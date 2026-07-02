@@ -1,0 +1,16 @@
+site_name: 乐享机器人教程
+theme:
+  name: material
+  language: zh  # 开启中文支持
+  palette:
+    primary: indigo # 主题色
+
+# 定义左侧目录结构与跳转
+nav:
+  - 首页: index.md
+  - 机器人基础篇:
+      - 第一章: chapter1.md
+      - 第二章: chapter2.md
+  - 机器人进阶篇:
+      - 第三章: chapter3.md
+      - 第四章: chapter4.md
