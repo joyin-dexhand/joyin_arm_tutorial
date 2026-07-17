@@ -47,13 +47,13 @@
 
     git clone xxxx
 
-**运行conda环境：**
+**运行conda环境(可选)：**
 
     source ~/miniconda3/bin/activate
     conda create -n my_arm python=3.10
     conda activate my_arm
 
-**运行uv环境：**
+**运行uv环境(可选)：**
 
     cd xxx
     uv venv --python 3.10
