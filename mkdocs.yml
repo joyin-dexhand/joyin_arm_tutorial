@@ -8,6 +8,8 @@ theme:
 # 定义左侧目录结构与跳转
 nav:
   - 首页: index.md
+  - 机器人使用篇:
+      - 电机控制指南: motor_control.md  
   - 机器人基础篇:
       - 第一章: chapter1.md
       - 第二章: chapter2.md
