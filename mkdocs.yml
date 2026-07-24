@@ -1,18 +1,33 @@
 site_name: 乐享机器人教程
 theme:
   name: material
-  language: zh  # 开启中文支持
+  language: zh # 开启中文支持
   palette:
     primary: indigo # 主题色
 
 # 定义左侧目录结构与跳转
 nav:
   - 首页: index.md
-  - 机器人使用篇:
-      - 电机控制指南: motor_control.md  
-  - 机器人基础篇:
-      - 第一章: chapter1.md
-      - 第二章: chapter2.md
-  - 机器人进阶篇:
-      - 第三章: chapter3.md
-      - 第四章: chapter4.md
+  - 使用篇:
+      - 快速上手: chapter1_1.md
+      - 关节电机: chapter1_2.md
+      - 六轴整臂: chapter1_3.md
+      - 两指夹爪: chapter1_4.md
+  - 基础篇:
+      - 第1章 机器人与机械臂初识: chapter2_1.md
+      - 第2章 空间位姿与位置正运动学: chapter2_2.md
+      - 第3章 位置逆运动学: chapter2_3.md
+      - 第4章 速度运动学与静力学: chapter2_4.md
+      - 第5章 轨迹生成: chapter2_5.md
+      - 第6章 运动控制: chapter2_6.md
+  - 进阶篇:
+      - 第7章 构型与结构设计、关节选型、装配体URDF导出: chapter3_1.md
+      - 第8章 动力学及控制实现: chapter3_2.md
+      - 第9章 力控制: chapter3_3.md
+      - 第10章 ROS2: chapter3_4.md
+  - 应用篇:
+      - 第11章 状态监测与安全软防护: chapter4_1.md
+      - 第12章 示教和遥操作: chapter4_2.md
+      - 第13章 末端执行器统一接口与自识别: chapter4_3.md
+      - 第14章 用户接口: chapter4_4.md
+      - 第15章 JoyArm 综合项目实践: chapter4_5.md
