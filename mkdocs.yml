@@ -2,8 +2,19 @@ site_name: JoyArm 机械臂实践教程
 theme:
   name: material
   language: zh # 开启中文支持
-  palette:
-    primary: indigo # 主题色
+  palette: # 亮/暗模式切换，点击左上角圆形按钮切换，记忆用户选择
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换至暗色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换至亮色模式
 
 # 定义左侧目录结构与跳转
 nav:
