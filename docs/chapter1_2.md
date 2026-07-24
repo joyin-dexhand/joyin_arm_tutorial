@@ -2,14 +2,14 @@
 
 本文将介绍如何通过Python、C++程序控制xxx电机。
 
-## 硬件准备
+## 1 硬件准备
 
 * USB转CAN线(图)
 * xxx机械臂(图)
 
-## 环境准备(Python)
+## 2 环境准备(Python)
 
-### 1.创建conda或uv环境 
+### 2.1 创建conda或uv环境
 
 **安装 conda 环境(可选)：**
 
@@ -37,7 +37,7 @@
 
     irm https://astral.sh/uv/install.ps1 | iex
 
-### 2.拉取代码并运行虚拟环境
+### 2.2 拉取代码并运行虚拟环境
 
 **拉取代码：**
 
@@ -55,7 +55,7 @@
     uv venv --python 3.10
     source .venv/bin/activate
 
-### 3.安装依赖
+### 2.3 安装依赖
 
 
 
