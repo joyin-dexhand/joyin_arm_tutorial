@@ -1,0 +1,41 @@
+/* ============================================================
+   侧边栏（左右目录）宽度与换行控制
+   - 宽度放大至默认的 1.5 倍（12rem → 18rem）
+   - 标题禁止自动换行，超出时横向滚动条拖拽
+   - md-sidebar__inner 限制最大宽度，避免过宽挤压正文
+   ============================================================ */
+
+/* 桌面端：放大侧边栏宽度（移动端抽屉式不受影响） */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar.md-sidebar--primary,
+  .md-sidebar.md-sidebar--secondary {
+    width: 18rem; /* 默认 12rem 的 1.5 倍 */
+  }
+  /* 右侧目录（页内 TOC）相应右移，避免与左侧栏重叠 */
+  .md-sidebar.md-sidebar--secondary {
+    margin-left: 2rem;
+  }
+}
+
+/* 标题不换行，超出部分横向滚动 */
+.md-sidebar__scrollwrap {
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.md-nav__title,
+.md-nav__link {
+  white-space: nowrap;
+}
+
+/* 横向滚动条样式（细且醒目） */
+.md-sidebar__scrollwrap::-webkit-scrollbar {
+  height: 6px;
+}
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb {
+  background: var(--md-default-fg-color--lighter);
+  border-radius: 3px;
+}
+.md-sidebar__scrollwrap::-webkit-scrollbar-track {
+  background: transparent;
+}
