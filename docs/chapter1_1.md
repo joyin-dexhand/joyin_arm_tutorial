@@ -63,15 +63,15 @@
 
 ```mermaid
 flowchart TD
-    A[拆箱验收] --> B[单关节测试并设置电机ID]
+    A[拆箱验收]:::mermaid-start --> B[单关节测试并设置电机ID]
     B --> C[整臂组装]
     C --> D[接线和上电]
     D --> E[零位标定]
     E --> F[示教和轨迹复现]
-    F --> G[其余实例例程功能]
+    F --> G[其余实例例程功能]:::mermaid-end
 
-    style A fill:#e1f5fe
-    style G fill:#c8e6c9
+    classDef mermaid-start stroke-width:2px
+    classDef mermaid-end stroke-width:2px
 ```
 
 ---
@@ -161,27 +161,117 @@ flowchart LR
 
 > 全教程共 4 篇：使用篇（操作上手）、基础篇（机器人学必备）、进阶篇（专业进阶）、应用篇（实机应用）。
 
-| 篇标题 | 章标题 | 本章主要内容概览 | 目录跳转 |
-|:---:|:---:|:---:|:---:|
-| 使用篇 | 快速上手 | 让机械臂快速动起来的操作流程 | [本章](chapter1_1.md) |
-| 使用篇 | 关节电机 | 通过 Python/C++ 程序控制单关节电机 | [第1章](chapter1_2.md) |
-| 使用篇 | 六轴整臂 | 整臂上电、关节与位置控制、示教复现 | [第2章](chapter1_3.md) |
-| 使用篇 | 两指夹爪 | 夹爪接线、位置与力度控制（仅操作） | [第3章](chapter1_4.md) |
-| 基础篇 | 第1章 机器人与机械臂初识 | 机器人发展历史、分类与核心概念速扫盲 | [第1章](chapter2_1.md) |
-| 基础篇 | 第2章 空间位姿与位置正运动学 | 位姿矩阵表示、MDH 建系、正运动学求解 | [第2章](chapter2_2.md) |
-| 基础篇 | 第3章 位置逆运动学 | 逆解可解性、代数/几何/数值解法 | [第3章](chapter2_3.md) |
-| 基础篇 | 第4章 速度运动学与静力学 | 速度传递、雅可比、奇异性、静力学 | [第4章](chapter2_4.md) |
-| 基础篇 | 第5章 轨迹生成 | 关节空间与笛卡尔空间轨迹规划 | [第5章](chapter2_5.md) |
-| 基础篇 | 第6章 运动控制 | 单关节电机控制、整机位置/速度控制 | [第6章](chapter2_6.md) |
-| 进阶篇 | 第7章 构型与结构设计、关节选型、装配体URDF导出 | 构型设计、结构设计、电机选型、URDF 导出 | [第7章](chapter3_1.md) |
-| 进阶篇 | 第8章 动力学及控制实现 | 牛顿欧拉递推、动力学方程、基于动力学的控制 | [第8章](chapter3_2.md) |
-| 进阶篇 | 第9章 力控制 | 纯力控、力位混合、阻抗、导纳控制 | [第9章](chapter3_3.md) |
-| 进阶篇 | 第10章 ROS2 | 工作空间、话题/服务通信、moveit2 集成 | [第10章](chapter3_4.md) |
-| 应用篇 | 第11章 状态监测与安全软防护 | 关节层/末端层/整机层状态监测与防护 | [第11章](chapter4_1.md) |
-| 应用篇 | 第12章 示教和遥操作 | 同臂/主从同构/主从异构示教、VR 遥操作 | [第12章](chapter4_2.md) |
-| 应用篇 | 第13章 末端执行器统一接口与自识别 | 夹爪/灵巧手/吸附等各类末端原理与接口 | [第13章](chapter4_3.md) |
-| 应用篇 | 第14章 用户接口 | UI、语音、视觉、NFC、UWB、体感 | [第14章](chapter4_4.md) |
-| 应用篇 | 第15章 JoyArm 综合项目实践 | 感知/规划/控制/交互全栈综合项目 | [第15章](chapter4_5.md) |
+<table>
+  <thead>
+    <tr>
+      <th>篇标题</th>
+      <th>章标题</th>
+      <th>本章主要内容概览</th>
+      <th>目录跳转</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="4" align="center"><strong>使用篇</strong></td>
+      <td align="center">快速上手</td>
+      <td align="center">让机械臂快速动起来的操作流程</td>
+      <td align="center"><a href="chapter1_1.md">本章</a></td>
+    </tr>
+    <tr>
+      <td align="center">关节电机</td>
+      <td align="center">通过 Python/C++ 程序控制单关节电机</td>
+      <td align="center"><a href="chapter1_2.md">第1章</a></td>
+    </tr>
+    <tr>
+      <td align="center">六轴整臂</td>
+      <td align="center">整臂上电、关节与位置控制、示教复现</td>
+      <td align="center"><a href="chapter1_3.md">第2章</a></td>
+    </tr>
+    <tr>
+      <td align="center">两指夹爪</td>
+      <td align="center">夹爪接线、位置与力度控制（仅操作）</td>
+      <td align="center"><a href="chapter1_4.md">第3章</a></td>
+    </tr>
+    <tr>
+      <td rowspan="6" align="center"><strong>基础篇</strong></td>
+      <td align="center">第1章 机器人与机械臂初识</td>
+      <td align="center">机器人发展历史、分类与核心概念速扫盲</td>
+      <td align="center"><a href="chapter2_1.md">第1章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第2章 空间位姿与位置正运动学</td>
+      <td align="center">位姿矩阵表示、MDH 建系、正运动学求解</td>
+      <td align="center"><a href="chapter2_2.md">第2章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第3章 位置逆运动学</td>
+      <td align="center">逆解可解性、代数/几何/数值解法</td>
+      <td align="center"><a href="chapter2_3.md">第3章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第4章 速度运动学与静力学</td>
+      <td align="center">速度传递、雅可比、奇异性、静力学</td>
+      <td align="center"><a href="chapter2_4.md">第4章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第5章 轨迹生成</td>
+      <td align="center">关节空间与笛卡尔空间轨迹规划</td>
+      <td align="center"><a href="chapter2_5.md">第5章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第6章 运动控制</td>
+      <td align="center">单关节电机控制、整机位置/速度控制</td>
+      <td align="center"><a href="chapter2_6.md">第6章</a></td>
+    </tr>
+    <tr>
+      <td rowspan="4" align="center"><strong>进阶篇</strong></td>
+      <td align="center">第7章 构型与结构设计、关节选型、装配体URDF导出</td>
+      <td align="center">构型设计、结构设计、电机选型、URDF 导出</td>
+      <td align="center"><a href="chapter3_1.md">第7章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第8章 动力学及控制实现</td>
+      <td align="center">牛顿欧拉递推、动力学方程、基于动力学的控制</td>
+      <td align="center"><a href="chapter3_2.md">第8章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第9章 力控制</td>
+      <td align="center">纯力控、力位混合、阻抗、导纳控制</td>
+      <td align="center"><a href="chapter3_3.md">第9章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第10章 ROS2</td>
+      <td align="center">工作空间、话题/服务通信、moveit2 集成</td>
+      <td align="center"><a href="chapter3_4.md">第10章</a></td>
+    </tr>
+    <tr>
+      <td rowspan="5" align="center"><strong>应用篇</strong></td>
+      <td align="center">第11章 状态监测与安全软防护</td>
+      <td align="center">关节层/末端层/整机层状态监测与防护</td>
+      <td align="center"><a href="chapter4_1.md">第11章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第12章 示教和遥操作</td>
+      <td align="center">同臂/主从同构/主从异构示教、VR 遥操作</td>
+      <td align="center"><a href="chapter4_2.md">第12章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第13章 末端执行器统一接口与自识别</td>
+      <td align="center">夹爪/灵巧手/吸附等各类末端原理与接口</td>
+      <td align="center"><a href="chapter4_3.md">第13章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第14章 用户接口</td>
+      <td align="center">UI、语音、视觉、NFC、UWB、体感</td>
+      <td align="center"><a href="chapter4_4.md">第14章</a></td>
+    </tr>
+    <tr>
+      <td align="center">第15章 JoyArm 综合项目实践</td>
+      <td align="center">感知/规划/控制/交互全栈综合项目</td>
+      <td align="center"><a href="chapter4_5.md">第15章</a></td>
+    </tr>
+  </tbody>
+</table>
 
 ---
 
