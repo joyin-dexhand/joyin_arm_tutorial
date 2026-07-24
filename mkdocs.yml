@@ -29,6 +29,7 @@ markdown_extensions:
 # 额外样式表（Mermaid 节点主题自适应配色等）
 extra_css:
   - stylesheets/mermaid.css
+  - stylesheets/extra.css
 
 # 定义左侧目录结构与跳转
 nav:
