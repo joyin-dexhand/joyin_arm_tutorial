@@ -18,6 +18,14 @@ theme:
         icon: material/brightness-4
         name: 切换至亮色模式
 
+# Mermaid 流程图渲染（markdown 中 ```mermaid 代码块会自动转为图形）
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
 # 定义左侧目录结构与跳转
 nav:
   - 首页: index.md
