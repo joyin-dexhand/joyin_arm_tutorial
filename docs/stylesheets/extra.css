@@ -5,15 +5,15 @@
    - md-sidebar__inner 限制最大宽度，避免过宽挤压正文
    ============================================================ */
 
-/* 桌面端：放大侧边栏宽度（移动端抽屉式不受影响） */
+/* 桌面端：放大整体布局并加宽侧边栏（移动端抽屉式不受影响） */
 @media screen and (min-width: 76.25em) {
+  /* 整体布局容器放宽：两侧栏(各18rem) + 中间内容(约50rem) = 86rem */
+  .md-grid {
+    max-width: 86rem; /* 默认 61rem，放宽以容纳更宽的中间内容 */
+  }
   .md-sidebar.md-sidebar--primary,
   .md-sidebar.md-sidebar--secondary {
-    width: 18rem; /* 默认 12rem 的 1.5 倍 */
-  }
-  /* 右侧目录（页内 TOC）相应右移，避免与左侧栏重叠 */
-  .md-sidebar.md-sidebar--secondary {
-    margin-left: 2rem;
+    width: 18rem; /* 默认 12.1rem 的约 1.5 倍，保持不变 */
   }
 }
 
