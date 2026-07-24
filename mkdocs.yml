@@ -2,6 +2,8 @@ site_name: JoyArm 机械臂实践教程
 theme:
   name: material
   language: zh # 开启中文支持
+  features:
+    - navigation.expand # 左侧目录默认全部展开（使用篇/基础篇/进阶篇/应用篇 同时展开）
   palette: # 亮/暗模式切换，点击左上角圆形按钮切换，记忆用户选择
     - media: "(prefers-color-scheme: light)"
       scheme: default
