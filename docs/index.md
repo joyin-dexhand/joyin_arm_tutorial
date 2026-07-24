@@ -1,17 +1,29 @@
-# 这是主页
+# JoyArm 机械臂教程
+## 概述
+机械臂渲染图
 
-欢迎访问乐享网址: https://www.zeroth0.com/
+*一段话介绍 JoyArm 项目的主要内容、特点和面向人群*
 
-## Commands
+效果图+演示动图（视频）
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
+## 特点与定位
 
-## Project layout
+| 本项目主要特点                     | 避免的情况           | 最适合人群                                             |
+| :------------------------------: | :--------------------: | :------------------------------------------------------: |
+| 突出项目实践，基础理论直观易理解 | 抽象的概念和过度的理论推导 | 初学者：高年级本科、低年级研究生、机器人及机械臂爱好者  |
+| 强调项目综合，具有系统性和整体性 | 在单一特定领域方向过于深入 | 希望系统性地从零到一掌握并完成一个完整的协作机械臂，掌全局而非局部 |
+| 面向经典应用，侧重实际功能和应用 | 避免在冷门方向进行功能创新 | 本专业学生学习、相关行业从业者和机器人开发爱好者   |
 
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+## 项目指引
+
+CAD结构件：*仓库链接*
+
+控制代码：*仓库链接*
+
+完整BOM表和外购标准件：*跳转到下一章（快速上手）*
+
+快速上手：*跳转到下一章（快速上手）*
+
+## 开源许可证
+
+*Apachi-2.0*
