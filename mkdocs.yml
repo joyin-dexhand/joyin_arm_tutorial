@@ -26,6 +26,10 @@ markdown_extensions:
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
 
+# 额外样式表（Mermaid 节点主题自适应配色等）
+extra_css:
+  - stylesheets/mermaid.css
+
 # 定义左侧目录结构与跳转
 nav:
   - 首页: index.md
