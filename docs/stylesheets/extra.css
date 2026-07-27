@@ -45,9 +45,10 @@
    - 强制所有表格 td/th 居中，无论 markdown 写成什么对齐符(:--- / :---:)
    - 适用 Markdown 表格与 HTML 表格（含合并单元格）
    - 本项目约定：所有表格单元格默认居中
+   - 用 !important 覆盖 mkdocs 由 :--- 生成的内联 text-align:left
    ============================================================ */
 .md-typeset table td,
 .md-typeset table th {
-  text-align: center;
+  text-align: center !important;
   vertical-align: middle;
 }
