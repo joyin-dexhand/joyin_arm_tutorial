@@ -154,16 +154,17 @@ CAD结构件：*仓库链接*
 
 | 名称 | 简介 | 链接 |
 |:---:|:---|:---:|
-| 《机器人学导论》（原书第四版） | John J. Craig 著，运动学、雅可比、动力学与力控制的经典教材，本教程基础篇与进阶篇的主要理论依据 | *待补充* |
-| 《机器人学：建模、规划与控制》 | Siciliano 等著，系统讲解机械臂建模、规划与控制，可作为扩展阅读 | *待补充* |
+| 《机器人学导论（原书第四版）》 | John J. Craig 著，运动学、雅可比、动力学与力控制的经典教材，本教程基础篇与进阶篇的主要理论参考 | [仓库内 PDF](reference/机器人学导论（第4版）.pdf) |
+| 《机器人学》（第四版） | 蔡自兴、谢斌 编著（清华大学出版社，2022，ISBN 9787302598220），国内高校广泛使用的中文经典教材，涵盖空间描述、运动学、动力学、控制与轨迹规划 | *待补充* |
 
 ### 主要参考开源项目
 
 | 名称 | 简介 | 链接 |
 |:---:|:---|:---:|
-| ROS 2 | 机器人操作系统，提供通信框架与生态，进阶篇 ROS2 章节的实操平台 | *待补充* |
-| MoveIt 2 | 机械臂运动规划框架，集成于 ROS 2，用于笛卡尔/关节空间规划与碰撞检测 | *待补充* |
-| Pinocchio | 高效的刚体动力学算法库，用于正/逆动力学计算，支撑动力学与控制实现 | *待补充* |
+| reBot-DevArm | Seeed-Projects 出品的开源六轴机械臂项目（6 DOF + 夹爪），提供全套软硬件图纸、BOM 及 Python/ROS2/LeRobot 生态集成 | https://github.com/Seeed-Projects/reBot-DevArm |
+| reBotArm_control_py | 基于 Pinocchio 与 MotorBridge SDK 的 reBotArm 六轴机械臂 Python 控制库，含正逆运动学、轨迹规划与重力补偿 | https://github.com/vectorBH6/reBotArm_control_py |
+| Panthera-HT_SDK | Panthera-HT 六轴机械臂官方 C++/Python SDK，支持位置/速度/力矩控制、运动学/动力学建模与主从遥操作 | https://github.com/HighTorque-Robotics/Panthera-HT_SDK |
+| Dummy-Robot | 稚晖君（peng-zhihui）的超迷你六轴机械臂机器人项目，固件核心为运动学姿态解算，已完整开源 | https://github.com/peng-zhihui/Dummy-Robot |
 
 ---
 
