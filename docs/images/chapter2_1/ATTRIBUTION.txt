@@ -1,0 +1,87 @@
+第一章图片版权与署名信息（均来自 Wikimedia Commons，自由许可证，可自由分发）
+======================================================================
+
+### Industrial robot welding BMW
+文件: images/chapter2_1/class_industrial_kuka.jpg
+Wikimedia 文件: File:BMW Leipzig MEDIA 050719 Download Karosseriebau max.jpg
+作者: BMW Werk Leipzig
+许可证: CC BY-SA 2.0 de
+来源: https://commons.wikimedia.org/wiki/File:BMW_Leipzig_MEDIA_050719_Download_Karosseriebau_max.jpg
+描述: BMW plant in Leipzig, Germany: Spot welding of BMW 3 series car bodies with KUKA industrial robots.
+
+### Roomba service robot
+文件: images/chapter2_1/class_service_roomba.jpg
+Wikimedia 文件: File:IRobot-Roomba-Bottom-view-01.jpg
+作者: CEphoto, Uwe Aranas
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:IRobot-Roomba-Bottom-view-01.jpg
+描述: The model year 2014 iRobot Roomba 782 Hoover.
+
+### Boston Dynamics Spot
+文件: images/chapter2_1/class_mobile_spot.jpg
+Wikimedia 文件: File:Boston Dynamics LKAB 2 Almedalen 29 juni 2023.jpg
+作者: Tore Danielsson (WMSE)
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Boston_Dynamics_LKAB_2_Almedalen_29_juni_2023.jpg
+描述: Picture from Almedalen Week taken during the afternoon of Thursday 29 June 2023.
+
+### Mars rover Perseverance
+文件: images/chapter2_1/class_space_perseverance.jpg
+Wikimedia 文件: File:Perseverance Landing Rover Uplook Camera (54336090246).jpg
+作者: semeion.photo
+许可证: Public domain
+来源: https://commons.wikimedia.org/wiki/File:Perseverance_Landing_Rover_Uplook_Camera_(54336090246).jpg
+描述: Instrument: ROVER UPLOOK CAMERA
+EUE_0000_0666952941_642EDR_N0000000EDLC00293_0000LUJ01
+LMST: Sol-00000M15:53:23.67992
+Start time: 2021-02-18 20:43:52 UTC
+Height above ellipsoid: -2236 m
+Height above landing: 0 m
+Speed: 0 km/h
+This image was processed
+
+### DJI Phantom drone
+文件: images/chapter2_1/class_air_drone.jpg
+Wikimedia 文件: File:2015 Dron DJI Phantom 3 Advanced.JPG
+作者: Jacek Halicki
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:2015_Dron_DJI_Phantom_3_Advanced.JPG
+描述: Dron DJI Phantom 3 Advanced
+
+### Underwater ROV manipulator
+文件: images/chapter2_1/class_sea_rov.jpg
+Wikimedia 文件: File:Robotic ROV Manipulator Arm.png
+作者: BPLINFO
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Robotic_ROV_Manipulator_Arm.png
+描述: Underwater ROV Manipulator Arm used in subsea inspection and intervention (Attribution: www.blueprintlab.com)
+
+### Da Vinci surgical robot
+文件: images/chapter2_1/class_medical_davinci.jpg
+Wikimedia 文件: File:Leonardo da Vinci, artist, thinker and man of science; (1898) (14579823499).jpg
+作者: Internet Archive Book Images
+许可证: No restrictions
+来源: https://commons.wikimedia.org/wiki/File:Leonardo_da_Vinci,_artist,_thinker_and_man_of_science;_(1898)_(14579823499).jpg
+描述: Identifier: leonardodavincia01munt (find matches)
+Title: Leonardo da Vinci, artist, thinker and man of science;
+Year: 1898 (1890s)
+Authors:  Müntz, Eugène, 1845-1902
+Subjects:  Leonardo, da Vinci, 1452-1519
+Publisher:  London : W. Heinemann New York,
+
+### ATM not a robot
+文件: images/chapter2_1/confusion_atm.jpg
+Wikimedia 文件: File:Raiffeisen Bank Aval ATM 01.jpg
+作者: Map hobby
+许可证: CC0
+来源: https://commons.wikimedia.org/wiki/File:Raiffeisen_Bank_Aval_ATM_01.jpg
+描述: Банкомат Raiffeisen у французькому центрі Харків
+
+### Rotary encoder
+文件: images/chapter2_1/hw_encoder.jpg
+Wikimedia 文件: File:Encoder.jpg
+作者: Rrudzik
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Encoder.jpg
+描述: Rotary optical encoder model
+
