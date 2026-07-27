@@ -1,3 +1,5 @@
-spec/
 .zcode/
 site/
+# spec/ 为内部规划目录，整体忽略；但放行对外说明文档 spec_readme.md
+spec/*
+!spec/spec_readme.md
