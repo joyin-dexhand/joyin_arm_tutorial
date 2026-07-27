@@ -50,5 +50,5 @@
 .md-typeset table td,
 .md-typeset table th {
   text-align: center !important;
-  vertical-align: middle;
+  vertical-align: middle !important;
 }

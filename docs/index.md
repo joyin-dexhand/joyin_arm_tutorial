@@ -24,9 +24,9 @@ CAD结构件：*仓库链接*
 
 控制代码：*仓库链接*
 
-完整BOM表和外购标准件：*跳转到下一章（快速上手）*
+完整BOM表和外购标准件：[快速上手](chapter1_1.md)
 
-快速上手：*跳转到下一章（快速上手）*
+快速上手：[快速上手](chapter1_1.md)
 
 ---
 
@@ -161,7 +161,7 @@ CAD结构件：*仓库链接*
 
 | 名称 | 简介 | 链接 |
 |:---:|:---|:---:|
-| reBot 机械臂 | Seeed-Projects 出品的开源六轴机械臂项目（6 DOF + 夹爪）：reBot-DevArm 提供全套软硬件图纸、BOM 及 Python/ROS2/LeRobot 生态集成；reBotArm_control_py 是基于 Pinocchio 的 Python 控制库，含正逆运动学、轨迹规划与重力补偿 | [DevArm](https://github.com/Seeed-Projects/reBot-DevArm) / [control_py](https://github.com/vectorBH6/reBotArm_control_py) |
+| reBot 机械臂 | Seeed 出品的开源六轴机械臂项目（6 DOF + 夹爪）：reBot-DevArm 提供全套软硬件图纸；reBotArm_control_py 是基于 Pinocchio 的 Python 控制库 | [DevArm](https://github.com/Seeed-Projects/reBot-DevArm) / [control_py](https://github.com/vectorBH6/reBotArm_control_py) |
 | Panthera-HT_SDK | Panthera-HT 六轴机械臂官方 C++/Python SDK，支持位置/速度/力矩控制、运动学/动力学建模与主从遥操作 | https://github.com/HighTorque-Robotics/Panthera-HT_SDK |
 | Dummy-Robot | 稚晖君（peng-zhihui）的超迷你六轴机械臂机器人项目，固件核心为运动学姿态解算，已完整开源 | https://github.com/peng-zhihui/Dummy-Robot |
 
