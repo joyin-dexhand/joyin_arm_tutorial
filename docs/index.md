@@ -20,13 +20,11 @@ JoyArm 是一套结合实机的协作机械臂学习教程，按 **使用、基�
 
 ## 项目指引
 
-CAD结构件：*仓库链接*
+本教程文档：[JoyArm 机械臂教程](https://joyin-dexhand.github.io/joyin_arm_tutorial/)
+
+CAD结构件及完整BOM表：[使用篇：快速上手](chapter1_1.md)
 
 控制代码：*仓库链接*
-
-完整BOM表和外购标准件：[快速上手](chapter1_1.md)
-
-快速上手：[快速上手](chapter1_1.md)
 
 ---
 
