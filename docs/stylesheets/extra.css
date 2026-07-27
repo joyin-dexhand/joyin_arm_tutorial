@@ -39,3 +39,15 @@
 .md-sidebar__scrollwrap::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ============================================================
+   表格单元格统一居中（水平 + 垂直）
+   - 强制所有表格 td/th 居中，无论 markdown 写成什么对齐符(:--- / :---:)
+   - 适用 Markdown 表格与 HTML 表格（含合并单元格）
+   - 本项目约定：所有表格单元格默认居中
+   ============================================================ */
+.md-typeset table td,
+.md-typeset table th {
+  text-align: center;
+  vertical-align: middle;
+}
