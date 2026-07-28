@@ -36,10 +36,10 @@
 
 | 类别 | 主要特点 | 优点 | 缺点 | 实例 |
 |:---:|:---:|:---:|:---:|:---:|
-| 工业机器人 | 面向制造业，结构化环境、重复精度高 | 速度快、精度高、可 24 小时作业 | 环境适应性差，需安全防护 | <img src="images/chapter2_1/class_industrial_kuka.jpg" alt="焊接机械臂" width="160"> |
-| 农业机器人 | 面向农田/温室，半结构化、户外作业 | 缓解劳动力短缺，作业标准化 | 受天气与作物多样性影响大 | <img src="images/chapter2_1/class_agri_robot.jpg" alt="农业采摘机器人" width="160"> |
-| 服务机器人 | 直接服务于人，强调安全与交互 | 与人共事，应用场景广 | 安全与合规要求高 | <img src="images/chapter2_1/class_service_roomba.jpg" alt="家用扫地机器人" width="160"> |
-| 特种机器人 | 替人进入危险/极端环境作业 | 替代人做高危工作 | 成本高、定制化程度高 | <img src="images/chapter2_1/class_space_perseverance.jpg" alt="太空探测机器人" width="160"> |
+| 工业机器人 | 面向制造业，结构化环境、重复精度高 | 速度快、精度高、可 24 小时作业 | 环境适应性差，需安全防护 | ![焊接机械臂](images/chapter2_1/class_industrial_kuka.jpg) |
+| 农业机器人 | 面向农田/温室，半结构化、户外作业 | 缓解劳动力短缺，作业标准化 | 受天气与作物多样性影响大 | ![农业采摘机器人](images/chapter2_1/class_agri_robot.jpg) |
+| 服务机器人 | 直接服务于人，强调安全与交互 | 与人共事，应用场景广 | 安全与合规要求高 | ![家用扫地机器人](images/chapter2_1/class_service_roomba.jpg) |
+| 特种机器人 | 替人进入危险/极端环境作业 | 替代人做高危工作 | 成本高、定制化程度高 | ![太空探测机器人](images/chapter2_1/class_space_perseverance.jpg) |
 
 > 💡 其中"服务机器人"按服务对象又细分为**个人/家用**（如扫地机、陪伴机器人）和**专业服务**（如手术机器人、物流配送）。本教程后续涉及的 JoyArm 机械臂既可用于个人/家用，亦可用于专业服务。
 
@@ -49,15 +49,15 @@
 
 | 类别 | 主要特点 | 优点 | 缺点 | 实例 |
 |:---:|:---:|:---:|:---:|:---:|
-| 固定式 | 基座固定不动，只有臂在动 | 精度高、负载大、易控制 | 工作范围受限 | <img src="images/chapter2_1/class_industrial_kuka.jpg" alt="串联机械臂" width="160"> |
-| 轮式 | 靠轮子在地面上行驶 | 速度快、效率高、结构简单 | 仅适于平整地面，越障差 | <img src="images/chapter2_1/class_wheeled_agv.jpg" alt="轮式移动机器人" width="160"> |
-| 履带式 | 靠履带行驶，附着力强 | 越野与越障能力强、接地面积大 | 速度慢、能耗高、易损地面 | <img src="images/chapter2_1/class_tracked_robot.jpg" alt="履带式机器人" width="160"> |
-| 足腿式 | 仿生多腿行走（双足/四足/多足） | 越障与地形适应性最好 | 控制复杂、能耗高、负载有限 | <img src="images/chapter2_1/class_mobile_spot.jpg" alt="四足机器狗" width="160"> |
-| 复合式 | 轮、腿、履等两种以上方式组合 | 兼顾速度与越障，适应面广 | 机械与控制复杂度高 | <img src="images/chapter2_1/class_hybrid_robot.jpg" alt="轮足复合机器人" width="160"> |
-| 飞行式 | 借助旋翼/固定翼在空中飞行 | 三维机动、覆盖范围大、无视地形 | 续航与负载受限、受气象影响 | <img src="images/chapter2_1/class_air_drone.jpg" alt="四旋翼无人机" width="160"> |
-| 水下式 | 在水下作业，耐压密封（含螺旋桨推进与仿生鱼摆尾） | 可到达人难以涉足的深海 | 通信与定位困难、维护成本高 | <img src="images/chapter2_1/class_robofish.jpg" alt="仿生机器鱼" width="160"> |
-| 空间式 | 在太空/外星环境运行 | 承担行星探测等极端任务 | 研制成本极高、不可维修 | <img src="images/chapter2_1/class_space_perseverance.jpg" alt="火星车" width="160"> |
-| 其他（爬行/攀爬/蠕动/跳跃/扑翼/滚动等） | 上述之外的小众移动方式：贴地爬行、立面攀爬、身体蠕动、弹跳、扑翼飞行、整体滚动等 | 各自适配特殊场景（管道/废墟/碎片地形/空中等） | 通用性差、载荷续航受限，多为定制 | <img src="images/chapter2_1/class_ball_robot.jpg" alt="球形机器人" width="160"> |
+| 固定式 | 基座固定不动，只有臂在动 | 精度高、负载大、易控制 | 工作范围受限 | ![串联机械臂](images/chapter2_1/class_industrial_kuka.jpg) |
+| 轮式 | 靠轮子在地面上行驶 | 速度快、效率高、结构简单 | 仅适于平整地面，越障差 | ![轮式移动机器人](images/chapter2_1/class_wheeled_agv.jpg) |
+| 履带式 | 靠履带行驶，附着力强 | 越野与越障能力强、接地面积大 | 速度慢、能耗高、易损地面 | ![履带式机器人](images/chapter2_1/class_tracked_robot.jpg) |
+| 足腿式 | 仿生多腿行走（双足/四足/多足） | 越障与地形适应性最好 | 控制复杂、能耗高、负载有限 | ![四足机器狗](images/chapter2_1/class_mobile_spot.jpg) |
+| 复合式 | 轮、腿、履等两种以上方式组合 | 兼顾速度与越障，适应面广 | 机械与控制复杂度高 | ![轮足复合机器人](images/chapter2_1/class_hybrid_robot.jpg) |
+| 飞行式 | 借助旋翼/固定翼在空中飞行 | 三维机动、覆盖范围大、无视地形 | 续航与负载受限、受气象影响 | ![四旋翼无人机](images/chapter2_1/class_air_drone.jpg) |
+| 水下式 | 在水下作业，耐压密封（含螺旋桨推进与仿生鱼摆尾） | 可到达人难以涉足的深海 | 通信与定位困难、维护成本高 | ![仿生机器鱼](images/chapter2_1/class_robofish.jpg) |
+| 空间式 | 在太空/外星环境运行 | 承担行星探测等极端任务 | 研制成本极高、不可维修 | ![火星车](images/chapter2_1/class_space_perseverance.jpg) |
+| 其他（爬行/攀爬/蠕动/跳跃/扑翼/滚动等） | 上述之外的小众移动方式：贴地爬行、立面攀爬、身体蠕动、弹跳、扑翼飞行、整体滚动等 | 各自适配特殊场景（管道/废墟/碎片地形/空中等） | 通用性差、载荷续航受限，多为定制 | ![球形机器人](images/chapter2_1/class_ball_robot.jpg) |
 
 #### 1.2.3 按构型与仿生特点分
 
@@ -65,11 +65,11 @@
 
 | 类别 | 主要特点 | 优点 | 缺点 | 实例 |
 |:---:|:---:|:---:|:---:|:---:|
-| 串联机器人 | 多个关节首尾依次串联，像人的手臂 | 工作空间大、灵活 | 累积误差大、刚度较低 | <img src="images/chapter2_1/class_industrial_kuka.jpg" alt="串联机械臂" width="160"> |
-| 并联机器人 | 多条支链共同驱动末端平台 | 刚度高、速度快、无累积误差 | 工作空间小、控制复杂 | <img src="images/chapter2_1/class_delta_parallel.jpg" alt="Delta 并联机器人" width="160"> |
-| 人形机器人 | 仿人形，双足 + 双臂 + 头部 | 适配人类环境与工具 | 平衡与控制极难、成本高 | <img src="images/chapter2_1/humanoid_asimo.jpg" alt="人形机器人" width="160"> |
-| 四足机器人 | 仿四足动物，四条腿行走 | 比双足稳、比轮式更能越障 | 负载与续航仍受限 | <img src="images/chapter2_1/class_mobile_spot.jpg" alt="四足机器狗" width="160"> |
-| 蛇形机器人 | 仿蛇，多节串联细长体 | 能钻入狭窄/废墟空间 | 推进效率低、难以精确定位 | <img src="images/chapter2_1/class_snake_robot.jpg" alt="蛇形机器人" width="160"> |
+| 串联机器人 | 多个关节首尾依次串联，像人的手臂 | 工作空间大、灵活 | 累积误差大、刚度较低 | ![串联机械臂](images/chapter2_1/class_industrial_kuka.jpg) |
+| 并联机器人 | 多条支链共同驱动末端平台 | 刚度高、速度快、无累积误差 | 工作空间小、控制复杂 | ![Delta 并联机器人](images/chapter2_1/class_delta_parallel.jpg) |
+| 人形机器人 | 仿人形，双足 + 双臂 + 头部 | 适配人类环境与工具 | 平衡与控制极难、成本高 | ![人形机器人](images/chapter2_1/humanoid_asimo.jpg) |
+| 四足机器人 | 仿四足动物，四条腿行走 | 比双足稳、比轮式更能越障 | 负载与续航仍受限 | ![四足机器狗](images/chapter2_1/class_mobile_spot.jpg) |
+| 蛇形机器人 | 仿蛇，多节串联细长体 | 能钻入狭窄/废墟空间 | 推进效率低、难以精确定位 | ![蛇形机器人](images/chapter2_1/class_snake_robot.jpg) |
 | …… | 还有球形、柔性、仿生鱼等众多构型 | — | — | — |
 
 > 📌 一台机器人往往同时属于多个类别：例如一台带轮子、会送货、与人交互的酒店派送机器人，既属于"服务机器人"又属于"移动机器人"。

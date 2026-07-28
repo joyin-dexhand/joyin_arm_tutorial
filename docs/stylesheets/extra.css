@@ -52,3 +52,15 @@
   text-align: center !important;
   vertical-align: middle !important;
 }
+
+/* ============================================================
+   表格内图片统一宽度
+   - 分类表（应用/移动/构型）的实例列配图统一宽度，
+     避免竖向高图(ASIMO/Delta/蛇形)显示过大、与横向图不一致
+   - 仅作用于表格单元格内的 <img>，不影响正文大图
+   ============================================================ */
+.md-typeset table td img {
+  max-width: 160px !important;
+  width: 160px !important;
+  height: auto !important;
+}
