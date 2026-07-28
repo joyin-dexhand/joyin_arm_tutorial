@@ -1,7 +1,15 @@
-第一章图片版权与署名信息（均来自 Wikimedia Commons，自由许可证，可自由分发）
+第一章图片版权与署名信息
 ======================================================================
 
-### Industrial robot welding BMW
+本章配图分两类：
+- 实物照片：来自 Wikimedia Commons，自由许可证（CC BY / CC BY-SA / CC0 / 公有领域），可自由分发，需保留原作者署名。
+- 技术示意图：本教程使用 Python (matplotlib) 自行绘制，原创内容。
+
+----------------------------------------------------------------------
+一、实物照片（来自 Wikimedia Commons）
+----------------------------------------------------------------------
+
+### 工业机器人（焊接机械臂，按应用领域·工业）
 文件: images/chapter2_1/class_industrial_kuka.jpg
 Wikimedia 文件: File:BMW Leipzig MEDIA 050719 Download Karosseriebau max.jpg
 作者: BMW Werk Leipzig
@@ -9,7 +17,15 @@ Wikimedia 文件: File:BMW Leipzig MEDIA 050719 Download Karosseriebau max.jpg
 来源: https://commons.wikimedia.org/wiki/File:BMW_Leipzig_MEDIA_050719_Download_Karosseriebau_max.jpg
 描述: BMW plant in Leipzig, Germany: Spot welding of BMW 3 series car bodies with KUKA industrial robots.
 
-### Roomba service robot
+### 农业机器人（按应用领域·农业）
+文件: images/chapter2_1/class_agri_robot.jpg
+Wikimedia 文件: File:Agritechnica 2023, Hanover (P1140937-RR).jpg
+作者: MB-one
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Agritechnica_2023,_Hanover_(P1140937-RR).jpg
+描述: Strawberry picking robot on rails by Octiva on display at Agritechnica 2023
+
+### 服务机器人（家用扫地机器人，按应用领域·服务）
 文件: images/chapter2_1/class_service_roomba.jpg
 Wikimedia 文件: File:IRobot-Roomba-Bottom-view-01.jpg
 作者: CEphoto, Uwe Aranas
@@ -17,7 +33,31 @@ Wikimedia 文件: File:IRobot-Roomba-Bottom-view-01.jpg
 来源: https://commons.wikimedia.org/wiki/File:IRobot-Roomba-Bottom-view-01.jpg
 描述: The model year 2014 iRobot Roomba 782 Hoover.
 
-### Boston Dynamics Spot
+### 太空探测机器人（按应用领域·特种 / 按移动方式·空间）
+文件: images/chapter2_1/class_space_perseverance.jpg
+Wikimedia 文件: File:Perseverance Landing Rover Uplook Camera (54336090246).jpg
+作者: semeion.photo
+许可证: Public domain
+来源: https://commons.wikimedia.org/wiki/File:Perseverance_Landing_Rover_Uplook_Camera_(54336090246).jpg
+描述: Instrument: ROVER UPLOOK CAMERA
+
+### 轮式移动机器人（按移动方式·轮式）
+文件: images/chapter2_1/class_wheeled_agv.jpg
+Wikimedia 文件: File:Kempower, Lahti2-tehdas, Mirri-robotti 2025 (OMA20251-12+(numero)).jpg
+作者: Tiina Rekola
+许可证: CC BY 4.0
+来源: https://commons.wikimedia.org/wiki/File:Kempower,_Lahti2-tehdas,_Mirri-robotti_2025_(OMA20251-12%2B(numero)).jpg
+描述: Kempowerin Lahti2-tehtaan tuotantotiloja, joissa valmistetaan satelliitti-pikalatauslaitteita. Robotti, joka kuljettaa kokoonpanossa tarvittavia osia eri tuotantolinjojen välillä p
+
+### 履带式机器人（按移动方式·履带式）
+文件: images/chapter2_1/class_tracked_robot.jpg
+Wikimedia 文件: File:Teodor explosive ordnance disposal and observation robot.JPG
+作者: Antti Leppänen
+许可证: CC BY-SA 3.0
+来源: https://commons.wikimedia.org/wiki/File:Teodor_explosive_ordnance_disposal_and_observation_robot.JPG
+描述: Teodor explosive ordnance disposal and observation robot in Jyväskylä, Finland
+
+### 四足机器狗（按移动方式·足腿式 / 按构型·四足）
 文件: images/chapter2_1/class_mobile_spot.jpg
 Wikimedia 文件: File:Boston Dynamics LKAB 2 Almedalen 29 juni 2023.jpg
 作者: Tore Danielsson (WMSE)
@@ -25,22 +65,15 @@ Wikimedia 文件: File:Boston Dynamics LKAB 2 Almedalen 29 juni 2023.jpg
 来源: https://commons.wikimedia.org/wiki/File:Boston_Dynamics_LKAB_2_Almedalen_29_juni_2023.jpg
 描述: Picture from Almedalen Week taken during the afternoon of Thursday 29 June 2023.
 
-### Mars rover Perseverance
-文件: images/chapter2_1/class_space_perseverance.jpg
-Wikimedia 文件: File:Perseverance Landing Rover Uplook Camera (54336090246).jpg
-作者: semeion.photo
-许可证: Public domain
-来源: https://commons.wikimedia.org/wiki/File:Perseverance_Landing_Rover_Uplook_Camera_(54336090246).jpg
-描述: Instrument: ROVER UPLOOK CAMERA
-EUE_0000_0666952941_642EDR_N0000000EDLC00293_0000LUJ01
-LMST: Sol-00000M15:53:23.67992
-Start time: 2021-02-18 20:43:52 UTC
-Height above ellipsoid: -2236 m
-Height above landing: 0 m
-Speed: 0 km/h
-This image was processed
+### 轮足复合机器人（按移动方式·复合式）
+文件: images/chapter2_1/class_hybrid_robot.jpg
+Wikimedia 文件: File:Leg-wheel Hybrid Walking Vehicle "Roller-Walker" 1994 - 2000.jpg
+作者: Fumihiro Kato
+许可证: CC BY 4.0
+来源: https://commons.wikimedia.org/wiki/File:Leg-wheel_Hybrid_Walking_Vehicle_%22Roller-Walker%22_1994_-_2000.jpg
+描述: 東京工業大学博物館 地下1階 特別展示室B 「ロボット研究と開発」展示．脚車輪ハイブリッド型４足歩行ロボット「ローラーウォーカー」1994年〜2000年
 
-### DJI Phantom drone
+### 四旋翼无人机（按移动方式·飞行式）
 文件: images/chapter2_1/class_air_drone.jpg
 Wikimedia 文件: File:2015 Dron DJI Phantom 3 Advanced.JPG
 作者: Jacek Halicki
@@ -48,110 +81,7 @@ Wikimedia 文件: File:2015 Dron DJI Phantom 3 Advanced.JPG
 来源: https://commons.wikimedia.org/wiki/File:2015_Dron_DJI_Phantom_3_Advanced.JPG
 描述: Dron DJI Phantom 3 Advanced
 
-### Underwater ROV manipulator
-文件: images/chapter2_1/class_sea_rov.jpg
-Wikimedia 文件: File:Robotic ROV Manipulator Arm.png
-作者: BPLINFO
-许可证: CC BY-SA 4.0
-来源: https://commons.wikimedia.org/wiki/File:Robotic_ROV_Manipulator_Arm.png
-描述: Underwater ROV Manipulator Arm used in subsea inspection and intervention (Attribution: www.blueprintlab.com)
-
-### Da Vinci surgical robot
-文件: images/chapter2_1/class_medical_davinci.jpg
-Wikimedia 文件: File:Leonardo da Vinci, artist, thinker and man of science; (1898) (14579823499).jpg
-作者: Internet Archive Book Images
-许可证: No restrictions
-来源: https://commons.wikimedia.org/wiki/File:Leonardo_da_Vinci,_artist,_thinker_and_man_of_science;_(1898)_(14579823499).jpg
-描述: Identifier: leonardodavincia01munt (find matches)
-Title: Leonardo da Vinci, artist, thinker and man of science;
-Year: 1898 (1890s)
-Authors:  Müntz, Eugène, 1845-1902
-Subjects:  Leonardo, da Vinci, 1452-1519
-Publisher:  London : W. Heinemann New York,
-
-### ATM not a robot
-文件: images/chapter2_1/confusion_atm.jpg
-Wikimedia 文件: File:Raiffeisen Bank Aval ATM 01.jpg
-作者: Map hobby
-许可证: CC0
-来源: https://commons.wikimedia.org/wiki/File:Raiffeisen_Bank_Aval_ATM_01.jpg
-描述: Банкомат Raiffeisen у французькому центрі Харків
-
-### Rotary encoder
-文件: images/chapter2_1/hw_encoder.jpg
-Wikimedia 文件: File:Encoder.jpg
-作者: Rrudzik
-许可证: CC BY-SA 4.0
-来源: https://commons.wikimedia.org/wiki/File:Encoder.jpg
-描述: Rotary optical encoder model
-
-
-### 农业机器人（按应用领域分类）
-文件: images/chapter2_1/class_agri_robot.jpg
-Wikimedia 文件: File:Agritechnica 2023, Hanover (P1140937-RR).jpg
-作者: MB-one
-许可证: CC BY-SA 4.0
-来源: https://commons.wikimedia.org/wiki/File:Agritechnica_2023,_Hanover_(P1140937-RR).jpg
-描述: Strawberry picking robot on rails by Octiva on display at Agritechnica 2023
-### 轮式移动机器人（按移动方式分类）
-文件: images/chapter2_1/class_wheeled_agv.jpg
-Wikimedia 文件: File:Kempower, Lahti2-tehdas, Mirri-robotti 2025 (OMA20251-12+(numero)).jpg
-作者: Tiina Rekola
-许可证: CC BY 4.0
-来源: https://commons.wikimedia.org/wiki/File:Kempower,_Lahti2-tehdas,_Mirri-robotti_2025_(OMA20251-12%2B(numero)).jpg
-描述: Kempowerin Lahti2-tehtaan tuotantotiloja, joissa valmistetaan satelliitti-pikalatauslaitteita. Robotti, joka kuljettaa kokoonpanossa tarvittavia osia eri tuotantolinjojen välillä p
-### 履带式机器人（按移动方式分类）
-文件: images/chapter2_1/class_tracked_robot.jpg
-Wikimedia 文件: File:Teodor explosive ordnance disposal and observation robot.JPG
-作者: Antti Leppänen
-许可证: CC BY-SA 3.0
-来源: https://commons.wikimedia.org/wiki/File:Teodor_explosive_ordnance_disposal_and_observation_robot.JPG
-描述: Teodor explosive ordnance disposal and observation robot in Jyväskylä, Finland
-### 轮足复合机器人（按移动方式分类）
-文件: images/chapter2_1/class_hybrid_robot.jpg
-Wikimedia 文件: File:Leg-wheel Hybrid Walking Vehicle "Roller-Walker" 1994 - 2000.jpg
-作者: Fumihiro Kato
-许可证: CC BY 4.0
-来源: https://commons.wikimedia.org/wiki/File:Leg-wheel_Hybrid_Walking_Vehicle_%22Roller-Walker%22_1994_-_2000.jpg
-描述: 東京工業大学博物館 地下1階 特別展示室B 「ロボット研究と開発」展示．脚車輪ハイブリッド型４足歩行ロボット「ローラーウォーカー」1994年〜2000年
-### Delta 并联机器人（按构型分类）
-文件: images/chapter2_1/class_delta_parallel.jpg
-Wikimedia 文件: File:Robot delta FlexPicker d'ABB.png
-作者: Marc Auledas
-许可证: CC BY-SA 4.0
-来源: https://commons.wikimedia.org/wiki/File:Robot_delta_FlexPicker_d%27ABB.png
-描述: Delta robot FlexPicker manufactured by ABB
-### 蛇形机器人（按构型分类）
-文件: images/chapter2_1/class_snake_robot.jpg
-Wikimedia 文件: File:SnakeBot1.jpg
-作者: ?
-许可证: Public domain
-来源: https://commons.wikimedia.org/wiki/File:SnakeBot1.jpg
-描述: ?
-
-### 爬行式机器人（按移动方式分类·新增）
-文件: images/chapter2_1/class_crawling_robot.jpg
-Wikimedia 文件: File:Pipetel Explorer 30-36.jpg
-作者: Bradley Kramer
-许可证: CC BY-SA 3.0 us
-来源: https://commons.wikimedia.org/wiki/File:Pipetel_Explorer_30-36.jpg
-描述: Pipetel Explorer tetherless NDT pipeline crawler
-### 攀爬式机器人（按移动方式分类·新增）
-文件: images/chapter2_1/class_climbing_robot.jpg
-Wikimedia 文件: File:Capuchin Free Climbing Robot.jpg
-作者: Rxzhang12
-许可证: CC BY-SA 3.0
-来源: https://commons.wikimedia.org/wiki/File:Capuchin_Free_Climbing_Robot.jpg
-描述: Capuchin climbing robot climbing a vertical artificial climbing wall.
-### 跳跃式机器人（按移动方式分类·其他）
-文件: images/chapter2_1/class_jumping_robot.jpg
-Wikimedia 文件: File:U.S. Department of Energy - Science - 153 013 007 (9568562353).jpg
-作者: U.S. Department of Energy from United States
-许可证: Public domain
-来源: https://commons.wikimedia.org/wiki/File:U.S._Department_of_Energy_-_Science_-_153_013_007_(9568562353).jpg
-描述: The four-wheeled hopper robots will navigate autonomously by  wheel and jump with one mighty let onto or over obstacles of more than 25 feet. 
-The Precision Urban Hopper is funded by the Defense Advan
-### 仿生机器鱼（按移动方式分类·水下式配图更换）
+### 仿生机器鱼（按移动方式·水下式）
 文件: images/chapter2_1/class_robofish.jpg
 Wikimedia 文件: File:Robot Fish (4651519523).jpg
 作者: Kuba Bożanowski from Warsaw, Poland
@@ -159,29 +89,110 @@ Wikimedia 文件: File:Robot Fish (4651519523).jpg
 来源: https://commons.wikimedia.org/wiki/File:Robot_Fish_(4651519523).jpg
 描述: Robot Fish
 
-注：原 class_sea_rov.jpg（水下 ROV）已不再被引用（水下式改用仿生机器鱼），文件已删除。
-
-======================================================================
-（更新：移动方式表「其他」行配图调整）
-
-### 跳跃式机器人（按移动方式分类·其他，纯腿式）
-文件: images/chapter2_1/class_jumping_robot.jpg
-Wikimedia 文件: File:150605-N-PO203-736 (18529331192).jpg
-作者: Office of Naval Research from Arlington, United States
-许可证: CC BY 2.0
-来源: https://commons.wikimedia.org/wiki/File:150605-N-PO203-736_(18529331192).jpg
-描述: The Massachusetts Institute of Technology (MIT) robotic cheetah entertains the crowd in between competition rounds during the Defense Advanced Resarch Projects Agency (DARPA) Robotics Challenge (DRC) 
-### 扑翼式机器人（按移动方式分类·其他）
-文件: images/chapter2_1/class_flapping_robot.jpg
-Wikimedia 文件: File:RoboCup 2016 Leipzig - Festo SmartBird.jpg
-作者: ubahnverleih
-许可证: CC0
-来源: https://commons.wikimedia.org/wiki/File:RoboCup_2016_Leipzig_-_Festo_SmartBird.jpg
-描述: RoboCup 2016 Leipzig - Festo SmartBird
-### 球形滚动机器人（按移动方式分类·其他）
+### 球形滚动机器人（按移动方式·其他）
 文件: images/chapter2_1/class_ball_robot.jpg
 Wikimedia 文件: File:Spherical Robot.jpg
 作者: Hossein Vahid Alizadeh
 许可证: CC BY-SA 4.0
 来源: https://commons.wikimedia.org/wiki/File:Spherical_Robot.jpg
 描述: Picture of a pendulum-drive spherical mobile robot. The robot is made of a transparent spherical shell serving as the body of the robot and an internal driving unit (IDU) that enables the robot to mov
+
+### 达芬奇手术机器人（按构型·串联机械臂应用）
+文件: images/chapter2_1/class_medical_davinci.jpg
+Wikimedia 文件: File:2023-09 - Robot chirurgien Da Vinci Xi - Centre hospitalier de Vesoul - 02.jpg
+作者: A.BourgeoisP
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:2023-09_-_Robot_chirurgien_Da_Vinci_Xi_-_Centre_hospitalier_de_Vesoul_-_02.jpg
+描述: Da Vinci Xi 手术机器人，法国 Vesoul 医院展示。
+
+### 人形机器人 ASIMO（按构型·人形）
+文件: images/chapter2_1/humanoid_asimo.jpg
+Wikimedia 文件: File:ASIMO 4.28.11.jpg
+作者: Vanillase
+许可证: CC BY-SA 3.0
+来源: https://commons.wikimedia.org/wiki/File:ASIMO_4.28.11.jpg
+描述: Honda 工厂中的 ASIMO 人形机器人（Advanced Step in Innovative MObility）。
+
+### Delta 并联机器人（按构型·并联）
+文件: images/chapter2_1/class_delta_parallel.jpg
+Wikimedia 文件: File:Robot delta FlexPicker d'ABB.png
+作者: Marc Auledas
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Robot_delta_FlexPicker_d%27ABB.png
+描述: Delta robot FlexPicker manufactured by ABB
+
+### 蛇形机器人（按构型·蛇形）
+文件: images/chapter2_1/class_snake_robot.jpg
+Wikimedia 文件: File:SnakeBot1.jpg
+作者: ?
+许可证: Public domain
+来源: https://commons.wikimedia.org/wiki/File:SnakeBot1.jpg
+描述: ?
+
+### 编码器（测关节角度的器件，硬件感知）
+文件: images/chapter2_1/hw_encoder.jpg
+Wikimedia 文件: File:Encoder.jpg
+作者: Rrudzik
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Encoder.jpg
+描述: Rotary optical encoder model
+
+### 伺服电机（关节执行器实物，硬件感知）
+文件: images/chapter2_1/hw_servomotor.png
+Wikimedia 文件: File:Servomotor.jpg
+作者: John Nagle
+许可证: CC BY-SA 3.0
+来源: https://commons.wikimedia.org/wiki/File:Servomotor.jpg
+描述: Servomotor with encoder（带编码器的伺服电机）
+
+----------------------------------------------------------------------
+二、技术示意图（本教程原创，matplotlib 自绘）
+----------------------------------------------------------------------
+
+### 机械臂基本组成（基座 + 关节 + 连杆 + 末端执行器）
+文件: images/chapter2_1/arm_skeleton.png
+作者: 本教程（JoyArm）
+许可证: 原创内容，随本教程以 Apache-2.0 许可证发布
+工具: Python (matplotlib)，字体 Noto Sans CJK
+
+### 自由度（DOF）概念
+文件: images/chapter2_1/dof_concept.png
+作者: 本教程（JoyArm）
+许可证: 原创内容，随本教程以 Apache-2.0 许可证发布
+工具: Python (matplotlib)，字体 Noto Sans CJK
+
+### 负载与工作半径（工作空间）
+文件: images/chapter2_1/workspace.png
+作者: 本教程（JoyArm）
+许可证: 原创内容，随本教程以 Apache-2.0 许可证发布
+工具: Python (matplotlib)，字体 Noto Sans CJK
+
+### 机械臂标准坐标系体系
+文件: images/chapter2_1/coordinate_frames.png
+作者: 本教程（JoyArm）
+许可证: 原创内容，随本教程以 Apache-2.0 许可证发布
+工具: Python (matplotlib)，字体 Noto Sans CJK
+
+### 机械臂常用传感器（按用途分类）
+文件: images/chapter2_1/sensor_overview.png
+作者: 本教程（JoyArm）
+许可证: 原创内容，随本教程以 Apache-2.0 许可证发布
+工具: Python (matplotlib)，字体 Noto Sans CJK
+
+### 学科方法链路（轨迹→逆运动学→控制→力控→执行）
+文件: images/chapter2_1/control_stack.png
+作者: 本教程（JoyArm）
+许可证: 原创内容，随本教程以 Apache-2.0 许可证发布
+工具: Python (matplotlib)，字体 Noto Sans CJK
+
+### 本教程推荐开发环境与工具栈
+文件: images/chapter2_1/dev_environment.png
+作者: 本教程（JoyArm）
+许可证: 原创内容，随本教程以 Apache-2.0 许可证发布
+工具: Python (matplotlib)，字体 Noto Sans CJK
+
+### 边缘计算设备（笔记本 / Jetson / RDK）
+文件: images/chapter2_1/edge_devices.png
+作者: 本教程（JoyArm）
+许可证: 原创内容，随本教程以 Apache-2.0 许可证发布
+工具: Python (matplotlib)，字体 Noto Sans CJK
