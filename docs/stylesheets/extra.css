@@ -60,7 +60,7 @@
    - 仅作用于表格单元格内的 <img>，不影响正文大图
    ============================================================ */
 .md-typeset table td img {
-  max-width: 160px !important;
-  width: 160px !important;
+  max-width: 240px !important;
+  width: 240px !important;
   height: auto !important;
 }
