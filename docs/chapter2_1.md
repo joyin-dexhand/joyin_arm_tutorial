@@ -49,7 +49,7 @@
 
 | 类别 | 主要特点 | 优点 | 缺点 | 实例 |
 |:---:|:---|:---|:---|:---:|
-| 固定式 | 基座固定不动，只有臂在动 | 精度高、负载大、易控制 | 工作范围受限 | ![固定式机械臂](images/chapter2_1/history_unimate_puma.jpg) |
+| 固定式 | 基座固定不动，只有臂在动 | 精度高、负载大、易控制 | 工作范围受限 | [占位]() |
 | 轮式 | 靠轮子在地面上行驶 | 速度快、效率高、结构简单 | 仅适于平整地面，越障差 | ![轮式移动机器人](images/chapter2_1/class_wheeled_agv.jpg) |
 | 履带式 | 靠履带行驶，附着力强 | 越野与越障能力强、接地面积大 | 速度慢、能耗高、易损地面 | ![履带式机器人](images/chapter2_1/class_tracked_robot.jpg) |
 | 足腿式 | 仿生多腿行走（双足/四足/多足） | 越障与地形适应性最好 | 控制复杂、能耗高、负载有限 | ![四足机器狗](images/chapter2_1/class_mobile_spot.jpg) |
@@ -57,7 +57,7 @@
 | 飞行式 | 借助旋翼/固定翼在空中飞行 | 三维机动、覆盖范围大、无视地形 | 续航与负载受限、受气象影响 | ![四旋翼无人机](images/chapter2_1/class_air_drone.jpg) |
 | 水下式 | 在水下作业，耐压密封（含螺旋桨推进与仿生鱼摆尾） | 可到达人难以涉足的深海 | 通信与定位困难、维护成本高 | ![仿生机器鱼](images/chapter2_1/class_robofish.jpg) |
 | 空间式 | 在太空/外星环境运行 | 承担行星探测等极端任务 | 研制成本极高、不可维修 | ![火星车](images/chapter2_1/class_space_perseverance.jpg) |
-| 其他（爬行/攀爬/蠕动/跳跃/扑翼/滚动等） | 上述之外的小众移动方式：贴地爬行、立面攀爬、身体蠕动、弹跳、扑翼飞行、整体滚动等 | 各自适配特殊场景（管道/废墟/碎片地形/空中等） | 通用性差、载荷续航受限，多为定制 | <table style="border:none;margin:0 auto;"><tr><td style="border:none;padding:2px 6px;">爬行式<br><img src="images/chapter2_1/class_crawling_robot.jpg" alt="爬行机器人" width="140"></td><td style="border:none;padding:2px 6px;">攀爬式<br><img src="images/chapter2_1/class_climbing_robot.jpg" alt="攀爬机器人" width="140"></td><td style="border:none;padding:2px 6px;">蠕动式<br><img src="images/chapter2_1/class_snake_robot.jpg" alt="蛇形机器人" width="140"></td></tr><tr><td style="border:none;padding:2px 6px;">跳跃式<br><img src="images/chapter2_1/class_jumping_robot.jpg" alt="跳跃式机器人" width="140"></td><td style="border:none;padding:2px 6px;">扑翼式<br><img src="images/chapter2_1/class_flapping_robot.jpg" alt="扑翼机器人" width="140"></td><td style="border:none;padding:2px 6px;">滚动式<br><img src="images/chapter2_1/class_ball_robot.jpg" alt="球形机器人" width="140"></td></tr></table> |
+| 其他（爬行/攀爬/蠕动/跳跃/扑翼/滚动等） | 上述之外的小众移动方式：贴地爬行、立面攀爬、身体蠕动、弹跳、扑翼飞行、整体滚动等 | 各自适配特殊场景（管道/废墟/碎片地形/空中等） | 通用性差、载荷续航受限，多为定制 | ![球形机器人](images/chapter2_1/class_ball_robot.jpg) |
 
 #### 1.2.3 按构型与仿生特点分
 
