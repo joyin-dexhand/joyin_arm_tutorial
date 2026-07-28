@@ -85,3 +85,46 @@ Wikimedia 文件: File:Encoder.jpg
 来源: https://commons.wikimedia.org/wiki/File:Encoder.jpg
 描述: Rotary optical encoder model
 
+
+### 农业机器人（按应用领域分类）
+文件: images/chapter2_1/class_agri_robot.jpg
+Wikimedia 文件: File:Agritechnica 2023, Hanover (P1140937-RR).jpg
+作者: MB-one
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Agritechnica_2023,_Hanover_(P1140937-RR).jpg
+描述: Strawberry picking robot on rails by Octiva on display at Agritechnica 2023
+### 轮式移动机器人（按移动方式分类）
+文件: images/chapter2_1/class_wheeled_agv.jpg
+Wikimedia 文件: File:Kempower, Lahti2-tehdas, Mirri-robotti 2025 (OMA20251-12+(numero)).jpg
+作者: Tiina Rekola
+许可证: CC BY 4.0
+来源: https://commons.wikimedia.org/wiki/File:Kempower,_Lahti2-tehdas,_Mirri-robotti_2025_(OMA20251-12%2B(numero)).jpg
+描述: Kempowerin Lahti2-tehtaan tuotantotiloja, joissa valmistetaan satelliitti-pikalatauslaitteita. Robotti, joka kuljettaa kokoonpanossa tarvittavia osia eri tuotantolinjojen välillä p
+### 履带式机器人（按移动方式分类）
+文件: images/chapter2_1/class_tracked_robot.jpg
+Wikimedia 文件: File:Teodor explosive ordnance disposal and observation robot.JPG
+作者: Antti Leppänen
+许可证: CC BY-SA 3.0
+来源: https://commons.wikimedia.org/wiki/File:Teodor_explosive_ordnance_disposal_and_observation_robot.JPG
+描述: Teodor explosive ordnance disposal and observation robot in Jyväskylä, Finland
+### 轮足复合机器人（按移动方式分类）
+文件: images/chapter2_1/class_hybrid_robot.jpg
+Wikimedia 文件: File:Leg-wheel Hybrid Walking Vehicle "Roller-Walker" 1994 - 2000.jpg
+作者: Fumihiro Kato
+许可证: CC BY 4.0
+来源: https://commons.wikimedia.org/wiki/File:Leg-wheel_Hybrid_Walking_Vehicle_%22Roller-Walker%22_1994_-_2000.jpg
+描述: 東京工業大学博物館 地下1階 特別展示室B 「ロボット研究と開発」展示．脚車輪ハイブリッド型４足歩行ロボット「ローラーウォーカー」1994年〜2000年
+### Delta 并联机器人（按构型分类）
+文件: images/chapter2_1/class_delta_parallel.jpg
+Wikimedia 文件: File:Robot delta FlexPicker d'ABB.png
+作者: Marc Auledas
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Robot_delta_FlexPicker_d%27ABB.png
+描述: Delta robot FlexPicker manufactured by ABB
+### 蛇形机器人（按构型分类）
+文件: images/chapter2_1/class_snake_robot.jpg
+Wikimedia 文件: File:SnakeBot1.jpg
+作者: ?
+许可证: Public domain
+来源: https://commons.wikimedia.org/wiki/File:SnakeBot1.jpg
+描述: ?
