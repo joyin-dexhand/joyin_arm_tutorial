@@ -128,3 +128,35 @@ Wikimedia 文件: File:SnakeBot1.jpg
 许可证: Public domain
 来源: https://commons.wikimedia.org/wiki/File:SnakeBot1.jpg
 描述: ?
+
+### 爬行式机器人（按移动方式分类·新增）
+文件: images/chapter2_1/class_crawling_robot.jpg
+Wikimedia 文件: File:Pipetel Explorer 30-36.jpg
+作者: Bradley Kramer
+许可证: CC BY-SA 3.0 us
+来源: https://commons.wikimedia.org/wiki/File:Pipetel_Explorer_30-36.jpg
+描述: Pipetel Explorer tetherless NDT pipeline crawler
+### 攀爬式机器人（按移动方式分类·新增）
+文件: images/chapter2_1/class_climbing_robot.jpg
+Wikimedia 文件: File:Capuchin Free Climbing Robot.jpg
+作者: Rxzhang12
+许可证: CC BY-SA 3.0
+来源: https://commons.wikimedia.org/wiki/File:Capuchin_Free_Climbing_Robot.jpg
+描述: Capuchin climbing robot climbing a vertical artificial climbing wall.
+### 跳跃式机器人（按移动方式分类·其他）
+文件: images/chapter2_1/class_jumping_robot.jpg
+Wikimedia 文件: File:U.S. Department of Energy - Science - 153 013 007 (9568562353).jpg
+作者: U.S. Department of Energy from United States
+许可证: Public domain
+来源: https://commons.wikimedia.org/wiki/File:U.S._Department_of_Energy_-_Science_-_153_013_007_(9568562353).jpg
+描述: The four-wheeled hopper robots will navigate autonomously by  wheel and jump with one mighty let onto or over obstacles of more than 25 feet. 
+The Precision Urban Hopper is funded by the Defense Advan
+### 仿生机器鱼（按移动方式分类·水下式配图更换）
+文件: images/chapter2_1/class_robofish.jpg
+Wikimedia 文件: File:Robot Fish (4651519523).jpg
+作者: Kuba Bożanowski from Warsaw, Poland
+许可证: CC BY 2.0
+来源: https://commons.wikimedia.org/wiki/File:Robot_Fish_(4651519523).jpg
+描述: Robot Fish
+
+注：原 class_sea_rov.jpg（水下 ROV）已不再被引用（水下式改用仿生机器鱼），文件已删除。
