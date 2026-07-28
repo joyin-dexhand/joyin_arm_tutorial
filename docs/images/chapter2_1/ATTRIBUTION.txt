@@ -105,29 +105,37 @@ Wikimedia 文件: File:2023-09 - Robot chirurgien Da Vinci Xi - Centre hospitali
 来源: https://commons.wikimedia.org/wiki/File:2023-09_-_Robot_chirurgien_Da_Vinci_Xi_-_Centre_hospitalier_de_Vesoul_-_02.jpg
 描述: Da Vinci Xi 手术机器人，法国 Vesoul 医院展示。
 
-### 人形机器人 ASIMO（按构型·人形）
+### 人形机器人（按构型·人形）
 文件: images/chapter2_1/humanoid_asimo.jpg
-Wikimedia 文件: File:ASIMO 4.28.11.jpg
-作者: Vanillase
-许可证: CC BY-SA 3.0
-来源: https://commons.wikimedia.org/wiki/File:ASIMO_4.28.11.jpg
-描述: Honda 工厂中的 ASIMO 人形机器人（Advanced Step in Innovative MObility）。
+Wikimedia 文件: File:Atlas climbing into a vehicle.jpg
+作者: Boston Dynamics（公有领域）
+许可证: Public domain
+来源: https://commons.wikimedia.org/wiki/File:Atlas_climbing_into_a_vehicle.jpg
+描述: Boston Dynamics Atlas 人形机器人爬入车辆的仿真图像。
 
 ### Delta 并联机器人（按构型·并联）
 文件: images/chapter2_1/class_delta_parallel.jpg
-Wikimedia 文件: File:Robot delta FlexPicker d'ABB.png
-作者: Marc Auledas
-许可证: CC BY-SA 4.0
-来源: https://commons.wikimedia.org/wiki/File:Robot_delta_FlexPicker_d%27ABB.png
-描述: Delta robot FlexPicker manufactured by ABB
+Wikimedia 文件: File:TOSY Parallel Robot.JPG
+作者: Stefan Xanthos
+许可证: CC BY-SA 3.0
+来源: https://commons.wikimedia.org/wiki/File:TOSY_Parallel_Robot.JPG
+描述: TOSY 工业并联机器人，2010 年慕尼黑 Automatica 展。
 
-### 蛇形机器人（按构型·蛇形）
+### 混联机器人（按构型·混联）
+文件: images/chapter2_1/class_hybrid_kinematic.jpg
+Wikimedia 文件: File:A birth of a "baby" robot.JPG
+作者: Norsirra
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:A_birth_of_a_%22baby%22_robot.JPG
+描述: Yamabot 8，串联机械臂 + 并联 Delta 的混联机器人。
+
+### 蛇形机器人（按构型·其他仿生代表）
 文件: images/chapter2_1/class_snake_robot.jpg
-Wikimedia 文件: File:SnakeBot1.jpg
-作者: ?
-许可证: Public domain
-来源: https://commons.wikimedia.org/wiki/File:SnakeBot1.jpg
-描述: ?
+Wikimedia 文件: File:The i²Snake Robot.png
+作者: I2Snake 团队
+许可证: CC BY 4.0
+来源: https://commons.wikimedia.org/wiki/File:The_i%C2%B2Snake_Robot.png
+描述: i²Snake，用于微创内镜手术的蛇形机器人原型。
 
 ### 编码器（测关节角度的器件，硬件感知）
 文件: images/chapter2_1/hw_encoder.jpg
