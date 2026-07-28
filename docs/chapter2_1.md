@@ -53,14 +53,14 @@
 | 轮式 | 靠轮子在地面上行驶 | 速度快、效率高、结构简单 | 仅适于平整地面，越障差 | ![轮式移动机器人](images/chapter2_1/class_wheeled_agv.jpg) |
 | 履带式 | 靠履带行驶，附着力强 | 越野与越障能力强、接地面积大 | 速度慢、能耗高、易损地面 | ![履带式机器人](images/chapter2_1/class_tracked_robot.jpg) |
 | 足腿式 | 仿生多腿行走（双足/四足/多足） | 越障与地形适应性最好 | 控制复杂、能耗高、负载有限 | ![四足机器狗](images/chapter2_1/class_mobile_spot.jpg) |
+| 复合式 | 轮、腿、履等两种以上方式组合 | 兼顾速度与越障，适应面广 | 机械与控制复杂度高 | ![轮足复合机器人](images/chapter2_1/class_hybrid_robot.jpg) |
 | 爬行式 | 贴地或贴壁蠕动前进，体型扁平 | 能钻入狭窄管道/缝隙 | 速度慢、负载小 | ![管道爬行机器人](images/chapter2_1/class_crawling_robot.jpg) |
 | 攀爬式 | 沿壁面/管线/树干等垂直面攀爬 | 替人执行高空与立面作业 | 附着机构复杂、易跌落 | ![攀爬机器人](images/chapter2_1/class_climbing_robot.jpg) |
 | 蠕动式 | 仿蛇/蚯蚓，靠身体波动向前蠕动 | 能穿越废墟与复杂狭窄空间 | 推进效率低、难以精确定位 | ![蛇形机器人](images/chapter2_1/class_snake_robot.jpg) |
-| 复合式 | 轮、腿、履等两种以上方式组合 | 兼顾速度与越障，适应面广 | 机械与控制复杂度高 | ![轮足复合机器人](images/chapter2_1/class_hybrid_robot.jpg) |
 | 飞行式 | 借助旋翼/固定翼在空中飞行 | 三维机动、覆盖范围大、无视地形 | 续航与负载受限、受气象影响 | ![四旋翼无人机](images/chapter2_1/class_air_drone.jpg) |
 | 水下式 | 在水下作业，耐压密封（含螺旋桨推进与仿生鱼摆尾） | 可到达人难以涉足的深海 | 通信与定位困难、维护成本高 | ![仿生机器鱼](images/chapter2_1/class_robofish.jpg) |
 | 空间式 | 在太空/外星环境运行 | 承担行星探测等极端任务 | 研制成本极高、不可维修 | ![火星车](images/chapter2_1/class_space_perseverance.jpg) |
-| 其他（跳跃式等） | 靠弹跳、滑翔等小众方式移动 | 适合碎片地形与突发越障 | 载荷与续航受限，应用面窄 | ![跳跃式机器人](images/chapter2_1/class_jumping_robot.jpg) |
+| 其他（跳跃/扑翼/滚动等） | 弹跳、扑翼飞行、整体滚动等小众方式 | 适合碎片地形、空中与特殊场景 | 载荷与续航受限，应用面窄 | 跳跃式：![跳跃式机器人](images/chapter2_1/class_jumping_robot.jpg)<br>扑翼式：![扑翼机器人](images/chapter2_1/class_flapping_robot.jpg)<br>滚动式：![球形机器人](images/chapter2_1/class_ball_robot.jpg) |
 
 #### 1.2.3 按构型与仿生特点分
 

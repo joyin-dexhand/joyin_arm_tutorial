@@ -160,3 +160,28 @@ Wikimedia 文件: File:Robot Fish (4651519523).jpg
 描述: Robot Fish
 
 注：原 class_sea_rov.jpg（水下 ROV）已不再被引用（水下式改用仿生机器鱼），文件已删除。
+
+======================================================================
+（更新：移动方式表「其他」行配图调整）
+
+### 跳跃式机器人（按移动方式分类·其他，纯腿式）
+文件: images/chapter2_1/class_jumping_robot.jpg
+Wikimedia 文件: File:150605-N-PO203-736 (18529331192).jpg
+作者: Office of Naval Research from Arlington, United States
+许可证: CC BY 2.0
+来源: https://commons.wikimedia.org/wiki/File:150605-N-PO203-736_(18529331192).jpg
+描述: The Massachusetts Institute of Technology (MIT) robotic cheetah entertains the crowd in between competition rounds during the Defense Advanced Resarch Projects Agency (DARPA) Robotics Challenge (DRC) 
+### 扑翼式机器人（按移动方式分类·其他）
+文件: images/chapter2_1/class_flapping_robot.jpg
+Wikimedia 文件: File:RoboCup 2016 Leipzig - Festo SmartBird.jpg
+作者: ubahnverleih
+许可证: CC0
+来源: https://commons.wikimedia.org/wiki/File:RoboCup_2016_Leipzig_-_Festo_SmartBird.jpg
+描述: RoboCup 2016 Leipzig - Festo SmartBird
+### 球形滚动机器人（按移动方式分类·其他）
+文件: images/chapter2_1/class_ball_robot.jpg
+Wikimedia 文件: File:Spherical Robot.jpg
+作者: Hossein Vahid Alizadeh
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Spherical_Robot.jpg
+描述: Picture of a pendulum-drive spherical mobile robot. The robot is made of a transparent spherical shell serving as the body of the robot and an internal driving unit (IDU) that enables the robot to mov
