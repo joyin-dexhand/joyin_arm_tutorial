@@ -107,11 +107,11 @@ Wikimedia 文件: File:2023-09 - Robot chirurgien Da Vinci Xi - Centre hospitali
 
 ### 人形机器人（按构型·人形）
 文件: images/chapter2_1/humanoid_asimo.jpg
-Wikimedia 文件: File:Atlas climbing into a vehicle.jpg
-作者: Boston Dynamics（公有领域）
-许可证: Public domain
-来源: https://commons.wikimedia.org/wiki/File:Atlas_climbing_into_a_vehicle.jpg
-描述: Boston Dynamics Atlas 人形机器人爬入车辆的仿真图像。
+Wikimedia 文件: File:Humanoid Robot at International Exhibitions.jpg
+作者: Muhammed Rıdvan
+许可证: CC BY-SA 4.0
+来源: https://commons.wikimedia.org/wiki/File:Humanoid_Robot_at_International_Exhibitions.jpg
+描述: 国际展会上的人形机器人。
 
 ### Delta 并联机器人（按构型·并联）
 文件: images/chapter2_1/class_delta_parallel.jpg
@@ -129,13 +129,13 @@ Wikimedia 文件: File:A birth of a "baby" robot.JPG
 来源: https://commons.wikimedia.org/wiki/File:A_birth_of_a_%22baby%22_robot.JPG
 描述: Yamabot 8，串联机械臂 + 并联 Delta 的混联机器人。
 
-### 蛇形机器人（按构型·其他仿生代表）
-文件: images/chapter2_1/class_snake_robot.jpg
-Wikimedia 文件: File:The i²Snake Robot.png
-作者: I2Snake 团队
-许可证: CC BY 4.0
-来源: https://commons.wikimedia.org/wiki/File:The_i%C2%B2Snake_Robot.png
-描述: i²Snake，用于微创内镜手术的蛇形机器人原型。
+### 仿生鸟（按构型·其他仿生代表）
+文件: images/chapter2_1/class_bio_bird.jpg
+Wikimedia 文件: File:RoboCup 2016 Leipzig - Festo SmartBird (2).jpg
+作者: ubahnverleih
+许可证: CC0
+来源: https://commons.wikimedia.org/wiki/File:RoboCup_2016_Leipzig_-_Festo_SmartBird_(2).jpg
+描述: Festo SmartBird 仿生扑翼鸟，2016 年 RoboCup 莱比锡展。
 
 ### 编码器（测关节角度的器件，硬件感知）
 文件: images/chapter2_1/hw_encoder.jpg
