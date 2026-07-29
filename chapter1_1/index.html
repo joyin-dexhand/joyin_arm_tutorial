@@ -1,0 +1,2426 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="..">
+      
+      
+        <link rel="next" href="../chapter1_2/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>快速上手 - JoyArm 机械臂教程</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#_1" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href=".." title="JoyArm 机械臂教程" class="md-header__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            JoyArm 机械臂教程
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              快速上手
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至暗色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切换至暗色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至亮色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切换至亮色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="JoyArm 机械臂教程" class="md-nav__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    JoyArm 机械臂教程
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    使用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速上手
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速上手
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 操作安全须知（首次上电必读）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 JoyArm 基本信息
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 JoyArm 基本信息">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 物理参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 电机参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 快速上手流程
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-bom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 物料清单（BOM）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 单电机测试
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6 整臂组装
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7 整机上电初始化
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7 整机上电初始化">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 上电与自检
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 自动零位标定
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 示教和轨迹复现
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8 实例例程
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-faq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9 初学者 FAQ
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10 资料速查汇总
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10 资料速查汇总">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#101" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 主要参考资料
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#102-joyarm-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.2 JoyArm 的 MDH 参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#103-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.3 JoyArm 的动力学参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#104-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.4 JoyArm 教程文档及项目仓库
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter1_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    关节电机
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter1_3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    六轴整臂
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter1_4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    两指夹爪
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    基础篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    基础篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第一章 机器人与机械臂初识
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第二章 空间位姿与位置正运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第三章 位置逆运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第四章 速度运动学与静力学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第五章 轨迹生成
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_6/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第六章 运动控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进阶篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    进阶篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter3_1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第七章 构型与结构设计、关节选型、装配体URDF导出
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter3_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第八章 动力学及控制实现
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter3_3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第九章 力控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter3_4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十章 ROS2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    应用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    应用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十一章 状态监测与安全软防护
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十二章 示教和遥操作
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十三章 末端执行器统一接口与自识别
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十四章 用户接口
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十五章 JoyArm 综合项目实践
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 操作安全须知（首次上电必读）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 JoyArm 基本信息
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 JoyArm 基本信息">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 物理参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 电机参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 快速上手流程
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-bom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 物料清单（BOM）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 单电机测试
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6 整臂组装
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7 整机上电初始化
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7 整机上电初始化">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 上电与自检
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 自动零位标定
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 示教和轨迹复现
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8 实例例程
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-faq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9 初学者 FAQ
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10 资料速查汇总
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10 资料速查汇总">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#101" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 主要参考资料
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#102-joyarm-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.2 JoyArm 的 MDH 参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#103-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.3 JoyArm 的动力学参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#104-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.4 JoyArm 教程文档及项目仓库
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="_1">快速上手</h1>
+<blockquote>
+<p>📌 <strong>本章定位</strong>：面向"想立刻用起来"的读者。<strong>无需任何理论基础</strong>，按下面流程操作即可让 JoyArm 机械臂动起来。想深入了解原理，请前往<a href="../chapter2_1/">基础篇</a>、<a href="../chapter3_1/">进阶篇</a>和<a href="../chapter4_1/">应用篇</a>。</p>
+</blockquote>
+<h2 id="1">1 操作安全须知（首次上电必读）</h2>
+<blockquote>
+<p>⚠️ <strong>请在第一次上电前完整阅读本节，操作不当可能损坏机械臂或造成人身伤害。</strong></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">序号</th>
+<th style="text-align: center;">安全要求</th>
+<th style="text-align: center;">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><strong>保持工作空间清空</strong></td>
+<td style="text-align: center;">机械臂工作半径内不得有人员与障碍物</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"><strong>先就位再上电</strong></td>
+<td style="text-align: center;">先将机械臂调至安全姿态（零位）再上电</td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;"><strong>上电后禁止强行扳动</strong></td>
+<td style="text-align: center;">上电后切勿手动强行扳动关节，会损坏电机减速器</td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;"><strong>紧急情况立即断电</strong></td>
+<td style="text-align: center;">出现异常立即按下急停按钮或断开电源</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-joyarm">2 JoyArm 基本信息</h2>
+<h3 id="21">2.1 物理参数</h3>
+<p><a href="">JoyArm 机械臂整体外观图 + 坐标系标注图</a></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">参数</th>
+<th style="text-align: center;">数值</th>
+<th style="text-align: center;">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">自由度</td>
+<td style="text-align: center;">6 DOF</td>
+<td style="text-align: center;">六旋转关节</td>
+</tr>
+<tr>
+<td style="text-align: center;">臂展长度</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">末端可达最大水平距离</td>
+</tr>
+<tr>
+<td style="text-align: center;">极限负载</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">末端可承载最大重量</td>
+</tr>
+<tr>
+<td style="text-align: center;">工作空间范围</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">末端可达空间包络</td>
+</tr>
+<tr>
+<td style="text-align: center;">自身重量</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">不含末端执行器</td>
+</tr>
+<tr>
+<td style="text-align: center;">MDH 参数表</td>
+<td style="text-align: center;">详见本页底部"附件与参考"</td>
+<td style="text-align: center;">改进 D-H 参数</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22">2.2 电机参数</h3>
+<p><a href="">关节电机实物图 + 接口标注图</a></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">参数</th>
+<th style="text-align: center;">数值</th>
+<th style="text-align: center;">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">峰值扭矩</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">瞬时最大输出力矩</td>
+</tr>
+<tr>
+<td style="text-align: center;">额定扭矩</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">长期稳定输出力矩</td>
+</tr>
+<tr>
+<td style="text-align: center;">额定电压</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">供电电压</td>
+</tr>
+<tr>
+<td style="text-align: center;">单电机重量</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">含减速器</td>
+</tr>
+<tr>
+<td style="text-align: center;">通信接口</td>
+<td style="text-align: center;">CAN</td>
+<td style="text-align: center;">详见<a href="../chapter1_2/">关节电机</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3">3 快速上手流程</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">具体操作</th>
+<th style="text-align: center;">操作目的</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">拆箱验收，核对物料清单</td>
+<td style="text-align: center;">确保运输无损坏</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">单关节测试并设置电机ID</td>
+<td style="text-align: center;">验证功能、分配唯一标识</td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">将关节与连杆拼装为完整机械臂并固定</td>
+<td style="text-align: center;">整臂组装固定</td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">将机械臂拜访至零位，运行自动零位标定程序（出厂已标定，新机可跳过此步骤）</td>
+<td style="text-align: center;">确定各关节的零位基准</td>
+</tr>
+<tr>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">拖动示教和轨迹回放复现，让机械臂动起来</td>
+<td style="text-align: center;">检验整臂运动能力</td>
+</tr>
+<tr>
+<td style="text-align: center;">6</td>
+<td style="text-align: center;">运行实例例程，开始上手二次开发</td>
+<td style="text-align: center;">熟悉功能，快速用起来</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-bom">4 物料清单（BOM）</h2>
+<p><a href="">全部零部件全家福照片</a></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">类别</th>
+<th style="text-align: center;">名称</th>
+<th style="text-align: center;">数量</th>
+<th style="text-align: center;">获取方式</th>
+<th style="text-align: center;">备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">结构件</td>
+<td style="text-align: center;">底座结构</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><em>购买/打印链接</em></td>
+<td style="text-align: center;"><em>参数</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">结构件</td>
+<td style="text-align: center;">连杆结构</td>
+<td style="text-align: center;">6</td>
+<td style="text-align: center;"><em>购买/打印链接</em></td>
+<td style="text-align: center;"><em>参数</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">执行器</td>
+<td style="text-align: center;">关节电机</td>
+<td style="text-align: center;">6</td>
+<td style="text-align: center;"><em>购买链接</em></td>
+<td style="text-align: center;">见电机参数表</td>
+</tr>
+<tr>
+<td style="text-align: center;">末端执行器</td>
+<td style="text-align: center;">两指夹爪</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><em>购买链接</em></td>
+<td style="text-align: center;">详见<a href="../chapter1_4/">两指夹爪</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">线缆模块</td>
+<td style="text-align: center;">USB 转 CAN</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><em>购买链接</em></td>
+<td style="text-align: center;">上位机通信</td>
+</tr>
+<tr>
+<td style="text-align: center;">电源</td>
+<td style="text-align: center;">直流电源</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><em>购买链接</em></td>
+<td style="text-align: center;"><em>规格</em></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5">5 单电机测试</h2>
+<p>按以下顺序逐项测试，确认单关节电机功能正常。</p>
+<p><a href="">单电机测试接线实物图 + 上位机软件界面截图</a></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">测试项</th>
+<th style="text-align: center;">出厂默认值</th>
+<th style="text-align: center;">测试方法</th>
+<th style="text-align: center;">操作演示图</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">上位机安装</td>
+<td style="text-align: center;">无</td>
+<td style="text-align: center;">安装并启动上位机，便于测试与运动可视化</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">上电和通信建立</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">连接 电源及 USB-CAN，确认总线能收发数据</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">电机 ID 读写</td>
+<td style="text-align: center;">0x00 ~ 0x05</td>
+<td style="text-align: center;">读取并设置电机唯一 ID</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">电机零位设置</td>
+<td style="text-align: center;">已标定</td>
+<td style="text-align: center;">标定电机零点角度，作为位置控制的基准</td>
+<td style="text-align: center;">无</td>
+</tr>
+<tr>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">指令读取</td>
+<td style="text-align: center;">无</td>
+<td style="text-align: center;">验证指令读取功能是否正常</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">6</td>
+<td style="text-align: center;">使能/失能</td>
+<td style="text-align: center;"><em>默认失能</em></td>
+<td style="text-align: center;">下发使能指令，电机进入伺服锁定状态</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">7</td>
+<td style="text-align: center;">位置控制</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">下发目标角度，观察是否准确到位</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">8</td>
+<td style="text-align: center;">速度控制</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">下发目标速度，观察运转方向与转速</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">9</td>
+<td style="text-align: center;">力矩反馈</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">堵转或加载，读取实时输出力矩值</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">10</td>
+<td style="text-align: center;">状态反馈</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">读取温度、电压、电流、故障码等状态量</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6">6 整臂组装</h2>
+<p><a href="">全部物料全家福照片（含 A~F 分区标注：A 结构件 / B 执行器 / C 末端执行器 / D 线缆模块 / E 电源及配件 / F 工具与紧固件）</a></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">具体操作</th>
+<th style="text-align: center;">操作目的</th>
+<th style="text-align: center;">操作演示图</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">安装底座并固定</td>
+<td style="text-align: center;">提供稳定的整机安装基准</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">安装电机 1、连杆 1</td>
+<td style="text-align: center;">组装第一轴关节与连杆</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">安装电机 2、连杆 2</td>
+<td style="text-align: center;">组装第二轴关节与连杆</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">安装电机 3、连杆 3</td>
+<td style="text-align: center;">组装第三轴关节与连杆</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">安装电机 4、连杆 4</td>
+<td style="text-align: center;">组装第四轴关节与连杆</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">6</td>
+<td style="text-align: center;">安装电机 5、连杆 5</td>
+<td style="text-align: center;">组装第五轴关节与连杆</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">7</td>
+<td style="text-align: center;">安装电机 6、连杆 6</td>
+<td style="text-align: center;">组装第六轴关节与连杆</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">8</td>
+<td style="text-align: center;">理线并固定</td>
+<td style="text-align: center;">防止运动中干涉、保障通信可靠</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">9</td>
+<td style="text-align: center;">检查与初始姿态</td>
+<td style="text-align: center;">确认各紧固件到位、关节可顺畅转动</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">10</td>
+<td style="text-align: center;">连接末端执行器</td>
+<td style="text-align: center;">连接夹爪使机械臂具备抓取能力</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7 整机上电初始化</h2>
+<h3 id="71">7.1 上电与自检</h3>
+<p>整机组装完成后，首次上电须按规范流程操作并完成自检，确认各关节状态正常。</p>
+<p><a href="">整臂上电接线实物图 + 上位机自检界面截图</a></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">具体操作</th>
+<th style="text-align: center;">操作目的</th>
+<th style="text-align: center;">操作演示图</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">安装并启动上位机</td>
+<td style="text-align: center;">便于测试和运动可视化</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">机械臂置于初始零位姿态</td>
+<td style="text-align: center;">防止发生意外运动</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">连接电源与 USB-CAN 线</td>
+<td style="text-align: center;">供电并建立通信链路</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">上位机扫描总线，识别 6 个电机</td>
+<td style="text-align: center;">确认全部关节通信正常</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;">逐个读取电机状态</td>
+<td style="text-align: center;">核对温度、电压、电流、故障码均正常</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="72">7.2 自动零位标定</h3>
+<blockquote>
+<p>📌 出厂已标定，新机可跳过本节；更换电机或重新装配后需重新执行。</p>
+</blockquote>
+<p><a href="">机械臂安全姿态（零位）示意图</a></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">具体操作</th>
+<th style="text-align: center;">操作目的</th>
+<th style="text-align: center;">操作演示图</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">上电与自检</td>
+<td style="text-align: center;">完成整机供电与状态检查（详见 7.1）</td>
+<td style="text-align: center;">无</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">确保机械臂位于零位姿态</td>
+<td style="text-align: center;">使各关节处于零位附近</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">运行自动零位标定功能或程序</td>
+<td style="text-align: center;">标定各关节零位置</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="73">7.3 示教和轨迹复现</h3>
+<p>通过拖动示教记录运动轨迹，再一键回放，可快速让机械臂动起来。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">具体操作</th>
+<th style="text-align: center;">操作目的</th>
+<th style="text-align: center;">操作演示图</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">单击按下末端连杆上的按钮</td>
+<td style="text-align: center;">进入示教模式，便于手动拖动</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">拖动机械臂记录轨迹</td>
+<td style="text-align: center;">演示期望的运动路径</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">单击按下末端连杆上的按钮</td>
+<td style="text-align: center;">停止记录并保存轨迹数据</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">双击按下末端连杆上的按钮</td>
+<td style="text-align: center;">一键回放复现上次记录的轨迹</td>
+<td style="text-align: center;"><a href="">占位</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8">8 实例例程</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">例程</th>
+<th style="text-align: center;">启动命令</th>
+<th style="text-align: center;">原理概述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1 单电机位置控制</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">下发目标角度，电机通过编码器闭环定位到指定角度</td>
+</tr>
+<tr>
+<td style="text-align: center;">2 单电机力矩读取</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">实时读取电机电流，换算为输出力矩并监测</td>
+</tr>
+<tr>
+<td style="text-align: center;">3 整臂关节空间运动</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">各关节独立规划轨迹，协同运动到目标关节角</td>
+</tr>
+<tr>
+<td style="text-align: center;">4 整臂笛卡尔空间运动</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">由末端目标位姿逆解出关节角，规划直线/圆弧轨迹</td>
+</tr>
+<tr>
+<td style="text-align: center;">5 零位标定</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">记录各关节零点基准，建立统一的角度参考</td>
+</tr>
+<tr>
+<td style="text-align: center;">6 示教与轨迹复现</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">拖动记录关节轨迹，再按时间序列回放运动</td>
+</tr>
+<tr>
+<td style="text-align: center;">7 关节空间轨迹规划</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">用多项式拟合关节角，生成平滑无冲击的运动轨迹</td>
+</tr>
+<tr>
+<td style="text-align: center;">8 夹爪控制</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">通过指令控制两指夹爪的开合位置与夹持力度</td>
+</tr>
+<tr>
+<td style="text-align: center;">9 综合抓取任务</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;">串联运动、夹爪与轨迹规划，完成抓取—放置闭环</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-faq">9 初学者 FAQ</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">你的问题</th>
+<th style="text-align: center;">简要回答</th>
+<th style="text-align: center;">详细阅读</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">什么是机器人，机器人有哪些类别？</td>
+<td style="text-align: center;">机器人是能自动执行任务的机器装置，常以工业/服务、移动/固定等方法分类</td>
+<td style="text-align: center;"><a href="../chapter2_1/">基础篇：第一章</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">什么是机械臂，有什么应用？为何做机械臂？</td>
+<td style="text-align: center;">机械臂是模仿手臂功能的机械装置，工业/服务领域应用最广</td>
+<td style="text-align: center;"><a href="../chapter2_1/">基础篇：第一章</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">机械臂的组件构成？核心知识概念有哪些？</td>
+<td style="text-align: center;">关节、连杆、末端执行器构成；运动学/动力学/控制为核心</td>
+<td style="text-align: center;"><a href="../chapter2_1/">基础篇：第一章</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">怎么让机械臂真正干活？我时间有限想直接用</td>
+<td style="text-align: center;">看完使用篇即可上手基础操作</td>
+<td style="text-align: center;"><a href="./">使用篇</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">怎么让机械臂动起来？我想掌握原理</td>
+<td style="text-align: center;">系统学习基础篇、进阶篇及应用篇的内容</td>
+<td style="text-align: center;"><a href="../chapter2_1/">基础篇</a>、<a href="../chapter3_1/">进阶篇</a>、<a href="../chapter4_1/">应用篇</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10">10 资料速查汇总</h2>
+<h3 id="101">10.1 主要参考资料</h3>
+<p>本教程理论部分的主要参考资料，涵盖运动学、动力学、力控制等核心内容。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">项目</th>
+<th style="text-align: center;">信息</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">书名</td>
+<td style="text-align: center;">机器人学导论（原书第四版）</td>
+</tr>
+<tr>
+<td style="text-align: center;">作者</td>
+<td style="text-align: center;">John J. Craig</td>
+</tr>
+<tr>
+<td style="text-align: center;">ISBN</td>
+<td style="text-align: center;">9787111590316</td>
+</tr>
+<tr>
+<td style="text-align: center;">适用章节</td>
+<td style="text-align: center;">基础篇、进阶篇</td>
+</tr>
+</tbody>
+</table>
+<p><a href="">教材封面图</a></p>
+<h3 id="102-joyarm-mdh">10.2 JoyArm 的 MDH 参数</h3>
+<p>JoyArm 六轴机械臂的改进 D-H 参数表，用于正/逆运动学求解。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">关节 i</th>
+<th style="text-align: center;">aᵢ₋₁ (m)</th>
+<th style="text-align: center;">αᵢ₋₁ (rad)</th>
+<th style="text-align: center;">dᵢ (m)</th>
+<th style="text-align: center;">θᵢ (rad)</th>
+<th style="text-align: center;">角度范围</th>
+<th style="text-align: center;">电机型号</th>
+<th style="text-align: center;">速度限制</th>
+<th style="text-align: center;">扭矩限制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">6</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">E</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+</tbody>
+</table>
+<h3 id="103-joyarm">10.3 JoyArm 的动力学参数</h3>
+<p>JoyArm 各连杆的质量、质心位置与惯量参数，用于动力学建模与控制。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">连杆 i</th>
+<th style="text-align: center;">质量 mᵢ (kg)</th>
+<th style="text-align: center;">质心位置 (m)</th>
+<th style="text-align: center;">惯量张量 (kg·m²)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">6</td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+</tbody>
+</table>
+<h3 id="104-joyarm">10.4 JoyArm 教程文档及项目仓库</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">项目</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">跳转链接</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">教程文档</td>
+<td style="text-align: center;">本教程站点</td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">BOM 清单</td>
+<td style="text-align: center;">机械臂三维模型与图纸</td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">控制代码</td>
+<td style="text-align: center;">电机控制与例程源码</td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+<tr>
+<td style="text-align: center;">电机文档</td>
+<td style="text-align: center;">电机厂商官方文档及代码</td>
+<td style="text-align: center;"><em>待补充</em></td>
+</tr>
+</tbody>
+</table>
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.expand"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

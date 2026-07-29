@@ -1,0 +1,66 @@
+/* ============================================================
+   侧边栏（左右目录）宽度与换行控制
+   - 宽度放大至默认的 1.5 倍（12rem → 18rem）
+   - 标题禁止自动换行，超出时横向滚动条拖拽
+   - md-sidebar__inner 限制最大宽度，避免过宽挤压正文
+   ============================================================ */
+
+/* 桌面端：放大整体布局并加宽侧边栏（移动端抽屉式不受影响） */
+@media screen and (min-width: 76.25em) {
+  /* 整体布局容器放宽：两侧栏(各18rem) + 中间内容(约50rem) = 86rem */
+  .md-grid {
+    max-width: 86rem; /* 默认 61rem，放宽以容纳更宽的中间内容 */
+  }
+  .md-sidebar.md-sidebar--primary,
+  .md-sidebar.md-sidebar--secondary {
+    width: 18rem; /* 默认 12.1rem 的约 1.5 倍，保持不变 */
+  }
+}
+
+/* 标题不换行，超出部分横向滚动 */
+.md-sidebar__scrollwrap {
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.md-nav__title,
+.md-nav__link {
+  white-space: nowrap;
+}
+
+/* 横向滚动条样式（细且醒目） */
+.md-sidebar__scrollwrap::-webkit-scrollbar {
+  height: 6px;
+}
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb {
+  background: var(--md-default-fg-color--lighter);
+  border-radius: 3px;
+}
+.md-sidebar__scrollwrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================================
+   表格单元格统一居中（水平 + 垂直）
+   - 强制所有表格 td/th 居中，无论 markdown 写成什么对齐符(:--- / :---:)
+   - 适用 Markdown 表格与 HTML 表格（含合并单元格）
+   - 本项目约定：所有表格单元格默认居中
+   - 用 !important 覆盖 mkdocs 由 :--- 生成的内联 text-align:left
+   ============================================================ */
+.md-typeset table td,
+.md-typeset table th {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+/* ============================================================
+   表格内图片统一宽度
+   - 分类表（应用/移动/构型）的实例列配图统一宽度，
+     避免竖向高图(ASIMO/Delta/蛇形)显示过大、与横向图不一致
+   - 仅作用于表格单元格内的 <img>，不影响正文大图
+   ============================================================ */
+.md-typeset table td img {
+  max-width: 300px !important;
+  width: 300px !important;
+  height: auto !important;
+}

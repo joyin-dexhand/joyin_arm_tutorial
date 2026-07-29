@@ -1,0 +1,2195 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../chapter1_4/">
+      
+      
+        <link rel="next" href="../chapter2_2/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>第一章 机器人与机械臂初识 - JoyArm 机械臂教程</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#_1" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href=".." title="JoyArm 机械臂教程" class="md-header__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            JoyArm 机械臂教程
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              第一章 机器人与机械臂初识
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至暗色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切换至暗色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至亮色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切换至亮色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="JoyArm 机械臂教程" class="md-nav__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    JoyArm 机械臂教程
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    使用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter1_1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速上手
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter1_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    关节电机
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter1_3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    六轴整臂
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter1_4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    两指夹爪
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    基础篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    基础篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第一章 机器人与机械臂初识
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第一章 机器人与机械臂初识
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 发展历史与分类方式
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 发展历史与分类方式">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 什么是机器人：从科幻到现实
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.1 什么是机器人：从科幻到现实">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        如何判断"是不是机器人"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 机器人的分类方式
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.2 机器人的分类方式">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.1 按应用领域分
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.2 按移动方式分
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.3 按构型与仿生特点分
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 为什么从机械臂开始入门
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 基础概念速扫盲
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 基础概念速扫盲">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 机械结构与几何类
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.1 机械结构与几何类">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#221" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.1 基本组成：基座、关节、连杆、末端执行器
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#222" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.2 关键参数：自由度、负载、工作半径、工作空间
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#223" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.3 坐标系体系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 感知执行硬件类
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 学科方法类
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 开发工具与环境
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第二章 空间位姿与位置正运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第三章 位置逆运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第四章 速度运动学与静力学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第五章 轨迹生成
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter2_6/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第六章 运动控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进阶篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    进阶篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter3_1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第七章 构型与结构设计、关节选型、装配体URDF导出
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter3_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第八章 动力学及控制实现
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter3_3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第九章 力控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter3_4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十章 ROS2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    应用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    应用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十一章 状态监测与安全软防护
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十二章 示教和遥操作
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十三章 末端执行器统一接口与自识别
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十四章 用户接口
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter4_5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十五章 JoyArm 综合项目实践
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 发展历史与分类方式
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 发展历史与分类方式">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 什么是机器人：从科幻到现实
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.1 什么是机器人：从科幻到现实">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        如何判断"是不是机器人"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 机器人的分类方式
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.2 机器人的分类方式">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.1 按应用领域分
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.2 按移动方式分
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.3 按构型与仿生特点分
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 为什么从机械臂开始入门
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 基础概念速扫盲
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 基础概念速扫盲">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 机械结构与几何类
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.1 机械结构与几何类">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#221" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.1 基本组成：基座、关节、连杆、末端执行器
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#222" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.2 关键参数：自由度、负载、工作半径、工作空间
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#223" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.3 坐标系体系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 感知执行硬件类
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 学科方法类
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 开发工具与环境
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="_1">第一章 机器人与机械臂初识</h1>
+<blockquote>
+<p>📌 <strong>概述</strong>：本章面向零基础初学者完成对机器人与机械臂的初识。回答了“<strong>什么是机器人</strong>”、“<strong>机器人类别有哪些</strong>”和“<strong>为什么从机械臂入门</strong>”三个基本问题。解释了几组贯穿后续章节的机器人学术语，涵盖机械结构与几何（关节/连杆/末端、自由度/负载/工作空间、坐标系体系）、硬件（执行器与传感器）、学科方法（运动学/动力学/控制）。给出了推荐的机械臂开发工具与环境。</p>
+</blockquote>
+<h2 id="1">1 发展历史与分类方式</h2>
+<h3 id="11">1.1 什么是机器人：从科幻到现实</h3>
+<p>"机器人（Robot）"一词最早出自 1920 年捷克作家卡雷尔·恰佩克的剧本《罗素姆的万能机器人》，词根源自 <em>robota</em>（意为"劳役、苦工"）。但真正让机器人从科幻走向现实，是<strong>工业机器人</strong>的诞生：</p>
+<ul>
+<li><strong>1954 年</strong>，美国人乔治·戴沃尔申请了第一台可编程机械手专利，奠定了"用程序代替人手"的工业机器人思路。</li>
+<li><strong>1961 年</strong>，<strong>Unimate</strong> 机械臂在美国通用汽车的装配线上岗，成为世界上<strong>第一台真正投入生产的工业机器人</strong>，负责压铸件搬运。</li>
+</ul>
+<p>此后，机器人技术沿<strong>两个方向</strong>演进：一个方向追求<strong>工业精度与负载</strong>（焊接、喷涂、装配等制造场景）；另一个方向追求<strong>自主性与适应性</strong>（移动、感知、决策等非结构化场景）。今天我们见到的各类机器人，本质上都来自这两个方向的延伸与融合。</p>
+<h4 id="_2">如何判断"是不是机器人"</h4>
+<p>会动 ≠ 机器，一个被广泛接受的判断标准是：<strong>机器人是一种能够通过感知、决策、执行，自主或半自主地完成物理任务的机器</strong>。必须同时具备<strong>可编程（动作可改）、可运动（产生物理位移或操作）、有感知（获取环境/自身反馈）</strong>三项特征。即：<strong>会按程序"感知—决策—执行"进行运动</strong>的才是机器人，"按固定流程动作"的叫自动化机器。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">设备类别</th>
+<th style="text-align: center;">是不是机器人</th>
+<th style="text-align: left;">关键判断</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">机械臂</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: left;">可编程、能运动、有位置反馈，三者齐全</td>
+</tr>
+<tr>
+<td style="text-align: center;">家用扫地机器人</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: left;">可编程、能移动、有传感器（防跌落、寻路）</td>
+</tr>
+<tr>
+<td style="text-align: center;">自动取款机（ATM）</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: left;">动作固定、不可编程改变运动逻辑，属于自动化设备</td>
+</tr>
+<tr>
+<td style="text-align: center;">普通洗衣机</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: left;">只有定时循环，无环境感知、无运动机构</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12">1.2 机器人的分类方式</h3>
+<p>机器人种类繁多，没有唯一正确的分类法。常见的三个分类视角为：<strong>看它干什么（应用领域）、看它怎么走（运动方式）、看它长什么样（构型与仿生）</strong>。</p>
+<blockquote>
+<p>💡 掌握这些分类，不是为了背概念，更是为了在遇到机器人时能快速做出判断。比如看到一台<strong>轮式机器人</strong>，就能联想到它能够"建图、定位、导航"，优势是"简单可靠、成本低"，常见于地面清洁、物流配送等场景；反过来，要设计一台<strong>野外巡检机器人</strong>，则会优先考虑<strong>履带式</strong>或<strong>足腿式</strong>——越障能力才是关键。<strong>分类本质上是一张"机器人速查表"</strong>。</p>
+</blockquote>
+<h4 id="121">1.2.1 按应用领域分</h4>
+<p>按机器人服务的行业和场景划分，是最贴近"用途"的分类视角。参照国际机器人联合会（IFR）的口径，可分为工业、农业、服务（个人家用 + 专业服务）、特种四大类。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">类别</th>
+<th style="text-align: center;">主要特点</th>
+<th style="text-align: center;">优点</th>
+<th style="text-align: center;">缺点</th>
+<th style="text-align: center;">实例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">工业机器人</td>
+<td style="text-align: center;">面向制造业，结构化环境、重复精度高</td>
+<td style="text-align: center;">速度快、精度高、可 24 小时作业</td>
+<td style="text-align: center;">环境适应性差，需安全防护</td>
+<td style="text-align: center;"><img alt="焊接机械臂" src="../images/chapter2_1/class_industrial_kuka.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">农业机器人</td>
+<td style="text-align: center;">面向农田/温室，半结构化、户外作业</td>
+<td style="text-align: center;">缓解劳动力短缺，作业标准化</td>
+<td style="text-align: center;">受天气与作物多样性影响大</td>
+<td style="text-align: center;"><img alt="农业采摘机器人" src="../images/chapter2_1/class_agri_robot.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">服务机器人</td>
+<td style="text-align: center;">直接服务于人，强调安全与交互</td>
+<td style="text-align: center;">与人共事，应用场景广</td>
+<td style="text-align: center;">安全与合规要求高</td>
+<td style="text-align: center;"><img alt="家用扫地机器人" src="../images/chapter2_1/class_service_roomba.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">特种机器人</td>
+<td style="text-align: center;">替人进入危险/极端环境作业</td>
+<td style="text-align: center;">替代人做高危工作</td>
+<td style="text-align: center;">成本高、定制化程度高</td>
+<td style="text-align: center;"><img alt="太空探测机器人" src="../images/chapter2_1/class_space_perseverance.jpg" /></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 其中"服务机器人"按服务对象又细分为<strong>个人/家用</strong>（如扫地机、陪伴机器人）和<strong>专业服务</strong>（如手术机器人、物流配送）。本教程后续涉及的 JoyArm 机械臂既可用于个人/家用，亦可用于专业服务。</p>
+</blockquote>
+<h4 id="122">1.2.2 按移动方式分</h4>
+<p>按机器人的基座是否移动、以及怎么移动来划分。这一视角直接体现了机器人"在不在原地干活"以及"怎么去到目标位置"。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">类别</th>
+<th style="text-align: center;">主要特点</th>
+<th style="text-align: center;">优点</th>
+<th style="text-align: center;">缺点</th>
+<th style="text-align: center;">实例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">固定式</td>
+<td style="text-align: center;">基座固定不动，只有臂在动</td>
+<td style="text-align: center;">精度高、负载大、易控制</td>
+<td style="text-align: center;">工作范围受限</td>
+<td style="text-align: center;"><img alt="串联机械臂" src="../images/chapter2_1/class_industrial_kuka.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">轮式</td>
+<td style="text-align: center;">靠轮子在地面上行驶</td>
+<td style="text-align: center;">速度快、效率高、结构简单</td>
+<td style="text-align: center;">仅适于平整地面，越障差</td>
+<td style="text-align: center;"><img alt="轮式移动机器人" src="../images/chapter2_1/class_wheeled_agv.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">履带式</td>
+<td style="text-align: center;">靠履带行驶，附着力强</td>
+<td style="text-align: center;">越野与越障能力强、接地面积大</td>
+<td style="text-align: center;">速度慢、能耗高、易损地面</td>
+<td style="text-align: center;"><img alt="履带式机器人" src="../images/chapter2_1/class_tracked_robot.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">足腿式</td>
+<td style="text-align: center;">仿生多腿行走（双足/四足/多足）</td>
+<td style="text-align: center;">越障与地形适应性最好</td>
+<td style="text-align: center;">控制复杂、能耗高、负载有限</td>
+<td style="text-align: center;"><img alt="四足机器狗" src="../images/chapter2_1/class_mobile_spot.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">复合式</td>
+<td style="text-align: center;">轮、腿、履等两种以上方式组合</td>
+<td style="text-align: center;">兼顾速度与越障，适应面广</td>
+<td style="text-align: center;">机械与控制复杂度高</td>
+<td style="text-align: center;"><img alt="轮足复合机器人" src="../images/chapter2_1/class_hybrid_robot.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">飞行式</td>
+<td style="text-align: center;">借助旋翼/固定翼在空中飞行</td>
+<td style="text-align: center;">三维机动、覆盖范围大、无视地形</td>
+<td style="text-align: center;">续航与负载受限、受气象影响</td>
+<td style="text-align: center;"><img alt="四旋翼无人机" src="../images/chapter2_1/class_air_drone.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">水下式</td>
+<td style="text-align: center;">在水下作业，耐压密封（含螺旋桨推进与仿生鱼摆尾）</td>
+<td style="text-align: center;">可到达人难以涉足的深海</td>
+<td style="text-align: center;">通信与定位困难、维护成本高</td>
+<td style="text-align: center;"><img alt="仿生机器鱼" src="../images/chapter2_1/class_robofish.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">空间式</td>
+<td style="text-align: center;">在太空/外星环境运行</td>
+<td style="text-align: center;">承担行星探测等极端任务</td>
+<td style="text-align: center;">研制成本极高、不可维修</td>
+<td style="text-align: center;"><img alt="火星车" src="../images/chapter2_1/class_space_perseverance.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">其他移动方式（爬行/攀爬/蠕动/跳跃/扑翼/滚动等）</td>
+<td style="text-align: center;">上述之外的小众移动方式：贴地爬行、立面攀爬、身体蠕动、弹跳、扑翼飞行、整体滚动等</td>
+<td style="text-align: center;">各自适配特殊场景（管道/废墟/碎片地形/空中等）</td>
+<td style="text-align: center;">通用性差、载荷续航受限，多为定制</td>
+<td style="text-align: center;"><img alt="球形机器人" src="../images/chapter2_1/class_ball_robot.jpg" /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="123">1.2.3 按构型与仿生特点分</h4>
+<p>按机械结构的拓扑（关节如何串联/并联/混联）以及是否模仿生物形态来划分。这一视角最贴近"机器人本体长什么样"。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">类别</th>
+<th style="text-align: center;">主要特点</th>
+<th style="text-align: center;">优点</th>
+<th style="text-align: center;">缺点</th>
+<th style="text-align: center;">实例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">串联机器人</td>
+<td style="text-align: center;">多个关节首尾依次串联，像人的手臂；常见变体有<strong>直角坐标、圆柱坐标、SCARA</strong>（平面关节）等</td>
+<td style="text-align: center;">工作空间大、灵活、结构简单</td>
+<td style="text-align: center;">累积误差大、刚度较低</td>
+<td style="text-align: center;"><img alt="串联机械臂" src="../images/chapter2_1/class_industrial_kuka.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">并联机器人</td>
+<td style="text-align: center;">多条支链共同驱动末端平台；代表有 <strong>Delta</strong>（高速拾放）和 <strong>Stewart</strong> 平台（六自由度）</td>
+<td style="text-align: center;">刚度高、速度快、无累积误差</td>
+<td style="text-align: center;">工作空间小、控制复杂</td>
+<td style="text-align: center;"><img alt="Delta 并联机器人" src="../images/chapter2_1/class_delta_parallel.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">混联机器人</td>
+<td style="text-align: center;">串联与并联机构组合，取两者之长（如 Tricept、Exechon，并联主结构 + 串联腕）</td>
+<td style="text-align: center;">兼顾大工作空间与高刚度</td>
+<td style="text-align: center;">结构与建模复杂</td>
+<td style="text-align: center;"><img alt="混联机器人" src="../images/chapter2_1/class_hybrid_kinematic.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">人形机器人</td>
+<td style="text-align: center;">仿人形，双足 + 双臂 + 头部</td>
+<td style="text-align: center;">适配人类环境与工具</td>
+<td style="text-align: center;">平衡与控制极难、成本高</td>
+<td style="text-align: center;"><img alt="人形机器人" src="../images/chapter2_1/humanoid_asimo.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">四足机器人</td>
+<td style="text-align: center;">仿四足动物，四条腿行走</td>
+<td style="text-align: center;">比双足稳、比轮式更能越障</td>
+<td style="text-align: center;">负载与续航仍受限</td>
+<td style="text-align: center;"><img alt="四足机器狗" src="../images/chapter2_1/class_mobile_spot.jpg" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">其他仿生</td>
+<td style="text-align: center;">仿鸟类（扑翼）、鱼类（摆尾）、昆虫节肢动物（六足/八足）、爬行（蛇形）、植物等众多仿生形态</td>
+<td style="text-align: center;">各自适配特殊场景（空中/水下/狭窄空间/侦察等）</td>
+<td style="text-align: center;">通用性差、多为定制</td>
+<td style="text-align: center;"><img alt="仿生鸟" src="../images/chapter2_1/class_bio_bird.jpg" /></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>📌 一台机器人往往同时属于多个类别：例如一台带轮子、会送货、与人交互的酒店派送机器人，既属于"服务机器人"又属于"移动机器人"。</p>
+</blockquote>
+<h3 id="13">1.3 为什么从机械臂开始入门</h3>
+<p><strong>机械臂（Robotic Arm / Manipulator）</strong>几乎是贯穿各类别的"最大公约数"：它既是工业机器人的代表，又是固定式机器人的典型，还是串联构型的基础形态。它是最经典、也最适合作为入门的一类机器人：</p>
+<ol>
+<li><strong>应用最广，值得学</strong>：从工厂的焊接、装配、喷涂，到医院里的手术辅助（如达芬奇手术机器人），再到生活中的分拣、抓取，机械臂几乎无处不在。这意味着学完就能直接对接真实场景，立刻解决实际问题。</li>
+<li><strong>理论最完整，好上手</strong>：机械臂涉及的运动学、动力学、轨迹规划、运动控制，正是整个机器人学的核心骨架，体系最成熟、教材最丰富，初学者能沿着一条清晰的主线稳步推进。</li>
+<li><strong>其他机器人前置基础，能进阶</strong>：人形机器人的手臂、四足机器人的腿部，本质都是"安装在可移动基座上的机械臂"。先掌握固定机械臂，再扩展到移动与人形，是最自然的进阶路径。</li>
+</ol>
+<blockquote>
+<p>🎯 本教程以<strong>JoyArm 机械臂</strong>作为实机对象展开机械臂的入门学习 —— 既能立刻做有用的事，又能打通机器人学理论主干，还能为后续学习人形、四足等更复杂形态打好基础。</p>
+</blockquote>
+<hr />
+<h2 id="2">2 基础概念速扫盲</h2>
+<p>机器人学有大量专有术语，初学者易理解不清而被劝退。本节按类别对每个术语进行 “直观解释+作用说明”，在开启正式学习前先建立一个直观认识。</p>
+<blockquote>
+<p>💡 不必立刻背下来。通读一遍留个直观印象，后续回查即可。</p>
+</blockquote>
+<h3 id="21">2.1 机械结构与几何类</h3>
+<p>描述机械臂"长什么样、能怎么动"，是后续所有章节的物理基础。</p>
+<h4 id="221">2.2.1 基本组成：基座、关节、连杆、末端执行器</h4>
+<p>把一台机械臂的"外衣"剥掉，剩下的是一条由<strong>基座 → 关节 → 连杆 → 关节 → … → 末端执行器</strong>串起来的运动链。下图为 JoyArm 的组件构成：</p>
+<p><img alt="图片占位：JoyArm 机械臂的组成" src="" /></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">中文</th>
+<th style="text-align: center;">英文</th>
+<th style="text-align: center;">直观解释</th>
+<th style="text-align: center;">功能作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">机械臂</td>
+<td style="text-align: center;">Robotic Arm / Manipulator</td>
+<td style="text-align: center;">由关节和连杆串联而成的可编程运动链</td>
+<td style="text-align: center;">在工作空间内把末端执行器送到指定位置与姿态</td>
+</tr>
+<tr>
+<td style="text-align: center;">基座</td>
+<td style="text-align: center;">Base</td>
+<td style="text-align: center;">机械臂的"根"，固定在地基或移动平台上</td>
+<td style="text-align: center;">承载全部重量、定义机械臂的位置，是基座坐标系的起点</td>
+</tr>
+<tr>
+<td style="text-align: center;">关节</td>
+<td style="text-align: center;">Joint</td>
+<td style="text-align: center;">连接两根连杆、能转动的"铰链"（旋转关节 R 或移动关节 P）</td>
+<td style="text-align: center;">提供自由度，决定机械臂能往哪些方向运动</td>
+</tr>
+<tr>
+<td style="text-align: center;">连杆</td>
+<td style="text-align: center;">Link</td>
+<td style="text-align: center;">连接相邻关节的刚性杆件，类似人的骨头</td>
+<td style="text-align: center;">把关节的运动传递、放大到末端，决定机械臂的臂展</td>
+</tr>
+<tr>
+<td style="text-align: center;">末端执行器</td>
+<td style="text-align: center;">End-Effector</td>
+<td style="text-align: center;">装在机械臂最前端、直接干活的工具（夹爪、吸盘、焊枪等）</td>
+<td style="text-align: center;">与外界发生物理交互，完成抓取、装配、喷涂等任务</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>口诀</strong>：<strong>关节负责"动"，连杆负责"传"，末端负责"干"，基座负责"站"</strong>。</p>
+</blockquote>
+<p>一台机械臂的"关节—连杆"重复了几段，往往决定它有几个自由度。</p>
+<h4 id="222">2.2.2 关键参数：自由度、负载、工作半径、工作空间</h4>
+<p>认识完"长什么样"，还要看一组描述机械臂"能干什么、能伸多远"的关键参数。它们是机械臂选型与性能评估的基本指标：</p>
+<p><img alt="图片占位：JoyArm的关键参数绘制：自由度、工作半径和工作空间" src="" /></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">中文</th>
+<th style="text-align: center;">英文</th>
+<th style="text-align: center;">直观解释</th>
+<th style="text-align: center;">功能作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">自由度</td>
+<td style="text-align: center;">Degree of Freedom（DOF）</td>
+<td style="text-align: center;">机械臂<strong>独立运动方式</strong>的个数，等于能自由控制的"变量数"；通常一个关节贡献 1 个自由度</td>
+<td style="text-align: center;">决定末端能以多少种方式调整位置与姿态，是机械臂灵活性的核心指标</td>
+</tr>
+<tr>
+<td style="text-align: center;">负载</td>
+<td style="text-align: center;">Payload</td>
+<td style="text-align: center;">机械臂末端<strong>最多能稳稳举起多重</strong>的物体，常用单位 kg</td>
+<td style="text-align: center;">决定能搬多重的工件，选型或设计时必须大于实际工件 + 末端执行器重量</td>
+</tr>
+<tr>
+<td style="text-align: center;">工作半径</td>
+<td style="text-align: center;">Reach</td>
+<td style="text-align: center;">机械臂从基座到末端的<strong>最大伸展距离</strong>，常用单位 mm</td>
+<td style="text-align: center;">决定机械臂"一伸手能多远"，是臂展尺寸的直接体现</td>
+</tr>
+<tr>
+<td style="text-align: center;">工作空间</td>
+<td style="text-align: center;">Workspace</td>
+<td style="text-align: center;">机械臂末端<strong>能到达的所有位置</strong>构成的体积范围</td>
+<td style="text-align: center;">决定能作业的区域大小；目标点必须落在工作空间内才能被执行</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>三者的关系</strong>：<strong>自由度</strong>回答"灵活不灵活"，<strong>负载</strong>回答"举得动多重"，<strong>工作半径 / 工作空间</strong>回答"够得到吗"。三者要同时满足 —— 再灵活的手臂，够不到、举不动也白搭。</p>
+</blockquote>
+<h4 id="223">2.2.3 坐标系体系</h4>
+<p>要让机械臂精确地把末端送到某点，必须先有一套"统一语言"来描述位置和姿态，这就是<strong>参考坐标系</strong>体系。机械臂常用到以下坐标系：</p>
+<p><img alt="图片占位：JoyArm 标准坐标系体系" src="" /></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">中文</th>
+<th style="text-align: center;">英文</th>
+<th style="text-align: center;">直观解释</th>
+<th style="text-align: center;">功能作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">基座系</td>
+<td style="text-align: center;">Base Frame</td>
+<td style="text-align: center;">固结在基座上的坐标系，是整条机械臂的"原点"</td>
+<td style="text-align: center;">作为机械臂运动的统一参考基准，运动学、动力学求解通常都在此系下进行</td>
+</tr>
+<tr>
+<td style="text-align: center;">连杆系</td>
+<td style="text-align: center;">Link Frame</td>
+<td style="text-align: center;">固结在每根连杆上的坐标系，每个关节处都有一个</td>
+<td style="text-align: center;">描述相邻连杆之间的相对位置与姿态，是运动学建模的基本工具</td>
+</tr>
+<tr>
+<td style="text-align: center;">腕部系</td>
+<td style="text-align: center;">Wrist Frame</td>
+<td style="text-align: center;">固结在手腕处（末端三个关节）的坐标系</td>
+<td style="text-align: center;">分离"位置由手臂决定、姿态由手腕决定"，简化逆运动学求解</td>
+</tr>
+<tr>
+<td style="text-align: center;">末端系 / 工具系</td>
+<td style="text-align: center;">End / Tool Frame</td>
+<td style="text-align: center;">固结在末端执行器（如夹爪指尖）上的坐标系</td>
+<td style="text-align: center;">描述工具本身的位置与朝向，操作员最关心此系下的目标</td>
+</tr>
+<tr>
+<td style="text-align: center;">固定系 / 工作台系</td>
+<td style="text-align: center;">World / Station Frame</td>
+<td style="text-align: center;">固结在工作台或车间的全局坐标系</td>
+<td style="text-align: center;">当有多台机械臂或外部设备协作时，提供统一的世界坐标</td>
+</tr>
+<tr>
+<td style="text-align: center;">目标系 / 物体系</td>
+<td style="text-align: center;">Object Frame</td>
+<td style="text-align: center;">固结在工件或目标物体上的坐标系</td>
+<td style="text-align: center;">描述"工件在哪里、朝哪放"，夹爪执行器系与其重合时才能抓到物体</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>📌 <strong>为什么这么多坐标系？</strong> 因为不同人关心不同事：运动控制关心<strong>基座系</strong>和<strong>执行器系</strong>，操作员关心<strong>工具系</strong>，视觉感知关心<strong>工作台系</strong>。<a href="../chapter2_2/">第二章</a>位置正运动学的原理便是多个坐标系间的位姿关系求解。</p>
+</blockquote>
+<h3 id="22">2.2 感知执行硬件类</h3>
+<p>描述机械臂"用什么器件动起来、用什么器件感知世界"。表格为机械臂（轻小型桌面级）通常会用到的硬件，下图中为 JoyArm 用到的硬件：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">中文</th>
+<th style="text-align: center;">英文</th>
+<th style="text-align: center;">直观解释</th>
+<th style="text-align: center;">功能作用</th>
+<th style="text-align: center;">实物图</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">电源</td>
+<td style="text-align: center;">Power Supply</td>
+<td style="text-align: center;">给整套系统供电的"心脏"，把市电或电池转换为所需电压</td>
+<td style="text-align: center;">为电机、控制器、传感器提供稳定能量，决定系统能否长时间运行</td>
+<td style="text-align: center;">-</td>
+</tr>
+<tr>
+<td style="text-align: center;">电机</td>
+<td style="text-align: center;">Motor</td>
+<td style="text-align: center;">把电能转换为机械转动的"肌肉"，是关节的动力来源</td>
+<td style="text-align: center;">驱动关节转动，是机械臂运动的最终执行机构</td>
+<td style="text-align: center;">-</td>
+</tr>
+<tr>
+<td style="text-align: center;">驱动器</td>
+<td style="text-align: center;">Driver / Amplifier</td>
+<td style="text-align: center;">接收控制器指令、向电机精准输出电流的"放大器"</td>
+<td style="text-align: center;">按目标位置/速度/力矩驱动电机，是控制器与电机之间的功率桥梁</td>
+<td style="text-align: center;">-</td>
+</tr>
+<tr>
+<td style="text-align: center;">编码器</td>
+<td style="text-align: center;">Encoder</td>
+<td style="text-align: center;">装在电机轴上的"角度尺"，实时读出转到了哪里</td>
+<td style="text-align: center;">把实际关节角反馈给控制器，构成闭环控制，是实现精确定位的关键</td>
+<td style="text-align: center;">-</td>
+</tr>
+<tr>
+<td style="text-align: center;">一体化关节</td>
+<td style="text-align: center;">Integrated Joint Module</td>
+<td style="text-align: center;">把电机 + 减速器 + 编码器 + 驱动器打包成一体的关节</td>
+<td style="text-align: center;">集成度高、走线简洁，是现代模块化机械臂（如 JoyArm）的标准单元</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td style="text-align: center;">关节力矩传感器</td>
+<td style="text-align: center;">Joint Torque Sensor</td>
+<td style="text-align: center;">装在关节处、测量输出力矩的"电子手腕"</td>
+<td style="text-align: center;">反馈关节实际出力大小，用于力控与碰撞检测</td>
+<td style="text-align: center;">-</td>
+</tr>
+<tr>
+<td style="text-align: center;">六维力传感器</td>
+<td style="text-align: center;">6-Axis Force/Torque Sensor</td>
+<td style="text-align: center;">装在手腕处、同时测三个力 + 三个力矩的传感器</td>
+<td style="text-align: center;">感知末端与外界接触的力，是精密装配、柔顺控制的核心器件</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td style="text-align: center;">RGB 相机</td>
+<td style="text-align: center;">RGB Camera</td>
+<td style="text-align: center;">普通彩色摄像头，输出二维彩色图像</td>
+<td style="text-align: center;">识别物体的颜色、纹理、轮廓，用于目标检测与视觉定位</td>
+<td style="text-align: center;">-</td>
+</tr>
+<tr>
+<td style="text-align: center;">RGB-D 相机</td>
+<td style="text-align: center;">RGB-D Camera</td>
+<td style="text-align: center;">能同时输出彩色图 + 深度图的相机（如 RealSense）</td>
+<td style="text-align: center;">直接获取物体距离，比单 RGB 更适合机械臂的三维抓取</td>
+<td style="text-align: center;">-</td>
+</tr>
+<tr>
+<td style="text-align: center;">雷达</td>
+<td style="text-align: center;">LiDAR</td>
+<td style="text-align: center;">用激光测距、扫出周围三维点云的传感器</td>
+<td style="text-align: center;">大范围感知环境与障碍物，多用于移动机械臂的建图与避障</td>
+<td style="text-align: center;">-</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>一句话区分</strong>：<strong>执行器是"出力的"，传感器是"反馈的"</strong>。一个负责让机械臂动，一个负责告诉大脑现在动到哪了、碰没碰到东西。</p>
+</blockquote>
+<h3 id="23">2.3 学科方法类</h3>
+<p>本教程的<strong>理论主线</strong>，解决"怎么让机械臂按我们的意图精确运动"的问题，后续章节将逐步展开。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">中文</th>
+<th style="text-align: center;">英文</th>
+<th style="text-align: center;">直观解释</th>
+<th style="text-align: center;">功能作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">位置正运动学</td>
+<td style="text-align: center;">Forward Kinematics</td>
+<td style="text-align: center;">已知各关节角，<strong>推算末端在哪</strong>（正向求解）</td>
+<td style="text-align: center;">由"关节状态"算出"末端位姿"，是建模与分析的基础</td>
+</tr>
+<tr>
+<td style="text-align: center;">位置逆运动学</td>
+<td style="text-align: center;">Inverse Kinematics</td>
+<td style="text-align: center;">已知末端目标位姿，<strong>反求各关节角</strong>（逆向求解）</td>
+<td style="text-align: center;">"伸手去够"问题的核心：给目标求关节指令，是规划的前提</td>
+</tr>
+<tr>
+<td style="text-align: center;">速度运动学</td>
+<td style="text-align: center;">Velocity Kinematics</td>
+<td style="text-align: center;">描述<strong>关节速度与末端速度</strong>之间的映射关系</td>
+<td style="text-align: center;">用于平滑的速度控制与雅可比分析</td>
+</tr>
+<tr>
+<td style="text-align: center;">雅可比</td>
+<td style="text-align: center;">Jacobian</td>
+<td style="text-align: center;">末端速度与关节速度之间的<strong>线性变换矩阵</strong></td>
+<td style="text-align: center;">速度运动学和静力学关系的关键，揭示机械臂在各姿态下的运动灵敏度，也是奇异性分析的工具</td>
+</tr>
+<tr>
+<td style="text-align: center;">静力学</td>
+<td style="text-align: center;">Statics</td>
+<td style="text-align: center;">研究机械臂在<strong>静止平衡</strong>状态下力与力矩的传递</td>
+<td style="text-align: center;">由末端受力反推各关节应输出多大的力矩，是力控与结构校核的基础</td>
+</tr>
+<tr>
+<td style="text-align: center;">动力学</td>
+<td style="text-align: center;">Dynamics</td>
+<td style="text-align: center;">研究关节力矩与<strong>运动（加速度）</strong>之间的关系，考虑质量与惯量</td>
+<td style="text-align: center;">用于高动态场景下的精确前馈控制与仿真，是进阶篇<a href="../chapter3_2/">第八章</a>的核心</td>
+</tr>
+<tr>
+<td style="text-align: center;">轨迹生成</td>
+<td style="text-align: center;">Trajectory Generation</td>
+<td style="text-align: center;">在时间轴上<strong>规划末端或关节的运动路径</strong>（位置随时间变化）</td>
+<td style="text-align: center;">让机械臂"平滑、连续、不越界"地从 A 点到 B 点</td>
+</tr>
+<tr>
+<td style="text-align: center;">运动控制</td>
+<td style="text-align: center;">Motion Control</td>
+<td style="text-align: center;">让各关节<strong>实际运动跟踪</strong>规划好的轨迹</td>
+<td style="text-align: center;">消除误差、抵抗干扰，保证机械臂精准执行预定动作</td>
+</tr>
+<tr>
+<td style="text-align: center;">力控制</td>
+<td style="text-align: center;">Force Control</td>
+<td style="text-align: center;">不再只追位置，而是<strong>控制末端与外界接触的力</strong></td>
+<td style="text-align: center;">用于装配、打磨、擦拭等需要"柔顺接触"的任务</td>
+</tr>
+</tbody>
+</table>
+<p>机械臂实现运动规划控制的一个最基础且经典的主线为"<strong>给目标 → 寻路径 → 求关节 → 控执行</strong>"四步，软件结构图如下。先有<strong>上位机或SDK调用</strong>给出要到达目标位姿，再结合正运动学对当前位姿的估计值通过<strong>轨迹生成</strong>获得当前位姿至末端位姿的平滑轨迹，接着进行<strong>逆运动学求解</strong>得到关节的轨迹，最后由关节的<strong>控制</strong>让机械臂精准地跟随这条轨迹。本教程基础篇正是沿此条主线逐章展开的。</p>
+<p><img alt="机械臂软件架构图" src="../images/chapter2_1/image.png" /></p>
+<h2 id="3">3 开发工具与环境</h2>
+<p>针对"用什么软硬件开发机械臂程序"的问题，本教程给出推荐的组合。下表"常见工具"列出该领域的常见选项供横向了解，"教程推荐"则是本教程实际采用和推荐的选型或方案：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">类别</th>
+<th style="text-align: center;">直观解释</th>
+<th style="text-align: center;">功能作用</th>
+<th style="text-align: center;">常见工具</th>
+<th style="text-align: center;">教程推荐</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">计算设备</td>
+<td style="text-align: center;">运行程序、跑算法的硬件载体</td>
+<td style="text-align: center;">承担机械臂的运动学解算、规划控制与可视化等功能</td>
+<td style="text-align: center;">笔记本、台式机、Jetson、RDK、树莓派</td>
+<td style="text-align: center;">笔记本电脑（部署阶段可选 Jetson / RDK）</td>
+</tr>
+<tr>
+<td style="text-align: center;">操作系统</td>
+<td style="text-align: center;">管理硬件、调度程序的底层基础</td>
+<td style="text-align: center;">提供文件、进程、驱动与开发工具运行环境</td>
+<td style="text-align: center;">Ubuntu、Windows、macOS</td>
+<td style="text-align: center;"><a href="https://releases.ubuntu.com/jammy/">Ubuntu 2204 LTS</a>（Linux 发行版）</td>
+</tr>
+<tr>
+<td style="text-align: center;">编程语言</td>
+<td style="text-align: center;">人与机械臂"对话"的语言</td>
+<td style="text-align: center;">编写运动学、控制、通信与可视化代码</td>
+<td style="text-align: center;">Python、C++、MATLAB</td>
+<td style="text-align: center;">Python（科学计算与原型验证）+ C++（性能敏感模块）</td>
+</tr>
+<tr>
+<td style="text-align: center;">环境管理</td>
+<td style="text-align: center;">隔离不同项目依赖的工具</td>
+<td style="text-align: center;">防止库版本冲突，让代码可复现、易迁移</td>
+<td style="text-align: center;">conda、pip、venv、Docker</td>
+<td style="text-align: center;"><a href="https://www.anaconda.com/download">conda</a> / <a href="https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html">mamba</a>（Python 虚拟环境）</td>
+</tr>
+<tr>
+<td style="text-align: center;">编辑器</td>
+<td style="text-align: center;">写代码、调试、看运行的"工作台"</td>
+<td style="text-align: center;">提供文件阅读编辑、语法高亮、自动补全、断点调试与终端等</td>
+<td style="text-align: center;">VS Code、PyCharm、CLion、Jupyter</td>
+<td style="text-align: center;"><a href="https://code.visualstudio.com/Download?_exp_download=fb315fc982">VS Code</a>（GitHub生态 + 丰富的插件）</td>
+</tr>
+<tr>
+<td style="text-align: center;">AI 编程辅助</td>
+<td style="text-align: center;">帮你写、读、改代码的智能码农助手</td>
+<td style="text-align: center;">加速学习与排错，尤其适合初学者理解陌生 API</td>
+<td style="text-align: center;">Cursor、Copilot、ChatGPT、Claude、ZCode、Kimi Code</td>
+<td style="text-align: center;">按需选择</td>
+</tr>
+<tr>
+<td style="text-align: center;">其他工具</td>
+<td style="text-align: center;">串口调试、版本管理、仿真等辅助软件</td>
+<td style="text-align: center;">解决通信联调、代码备份、离线仿真等具体需求</td>
+<td style="text-align: center;">Git、URDF Studio、Serial Studio、RViz、Gazebo、MATLAB/Simulink</td>
+<td style="text-align: center;"><a href="https://git-scm.com/book/zh/v2/%E8%B5%B7%E6%AD%A5-%E5%AE%89%E8%A3%85-Git">Git（版本管理）</a>、<a href="https://urdf.d-robotics.cc/">URDF Studio</a>等，按需选择</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>📌 <strong>最小化起步组合推荐</strong>：一台 JoyArm 机械臂 + 一台装有 <strong>Ubuntu 2204 LTS</strong> 系统的笔记本电脑 + <strong>VS Code</strong> + <strong>conda</strong> 管理的 <strong>Python</strong> 环境 + 一个熟悉的 <strong>AI Agent 工具</strong>。对于其他工具，无需过度了解，学习实践的过程中再逐步丰富工具栈即可。</p>
+</blockquote>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.expand"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
