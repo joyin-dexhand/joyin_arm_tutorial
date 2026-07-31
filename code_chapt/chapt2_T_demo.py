@@ -1,0 +1,529 @@
+"""
+==============================================================================
+位姿变换可视化演示  (第二章 §1.3)
+==============================================================================
+【功能概要】
+    用 PySide6 GUI + matplotlib 3D 演示齐次变换矩阵 ^A_B T 对空间的变换效果：
+      - 固定参考系 {A}：原点 + RGB 虚线单位轴（红=X、绿=Y、蓝=Z），观察基准
+      - 单位球固连系 {B}：原点 + RGB 实线坐标轴 + 半透明线框单位球，被 ^A_B T 驱动
+    通过滑块/矩阵表格实时修改 ^A_B T，可直观观察四类典型变换：
+      纯平移 / 纯旋转(绕单轴) / 复合变换 / 连乘级联。
+
+【环境与运行】
+    # 1. 安装 uv（仅首次）
+    curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
+    # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
+
+    # 2. 进入项目根目录并创建虚拟环境（Python 3.10）
+    cd joyin_arm_tutorial
+    uv venv --python 3.10
+    source .venv/bin/activate                                   # Windows: .venv\Scripts\activate
+
+    # 3. 安装依赖
+    uv pip install PySide6 numpy matplotlib
+    sudo apt-get install -y libxcb-cursor0 # Linux: 解决 Qt5/6 运行时缺少 libxcb-cursor.so.0 的问题
+
+    # 4. 运行本脚本
+    cd code_chapt
+    python chapt2_T_demo.py
+
+    # 5. T矩阵数值简单实例：绕 Z 轴旋转 90° + 平移 (0.5, 0.0, 0.0)
+
+    输入下面数值到表格中，观察效果：
+
+    T = [[ 0, -1, 0, 0.5],
+         [ 1,  0, 0, 0.0],
+         [ 0,  0, 1, 0.0],
+         [ 0,  0, 0, 1.0]]
+
+    特点：x轴转到了y轴（0 1 0），y轴转到了-x轴 （-1 0 0），z轴不变 （0 0 1），原点x 平移了0.5米
+
+    # 注：滑块控制的旋转矩阵 R = R_X * R_Y * R_Z —— 按 x-y-z 顺序的内旋（按 z-y-x 顺序的外旋）。详见后面的欧拉角和固定角的讲解。
+
+==============================================================================
+"""
+
+import sys
+import numpy as np
+
+# 注意：matplotlib 后端须在导入 pyplot 前设置，使其嵌入 PySide6 的 Qt 窗口
+import matplotlib
+matplotlib.use("QtAgg")
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+
+from PySide6.QtCore import Qt, Signal, QSignalBlocker
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QSlider, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
+    QGroupBox, QGridLayout, QDoubleSpinBox,
+)
+
+# ----------------------------------------------------------------------------
+# 全局常量
+# ----------------------------------------------------------------------------
+TRANS_MIN, TRANS_MAX = -2.0, 2.0        # 平移滑块范围 (m)
+ROT_MIN, ROT_MAX = -180, 180           # 旋转滑块范围 (度)
+SLIDER_STEPS = 400                      # 滑块离散步数（越大越平滑）
+AXIS_COLORS = ("#e6194b", "#3cb44b", "#2b6cb0")   # RGB 对应 X/Y/Z
+PLOT_LIM = 2.4                          # 3D 坐标轴显示范围
+
+
+# ----------------------------------------------------------------------------
+# 旋转矩阵（与第二章 §2.1 公式一致：RPY = R_X * R_Y * R_Z，单位：弧度）
+# ----------------------------------------------------------------------------
+def rot_x(a: float) -> np.ndarray:
+    ca, sa = np.cos(a), np.sin(a)
+    return np.array([[1, 0, 0], [0, ca, -sa], [0, sa, ca]])
+
+
+def rot_y(a: float) -> np.ndarray:
+    ca, sa = np.cos(a), np.sin(a)
+    return np.array([[ca, 0, sa], [0, 1, 0], [-sa, 0, ca]])
+
+
+def rot_z(a: float) -> np.ndarray:
+    ca, sa = np.cos(a), np.sin(a)
+    return np.array([[ca, -sa, 0], [sa, ca, 0], [0, 0, 1]])
+
+
+def rpy_to_matrix(rx: float, ry: float, rz: float) -> np.ndarray:
+    """由 RPY 角（弧度）合成旋转矩阵 R = R_X(rx) R_Y(ry) R_Z(rz)。"""
+    return rot_x(rx) @ rot_y(ry) @ rot_z(rz)
+
+
+def make_T(R: np.ndarray, p: np.ndarray) -> np.ndarray:
+    """由 3x3 旋转矩阵与 3x1 位置向量拼成 4x4 齐次变换矩阵 ^A_B T。"""
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = p
+    return T
+
+
+# ----------------------------------------------------------------------------
+# 单位球线框顶点：用于可视化 {B} 的姿态（球随 T 旋转后形状改变）
+# ----------------------------------------------------------------------------
+def unit_ball_lines():
+    """返回单位球上若干经/纬线折线段的顶点列表；每个元素是 (n,3) 的点序列，
+    绘制时逐相邻两点连线，并对整体做 T 变换。"""
+    theta = np.linspace(0, np.pi, 24)
+    phi = np.linspace(0, 2 * np.pi, 48)
+    lines = []
+    # 经线（固定 phi，扫 theta）
+    for p in phi[::4]:
+        x = np.sin(theta) * np.cos(p)
+        y = np.sin(theta) * np.sin(p)
+        z = np.cos(theta)
+        lines.append(np.stack([x, y, z], axis=-1))
+    # 纬线（固定 theta，扫 phi）
+    for t in theta[2:-2:4]:
+        x = np.sin(t) * np.cos(phi)
+        y = np.sin(t) * np.sin(phi)
+        z = np.full_like(phi, np.cos(t))   # 标量扩为同长向量
+        lines.append(np.stack([x, y, z], axis=-1))
+    return lines
+
+
+# ============================================================================
+# 主窗口
+# ============================================================================
+class PoseDemoWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("位姿变换可视化演示  (位姿矩阵 T)")
+        self.resize(1280, 760)
+
+        # 当前变换矩阵（受滑块/表格驱动）
+        self._T = np.eye(4)
+        # 连乘级联历史步骤列表（每个元素为 4x4 矩阵）
+        self._cascade: list[np.ndarray] = []
+
+        self._build_ui()
+        self._refresh_from_params()   # 初始化为单位阵并绘制
+
+    # ------------------------------------------------------------------ UI
+    def _build_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        h = QHBoxLayout(central)
+
+        # --- 左侧：3D 画布 ---
+        self.fig = plt.figure(figsize=(7, 7))
+        self.canvas = FigureCanvas(self.fig)
+        self.ax = self.fig.add_subplot(111, projection="3d")
+        self._setup_axes()
+        h.addWidget(self.canvas, stretch=3)
+
+        # --- 右侧：控制面板 ---
+        panel = QWidget()
+        pv = QVBoxLayout(panel)
+        pv.addWidget(self._build_transform_group())
+        pv.addWidget(self._build_matrix_group())
+        pv.addWidget(self._build_action_group())
+        pv.addStretch(1)
+        h.addWidget(panel, stretch=2)
+
+    def _setup_axes(self):
+        """固定 3D 坐标系样式（等比例、正方向、网格）。"""
+        ax = self.ax
+        ax.set_xlim(-PLOT_LIM, PLOT_LIM)
+        ax.set_ylim(-PLOT_LIM, PLOT_LIM)
+        ax.set_zlim(-PLOT_LIM, PLOT_LIM)
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        ax.view_init(elev=22, azim=-55)
+
+    # ---------------- 平移/旋转 滑块 + 数值输入组 ----------------
+    def _build_transform_group(self):
+        box = QGroupBox("变换参数（滑块拖动 / 数值输入）")
+        g = QGridLayout(box)
+
+        # 平移：tx ty tz —— 滑块(可拖动) + 数值框(可精确输入)
+        self.t_sliders = []
+        self.t_spins = []
+        for i, name in enumerate(("tx", "ty", "tz")):
+            g.addWidget(QLabel(f"平移 {name} (m)"), i, 0)
+            s = QSlider(Qt.Horizontal)
+            s.setMinimum(0)
+            s.setMaximum(SLIDER_STEPS)
+            s.setValue(SLIDER_STEPS // 2)  # 中点 = 0
+            s.valueChanged.connect(lambda v, idx=i: self._on_slider_changed("t", idx, v))
+            g.addWidget(s, i, 1)
+            sp = self._make_spin(TRANS_MIN, TRANS_MAX, 2)
+            sp.valueChanged.connect(lambda v, idx=i: self._on_spin_changed("t", idx, v))
+            g.addWidget(sp, i, 2)
+            self.t_sliders.append(s)
+            self.t_spins.append(sp)
+
+        # 旋转：rx ry rz（度）—— 滑块 + 数值框
+        self.r_sliders = []
+        self.r_spins = []
+        for i, name in enumerate(("rx", "ry", "rz")):
+            g.addWidget(QLabel(f"旋转 {name} (°)"), i + 3, 0)
+            s = QSlider(Qt.Horizontal)
+            s.setMinimum(0)
+            s.setMaximum(SLIDER_STEPS)
+            s.setValue(SLIDER_STEPS // 2)
+            s.valueChanged.connect(lambda v, idx=i: self._on_slider_changed("r", idx, v))
+            g.addWidget(s, i + 3, 1)
+            sp = self._make_spin(ROT_MIN, ROT_MAX, 1)
+            sp.valueChanged.connect(lambda v, idx=i: self._on_spin_changed("r", idx, v))
+            g.addWidget(sp, i + 3, 2)
+            self.r_sliders.append(s)
+            self.r_spins.append(sp)
+
+        # 重置按钮行：重置 txyz / 重置 rxyz / 全部重置
+        reset_row = QHBoxLayout()
+        b_reset_t = QPushButton("重置 txyz")
+        b_reset_t.clicked.connect(lambda: self._reset_group("t"))
+        b_reset_r = QPushButton("重置 rxyz")
+        b_reset_r.clicked.connect(lambda: self._reset_group("r"))
+        b_reset_all = QPushButton("全部重置")
+        b_reset_all.clicked.connect(self._reset_identity)
+        for b in (b_reset_t, b_reset_r, b_reset_all):
+            reset_row.addWidget(b)
+        g.addLayout(reset_row, 6, 0, 1, 3)
+
+        return box
+
+    def _make_spin(self, lo, hi, decimals):
+        """构造一个数值输入框（指定范围与小数位）。"""
+        sp = QDoubleSpinBox()
+        sp.setRange(lo, hi)
+        sp.setDecimals(decimals)
+        sp.setSingleStep(0.1)
+        sp.setValue(0.0)
+        sp.setKeyboardTracking(False)   # 仅回车/失焦时触发 valueChanged，避免输入中途抖动
+        return sp
+
+    # ---------------- 4x4 矩阵表格 ----------------
+    def _build_matrix_group(self):
+        box = QGroupBox("位姿矩阵 T（可手改）")
+        v = QVBoxLayout(box)
+        self.table = QTableWidget(4, 4)
+        self.table.setHorizontalHeaderLabels(["x̂_B", "ŷ_B", "ẑ_B", "原点"])
+        self.table.verticalHeader().setVisible(False)
+        # 前 3 列为姿态（旋转块），第 4 列为位置（原点列），均可编辑
+        for r in range(4):
+            for c in range(4):
+                self.table.setItem(r, c, QTableWidgetItem("0"))
+        self.table.itemChanged.connect(self._on_table_edited)
+        v.addWidget(self.table)
+        hint = QLabel("直接编辑单元格数值（回车生效）；与左侧滑块双向同步。")
+        hint.setWordWrap(True)
+        v.addWidget(hint)
+        return box
+
+    # ---------------- 预设 / 动作按钮 ----------------
+    def _build_action_group(self):
+        box = QGroupBox("四类典型变换 / 操作")
+        v = QVBoxLayout(box)
+
+        row1 = QHBoxLayout()
+        b_trans = QPushButton("纯平移")
+        b_trans.clicked.connect(lambda: self._apply_preset("translate"))
+        b_rot = QPushButton("纯旋转(绕Y)")
+        b_rot.clicked.connect(lambda: self._apply_preset("rotate"))
+        row1.addWidget(b_trans)
+        row1.addWidget(b_rot)
+        v.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        b_comp = QPushButton("复合变换")
+        b_comp.clicked.connect(lambda: self._apply_preset("composite"))
+        b_add = QPushButton("添加为级联步骤")
+        b_add.clicked.connect(self._add_cascade_step)
+        row2.addWidget(b_comp)
+        row2.addWidget(b_add)
+        v.addLayout(row2)
+
+        row3 = QHBoxLayout()
+        b_clear = QPushButton("清空级联")
+        b_clear.clicked.connect(self._clear_cascade)
+        b_reset = QPushButton("重置为单位阵")
+        b_reset.clicked.connect(self._reset_identity)
+        row3.addWidget(b_clear)
+        row3.addWidget(b_reset)
+        v.addLayout(row3)
+
+        self.lbl_cascade = QLabel("级联步骤数：0")
+        v.addWidget(self.lbl_cascade)
+        return box
+
+    # ------------------------------------------------------------------ 数值 <-> 滑块 互转
+    @staticmethod
+    def _trans_to_slider(v: float) -> int:
+        """平移量 (m) -> 滑块离散值。"""
+        return int(round((v - TRANS_MIN) / (TRANS_MAX - TRANS_MIN) * SLIDER_STEPS))
+
+    @staticmethod
+    def _rot_to_slider(v: float) -> int:
+        """旋转角 (度) -> 滑块离散值。"""
+        return int(round((v - ROT_MIN) / (ROT_MAX - ROT_MIN) * SLIDER_STEPS))
+
+    def _slider_value(self, kind, idx):
+        """读取某轴的"真实数值"（从滑块反算，保证与拖动一致）。"""
+        s = self.t_sliders[idx] if kind == "t" else self.r_sliders[idx]
+        lo, hi = (TRANS_MIN, TRANS_MAX) if kind == "t" else (ROT_MIN, ROT_MAX)
+        t = s.value() / SLIDER_STEPS
+        return lo + t * (hi - lo)
+
+    def _on_slider_changed(self, kind, idx, _v):
+        """滑块拖动 -> 同步数值框 -> 重算 T。"""
+        val = self._slider_value(kind, idx)
+        spins = self.t_spins if kind == "t" else self.r_spins
+        with QSignalBlocker(spins[idx]):     # 阻断 spin 回调，防递归
+            spins[idx].setValue(val)
+        self._refresh_from_params()
+
+    def _on_spin_changed(self, kind, idx, val):
+        """数值框输入 -> 同步滑块 -> 重算 T。"""
+        sliders = self.t_sliders if kind == "t" else self.r_sliders
+        to_slider = self._trans_to_slider if kind == "t" else self._rot_to_slider
+        with QSignalBlocker(sliders[idx]):    # 阻断 slider 回调，防递归
+            sliders[idx].setValue(to_slider(val))
+        self._refresh_from_params()
+
+    def _refresh_from_params(self):
+        """由当前所有滑块/数值框重新计算 T，刷新表格与 3D 视图。"""
+        # 平移（以滑块为准，受其离散精度限制；数值框负责精确显示与输入）
+        p = np.array([self._slider_value("t", i) for i in range(3)])
+        degs = [self._slider_value("r", i) for i in range(3)]
+        rads = np.deg2rad(degs)
+        R = rpy_to_matrix(*rads)
+        self._T = make_T(R, p)
+        self._update_table(silent=True)
+        self._render()
+
+    def _reset_group(self, kind):
+        """重置某一组（t 平移 / r 旋转）归零。"""
+        sliders = self.t_sliders if kind == "t" else self.r_sliders
+        spins = self.t_spins if kind == "t" else self.r_spins
+        mid = SLIDER_STEPS // 2
+        for s, sp in zip(sliders, spins):
+            with QSignalBlocker(s), QSignalBlocker(sp):
+                s.setValue(mid)
+                sp.setValue(0.0)
+        self._refresh_from_params()
+
+    def _on_table_edited(self, _item):
+        """表格手改后，解析为 T、最近正交化，并回写滑块/数值框（双向同步）。"""
+        try:
+            vals = np.zeros((4, 4))
+            for r in range(4):
+                for c in range(4):
+                    txt = self.table.item(r, c).text().strip() or "0"
+                    vals[r, c] = float(txt)
+            # 左上 4x3 -> R，原点列 -> p，第4列齐次行忽略
+            R = vals[:3, :3]
+            p = vals[:3, 3]
+            # 若用户输入的 R 不严格正交，做最近正交化（SVD），保证有效旋转
+            U, _, Vt = np.linalg.svd(R)
+            R = U @ Vt
+            if np.linalg.det(R) < 0:           # 防镜像
+                U[:, -1] *= -1
+                R = U @ Vt
+        except ValueError:
+            return  # 非法输入忽略
+        # 回写滑块/数值框（由 R 反算 RPY，由 p 直填平移），均阻断信号防递归
+        rx, ry, rz = self._matrix_to_rpy(R)
+        tvals = np.clip(p, TRANS_MIN, TRANS_MAX)
+        rvals = np.clip([rx, ry, rz], ROT_MIN, ROT_MAX)
+        for s, sp, v in zip(self.t_sliders, self.t_spins, tvals):
+            with QSignalBlocker(s), QSignalBlocker(sp):
+                s.setValue(self._trans_to_slider(float(v)))
+                sp.setValue(float(v))
+        for s, sp, v in zip(self.r_sliders, self.r_spins, rvals):
+            with QSignalBlocker(s), QSignalBlocker(sp):
+                s.setValue(self._rot_to_slider(float(v)))
+                sp.setValue(float(v))
+        self._T = make_T(R, p)
+        self._render()
+
+    @staticmethod
+    def _matrix_to_rpy(R: np.ndarray):
+        """由旋转矩阵反算固定轴 XYZ 的 RPY 角（度）；与 §2.4 公式一致。"""
+        ry = np.degrees(np.arctan2(-R[2, 0], np.hypot(R[0, 0], R[1, 0])))
+        rz = np.degrees(np.arctan2(R[1, 0], R[0, 0]))
+        rx = np.degrees(np.arctan2(R[2, 1], R[2, 2]))
+        return rx, ry, rz
+
+    def _update_table(self, silent: bool):
+        """把当前 self._T 写入表格。silent=True 时阻断 itemChanged 信号防递归。"""
+        if silent:
+            self.table.blockSignals(True)
+        T = self._T
+        labels = (
+            f"{T[0,0]:+.3f}", f"{T[0,1]:+.3f}", f"{T[0,2]:+.3f}", f"{T[0,3]:+.3f}",
+            f"{T[1,0]:+.3f}", f"{T[1,1]:+.3f}", f"{T[1,2]:+.3f}", f"{T[1,3]:+.3f}",
+            f"{T[2,0]:+.3f}", f"{T[2,1]:+.3f}", f"{T[2,2]:+.3f}", f"{T[2,3]:+.3f}",
+            "0", "0", "0", "1",
+        )
+        for idx, txt in enumerate(labels):
+            r, c = divmod(idx, 4)
+            self.table.item(r, c).setText(txt)
+        if silent:
+            self.table.blockSignals(False)
+
+    # ------------------------------------------------------------------ 预设
+    def _apply_preset(self, kind: str):
+        """应用四类典型变换预设（设置滑块位置）。"""
+        mid = SLIDER_STEPS // 2
+        if kind == "translate":           # 纯平移：(0.8, 0.5, 0.6)，旋转归零
+            tvals = (0.8, 0.5, 0.6)
+            rvals = (0.0, 0.0, 0.0)
+        elif kind == "rotate":            # 纯旋转：绕 Y 转 60°，平移归零
+            tvals = (0.0, 0.0, 0.0)
+            rvals = (0.0, 60.0, 0.0)
+        elif kind == "composite":         # 复合：平移 + 旋转同时
+            tvals = (0.7, -0.4, 0.5)
+            rvals = (20.0, 45.0, -30.0)
+        else:
+            return
+        self._set_sliders(tvals, rvals)
+
+    def _set_sliders(self, tvals, rvals):
+        """预设：同时设置滑块与数值框（阻断信号防递归），再统一刷新。"""
+        for s, sp, v in zip(self.t_sliders, self.t_spins, tvals):
+            with QSignalBlocker(s), QSignalBlocker(sp):
+                s.setValue(self._trans_to_slider(v))
+                sp.setValue(v)
+        for s, sp, v in zip(self.r_sliders, self.r_spins, rvals):
+            with QSignalBlocker(s), QSignalBlocker(sp):
+                s.setValue(self._rot_to_slider(v))
+                sp.setValue(v)
+        self._refresh_from_params()
+
+    def _reset_identity(self):
+        self._clear_cascade()
+        mid = SLIDER_STEPS // 2
+        for s, sp in zip(self.t_sliders, self.t_spins):
+            with QSignalBlocker(s), QSignalBlocker(sp):
+                s.setValue(mid)
+                sp.setValue(0.0)
+        for s, sp in zip(self.r_sliders, self.r_spins):
+            with QSignalBlocker(s), QSignalBlocker(sp):
+                s.setValue(mid)
+                sp.setValue(0.0)
+        self._refresh_from_params()
+
+    # ------------------------------------------------------------------ 级联
+    def _add_cascade_step(self):
+        self._cascade.append(self._T.copy())
+        self.lbl_cascade.setText(f"级联步骤数：{len(self._cascade)}")
+        self._render()
+
+    def _clear_cascade(self):
+        self._cascade.clear()
+        self.lbl_cascade.setText("级联步骤数：0")
+        self._render()
+
+    def _effective_T(self) -> np.ndarray:
+        """连乘级联：T_total = T_1 @ T_2 @ ... @ T_n @ T_current。"""
+        T = np.eye(4)
+        for step in self._cascade:
+            T = T @ step
+        return T @ self._T
+
+    # ------------------------------------------------------------------ 渲染
+    def _render(self):
+        ax = self.ax
+        ax.cla()
+        self._setup_axes()
+
+        # 固定参考系 {A}：虚线 RGB 单位轴
+        self._draw_frame(ax, np.eye(4), dashed=True, prefix="{A}")
+        # 单位球固连系 {B}：实线 RGB 轴 + 球
+        Tb = self._effective_T()
+        self._draw_frame(ax, Tb, dashed=False, prefix="{B}")
+        self._draw_ball(ax, Tb)
+
+        # 连乘路径：用淡色折线连接各级联原点，展示累积效果
+        if len(self._cascade) >= 1:
+            pts = [np.zeros(3)]
+            T_acc = np.eye(4)
+            for step in self._cascade:
+                T_acc = T_acc @ step
+                pts.append(T_acc[:3, 3])
+            pts.append(Tb[:3, 3])
+            pts = np.array(pts)
+            ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color="gray",
+                    linestyle=":", linewidth=1.2, alpha=0.8)
+
+        self.canvas.draw_idle()
+
+    def _draw_frame(self, ax, T, dashed: bool, prefix: str):
+        origin = T[:3, 3]
+        length = 1.0
+        for i, color in enumerate(AXIS_COLORS):
+            direction = T[:3, i]
+            end = origin + direction * length
+            ls = "--" if dashed else "-"
+            lw = 1.5 if dashed else 2.4
+            ax.plot([origin[0], end[0]], [origin[1], end[1]], [origin[2], end[2]],
+                    color=color, linestyle=ls, linewidth=lw)
+            ax.text(end[0], end[1], end[2], f"{prefix}", color=color, fontsize=8)
+        ax.scatter(*origin, color="k", s=18)
+
+    def _draw_ball(self, ax, T):
+        # 把单位球各经/纬线用 T 变换到 {A} 下后绘制（半透明线框，让旋转可见）
+        R, p0 = T[:3, :3], T[:3, 3]
+        for pts in unit_ball_lines():
+            p = (R @ pts.T).T + p0                 # (n,3) 旋转 + 平移
+            ax.plot(p[:, 0], p[:, 1], p[:, 2],
+                    color="#4a5568", linewidth=0.5, alpha=0.45)
+
+
+# ============================================================================
+# 入口
+# ============================================================================
+def main():
+    app = QApplication(sys.argv)
+    win = PoseDemoWindow()
+    win.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

@@ -19,6 +19,7 @@ theme:
         name: 切换至亮色模式
 
 # Mermaid 流程图渲染（markdown 中 ```mermaid 代码块会自动转为图形）
+# MathJax 数学公式渲染（$...$ 行内、$$...$$ 行间）
 markdown_extensions:
   - pymdownx.superfences:
       custom_fences:
@@ -28,9 +29,17 @@ markdown_extensions:
             !!python/name:pymdownx.superfences.fence_code_format # 额外样式表（Mermaid 节点主题自适应配色等）
 
 
+  - pymdownx.arithmatex: # 数学公式：$...$ 与 $$...$$ 自动交给 MathJax 渲染
+      generic: true
+
 extra_css:
   - stylesheets/mermaid.css
   - stylesheets/extra.css
+
+# MathJax 脚本：先加载本地配置，再加载 MathJax 本体
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 # 定义左侧目录结构与跳转
 nav:
