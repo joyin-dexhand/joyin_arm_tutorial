@@ -196,7 +196,7 @@
 | 编程语言 | 人与机械臂"对话"的语言 | 编写运动学、控制、通信与可视化代码 | Python、C++、MATLAB | Python（科学计算与原型验证）+ C++（性能敏感模块） |
 | 环境管理 | 隔离不同项目依赖的工具 | 防止库版本冲突，让代码可复现、易迁移 | conda、uv、venv、Docker | [uv](https://docs.astral.sh/uv/)（Python 虚拟环境与依赖管理） |
 | 编辑器 | 写代码、调试、看运行的"工作台" | 提供文件阅读编辑、语法高亮、自动补全、断点调试与终端等 | VS Code、PyCharm、CLion、Jupyter | [VS Code](https://code.visualstudio.com/Download?_exp_download=fb315fc982)（GitHub生态 + 丰富的插件） |
-| AI 编程辅助 | 帮你写、读、改代码的智能码农助手 | 加速学习与排错，尤其适合初学者理解陌生 API | Cursor、Copilot、ChatGPT、Claude、ZCode、Kimi Code | 按需选择 |
+| AI 编程辅助 | 帮你写、读、改代码的智能码农助手 | 加速学习与排错，尤其适合初学者理解陌生 API | Cursor、Copilot、Codex、Claude Code、ZCode、Kimi Code | 按需选择 |
 | 其他工具 | 串口调试、版本管理、仿真等辅助软件 | 解决通信联调、代码备份、离线仿真等具体需求 | Git、URDF Studio、Serial Studio、RViz、Gazebo、MATLAB/Simulink | [Git（版本管理）](https://git-scm.com/book/zh/v2/%E8%B5%B7%E6%AD%A5-%E5%AE%89%E8%A3%85-Git)、[URDF Studio](https://urdf.d-robotics.cc/)等，按需选择 |
 
 > 📌 **最小化起步组合推荐**：一台 JoyArm 机械臂 + 一台装有 **Ubuntu 2204 LTS** 系统的笔记本电脑 + **VS Code** + **uv** 管理的 **Python** 环境 + 一个熟悉的 **AI Agent 工具**。对于其他工具，无需过度了解，学习实践的过程中再逐步丰富工具栈即可。
