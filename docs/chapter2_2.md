@@ -114,7 +114,7 @@ $$
 | 复合变换 | 同时改位置与姿态 | 球边移边转|
 | 连乘级联 | 多个 $\bm{T}$ 相乘 | 多段变换的累积效果 |
 
-对应脚本位于 `code_chapt/chapt2_T_demo.py`，使用说明见脚本头部注释。
+对应脚本位于 `joyarm_code/chapt/chapt2_T_demo.py`，使用说明见脚本头部注释。
 
 > 💡 建议亲手改动UI界面里的 $^A_B\bm{T}$ 数值或上方滑块条，观察球与坐标轴的实时响应，建立"矩阵数字"与"空间运动"的对应直觉。
 
@@ -214,7 +214,7 @@ $$
 
 只依赖 $(\alpha\mp\gamma)$ ，这表明 Roll（$\gamma$）与 Yaw（$\alpha$）此时作用在**同一直线**上、无法区分 —— 三个旋转轴中有两个共线，**丢失了一个自由度**。
 
-> ⚠️ **万向锁**：当 $\beta=\pm90°$ 时，Roll 与 Yaw 退化为同轴，姿态不再由三个独立角度决定（逆解不再唯一）。这是**所有三参数姿态表示**（含 RPY 与各种欧拉角）的通病，也是工程上引入轴角（[2.2](#22-轴角表示)）与四元数（[2.3](#23-四元数)）的重要动因之一。
+> ⚠️ **万向锁**：当 $\beta=\pm90°$ 时，Roll 与 Yaw 退化为同轴，姿态不再由三个独立角度决定（逆解不再唯一）。这是**所有三参数姿态表示**（含 RPY 与各种欧拉角）的通病，也是工程上引入轴角（[2.2](#22)）与四元数（[2.3](#23)）的重要动因之一。
 
 ### 2.2 轴角表示
 
@@ -267,9 +267,9 @@ $$
 | $\bm{R}$ | ZYX欧拉角和RPY | $\beta=\arctan2(-r_{31},\sqrt{r_{11}^2+r_{21}^2})$；$\alpha=\arctan2(r_{21},r_{11})$；$\gamma=\arctan2(r_{32},r_{33})$ | `pinocchio.rpy.matrixToRpy(R)` | `rmat.rpy()` | **$\beta\ne\pm90°$**，否则万向锁 |
 | $\bm{R}$ | 轴角 | $\theta=\arccos\!\frac{\mathrm{tr}(\bm{R})-1}{2}$；$\hat{k}=\frac{1}{2\sin\theta}\begin{bmatrix}r_{32}-r_{23}\\r_{13}-r_{31}\\r_{21}-r_{12}\end{bmatrix}$ | `pinocchio.log3(R)` | `rmat.angvec()` | **$\theta\ne0,\pi$**，轴不确定 |
 | $\bm{R}$ | 四元数 | $w=\tfrac{1}{2}\sqrt{1+\mathrm{tr}(\bm{R})}$；$x=\frac{r_{32}-r_{23}}{4w}$；$y=\frac{r_{13}-r_{31}}{4w}$；$z=\frac{r_{21}-r_{12}}{4w}$ | `pinocchio.Quaternion(R).coeffs()` | `UnitQuaternion(rmat)` | **$\mathrm{tr}(\bm{R})>-1$**（即 $w\ne0$） |
-| ZYX欧拉角和RPY | $\bm{R}$ | $\bm{R}=\bm{R}_Z(\alpha)\bm{R}_Y(\beta)\bm{R}_X(\gamma)$ | `pinocchio.rpy.rpyToMatrix(rpy)` | `SE3.RPY(rpy, order='zyx')` | 见 [2.1](#21-欧拉角和固定角) |
-| 轴角 | $\bm{R}$ | 罗德里格斯公式 $\bm{R}=\cos\theta\,\bm{I}+(1-\cos\theta)\hat{k}\hat{k}^\top+\sin\theta\,\bm{K}$，$\bm{K}=\begin{bmatrix}0&-k_z&k_y\\k_z&0&-k_x\\-k_y&k_x&0\end{bmatrix}$ | `pinocchio.exp3(theta*k)` | `SE3.AngVec(theta, k)` | 见 [2.2](#22-轴角表示) |
-| 四元数 | $\bm{R}$ | $\bm{R}(\bm{q})=\begin{bmatrix}1-2(y^2+z^2)&2(xy-wz)&2(xz+wy)\\2(xy+wz)&1-2(x^2+z^2)&2(yz-wx)\\2(xz-wy)&2(yz+wx)&1-2(x^2+y^2)\end{bmatrix}$ | `pinocchio.Quaternion(q).toRotationMatrix()` | `SE3(UnitQuaternion(q))` | 见 [2.3](#23-四元数) |
+| ZYX欧拉角和RPY | $\bm{R}$ | $\bm{R}=\bm{R}_Z(\alpha)\bm{R}_Y(\beta)\bm{R}_X(\gamma)$ | `pinocchio.rpy.rpyToMatrix(rpy)` | `SE3.RPY(rpy, order='zyx')` | 见 [2.1](#21) |
+| 轴角 | $\bm{R}$ | 罗德里格斯公式 $\bm{R}=\cos\theta\,\bm{I}+(1-\cos\theta)\hat{k}\hat{k}^\top+\sin\theta\,\bm{K}$，$\bm{K}=\begin{bmatrix}0&-k_z&k_y\\k_z&0&-k_x\\-k_y&k_x&0\end{bmatrix}$ | `pinocchio.exp3(theta*k)` | `SE3.AngVec(theta, k)` | 见 [2.2](#22) |
+| 四元数 | $\bm{R}$ | $\bm{R}(\bm{q})=\begin{bmatrix}1-2(y^2+z^2)&2(xy-wz)&2(xz+wy)\\2(xy+wz)&1-2(x^2+z^2)&2(yz-wx)\\2(xz-wy)&2(yz+wx)&1-2(x^2+y^2)\end{bmatrix}$ | `pinocchio.Quaternion(q).toRotationMatrix()` | `SE3(UnitQuaternion(q))` | 见 [2.3](#23) |
 | 轴角 | 四元数 | $\bm{q}=\bigl(\cos\tfrac{\theta}{2},\;\sin\tfrac{\theta}{2}\hat{k}\bigr)$ | `pinocchio.Quaternion(pin.AngleAxis(theta, k))` | `UnitQuaternion.AngVec(theta, k)` | 无奇异，最常用直接法 |
 | 四元数 | 轴角 | $\theta=2\arccos w$；$\hat{k}=\frac{(x,y,z)}{\sqrt{x^2+y^2+z^2}}=\frac{(x,y,z)}{\sin(\theta/2)}$ | —（由四元数分量直接算） | `q.angvec()` | $w=\pm1$（$\theta\to0$）时轴不定 |
 
@@ -290,7 +290,7 @@ $$
 | 四元数 | $w,x,y,z$ 四个数值框 | 只读，实时跟随 | 输出端 |
 | 旋转矩阵 $\bm{R}$ | $3\times3$ 表格 | 只读，实时跟随 | 输出端 |
 
-对应脚本位于 `code_chapt/chapt2_pose_demo.py`，使用说明见脚本头部注释。
+对应脚本位于 `joyarm_code/chapt/chapt2_pose_demo.py`，使用说明见脚本头部注释。
 
 ---
 
@@ -418,7 +418,7 @@ s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
 $$
 
 $$
-^0_1\bm{T}=\begin{bmatrix}
+^1_2\bm{T}=\begin{bmatrix}
 c_1 & -s_1 & 0 & a_0\\
 s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
 s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
@@ -427,7 +427,7 @@ s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
 $$
 
 $$
-^0_1\bm{T}=\begin{bmatrix}
+^2_3\bm{T}=\begin{bmatrix}
 c_1 & -s_1 & 0 & a_0\\
 s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
 s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
@@ -436,7 +436,7 @@ s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
 $$
 
 $$
-^0_1\bm{T}=\begin{bmatrix}
+^3_4\bm{T}=\begin{bmatrix}
 c_1 & -s_1 & 0 & a_0\\
 s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
 s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
@@ -445,7 +445,7 @@ s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
 $$
 
 $$
-^0_1\bm{T}=\begin{bmatrix}
+^4_5\bm{T}=\begin{bmatrix}
 c_1 & -s_1 & 0 & a_0\\
 s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
 s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
@@ -454,7 +454,7 @@ s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
 $$
 
 $$
-^0_1\bm{T}=\begin{bmatrix}
+^5_6\bm{T}=\begin{bmatrix}
 c_1 & -s_1 & 0 & a_0\\
 s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
 s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
@@ -556,11 +556,11 @@ T_ee = pin.updateFramePlacement(model, data, model.getFrameId("ee")) # 获取结
 
 #### 5.2.1 实现方案
 
-脚本 `code_chapt/chapt2_workspace.py` 完成如下流程（核心功能调用 `joyarm` 的 `fkine` 与 `JoyArm` 类）：
+脚本 `joyarm_code/chapt/chapt2_workspace.py` 完成如下流程（核心功能调用 `joyarm` 的 `fkine` 与 `JoyArmRebotDM` 类）：
 
 | 模块 | 功能 | 实现要点 |
 |:---:|:---:|:---:|
-| 模型加载 | 读取 MDH 参数（或 URDF） | 调用 `joyarm` 的 `JoyArm` 类 |
+| 模型加载 | 读取 MDH 参数（或 URDF） | 调用 `joyarm` 的 `JoyArmRebotDM` 类 |
 | 关节采样 | 六维关节空间均匀随机采样 $N$ 组 | `numpy.random.uniform(qlow, qhigh, (N,6))` |
 | 正运动学 | 对每组关节角求末端位置 | 批量调用 `fkine` |
 | 可视化 | MeshCat / Matplotlib 3D 绘点云 | 动态刷新，逐批添加点 |
