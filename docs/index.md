@@ -96,12 +96,12 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
     </tr>
     <tr>
       <td rowspan="4" align="center"><strong>进阶篇</strong></td>
-      <td align="center">第七章 构型与结构设计、关节选型、装配体URDF导出</td>
+      <td align="center">第七章 构型结构设计与URDF导出</td>
       <td align="center">构型设计、结构设计、电机选型、URDF 导出</td>
       <td align="center"><a href="chapt7_urdf">第七章</a></td>
     </tr>
     <tr>
-      <td align="center">第八章 动力学及控制实现</td>
+      <td align="center">第八章 动力学及控制</td>
       <td align="center">牛顿欧拉递推、动力学方程、基于动力学的控制</td>
       <td align="center"><a href="chapt8_dyn">第八章</a></td>
     </tr>
@@ -127,7 +127,7 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
       <td align="center"><a href="chapt12_teleop">第十二章</a></td>
     </tr>
     <tr>
-      <td align="center">第十三章 末端执行器统一接口与自识别</td>
+      <td align="center">第十三章 末端执行器</td>
       <td align="center">夹爪/灵巧手/吸附等各类末端原理与接口</td>
       <td align="center"><a href="chapt13_endeffector">第十三章</a></td>
     </tr>
@@ -137,7 +137,7 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
       <td align="center"><a href="chapt14_ui">第十四章</a></td>
     </tr>
     <tr>
-      <td align="center">第十五章 JoyArm 综合项目实践</td>
+      <td align="center">第十五章 JoyArm 综合实践项目</td>
       <td align="center">感知/规划/控制/交互全栈综合项目</td>
       <td align="center"><a href="chapt15_project">第十五章</a></td>
     </tr>
@@ -151,14 +151,14 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
 ### 主要参考书籍
 
 | 名称 | 简介 | 链接 |
-|:---:|:---|:---:|
+|:---:|:---:|:---:|
 | 《机器人学导论（原书第四版）》 | John J. Craig 著，运动学、雅可比、动力学与力控制的经典教材，本教程基础篇与进阶篇的主要理论参考 | [仓库内 PDF](reference/机器人学导论（第4版）.pdf) |
 | 《机器人学（第四版）》 | 蔡自兴、谢斌 编著（清华大学出版社，2022，ISBN 9787302598220），国内高校广泛使用的中文经典教材，涵盖空间描述、运动学、动力学、控制与轨迹规划 | *待补充* |
 
 ### 主要参考开源项目
 
 | 名称 | 简介 | 链接 |
-|:---:|:---|:---:|
+|:---:|:---:|:---:|
 | reBot 机械臂 | Seeed 出品的开源六轴机械臂项目（6 DOF + 夹爪）：reBot-DevArm 提供全套软硬件图纸；reBotArm_control_py 是基于 Pinocchio 的 Python 控制库 | [DevArm](https://github.com/Seeed-Projects/reBot-DevArm) / [control_py](https://github.com/vectorBH6/reBotArm_control_py) |
 | Panthera-HT_SDK | Panthera-HT 六轴机械臂官方 C++/Python SDK，支持位置/速度/力矩控制、运动学/动力学建模与主从遥操作 | https://github.com/HighTorque-Robotics/Panthera-HT_SDK |
 | Dummy-Robot | 稚晖君（peng-zhihui）的超迷你六轴机械臂机器人项目，固件核心为运动学姿态解算，已完整开源 | https://github.com/peng-zhihui/Dummy-Robot |
@@ -167,6 +167,6 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
 
 ## 开源许可证
 
-*Apachi-2.0*
+Apache-2.0
 
 ---

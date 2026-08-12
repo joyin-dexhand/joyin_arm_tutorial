@@ -37,9 +37,9 @@ class Gripper:
     :param gripper_id: 夹爪总线 ID。
     """
 
-    def __init__(self, backend: EndBackend, gripper_id: int = 0x06, **kwargs):
+    def __init__(self, backend: EndBackend, gripper_id: int = 0x07, **kwargs):
         self.backend = backend
-        # 夹爪在 CAN 总线上的 ID（与 6 个关节电机 0x00~0x05 区分，夹爪用 0x06）
+        # 夹爪在 CAN 总线上的 ID（与 6 个关节电机 0x01~0x06 区分，夹爪用 0x07）
         self.gripper_id = gripper_id
 
     def open(self) -> None:

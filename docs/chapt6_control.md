@@ -1,6 +1,6 @@
 # 第六章 运动控制
 
-本章从单关节到整机，讲解机械臂的运动控制：使用篇中电机控制被视为"黑盒"，此处则作为"白盒"深入浅出讲解电机原理与控制；进而讨论整机位置运动学控制与速度运动学控制，并在 JoyArm 上实现基于运动学的控制。
+> 📌 **概述**：本章从单关节到整机，讲解机械臂的运动控制：使用篇中电机控制被视为"黑盒"，此处则作为"白盒"深入浅出讲解电机原理与控制；进而讨论整机位置运动学控制与速度运动学控制，并在 JoyArm 上实现基于运动学的控制。
 
 <!-- ✍️ 写作指引（HTML 注释，不会渲染到线上；完稿后可保留或删除）
 
@@ -11,19 +11,19 @@
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
     ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
-  · 末节固定为「## 4 本章实践：JoyArm 基于运动学的控制实现」，对应脚本 joyarm_code/chapt/chapt2_control_demo.py。
+  · 末节固定为「## 4 本章实践：JoyArm 基于运动学的控制实现」，对应脚本 joyarm_code/chapt/chapt6_control_demo.py。
 【全局写作规范】（详见 AGENTS.md / spec/项目架构.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 数学：行内 $...$、独立 $$...$$，传递函数/控制律用 $\bm{K}_p$ 等；多画控制框图（mermaid 或图占位）。
-  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt2_control_demo.py`，使用说明见脚本头部注释。」
+  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt6_control_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm/：control（控制）/ arm（Arm 类）/ fkine / jacobian / trajectory。
   · 图示：配图放 docs/images/chapt6_control/，未就绪用 ![图片占位：描述]()；控制框图可用 mermaid ```mermaid``` 围栏。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接（如 [第四章](chapt4_jacobian.md) 雅可比）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt2_control_demo.py、robotics/control.py、arm/arm.py、robotics/fkine.py、robotics/jacobian.py、robotics/trajectory.py。
+【本章可引用的脚本/库】chapt6_control_demo.py、robotics/control.py、arm/arm.py、robotics/fkine.py、robotics/jacobian.py、robotics/trajectory.py。
 -->
 
 ## 1 单关节电机控制
@@ -65,6 +65,6 @@
 <!-- ✍️ 本节写作要点：
   · 目标：在 JoyArm 上实现并验证基于运动学的控制（整机位置控制 + 速度控制各一个实例）。
   · 建议结构：设定任务（如末端画圆/直线跟踪）→ 用 §2 或 §3 的控制律 → 记录跟踪误差 → 分析。
-  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt2_control_demo.py`，使用说明见脚本头部注释。」
+  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt6_control_demo.py`，使用说明见脚本头部注释。」
   · 可加 > 💡：实际工程中位置/速度/力矩模式常分层组合（外层运动学 + 内层关节闭环）。
 -->

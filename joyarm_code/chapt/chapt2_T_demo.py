@@ -17,7 +17,7 @@
     # 2. 进入项目根目录并创建虚拟环境（Python 3.10）
     cd joyin_arm_tutorial
     uv venv --python 3.10
-    source .venv/bin/activate                                   # Windows: .venv\Scripts\activate
+    source .venv/bin/activate                                   # Windows: .venv\\Scripts\\activate
 
     # 3. 安装依赖
     uv pip install PySide6 numpy matplotlib
@@ -38,7 +38,7 @@
 
     特点：x轴转到了y轴（0 1 0），y轴转到了-x轴 （-1 0 0），z轴不变 （0 0 1），原点x 平移了0.5米
 
-    # 注：滑块控制的旋转矩阵 R = R_X * R_Y * R_Z —— 按 x-y-z 顺序的内旋（按 z-y-x 顺序的外旋）。具体原理详见后面的欧拉角和固定角的讲解。
+    # 注：滑块控制的旋转矩阵 R = R_Z(rz)·R_Y(ry)·R_X(rx) —— 按 x-y-z 顺序的外旋（等价于按 z-y-x 顺序的内旋），即标准 RPY。具体原理详见后面的欧拉角和固定角的讲解。
 
 ==============================================================================
 """
@@ -51,7 +51,7 @@ matplotlib.use("QtAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
-from PySide6.QtCore import Qt, Signal, QSignalBlocker
+from PySide6.QtCore import Qt, QSignalBlocker
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QSlider, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
@@ -69,7 +69,7 @@ PLOT_LIM = 2.4                          # 3D 坐标轴显示范围
 
 
 # ----------------------------------------------------------------------------
-# 旋转矩阵（与第二章 §2.1 公式一致：RPY = R_X * R_Y * R_Z，单位：弧度）
+# 旋转矩阵（与第二章 §2.1 公式一致：RPY = R_Z * R_Y * R_X，标准 RPY / 外旋 XYZ，单位：弧度）
 # ----------------------------------------------------------------------------
 def rot_x(a: float) -> np.ndarray:
     """绕 X 轴旋转 a 弧度的 3x3 旋转矩阵（X 轴不变，Y/Z 平面内转）。"""
@@ -90,8 +90,8 @@ def rot_z(a: float) -> np.ndarray:
 
 
 def rpy_to_matrix(rx: float, ry: float, rz: float) -> np.ndarray:
-    """由 RPY 角（弧度）合成旋转矩阵 R = R_X(rx) R_Y(ry) R_Z(rz)。"""
-    return rot_x(rx) @ rot_y(ry) @ rot_z(rz)
+    """由 RPY 角（弧度）合成旋转矩阵 R = R_Z(rz) R_Y(ry) R_X(rx)（标准 RPY：外旋 XYZ）。"""
+    return rot_z(rz) @ rot_y(ry) @ rot_x(rx)
 
 
 def make_T(R: np.ndarray, p: np.ndarray) -> np.ndarray:

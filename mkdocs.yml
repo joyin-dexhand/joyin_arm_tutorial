@@ -65,5 +65,5 @@ nav:
       - 第十一章 状态监测与安全软防护: chapt11_safety.md
       - 第十二章 示教和遥操作: chapt12_teleop.md
       - 第十三章 末端执行器: chapt13_endeffector.md
-      - 第十四章 用户界面接口: chapt14_ui.md
+      - 第十四章 用户接口: chapt14_ui.md
       - 第十五章 JoyArm 综合实践项目: chapt15_project.md

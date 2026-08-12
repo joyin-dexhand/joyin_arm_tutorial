@@ -1,6 +1,6 @@
 # 第十二章 示教和遥操作
 
-本章介绍机械臂的示教与遥操作技术，涵盖同臂示教、主从缩比同构臂、主从异构臂末端数据记录与回放，以及主端 VR 空间手柄数据记录等多种方式。
+> 📌 **概述**：本章介绍机械臂的示教与遥操作技术，涵盖同臂示教、主从缩比同构臂、主从异构臂末端数据记录与回放，以及主端 VR 空间手柄数据记录等多种方式。
 
 <!-- ✍️ 写作指引（HTML 注释，不会渲染到线上；完稿后可保留或删除）
 
@@ -11,18 +11,18 @@
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
     ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
-  · 💡 建议补一节「## 5 本章实践：JoyArm 示教与遥操作综合」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt4_teleop_demo.py。
+  · 💡 建议补一节「## 5 本章实践：JoyArm 示教与遥操作综合」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt12_teleop_demo.py。
 【全局写作规范】（详见 AGENTS.md / spec/项目架构.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
-  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt4_teleop_demo.py`，使用说明见脚本头部注释。」
+  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt12_teleop_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm/：teleop（示教/遥操作）/ arm / joyarm_rebot_dm / ikine（异构臂末端→关节映射）/ fkine。
   · 图示：配图放 docs/images/chapt12_teleop/（主从/VR 示意），未就绪用 ![图片占位：描述]()；数据流可用 mermaid。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第三章](chapt3_ikine.md) IK 用于异构臂、[第十一章](chapt11_safety.md) 遥操作安全）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt4_teleop_demo.py（待建）、application/teleop.py、arm/arm.py、arm/joyarm_rebot_dm.py、robotics/ikine.py、robotics/fkine.py。
+【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、application/teleop.py、arm/arm.py、arm/joyarm_rebot_dm.py、robotics/ikine.py、robotics/fkine.py。
 -->
 
 ## 1 同臂示教数据记录与回放
@@ -58,4 +58,11 @@
   · 给 VR 手柄位姿（6D）→ 从臂末端的映射流程，配 ![图片占位：VR 遥操作示意]()。
   · 讨论 VR 主端的优点（无主臂硬件、可缩放工作空间）与挑战（无力反馈）。
   · 收尾 > 📌：VR 遥操作常配合 [第十四章](chapt14_ui.md) 体感设备、[第九章](chapt9_force.md) 力反馈做闭环。
+-->
+
+## 5 本章实践：JoyArm 示教与遥操作综合
+
+<!-- ✍️ 本节写作要点：
+  · 目标：用脚本实现本章示教/遥操作方式（如同臂示教记录与回放）。对应脚本位于 `joyarm_code/chapt/chapt12_teleop_demo.py`，使用说明见脚本头部注释。
+  · 结构建议：记录流程 → 回放流程 → 运行结果（配 ![图片占位：示教回放效果]()）。
 -->

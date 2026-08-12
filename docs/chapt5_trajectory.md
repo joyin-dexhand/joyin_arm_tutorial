@@ -1,6 +1,6 @@
 # 第五章 轨迹生成
 
-实现轨迹的自动生成，如：给定末端位姿自动生成轨迹。本章分别介绍关节空间规划与笛卡尔空间规划两类方法，并在 JoyArm 上实践。
+> 📌 **概述**：实现轨迹的自动生成，如：给定末端位姿自动生成轨迹。本章分别介绍关节空间规划与笛卡尔空间规划两类方法，并在 JoyArm 上实践。
 
 <!-- ✍️ 写作指引（HTML 注释，不会渲染到线上；完稿后可保留或删除）
 
@@ -11,19 +11,19 @@
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
     ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
-  · 末节固定为「## 3 本章实践：JoyArm 关节空间和笛卡尔空间轨迹生成」，对应脚本 joyarm_code/chapt/chapt2_trajectory_demo.py。
+  · 末节固定为「## 3 本章实践：JoyArm 关节空间和笛卡尔空间轨迹生成」，对应脚本 joyarm_code/chapt/chapt5_trajectory_demo.py。
 【全局写作规范】（详见 AGENTS.md / spec/项目架构.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 数学：行内 $...$、独立 $$...$$，时间记法 $q(t)$、$t\in[t_0,t_f]$，多项式系数用下标 $a_i$。
-  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt2_trajectory_demo.py`，使用说明见脚本头部注释。」
+  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt5_trajectory_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm/：trajectory（轨迹）/ fkine / ikine。
   · 图示：配图放 docs/images/chapt5_trajectory/，未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接（如 [第四章](chapt4_jacobian.md)）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt2_trajectory_demo.py、robotics/trajectory.py、robotics/fkine.py、robotics/ikine.py。
+【本章可引用的脚本/库】chapt5_trajectory_demo.py、robotics/trajectory.py、robotics/fkine.py、robotics/ikine.py。
 -->
 
 ## 1 关节空间规划
@@ -61,6 +61,6 @@
 <!-- ✍️ 本节写作要点：
   · 目标：在 JoyArm 上分别生成关节空间轨迹与笛卡尔空间轨迹并对比（可视化末端路径 + 关节曲线）。
   · 建议结构：给若干路径点 → 关节空间规划 → 笛卡尔空间规划（直线/圆弧）→ 可视化对比 → 讨论奇异/多解影响。
-  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt2_trajectory_demo.py`，使用说明见脚本头部注释。」
+  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt5_trajectory_demo.py`，使用说明见脚本头部注释。」
   · 可加 > 💡：实际工程常"笛卡尔规划 + 关节空间平滑过渡"混合使用，兼顾直观与稳妥。
 -->

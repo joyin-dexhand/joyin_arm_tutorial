@@ -1,7 +1,7 @@
 """
 ``JoyArmRebotDMBackend`` —— JoyArm（reBot-DevArm）真机机械臂通信后端。
 
-基于 CAN 总线与达妙（DM）电机驱动机械臂本体（6 个关节电机，ID ``0x00~0x05``）。
+基于 CAN 总线与达妙（DM）电机驱动机械臂本体（6 个关节电机，ID ``0x01~0x06``）。
 末端执行器（夹爪等）的通信不在本类范围，请见
 :class:`~joyarm.backends.gripper_backend.GripperBackend` 等末端后端。
 """
@@ -15,7 +15,7 @@ from .arm_backend import ArmBackend
 __all__ = ["JoyArmRebotDMBackend"]
 
 class JoyArmRebotDMBackend(ArmBackend):
-    """JoyArm（reBot-DevArm）真机机械臂后端（CAN 总线，电机 ID ``0x00~0x05``）。
+    """JoyArm（reBot-DevArm）真机机械臂后端（CAN 总线，电机 ID ``0x01~0x06``）。
 
     :param can_interface: CAN 接口名（如 ``"can0"``）。
     :param baudrate: 波特率（CAN bps）。
@@ -57,7 +57,7 @@ class JoyArmRebotDMBackend(ArmBackend):
         raise NotImplementedError("JoyArmRebotDMBackend.set_zero 待 Ch6 实现")
 
     def scan(self) -> List[int]:
-        # 占位：Ch6 实现——扫描总线上有哪些电机，返回它们的 ID（应为 0x00~0x05）。
+        # 占位：Ch6 实现——扫描总线上有哪些电机，返回它们的 ID（应为 0x01~0x06）。
         raise NotImplementedError("JoyArmRebotDMBackend.scan 待 Ch6 实现")
 
     # ----------------------------------------------------------

@@ -134,7 +134,7 @@ class ControlLoop:
 
 
 def play_trajectory(arm, traj, mode: ControlMode = ControlMode.POSITION, hz: int = 200):
-    """按时间序列回放轨迹（§8 例程 6/7）。
+    """按时间序列回放轨迹（§6 例程 6/7）。
 
     :param traj: :class:`joyarm.robotics.trajectory.Trajectory`。
     :param mode: 回放控制模式。

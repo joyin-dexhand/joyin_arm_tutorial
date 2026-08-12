@@ -1,6 +1,6 @@
 # 第十章 ROS2
 
-本章介绍 ROS2 机器人操作系统的核心概念与生态：包括基本概念和工作空间结构、话题通讯、服务通信、常用工具与生态，以及 moveit2 的集成，并在 JoyArm 上实践其 ROS2 结构与实现。
+> 📌 **概述**：本章介绍 ROS2 机器人操作系统的核心概念与生态：包括基本概念和工作空间结构、话题通讯、服务通信、常用工具与生态，以及 moveit2 的集成，并在 JoyArm 上实践其 ROS2 结构与实现。
 
 <!-- ✍️ 写作指引（HTML 注释，不会渲染到线上；完稿后可保留或删除）
 
@@ -11,7 +11,7 @@
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
     ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
-  · 末节固定为「## 6 本章实践：JoyArm 的 ROS2 结构与实现」，对应脚本 joyarm_code/chapt/chapt3_ros2_demo.py。
+  · 末节固定为「## 6 本章实践：JoyArm 的 ROS2 结构与实现」，对应脚本 joyarm_code/chapt/chapt10_ros2_demo.py。
 【全局写作规范】（详见 AGENTS.md / spec/项目架构.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
@@ -22,7 +22,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第七章](chapt7_urdf.md) URDF、[第六章](chapt6_control.md) 控制为 moveit2 底层）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt3_ros2_demo.py、application/ros2.py、arm/arm.py、robotics/control.py、robotics/fkine.py、robotics/ikine.py。
+【本章可引用的脚本/库】chapt10_ros2_demo.py、application/ros2.py、arm/arm.py、robotics/control.py、robotics/fkine.py、robotics/ikine.py。
 -->
 
 ## 1 基本概念和工作空间结构
@@ -72,6 +72,6 @@ rviz，rqt，nav2，moveit2。
 <!-- ✍️ 本节写作要点：
   · 目标：在 JoyArm 上搭建一个最小可运行的 ROS2 节点（话题发布关节状态 + 服务/话题接收运动指令）。
   · 建议结构：节点结构图 → 启动命令（```shell```）→ 用 rviz 观察 → 发指令执行 → 验证。
-  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt3_ros2_demo.py`，使用说明见脚本头部注释。」
+  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt10_ros2_demo.py`，使用说明见脚本头部注释。」
   · 可加 > 💡：ROS2 是后续 [应用篇](chapt11_safety.md)（监测/安全、综合项目）的集成底座。
 -->

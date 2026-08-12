@@ -122,7 +122,7 @@ $$
 
 ## 2 空间位姿其他常见表示及其转换关系
 
-位姿矩阵 $\bm{T}$ 中的旋转矩阵 $\bm{R}$ 有 **9 个元素**（实际 3 个独立量），工程上（尤其数据传输或存储时）常用更紧凑的替代表示姿态。本节介绍**RPY、轴角、四元数**最经典常用的三种，给出与 $\bm{R}$ 的相互转换，最后汇总通过计算库（Pinochio）进行四者相互转换的方法。
+位姿矩阵 $\bm{T}$ 中的旋转矩阵 $\bm{R}$ 有 **9 个元素**（实际 3 个独立量），工程上（尤其数据传输或存储时）常用更紧凑的替代表示姿态。本节介绍**RPY、轴角、四元数**最经典常用的三种，给出与 $\bm{R}$ 的相互转换，最后汇总通过计算库（Pinocchio）进行四者相互转换的方法。
 
 ### 2.1 欧拉角和固定角
 
@@ -306,7 +306,7 @@ $$
 
 JoyArm 为 **6 DOF 串联旋转关节机械臂**（6R）：6 个旋转关节 ，相邻两关节间的刚性杆件为连杆，关节 $i$ 驱动的与其固连的连杆编号为 $i$。
 
-#### 3.1.2 MDH 建系的四步法
+#### 3.1.2 MDH 建系步骤
 
 **步骤 1**：标出各个关节轴及其延长线，自基座向末端编号依次为 1 至 6。
 
@@ -320,7 +320,7 @@ JoyArm 为 **6 DOF 串联旋转关节机械臂**（6R）：6 个旋转关节 ，
 
 **步骤 6**：基座系 $\{0\}$ 通常与初始位姿下的连杆系 $\{1\}$ 重合；或沿其 $\hat{Z}_1$ 轴进行平移，使得基座系 $\{0\}$ 原点位于基座的安装底面上。
 
-**步骤 7**：末端工具系 $\{E\}$（可选）。** 固连于末端执行器：原点取工具工作点（TCP），三轴按工具固有朝向选取，通过固定偏移 $^6_E\bm{T}$ 与 $\{6\}$ 相连。
+**步骤 7**：末端工具系 $\{E\}$（可选）。固连于末端执行器：原点取工具工作点（TCP），三轴按工具固有朝向选取，通过固定偏移 $^6_E\bm{T}$ 与 $\{6\}$ 相连。
 
 **步骤 8**：末连杆系 $\{n\}$ 的原点和 $\hat{X}_n$ 方向可任意选取，但通常尽量使连杆参数为0。
 
@@ -419,47 +419,47 @@ $$
 
 $$
 ^1_2\bm{T}=\begin{bmatrix}
-c_1 & -s_1 & 0 & a_0\\
-s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
-s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
+c_2 & -s_2 & 0 & a_1\\
+s_2 c_{\alpha_1} & c_2 c_{\alpha_1} & -s_{\alpha_1} & -s_{\alpha_1} d_2\\
+s_2 s_{\alpha_1} & c_2 s_{\alpha_1} & c_{\alpha_1} & c_{\alpha_1} d_2\\
 0 & 0 & 0 & 1
-\end{bmatrix},\quad c_1=\cos\theta_1,\;s_1=\sin\theta_1
+\end{bmatrix},\quad c_2=\cos\theta_2,\;s_2=\sin\theta_2
 $$
 
 $$
 ^2_3\bm{T}=\begin{bmatrix}
-c_1 & -s_1 & 0 & a_0\\
-s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
-s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
+c_3 & -s_3 & 0 & a_2\\
+s_3 c_{\alpha_2} & c_3 c_{\alpha_2} & -s_{\alpha_2} & -s_{\alpha_2} d_3\\
+s_3 s_{\alpha_2} & c_3 s_{\alpha_2} & c_{\alpha_2} & c_{\alpha_2} d_3\\
 0 & 0 & 0 & 1
-\end{bmatrix},\quad c_1=\cos\theta_1,\;s_1=\sin\theta_1
+\end{bmatrix},\quad c_3=\cos\theta_3,\;s_3=\sin\theta_3
 $$
 
 $$
 ^3_4\bm{T}=\begin{bmatrix}
-c_1 & -s_1 & 0 & a_0\\
-s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
-s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
+c_4 & -s_4 & 0 & a_3\\
+s_4 c_{\alpha_3} & c_4 c_{\alpha_3} & -s_{\alpha_3} & -s_{\alpha_3} d_4\\
+s_4 s_{\alpha_3} & c_4 s_{\alpha_3} & c_{\alpha_3} & c_{\alpha_3} d_4\\
 0 & 0 & 0 & 1
-\end{bmatrix},\quad c_1=\cos\theta_1,\;s_1=\sin\theta_1
+\end{bmatrix},\quad c_4=\cos\theta_4,\;s_4=\sin\theta_4
 $$
 
 $$
 ^4_5\bm{T}=\begin{bmatrix}
-c_1 & -s_1 & 0 & a_0\\
-s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
-s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
+c_5 & -s_5 & 0 & a_4\\
+s_5 c_{\alpha_4} & c_5 c_{\alpha_4} & -s_{\alpha_4} & -s_{\alpha_4} d_5\\
+s_5 s_{\alpha_4} & c_5 s_{\alpha_4} & c_{\alpha_4} & c_{\alpha_4} d_5\\
 0 & 0 & 0 & 1
-\end{bmatrix},\quad c_1=\cos\theta_1,\;s_1=\sin\theta_1
+\end{bmatrix},\quad c_5=\cos\theta_5,\;s_5=\sin\theta_5
 $$
 
 $$
 ^5_6\bm{T}=\begin{bmatrix}
-c_1 & -s_1 & 0 & a_0\\
-s_1 c_{\alpha_0} & c_1 c_{\alpha_0} & -s_{\alpha_0} & -s_{\alpha_0} d_1\\
-s_1 s_{\alpha_0} & c_1 s_{\alpha_0} & c_{\alpha_0} & c_{\alpha_0} d_1\\
+c_6 & -s_6 & 0 & a_5\\
+s_6 c_{\alpha_5} & c_6 c_{\alpha_5} & -s_{\alpha_5} & -s_{\alpha_5} d_6\\
+s_6 s_{\alpha_5} & c_6 s_{\alpha_5} & c_{\alpha_5} & c_{\alpha_5} d_6\\
 0 & 0 & 0 & 1
-\end{bmatrix},\quad c_1=\cos\theta_1,\;s_1=\sin\theta_1
+\end{bmatrix},\quad c_6=\cos\theta_6,\;s_6=\sin\theta_6
 $$
 
 ### 4.2 完整正运动学
@@ -488,7 +488,31 @@ $$
 JoyArm 机械臂的基座、关节 1 和连杆 1 的URDF定义示例如下
 
 ```xml
+<link name="base_link">
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="../meshes/base_link.STL"/>
+    </geometry>
+  </visual>
+</link>
 
+<joint name="joint1" type="revolute">
+  <origin xyz="-8.416E-05 0 0.08465" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child  link="link1"/>
+  <axis xyz="0 0 1"/>
+  <limit lower="-2.8" upper="2.8" effort="27" velocity="50"/>
+</joint>
+
+<link name="link1">
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="../meshes/link1.STL"/>
+    </geometry>
+  </visual>
+</link>
 ```
 
 URDF 使用"父子连杆 + 关节偏移"的树状结构描述机器人几何结构，**不依赖特定 D-H 约定，比 MDH 法更通用、更贴近结构设计 CAD**。JoyArm 的 URDF 便是由[第七章](chapt7_urdf.md)装配体 CAD 导出的。
@@ -504,6 +528,7 @@ URDF 几乎兼容所有的主流仿真器和机器人学计算库，它可以导
 以 **URDF + Pinocchio** 计算正运动学，核心流程仅几行：
 
 ```python
+import numpy as np
 import pinocchio as pin
 
 # 1. 从 URDF 加载模型（含运动链与关节限位）
@@ -513,7 +538,7 @@ data  = model.createData() # 数据
 # 2. 给定六关节角（rad）
 q = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) 
 
-# 3. 求解末端（'tool' 帧）相对基座的位姿
+# 3. 求解末端（"ee" 帧）相对基座的位姿
 pin.forwardKinematics(model, data, q) # 计算正运动学
 T_ee = pin.updateFramePlacement(model, data, model.getFrameId("ee")) # 获取结果
 ```
