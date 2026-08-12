@@ -45,25 +45,25 @@ extra_javascript:
 nav:
   - 首页: index.md
   - 使用篇:
-      - 快速上手: chapter1_1.md
-      - 关节电机: chapter1_2.md
-      - 六轴整臂: chapter1_3.md
-      - 两指夹爪: chapter1_4.md
+      - 快速上手: quickstart.md
+      - 关节电机: joint_motor.md
+      - 六轴整臂: arm_6dof.md
+      - 两指夹爪: gripper.md
   - 基础篇:
-      - 第一章 机器人与机械臂初识: chapter2_1.md
-      - 第二章 空间位姿与位置正运动学: chapter2_2.md
-      - 第三章 位置逆运动学: chapter2_3.md
-      - 第四章 速度运动学与静力学: chapter2_4.md
-      - 第五章 轨迹生成: chapter2_5.md
-      - 第六章 运动控制: chapter2_6.md
+      - 第一章 机器人与机械臂初识: chapt1_intro.md
+      - 第二章 空间位姿与位置正运动学: chapt2_fkine.md
+      - 第三章 位置逆运动学: chapt3_ikine.md
+      - 第四章 速度运动学与静力学: chapt4_jacobian.md
+      - 第五章 轨迹生成: chapt5_trajectory.md
+      - 第六章 运动控制: chapt6_control.md
   - 进阶篇:
-      - 第七章 构型与结构设计、关节选型、装配体URDF导出: chapter3_1.md
-      - 第八章 动力学及控制实现: chapter3_2.md
-      - 第九章 力控制: chapter3_3.md
-      - 第十章 ROS2: chapter3_4.md
+      - 第七章 构型结构设计与URDF导出: chapt7_urdf.md
+      - 第八章 动力学及控制: chapt8_dyn.md
+      - 第九章 力控制: chapt9_force.md
+      - 第十章 ROS2: chapt10_ros2.md
   - 应用篇:
-      - 第十一章 状态监测与安全软防护: chapter4_1.md
-      - 第十二章 示教和遥操作: chapter4_2.md
-      - 第十三章 末端执行器统一接口与自识别: chapter4_3.md
-      - 第十四章 用户接口: chapter4_4.md
-      - 第十五章 JoyArm 综合项目实践: chapter4_5.md
+      - 第十一章 状态监测与安全软防护: chapt11_safety.md
+      - 第十二章 示教和遥操作: chapt12_teleop.md
+      - 第十三章 末端执行器: chapt13_endeffector.md
+      - 第十四章 用户界面接口: chapt14_ui.md
+      - 第十五章 JoyArm 综合实践项目: chapt15_project.md

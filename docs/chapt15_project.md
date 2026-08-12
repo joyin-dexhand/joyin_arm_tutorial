@@ -19,7 +19,7 @@
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt4_project_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm/：arm / joyarm_rebot_dm / fkine / ikine / jacobian / trajectory / control /
     dyn / gripper / safety / teleop / vision / viz / ros2（几乎全库参与）。
-  · 图示：配图放 docs/images/chapter4_5/；系统分层/数据流用 mermaid ```mermaid``` 围栏。
+  · 图示：配图放 docs/images/chapt15_project/；系统分层/数据流用 mermaid ```mermaid``` 围栏。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用（本章尤其多）  ｜  > ⚠️ 警告/注意（联调安全）。
   · 跨章引用用相对链接，覆盖基础/进阶/应用各篇。
   · 不写"本章小结"——第 3 行概述已替代它（作为全教程收尾，概述可适当拔高）。
@@ -37,15 +37,15 @@
 ## 2 感知层
 
 <!-- ✍️ 本节写作要点：
-  · 目标：整合视觉/NFC/UWB 等感知（[第十四章](chapter4_4.md)）完成任务所需的"看/读/定位"。
+  · 目标：整合视觉/NFC/UWB 等感知（[第十四章](chapt14_ui.md)）完成任务所需的"看/读/定位"。
   · 给感知层数据流（图/mermaid）+ 输出信息表（感知量|来源|用途|对应章节）。
-  · 引用 vision.py，用脚本引用句式。
+  · 引用 application/vision.py，用脚本引用句式。
 -->
 
 ## 3 规划与控制层
 
 <!-- ✍️ 本节写作要点：
-  · 目标：整合运动学/轨迹/运动控制/动力学/力控制——感知结果 → 目标位姿 → 轨迹（[第五章](chapter2_5.md)）→ IK（[第三章](chapter2_3.md)）→ 控制（[第六章](chapter2_6.md)/[第八章](chapter3_2.md)/[第九章](chapter3_3.md)）。
+  · 目标：整合运动学/轨迹/运动控制/动力学/力控制——感知结果 → 目标位姿 → 轨迹（[第五章](chapt5_trajectory.md)）→ IK（[第三章](chapt3_ikine.md)）→ 控制（[第六章](chapt6_control.md)/[第八章](chapt8_dyn.md)/[第九章](chapt9_force.md)）。
   · 给规划与控制层框图（mermaid）+ 控制策略选择表（任务阶段|选用控制|理由|对应章节）。
   · 收尾 > 📌：本层是基础篇+进阶篇能力的集中应用，注意奇异/多解/动力学耦合。
 -->
@@ -53,9 +53,9 @@
 ## 4 交互层：末端执行器与力觉反馈
 
 <!-- ✍️ 本节写作要点：
-  · 目标：整合末端执行器（[第十三章](chapter4_3.md)）与力觉反馈（[第九章](chapter3_3.md)/[第十二章](chapter4_2.md) 遥操作）完成任务交互。
+  · 目标：整合末端执行器（[第十三章](chapt13_endeffector.md)）与力觉反馈（[第九章](chapt9_force.md)/[第十二章](chapt12_teleop.md) 遥操作）完成任务交互。
   · 给"交互层方案表"（子任务|末端执行器|力觉策略|用户接口|对应章节）。
-  · ⚠️ 提示：接触/力控阶段务必启用 [第十一章](chapter4_1.md) 的力/速度安全防护。
+  · ⚠️ 提示：接触/力控阶段务必启用 [第十一章](chapt11_safety.md) 的力/速度安全防护。
 -->
 
 ## 5 JoyArm 综合任务部署与联调

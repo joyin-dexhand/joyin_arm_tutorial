@@ -5,7 +5,7 @@
 <!-- ✍️ 写作指引（HTML 注释，不会渲染到线上；完稿后可保留或删除）
 
 【本章定位】进阶篇·生态章，把前述运动学/轨迹/控制"接到 ROS2 生态"，是工程化部署的入口。
-【参考模板】概念/生态部分以对比表+命令示例为主（参考 chapter1_2.md 的环境/命令风格），集成部分用框图+脚本引用。
+【参考模板】概念/生态部分以对比表+命令示例为主（参考 joint_motor.md 的环境/命令风格），集成部分用框图+脚本引用。
 【固定骨架】
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
@@ -18,11 +18,11 @@
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 命令/代码：ROS2 命令用 ```shell``` 围栏；节点/话题示例可用 ```python```；脚本用"脚本引用句式"。
   · 可复用核心库 joyarm_code/joyarm/：ros2（ROS2 封装）/ arm / control / fkine / ikine。
-  · 图示：配图放 docs/images/chapter3_4/，节点关系图可用 mermaid ```mermaid```。
+  · 图示：配图放 docs/images/chapt10_ros2/，节点关系图可用 mermaid ```mermaid```。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
-  · 跨章引用用相对链接（如 [第七章](chapter3_1.md) URDF、[第六章](chapter2_6.md) 控制为 moveit2 底层）。
+  · 跨章引用用相对链接（如 [第七章](chapt7_urdf.md) URDF、[第六章](chapt6_control.md) 控制为 moveit2 底层）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt3_ros2_demo.py、ros2.py、arm.py、control.py、fkine.py、ikine.py。
+【本章可引用的脚本/库】chapt3_ros2_demo.py、application/ros2.py、arm/arm.py、robotics/control.py、robotics/fkine.py、robotics/ikine.py。
 -->
 
 ## 1 基本概念和工作空间结构
@@ -62,9 +62,9 @@ rviz，rqt，nav2，moveit2。
 ## 5 moveit2 集成
 
 <!-- ✍️ 本节写作要点：
-  · 目标：讲清 moveit2 如何为机械臂做运动规划——规划组、运动学求解器（IK）、规划接口、与 [第二章](chapter2_2.md)~[第六章](chapter2_6.md) 的对应。
-  · 给"配置→规划→执行"流程，配 moveit2 节点框图（mermaid）；说明 IK 求解器选择（衔接 [第三章](chapter2_3.md)）。
-  · 引用 ros2.py（封装）与 chapt 脚本，用脚本引用句式。
+  · 目标：讲清 moveit2 如何为机械臂做运动规划——规划组、运动学求解器（IK）、规划接口、与 [第二章](chapt2_fkine.md)~[第六章](chapt6_control.md) 的对应。
+  · 给"配置→规划→执行"流程，配 moveit2 节点框图（mermaid）；说明 IK 求解器选择（衔接 [第三章](chapt3_ikine.md)）。
+  · 引用 application/ros2.py（封装）与 chapt 脚本，用脚本引用句式。
 -->
 
 ## 6 本章实践：JoyArm 的 ROS2 结构与实现
@@ -73,5 +73,5 @@ rviz，rqt，nav2，moveit2。
   · 目标：在 JoyArm 上搭建一个最小可运行的 ROS2 节点（话题发布关节状态 + 服务/话题接收运动指令）。
   · 建议结构：节点结构图 → 启动命令（```shell```）→ 用 rviz 观察 → 发指令执行 → 验证。
   · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt3_ros2_demo.py`，使用说明见脚本头部注释。」
-  · 可加 > 💡：ROS2 是后续 [应用篇](chapter4_1.md)（监测/安全、综合项目）的集成底座。
+  · 可加 > 💡：ROS2 是后续 [应用篇](chapt11_safety.md)（监测/安全、综合项目）的集成底座。
 -->

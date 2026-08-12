@@ -4,8 +4,8 @@
 
 <!-- ✍️ 写作指引（HTML 注释，不会渲染到线上；完稿后可保留或删除）
 
-【本章定位】进阶篇·理论章，建立在 [第六章](chapter2_6.md) 运动控制、[第八章](chapter3_2.md) 动力学之上，讲"力"维度的控制。
-【参考模板】对齐 chapter2_2.md（最完整的理论章范本）——数学推导 + 框图。
+【本章定位】进阶篇·理论章，建立在 [第六章](chapt6_control.md) 运动控制、[第八章](chapt8_dyn.md) 动力学之上，讲"力"维度的控制。
+【参考模板】对齐 chapt2_fkine.md（最完整的理论章范本）——数学推导 + 框图。
 【固定骨架】
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
@@ -19,11 +19,11 @@
   · 数学：行内 $...$、独立 $$...$$，阻抗/导纳方程用 \bm{F}、\bm{x}、刚度/阻尼 $K_d, B_d, M_d$。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt3_force_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm/：control / dyn / arm / jacobian / fkine。
-  · 图示：配图放 docs/images/chapter3_3/；⚠️ 第 5 行 `![力控制分类](image.png)` 路径不规范（非 images/ 目录），建议改放 docs/images/chapter3_3/force_control_classification.png。
+  · 图示：配图放 docs/images/chapt9_force/；⚠️ 第 5 行 `![力控制分类](image.png)` 路径不规范（非 images/ 目录），建议改放 docs/images/chapt9_force/force_control_classification.png。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意（接触/碰撞安全）。
-  · 跨章引用用相对链接（如 [第八章](chapter3_2.md)、[第十一章](chapter4_1.md) 安全防护）。
+  · 跨章引用用相对链接（如 [第八章](chapt8_dyn.md)、[第十一章](chapt11_safety.md) 安全防护）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt3_force_demo.py（待建）、control.py、dyn.py、arm.py、jacobian.py。
+【本章可引用的脚本/库】chapt3_force_demo.py（待建）、robotics/control.py、robotics/dyn.py、arm/arm.py、robotics/jacobian.py。
 -->
 
 ![力控制分类](image.png)
@@ -61,7 +61,7 @@
   · 目标：讲清导纳控制——根据测得的接触力修正期望位姿（力→位移），与阻抗对偶。
   · 已有两条要点（有/无力传感器），建议给导纳方程并补一张"导纳 vs 阻抗"对比表
     （方向|控制律|输入输出|对内环要求|典型适用）。
-  · 收尾 > 📌：导纳常叠加在 [第六章](chapter2_6.md) 的位置/速度内环之上，工程实现更灵活。
+  · 收尾 > 📌：导纳常叠加在 [第六章](chapt6_control.md) 的位置/速度内环之上，工程实现更灵活。
 -->
 
 * 有力传感器
