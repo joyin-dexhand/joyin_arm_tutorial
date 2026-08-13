@@ -1,6 +1,6 @@
 """``joyarm.utils.interfaces`` —— 核心接口协议（依赖倒置）。
 
-class:`MasProtocol`：``robotics`` / ``safety`` 算法层对多轴本体对象的最小结构化契约。保证 **单向依赖、无环**——
+- :class:`MasProtocol`：``robotics`` / ``safety`` 算法层对多轴本体对象的最小结构化契约。保证 **单向依赖、无环**——
 
 - ``arms`` import ``robotics`` / ``safety`` 做**门面委托**（``arm.fkine()`` 等）；
 - ``robotics`` / ``safety`` 不 import ``arms``，仅依赖本 Protocol。
