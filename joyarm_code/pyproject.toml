@@ -13,7 +13,7 @@ build-backend = "setuptools.build_meta"
 name = "joyarm"
 version = "0.1.0"
 description = "JoyArm 机械臂教程核心 SDK 库（核心包 joyarm + ROS2 兄弟包 joyarm_ros2）"
-readme = "joyarm/README.md"
+readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "JoyArm" }]
 dependencies = [

@@ -2,49 +2,50 @@
 
 本模块实现旋转矩阵、欧拉角/RPY、轴角、四元数、齐次变换矩阵之间的互转与运算
 
-约定（务必阅读）：
+约定：
 ----------------
 
-- 旋转矩阵 ``R``：``(3,3)`` numpy 数组，右手坐标系。
-- **RPY 角**：``rpy = (r, p, y)`` 传入（roll/pitch/yaw），弧度；默认按 ``R = Rz(y)·Ry(p)·Rx(r)`` 计算。
+- **``R``**：``(3,3)`` numpy 数组，右手坐标系。
+- **RPY**：``rpy = (r, p, y)`` 传入（roll/pitch/yaw），弧度；默认按 ``R = Rz(y)·Ry(p)·Rx(r)`` 计算。
 - **四元数**：``(w, x, y, z)`` 顺序，实部在前，单位四元数。
-- **齐次变换矩阵** ``T``：``(4,4)``。
+- **``T``** ：``(4,4)``。
 
 """
+
 from __future__ import annotations
 
 import numpy as np
 
 __all__ = [
-    # 基本旋转
-    "rot_x",
-    "rot_y",
-    "rot_z",
-    # RPY
-    "rpy_to_R",
-    "R_to_rpy",
-    # 轴角
-    "rodrigues",
-    "R_to_axis_angle",
-    "axis_angle_to_R",
-    # 四元数
-    "quat_to_R",
-    "R_to_quat",
-    "quat_to_axis_angle",
-    "axis_angle_to_quat",
-    "rpy_to_quat",
-    "quat_to_rpy",
-    "quat_mul",
-    "quat_conj",
-    "quat_norm",
-    # 齐次变换
-    "make_T",
-    "T_to_Rp",
-    "T_inv",
-    "T_mul",
-    "adT",
+    # 基本旋转矩阵
+    "rot_x",                # rot_x(angle: float) -> np.ndarray
+    "rot_y",                # rot_y(angle: float) -> np.ndarray
+    "rot_z",                # rot_z(angle: float) -> np.ndarray
+    # R ↔ RPY
+    "rpy_to_R",             # rpy_to_R(rpy) -> np.ndarray
+    "R_to_rpy",             # R_to_rpy(R) -> np.ndarray
+    # R ↔ 轴角
+    "rodrigues",            # rodrigues(k, theta=None) -> np.ndarray
+    "R_to_axis_angle",      # R_to_axis_angle(R) -> tuple[np.ndarray, float]
+    "axis_angle_to_R",      # axis_angle_to_R(k, theta: float) -> np.ndarray
+    # 四元数 ↔ 旋转矩阵 / 轴角 / RPY
+    "quat_to_R",            # quat_to_R(quat) -> np.ndarray
+    "R_to_quat",            # R_to_quat(R) -> np.ndarray
+    "quat_to_axis_angle",   # quat_to_axis_angle(quat) -> tuple[np.ndarray, float]
+    "axis_angle_to_quat",   # axis_angle_to_quat(k, theta: float) -> np.ndarray
+    "rpy_to_quat",          # rpy_to_quat(rpy) -> np.ndarray
+    "quat_to_rpy",          # quat_to_rpy(quat) -> np.ndarray
+    "quat_mul",             # quat_mul(q1, q2) -> np.ndarray
+    "quat_conj",            # quat_conj(quat) -> np.ndarray
+    "quat_norm",            # quat_norm(quat) -> float
+    # T ↔ R/p
+    "Rp_to_T",              # Rp_to_T(R=None, p=None) -> np.ndarray
+    "T_to_Rp",              # T_to_Rp(T) -> tuple[np.ndarray, np.ndarray]
+    "T_inv",                # T_inv(T) -> np.ndarray
+    "T_mul",                # T_mul(T1, T2) -> np.ndarray
+    "adT",                  # adT(T) -> np.ndarray
     # 插值
-    "slerp",
+    "slerp",                # slerp(R0, R1, s: float) -> np.ndarray     
 ]
 
 
@@ -331,7 +332,7 @@ def quat_norm(q) -> np.ndarray:
 # ============================================================
 # 齐次变换矩阵
 # ============================================================
-def make_T(R=None, p=None) -> np.ndarray:
+def Rp_to_T(R=None, p=None) -> np.ndarray:
     """由旋转 ``R`` 与平移 ``p`` 组装 ``(4,4)`` 齐次变换矩阵。
 
     :param R: ``(3,3)`` 旋转矩阵，缺省为单位阵。
@@ -363,7 +364,7 @@ def T_inv(T) -> np.ndarray:
     """
     R, p = T_to_Rp(T)
     R_inv = R.T
-    return make_T(R_inv, -R_inv @ p)
+    return Rp_to_T(R_inv, -R_inv @ p)
 
 
 def T_mul(T1, T2) -> np.ndarray:

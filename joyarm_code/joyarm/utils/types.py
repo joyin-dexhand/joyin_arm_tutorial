@@ -1,38 +1,38 @@
 """共享数据类型与枚举。
 
-本模块定义全篇复用的不可变数据类型（``@dataclass``）与枚举（``enum``），
+本模块定义全篇复用的数据类型（可变 ``@dataclass`` 快照）与枚举（``enum``），
 所有模块统一引用此处定义的类型，杜绝重复定义。
+数据类继承 :class:`_ArrayEqMixin`，提供 ndarray 字段安全的相等性比较。
 
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import Enum
-from typing import List
 
 import numpy as np
-from .transforms import T_to_Rp, R_to_quat, quat_to_R, make_T
+from .transforms import T_to_Rp, R_to_quat, quat_to_R, Rp_to_T
 
 __all__ = [
     # 枚举
-    "ControlMode",
-    "Severity",
-    "SafetyAction",
-    "TrajectorySpace",
+    "ControlMode",      # 关节控制模式：POSITION / VELOCITY / TORQUE / MIT
+    "Severity",         # 安全违规分级：INFO / WARNING / ERROR / CRITICAL
+    "SafetyAction",     # 安全响应策略：NONE / CLAMP / DAMPING_HOLD / FREEZE / ESTOP
+    "TrajectorySpace",  # 轨迹空间标识：JOINT / CARTESIAN
     # 数据类
-    "Wrench",
-    "Twist",
-    "Pose",
-    "JointState",
-    "TcpState",
-    "ArmState",
-    "JointLimits",
-    "TcpLimits",
-    "Violation",
-    "IKResult",
-    "ComplianceParams",
+    "Wrench",           # 六维力/力矩：force + torque
+    "Twist",            # 空间速度：linear + angular
+    "Pose",             # 统一位姿表示：position + orientation（单位四元数）
+    "JointState",       # 关节状态：control_mode + q/dq/ddq/tau + status + temp_coil/temp_driver + voltage/current
+    "TcpState",         # 工具中心点状态：pose + twist + wrench
+    "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
+    "JointLimits",      # 关节限位: q_min/q_max + dq_max + ddq_max + tau_max + temp_coil_max/temp_driver_max + voltage_min/voltage_max + current_max
+    "TcpLimits",        # 工具中心点限位: workspace_box + v_lin_max + v_ang_max + f_max + t_max
+    "Violation",        # 安全违规: layer + joint_idx + metric + value + limit + severity
+    "IKResult",         # 逆运动学结果： q + success + err + n_iter
+    "ComplianceParams", # Compliance 参数 : K/D/M
     # 纯函数
-    "clamp_to_limits",
+    "clamp_to_limits",  # 关节角裁剪到限位内
 ]
 
 
@@ -90,10 +90,38 @@ class TrajectorySpace(Enum):
 
 
 # ============================================================
+# 数据类公共基类
+# ============================================================
+class _ArrayEqMixin:
+    """ndarray 字段安全的 ``__eq__``。
+
+    dataclass 默认 ``__eq__`` 逐字段 ``==`` 比较，遇 ``np.ndarray`` 因布尔
+    歧义抛 ``ValueError``；本混入改为 ndarray 字段用
+    :func:`np.array_equal`（``equal_nan=True``），其余字段用 ``==``。
+
+    .. note:: 子类须以 ``@dataclass(eq=False)`` 声明，否则 dataclass
+       自动生成的 ``__eq__`` 会覆盖本混入。
+    """
+
+    def __eq__(self, other: object) -> bool:
+        if other.__class__ is not self.__class__:
+            return NotImplemented
+        for f in fields(self):
+            a = getattr(self, f.name)
+            b = getattr(other, f.name)
+            if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+                if not np.array_equal(a, b, equal_nan=True):
+                    return False
+            elif a != b:
+                return False
+        return True
+
+
+# ============================================================
 # 几何/运动学数据类
 # ============================================================
-@dataclass
-class Wrench:
+@dataclass(eq=False)
+class Wrench(_ArrayEqMixin):
     """六维力/力矩。
 
     :ivar force: ``(3,)`` 力向量，单位 N。
@@ -104,8 +132,8 @@ class Wrench:
     torque: np.ndarray = field(default_factory=lambda: np.zeros(3))
 
 
-@dataclass
-class Twist:
+@dataclass(eq=False)
+class Twist(_ArrayEqMixin):
     """空间速度
 
     :ivar linear: ``(3,)`` 线速度，单位 m/s。
@@ -116,9 +144,9 @@ class Twist:
     angular: np.ndarray = field(default_factory=lambda: np.zeros(3))
 
 
-@dataclass
-class Pose:
-    """统一位姿表示（全篇复用）。
+@dataclass(eq=False)
+class Pose(_ArrayEqMixin):
+    """统一位姿表示
 
     以 position(3) + orientation（单位四元数 4） 存储，与 ROS2
     ``geometry_msgs/Pose`` 语义对齐。正运动学等内部计算仍用 4×4 齐次矩阵 ``T``，
@@ -142,28 +170,29 @@ class Pose:
     @property
     def T(self) -> np.ndarray:
         """派生的 4×4 齐次变换矩阵（每次调用现算）。"""
-        return make_T(quat_to_R(self.orientation), self.position)
+        return Rp_to_T(quat_to_R(self.orientation), self.position)
 
 
 # ============================================================
 # 状态快照
 # ============================================================
-@dataclass
-class JointState:
-    """关节层状态快照（Ch11 §11.1）。
+@dataclass(eq=False)
+class JointState(_ArrayEqMixin):
+    """关节层状态快照
 
+    :ivar control_mode: 关节当前控制模式（见 :class:`ControlMode`）。
     :ivar q: ``(n,)`` 关节位置，弧度。
     :ivar dq: ``(n,)`` 关节速度，弧度/秒。
     :ivar ddq: ``(n,)`` 关节加速度，弧度/秒²。
     :ivar tau: ``(n,)`` 关节力矩，N·m。
-    :ivar status: ``(n,)`` int 关节电机状态码；
-                  ``0``=失能，``1``=使能，其他值代表过温/过流/通信异常等信息。
+    :ivar status: ``(n,)`` int 关节电机状态码；``0``=失能，``1``=使能，其他值代表过温/过流/通信异常等信息。
     :ivar temp_coil: ``(n,)`` 线圈温度，单位 ℃。
     :ivar temp_driver: ``(n,)`` 驱动器温度，单位 ℃。
     :ivar voltage: 总线电压，单位 V。
     :ivar current: 总线电流，单位 A。
     """
 
+    control_mode: ControlMode = ControlMode.POSITION
     q: np.ndarray = field(default_factory=lambda: np.zeros(0))
     dq: np.ndarray = field(default_factory=lambda: np.zeros(0))
     ddq: np.ndarray = field(default_factory=lambda: np.zeros(0))
@@ -175,17 +204,17 @@ class JointState:
     current: float = 0.0
 
 
-@dataclass
-class TcpState:
-    """末端层状态快照（Ch11 §11.2）。"""
+@dataclass(eq=False)
+class TcpState(_ArrayEqMixin):
+    """末端层状态快照"""
 
     pose: Pose = field(default_factory=Pose)
     twist: Twist = field(default_factory=Twist)
     wrench: Wrench = field(default_factory=Wrench)
 
 
-@dataclass
-class ArmState:
+@dataclass(eq=False)
+class ArmState(_ArrayEqMixin):
     """整机状态聚合快照
 
     :ivar joint: 关节层状态。
@@ -199,15 +228,15 @@ class ArmState:
     tcp: TcpState = field(default_factory=TcpState)
     mode: ControlMode = ControlMode.POSITION
     timestamp: float = 0.0
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 # ============================================================
 # 限位声明
 # ============================================================
-@dataclass
-class JointLimits:
-    """关节限位声明（Ch11 §11.1）。
+@dataclass(eq=False)
+class JointLimits(_ArrayEqMixin):
+    """关节限位声明
 
     所有数组维度均为 ``(n,)``，``n`` 为机械臂自由度数。
 
@@ -243,12 +272,11 @@ class JointLimits:
     current_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
 
-@dataclass
-class TcpLimits:
-    """末端限位声明（Ch11 §11.2）。
+@dataclass(eq=False)
+class TcpLimits(_ArrayEqMixin):
+    """末端限位声明
 
-    :ivar workspace_box: ``(3,2)`` 末端工作空间包围盒，
-                         每行 ``[min, max]`` 对应 x/y/z，单位 m。
+    :ivar workspace_box: ``(3,2)`` 末端工作空间包围盒，每行 ``[min, max]`` 对应 x/y/z，单位 m。
     :ivar v_lin_max: 末端最大线速度，m/s。
     :ivar v_ang_max: 末端最大角速度，rad/s。
     :ivar f_max: 末端最大力，N。
@@ -264,12 +292,11 @@ class TcpLimits:
     t_max: float = 0.0
 
 
-@dataclass
-class Violation:
-    """安全监控器输出的违规记录（Ch11）。
+@dataclass(eq=False)
+class Violation(_ArrayEqMixin):
+    """安全监控器输出的违规记录
 
-    :ivar layer: 监控层标识，``"joint"``/``"tcp"``/``"arm"`，
-                 分别对应 §11.1/11.2/11.3。
+    :ivar layer: 监控层标识，``"joint"``/``"tcp"``/``"arm"`
     :ivar joint_idx: 关节索引（末端/整机层违规可置 ``-1``）。
     :ivar metric: 违规指标名（如 ``"q"``/``"dq"``/``"temp_coil"``）。
     :ivar value: 实测值。
@@ -288,9 +315,9 @@ class Violation:
 # ============================================================
 # 求解结果
 # ============================================================
-@dataclass
-class IKResult:
-    """逆运动学求解结果（Ch3）。
+@dataclass(eq=False)
+class IKResult(_ArrayEqMixin):
+    """逆运动学求解结果
 
     :ivar q: ``(n,)`` 解算得到的关节角，弧度。
     :ivar success: 是否收敛到满足精度的解。
@@ -304,9 +331,9 @@ class IKResult:
     n_iter: int = 0
 
 
-@dataclass
-class ComplianceParams:
-    """笛卡尔柔顺参数（Ch9 阻抗/导纳共用）。
+@dataclass(eq=False)
+class ComplianceParams(_ArrayEqMixin):
+    """笛卡尔柔顺参数
 
     阻抗控制器 ``K_d/D_d/M_d`` 与导纳控制器 ``K_a/D_a/M_a``
     均映射到本类的 ``K/D/M`` 三个 6×6 笛卡尔矩阵（默认对角）。
@@ -334,11 +361,25 @@ def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
     :param targets: ``(n,)`` 或 ``(N,n)`` 目标关节角，弧度。
     :param limits: 关节限位声明。
     :return: 与 ``targets`` 同形状的裁剪后关节角。
-    :raises ValueError: ``targets`` 与限位维度不匹配时抛出。
+    :raises ValueError: ``targets`` 与限位维度不匹配，或限位自身
+                        ``q_min > q_max``（配置错误）时抛出。
     """
     targets = np.asarray(targets, dtype=float)
     q_min = np.asarray(limits.q_min, dtype=float)
     q_max = np.asarray(limits.q_max, dtype=float)
+
+    # q_min > q_max 属配置错误，静默裁剪会掩盖问题
+    bad = np.where(q_min > q_max)[0]
+    if bad.size > 0:
+        raise ValueError(
+            f"限位配置错误：q_min > q_max（关节索引 {bad.tolist()}）"
+        )
+
+    # 标量（0-d）输入拦截：shape 为 ()，shape[-1] 会 IndexError
+    if targets.ndim == 0:
+        raise ValueError(
+            "目标关节角不能是标量，需为 (n,) 或 (N,n) 数组"
+        )
 
     # 维度校验：目标最后一维必须等于关节数（限位数组长度）
     if targets.shape[-1] != q_min.shape[0]:

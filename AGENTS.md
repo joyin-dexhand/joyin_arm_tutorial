@@ -63,3 +63,23 @@
 - **算法默认 pinocchio**：robotics 不带 `method` 参数，默认走 urdf+pin；手写实现请在 `Mas` 子类覆盖对应方法。
 - 约定针对**系统组件**（mas/end/arm/backend）；项目品牌名 `joyarm`/`joyarm_code` 不改。
 - 详见 `joyarm_code/joyarm/架构设计.md`。
+
+## 代码库文档与注释维护（`joyarm_code/`）
+
+`joyarm_code/README.md`（用户向：结构/功能/用法）与 `joyarm_code/架构与API.md`（开发者向：整体结构 → 各 py 文件 → 类与函数 → API）是代码库两大入口文档。
+
+### 文档定位：精简概述、代码即详则
+
+- 两份 md 文档**只写精简化概述**（结构速览、用法、API 速查），**不复述**代码已有内容。
+- **详细规则写进代码注释**（同样尽量精简）：各包 `__init__.py` 写模块职责一句话；类与函数写精简 docstring（`:param:`/`:return:`/`:raises:`/章节标记）。
+- 查细节请看源码 docstring 或 `help(符号)`，不要在 md 中重复抄写。
+
+### 同步维护强制原则
+
+> ⚠️ 凡改动 `joyarm_code/` 下任何 `.py` / `.yaml` / 目录结构，**必须同步更新**对应代码 docstring 与这两份文档，使其与代码保持一致：
+>
+> - 公开 API（`joyarm/__init__.py` 的 `__all__` 导出）变化 → 更新 `架构与API.md` 的「API 参考」节；
+> - 目录 / 文件结构变化 → 更新两份文档的结构节与目录树；
+> - 安装 / 用法 / 示例变化 → 更新 `README.md`。
+>
+> 提交前自检：新增的公开符号已收录、且已补精简 docstring；删除的符号已从文档移除；文件清单与目录树一致。
