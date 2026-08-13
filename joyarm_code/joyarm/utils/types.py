@@ -23,7 +23,6 @@ __all__ = [
     "Wrench",
     "Twist",
     "Pose",
-    "Transform",
     "JointState",
     "TcpState",
     "ArmState",
@@ -144,35 +143,6 @@ class Pose:
     def T(self) -> np.ndarray:
         """派生的 4×4 齐次变换矩阵（每次调用现算）。"""
         return make_T(quat_to_R(self.orientation), self.position)
-
-
-@dataclass
-class Transform:
-    """坐标系间的刚体变换（与 ROS2 ``geometry_msgs/Transform`` 语义对齐）。
-
-    :ivar translation: ``(3,)`` 平移向量。
-    :ivar rotation: ``(4,)`` 单位四元数，``(w, x, y, z)`` 实部在前。
-    """
-
-    translation: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    rotation: np.ndarray = field(
-        default_factory=lambda: np.array([1.0, 0.0, 0.0, 0.0])
-    )
-
-    @classmethod
-    def from_T(cls, T: np.ndarray) -> Transform:
-        """从 4×4 齐次变换矩阵构造。"""
-        R, p = T_to_Rp(T)
-        return cls(translation=p, rotation=R_to_quat(R))
-
-    @property
-    def T(self) -> np.ndarray:
-        """派生的 4×4 齐次变换矩阵（每次调用现算）。"""
-        return make_T(quat_to_R(self.rotation), self.translation)
-
-    def to_pose(self) -> Pose:
-        """转成 :class:`Pose`（字段值不变，仅语义包装不同）。"""
-        return Pose(position=self.translation, orientation=self.rotation)
 
 
 # ============================================================

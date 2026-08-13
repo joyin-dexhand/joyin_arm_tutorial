@@ -1,0 +1,48 @@
+# ──────────────────────────────────────────────────────────────────────────
+# JoyArm 教程 Python 工程配置（核心包 joyarm + ROS2 兄弟包 joyarm_ros2）
+# 本文件位于 joyarm_code/，即 Python 工程根目录。
+# 安装：cd joyarm_code && uv pip install -e .        # 可编辑安装两个包
+#      cd joyarm_code && uv pip install -e ".[ros2]" # 额外装 ROS2 依赖（rclpy）
+# ──────────────────────────────────────────────────────────────────────────
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "joyarm"
+version = "0.1.0"
+description = "JoyArm 机械臂教程核心 SDK 库（核心包 joyarm + ROS2 兄弟包 joyarm_ros2）"
+readme = "joyarm/README.md"
+requires-python = ">=3.10"
+authors = [{ name = "JoyArm" }]
+dependencies = [
+    "numpy",  # 数值计算
+    "pin",    # pinocchio：URDF 加载 + 运动学/动力学（重依赖）
+    "pyyaml", # 读取 configs/*.yaml 型号配置
+]
+
+[project.optional-dependencies]
+# ROS2 兄弟包 joyarm_ros2 需要；rclpy 通常由 ROS2 环境提供（apt），非 pip 安装
+ros2 = ["rclpy"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["joyarm", "joyarm.*", "joyarm_ros2", "joyarm_ros2.*"]
+exclude = ["test*", "chapt*", "quickstart*"]
+
+# 随包数据：URDF / meshes / YAML 配置（importlib.resources 解析）
+[tool.setuptools.package-data]
+joyarm = [
+    "configs/*.yaml",
+    "robots/*/urdf/*.urdf",
+    "robots/*/urdf/*.csv",
+    "robots/*/meshes/*.STL",
+    "robots/*/meshes/*.stl",
+]
+
+# ── pytest：免去 PYTHONPATH=joyarm_code ──
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["test"]

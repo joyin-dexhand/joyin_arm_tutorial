@@ -1,4 +1,4 @@
-"""``joyarm`` 包入口测试：导入冒烟、``__all__`` 一致性、``load_arm()`` 离线实例化。
+"""``joyarm`` 包入口测试：导入冒烟、``__all__`` 一致性、``JoyArmRebotDM()`` 离线实例化。
 
 依赖：pinocchio（环境已装 4.1.0）。
 """
@@ -46,24 +46,28 @@ class TestImportSmoke:
             "rpy_to_R",
             "slerp",
             "clamp_to_limits",
-            # 运动学模型层
+            "MasProtocol",
+            # 设备模型层（Mas / End / Arm）
+            "Mas",
+            "End",
             "Arm",
             "JoyArmRebotDM",
+            # 算法层
             "fkine",
             "ikine",
-            # 轨迹 / 动力学
             "Trajectory",
             "fdyn",
-            # 控制 / 安全 / 应用支撑
+            # 控制 / 安全
             "ControlLoop",
             "SafetySupervisor",
-            "Gripper",
-            # 可视化 / 通信
-            "viz",
+            # 通信层（三层）
             "backends",
-            "JoyArmRebotDMBackend",
-            # 工厂 / 版本
-            "load_arm",
+            "Backend",
+            "BackendMas",
+            "BackendEnd",
+            "BackendMasRebotDM",
+            "BackendEndJoyGripper",
+            # 版本
             "__version__",
         ]:
             assert name in joyarm_pkg.__all__, f"{name} 未列入 __all__"
@@ -71,55 +75,30 @@ class TestImportSmoke:
 
 
 # ============================================================
-# load_arm() 工厂
+# JoyArmRebotDM() 离线实例化
 # ============================================================
-class TestLoadArm:
+class TestInstantiation:
     def test_default_offline(self, joyarm_pkg):
-        """默认参数 → 离线 Arm 实例。"""
-        arm = joyarm_pkg.load_arm()
+        """默认参数 → 未连接的 Arm 实例（Arm = Mas + End；backends 由 config 实例化）。"""
+        arm = joyarm_pkg.JoyArmRebotDM()
         assert isinstance(arm, joyarm_pkg.Arm)
+        assert isinstance(arm, joyarm_pkg.Mas)               # Arm is-a Mas
         assert isinstance(arm, joyarm_pkg.JoyArmRebotDM)
-        # 离线模式 backend 为 None
-        assert arm.backend is None
-
-    def test_explicit_model(self, joyarm_pkg):
-        arm = joyarm_pkg.load_arm(model="joyarm_rebot_dm")
-        assert isinstance(arm, joyarm_pkg.JoyArmRebotDM)
-
-    def test_unknown_model_raises(self, joyarm_pkg):
-        with pytest.raises(ValueError, match="未知型号"):
-            joyarm_pkg.load_arm(model="does_not_exist")
-
-    def test_unknown_backend_raises(self, joyarm_pkg):
-        with pytest.raises(ValueError, match="未知 backend"):
-            joyarm_pkg.load_arm(backend="can")
-
-    def test_real_backend_offline_instantiation(self, joyarm_pkg):
-        """backend='real' 仅构造 backend 实例（不真连），Arm 仍可被实例化。"""
-        arm = joyarm_pkg.load_arm(
-            backend="real", backend_kwargs={}
-        )
-        assert arm.backend is not None
-        assert isinstance(arm.backend, joyarm_pkg.JoyArmRebotDMBackend)
-
-    def test_backend_kwargs_with_offline_not_swallowed(self, joyarm_pkg):
-        """Bug 5 回归：backend=None 时传 backend_kwargs 不应触发 TypeError。
-
-        原实现仅在 backend=='real' 分支 pop backend_kwargs，
-        backend=None 时该键被原样透传给 Arm 构造函数，触发意外关键字错误。
-        """
-        # 应被 load_arm 自身消化（pop 出来），不再透传给 Arm
-        arm = joyarm_pkg.load_arm(backend=None, backend_kwargs={})
-        assert arm.backend is None
+        # 两个 backend 已按 config 实例化；默认未连接（离线）
+        assert isinstance(arm.backend_mas, joyarm_pkg.BackendMasRebotDM)
+        assert isinstance(arm.end.backend_end, joyarm_pkg.BackendEndJoyGripper)
+        assert arm.connected is False
 
     def test_arm_supports_offline_compute(self, joyarm_pkg):
         """离线模式下计算路径可用：rand_q / fkine。"""
-        arm = joyarm_pkg.load_arm()
+        arm = joyarm_pkg.JoyArmRebotDM()
         q = arm.rand_q(size=4)
         assert q.shape == (4, arm.n) or q.shape[-1] == arm.n
 
     def test_offline_get_state_raises(self, joyarm_pkg):
-        """离线模式：get_state / command 应 raise RuntimeError。"""
-        arm = joyarm_pkg.load_arm()
+        """未连接真机：get_state / command 应 raise RuntimeError。"""
+        arm = joyarm_pkg.JoyArmRebotDM()
         with pytest.raises(RuntimeError):
             arm.get_state()
+        with pytest.raises(RuntimeError):
+            arm.command(q=arm.rand_q())

@@ -53,22 +53,19 @@ __all__ = [
 # ============================================================
 def rot_x(angle: float) -> np.ndarray:
     """绕 X 轴旋转 ``angle`` 弧度的 ``(3,3)`` 旋转矩阵。"""
-    c, s = np.cos(angle), np.sin(angle)       # 预算 cos、sin，避免重复计算
-    # X 轴不变（第一行/列 [1,0,0]），Y、Z 在 YZ 平面内转
+    c, s = np.cos(angle), np.sin(angle)
     return np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
 
 
 def rot_y(angle: float) -> np.ndarray:
     """绕 Y 轴旋转 ``angle`` 弧度的 ``(3,3)`` 旋转矩阵。"""
     c, s = np.cos(angle), np.sin(angle)
-    # Y 轴不变（中间 [1]），X、Z 在 XZ 平面内转
     return np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]])
 
 
 def rot_z(angle: float) -> np.ndarray:
     """绕 Z 轴旋转 ``angle`` 弧度的 ``(3,3)`` 旋转矩阵。"""
     c, s = np.cos(angle), np.sin(angle)
-    # Z 轴不变（右下 [1]），X、Y 在 XY 平面内转
     return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
 
@@ -83,8 +80,8 @@ def rpy_to_R(rpy) -> np.ndarray:
     :param rpy: ``(3,)`` 数组 ``(roll, pitch, yaw)``，弧度。
     :return: ``(3,3)`` 旋转矩阵。
     """
-    rpy = np.asarray(rpy, dtype=float).reshape(3)  # 统一成 (3,) float 数组
-    r, p, y = rpy                            # 拆出 roll/pitch/yaw
+    rpy = np.asarray(rpy, dtype=float).reshape(3)
+    r, p, y = rpy
     # 外旋 X-Y-Z：先绕 X 转 r，再绕 Y 转 p，最后绕 Z 转 y
     # 矩阵相乘顺序与"绕固定轴旋转"的顺序相反（右乘）
     return rot_z(y) @ rot_y(p) @ rot_x(r)
@@ -140,7 +137,7 @@ def rodrigues(k, theta=None) -> np.ndarray:
     :param theta: 旋转角，弧度；为 ``None`` 时从 ``k`` 的模长取。
     :return: ``(3,3)`` 旋转矩阵。
     """
-    k = np.asarray(k, dtype=float).reshape(3)  # 统一成 (3,) float 数组
+    k = np.asarray(k, dtype=float).reshape(3)
     if theta is None:
         # 没给角度：把 k 当"旋转向量"——方向是轴、长度是角
         theta = np.linalg.norm(k)               # 角度 = 向量模长
@@ -325,10 +322,10 @@ def quat_conj(q) -> np.ndarray:
 def quat_norm(q) -> np.ndarray:
     """四元数归一化 → 单位四元数 ``(w,x,y,z)``。"""
     q = np.asarray(q, dtype=float).reshape(4)
-    n = np.linalg.norm(q)                     # 四元数模长
+    n = np.linalg.norm(q)
     if n < 1e-12:                             # 零四元数无法归一，返回单位四元数（零旋转）
         return np.array([1.0, 0.0, 0.0, 0.0])
-    return q / n                              # 除以模长 → 单位四元数
+    return q / n
 
 
 # ============================================================
@@ -341,11 +338,11 @@ def make_T(R=None, p=None) -> np.ndarray:
     :param p: ``(3,)`` 平移向量，缺省为零向量。
     :return: ``(4,4)`` 齐次变换矩阵。
     """
-    T = np.eye(4)                             # 先建 4x4 单位阵（最后一行固定 [0,0,0,1]）
+    T = np.eye(4)
     if R is not None:
-        T[:3, :3] = np.asarray(R, dtype=float)    # 左上 3x3 块填旋转矩阵
+        T[:3, :3] = np.asarray(R, dtype=float)
     if p is not None:
-        T[:3, 3] = np.asarray(p, dtype=float).reshape(3)   # 右上 3x1 列填平移
+        T[:3, 3] = np.asarray(p, dtype=float).reshape(3)
     return T
 
 
@@ -355,7 +352,7 @@ def T_to_Rp(T) -> tuple[np.ndarray, np.ndarray]:
     :return: ``(R(3,3), p(3,))``。
     """
     T = np.asarray(T, dtype=float)
-    # 左上 3x3 = 旋转 R；右上 3x1 = 平移 p；copy() 防止外部修改影响原矩阵
+    # copy() 防止返回的切片被外部意外修改
     return T[:3, :3].copy(), T[:3, 3].copy()
 
 
@@ -365,8 +362,7 @@ def T_inv(T) -> np.ndarray:
     对 ``T = [R p; 0 1]``，逆为 ``[Rᵀ  -Rᵀp; 0 1]``。
     """
     R, p = T_to_Rp(T)
-    R_inv = R.T                              # 旋转矩阵的逆 = 转置（正交性）
-    # 平移部分的逆 = -Rᵀ·p（把原点变换回去）
+    R_inv = R.T
     return make_T(R_inv, -R_inv @ p)
 
 
@@ -441,7 +437,7 @@ def slerp(R0, R1, s: float) -> np.ndarray:
 def _normalize(v) -> np.ndarray:
     """归一化 3 维向量为单位向量；零向量返回 (1,0,0)。"""
     v = np.asarray(v, dtype=float).reshape(3)
-    n = np.linalg.norm(v)                     # 向量模长
+    n = np.linalg.norm(v)
     if n < 1e-12:                             # 零向量无法归一，约定返回 X 轴
         return np.array([1.0, 0.0, 0.0])
-    return v / n                              # 除以模长 → 单位向量
+    return v / n

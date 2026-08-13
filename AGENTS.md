@@ -43,4 +43,23 @@
 
 ### 机械臂代码库
 
-位置：`./joyarm_code/joyarm`
+位置：`./joyarm_code/joyarm`（核心 SDK，ROS2-free）+ `./joyarm_code/joyarm_ros2`（ROS2 兄弟包）。
+
+#### 命名约定（类 / 文件 / backend）—— 全仓库强制遵循
+
+- **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
+- **设备三概念**（`arms/`）：
+  - `Mas` = 多轴系统（Multi-Axis System，**不含**末端执行器的本体）。文件 `arms/mas.py`。
+  - `End` = 末端执行器（夹爪/灵巧手/吸附…）。文件 `arms/end.py`。
+  - `Arm` = 完整机械臂（= `Mas` + `End`）。`Arm(Mas)` 组合一个 `End`；文件 `arms/arm.py`。
+  - 具体型号：`JoyArmRebotDM(Arm)` 等（"Arm" 表示完整臂，名仍对）。
+- **Backend 三层**（`Backend` 前缀，`backends/`）：
+  - 根：`Backend`（`backend.py`）—— 通用硬件通信抽象（`connect/disconnect/read_state`）。
+  - 类型层（按硬件类型派生）：`BackendMas` / `BackendEnd` …。
+  - 型号层（按具体型号派生）：`BackendMasRebotDM` / `BackendEndJoyGripper` …。
+  - 文件名：`backend.py` / `backend_mas.py` / `backend_end.py` / `backend_mas_rebot_dm.py` / `backend_end_joygripper.py`。
+- **属性 / 形参**：本体后端 = `backend_mas`（`Mas` 持有）；末端后端 = `backend_end`（`End` 持有）；robotics/safety 算法形参用 `mas`（依赖 `utils.MasProtocol`，**不 import** `arms`）。
+- **yaml**：`configs/<model>.yaml` 按 backend 分段——`backend_mas:` / `backend_end:`（不再用单一 `comm:`）。子类绑 backend **类**（`backend_mas_cls` / `backend_end_cls`），基类按 config 段实例化。
+- **算法默认 pinocchio**：robotics 不带 `method` 参数，默认走 urdf+pin；手写实现请在 `Mas` 子类覆盖对应方法。
+- 约定针对**系统组件**（mas/end/arm/backend）；项目品牌名 `joyarm`/`joyarm_code` 不改。
+- 详见 `joyarm_code/joyarm/架构设计.md`。

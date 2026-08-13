@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from ..utils.types import ArmState, JointState, Pose
+from joyarm.utils.types import ArmState, JointState, Pose
 
 __all__ = ["Ros2Adapter", "to_joint_msg", "from_pose_msg"]
 

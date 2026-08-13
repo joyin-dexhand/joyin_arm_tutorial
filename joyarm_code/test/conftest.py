@@ -45,6 +45,6 @@ def random_R(rng):
     k = v / np.linalg.norm(v)
     theta = rng.uniform(0.0, 2.0 * np.pi)
     # 用 axis_angle_to_R 构造（已归一化轴）
-    from joyarm_code.joyarm.utils.transforms import axis_angle_to_R
+    from joyarm.utils.transforms import axis_angle_to_R
 
     return axis_angle_to_R(k, theta)

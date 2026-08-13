@@ -24,7 +24,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from ..utils.types import ControlMode, Pose, Twist
+from joyarm.utils.types import ControlMode, Pose, Twist
 
 __all__ = [
     "Sample",

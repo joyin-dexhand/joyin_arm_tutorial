@@ -1,13 +1,13 @@
 """轨迹生成（轨迹层，Ch5 占位）。
 
 在关节空间或笛卡尔空间生成平滑轨迹（时间序列），供
-:mod:`joyarm.robotics.control` 回放或 :mod:`joyarm.application.viz` 预演。
+:mod:`joyarm.robotics.control` 回放。
 
 - **关节空间**（§5.1）：三次 / 五次多项式、抛物线过渡线性（LSPB）、多点途经。
 - **笛卡尔空间**（§5.2）：直线（位置线性 + 姿态 slerp）、圆弧、平滑拼接。
 - **工具**：定速重定时、轨迹校验（接 :mod:`joyarm.safety`）。
 
-:mod:`joyarm.application.teleop` 的示教记录**直接复用**本模块的
+:mod:`joyarm_ros2.apps.teleop` 的示教记录**直接复用**本模块的
 :class:`Trajectory` 载体（不另定义子类）。
 
 对应章节：Ch5（``chapter2_5.md`` 第五章 轨迹生成）。
@@ -36,14 +36,6 @@ __all__ = [
     "constant_velocity_retime",
     "validate",
 ]
-
-# 【给新手的话】本文件是"占位文件"——函数体目前都是 raise NotImplementedError。
-# 这不是 bug，而是教学安排：第五章会真正实现轨迹生成。
-# "轨迹"就是让机械臂随时间平滑运动的一组数据（时间戳 + 每个时刻的关节角或末端位姿）。
-# 两种规划空间：
-#   - 关节空间：直接规划各关节角随时间的变化（简单，但末端路径不直观）。
-#   - 笛卡尔空间：规划末端在三维空间中的路径（直线/圆弧），再逐点反算关节角。
-# 平滑性靠多项式插值保证（三次/五次），避免运动起停时的冲击。
 
 
 # ============================================================
@@ -186,13 +178,13 @@ def cart_arc(
 
 
 def cart_to_joint(
-    arm,
+    mas,
     cart_traj: Trajectory,
     q0: Optional[np.ndarray] = None,
-    method: str = "auto",
 ) -> Trajectory:
     """笛卡尔轨迹 → 关节轨迹（逐点 IK，处理奇异 / 不可达 / 多解）。
 
+    :param mas: :class:`joyarm.arms.mas.Mas` 实例。
     :param cart_traj: 笛卡尔空间 :class:`Trajectory`。
     :param q0: IK 初值（连续性种子）。
     :return: 关节空间 :class:`Trajectory`。
@@ -213,7 +205,7 @@ def constant_velocity_retime(traj: Trajectory, v_max: float) -> Trajectory:
     raise NotImplementedError("constant_velocity_retime 待 Ch5 实现")
 
 
-def validate(traj: Trajectory, arm) -> List[Violation]:
+def validate(traj: Trajectory, mas) -> List[Violation]:
     """轨迹校验：途经点是否超限位 / 奇异（接 :mod:`joyarm.safety`）。
 
     :return: 违规列表 ``list[Violation]``。

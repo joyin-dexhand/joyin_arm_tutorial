@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm_code.joyarm.utils import types
-from joyarm_code.joyarm.utils import transforms as T
+from joyarm.utils import types
+from joyarm.utils import transforms as T
 
 
 # ============================================================
@@ -42,9 +42,9 @@ class TestEnums:
 
 
 # ============================================================
-# Pose / Transform
+# Pose
 # ============================================================
-class TestPoseTransform:
+class TestPose:
     def test_pose_defaults(self):
         pose = types.Pose()
         assert_allclose(pose.position, np.zeros(3))
@@ -64,27 +64,6 @@ class TestPoseTransform:
         T4 = pose.T
         assert_allclose(T4[:3, :3], R, atol=1e-9)
         assert_allclose(T4[:3, 3], p, atol=1e-9)
-
-    def test_transform_defaults(self):
-        tf = types.Transform()
-        assert_allclose(tf.translation, np.zeros(3))
-        assert_allclose(tf.rotation, [1, 0, 0, 0])
-
-    def test_transform_from_T_round_trip(self, random_R, rng):
-        p = rng.normal(size=3)
-        T4 = T.make_T(random_R, p)
-        tf = types.Transform.from_T(T4)
-        assert_allclose(tf.translation, p, atol=1e-9)
-        assert_allclose(tf.T, T4, atol=1e-9)
-
-    def test_transform_to_pose(self):
-        tf = types.Transform(
-            translation=np.array([1.0, 2.0, 3.0]),
-            rotation=np.array([0.5, 0.5, 0.5, 0.5]),
-        )
-        pose = tf.to_pose()
-        assert_allclose(pose.position, tf.translation)
-        assert_allclose(pose.orientation, tf.rotation)
 
 
 # ============================================================

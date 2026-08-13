@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm_code.joyarm.utils import transforms as T
+from joyarm.utils import transforms as T
 
 
 # ============================================================
