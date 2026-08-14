@@ -26,12 +26,13 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format:
-            !!python/name:pymdownx.superfences.fence_code_format # 额外样式表（Mermaid 节点主题自适应配色等）
+            !!python/name:pymdownx.superfences.fence_code_format
 
 
   - pymdownx.arithmatex: # 数学公式：$...$ 与 $$...$$ 自动交给 MathJax 渲染
       generic: true
 
+# 额外样式表（Mermaid 节点主题自适应配色等）
 extra_css:
   - stylesheets/mermaid.css
   - stylesheets/extra.css

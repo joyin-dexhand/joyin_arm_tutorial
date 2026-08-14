@@ -143,7 +143,7 @@ SDK（`arm.xx`）→ `joyarm/`；ROS2 节点/launch → `joyarm_ros2_ws/src/`（
 | `backends/backend_end_joygripper.py` | `BackendEndJoyGripper(BackendEnd)`（CAN，2 指夹爪） | Ch13 | 🟡 |
 | `robotics/fkine.py` | `fkine`（+ `_fkine_single`/`_fkine_batch` 内部） | Ch2 | ✅ |
 | `robotics/ikine.py` 等 | 逆运动学 / 雅可比 / 轨迹 / 动力学 / 控制函数族 | Ch3-9 | 🟡 |
-| `safety/safety.py` | `StateMonitor`/`SelfCollisionChecker`/`ExternalCollisionDetector`/`SafetySupervisor`/`joint_limits_check`/`tcp_limits_check` | Ch11 | 🟡 |
+| `safety/safety.py` | `CollisionReport`/`StateMonitor`/`SelfCollisionChecker`/`ExternalCollisionDetector`/`SafetySupervisor`/`joint_limits_check`/`tcp_limits_check` | Ch11 | 🟡 |
 | `arms/arm.py` | `Arm`（本体+末端基类） | Ch2 | ✅ |
 | `arms/joyarm_rebot_dm.py` | `JoyArmRebotDM(Arm)` | Ch2 | ✅ |
 | `configs/joyarm_rebot_dm.yaml` | 型号 YAML（限位 / home / backend 分段） | Ch2/7 | ✅ |

@@ -3,10 +3,11 @@ site/
 .venv/
 spec/
 
-# Python 字节码缓存 / 打包元数据
+# Python 字节码缓存 / 打包元数据 / 测试缓存
 __pycache__/
 *.pyc
 *.egg-info/
+.pytest_cache/
 
 # ROS2 colcon 工作空间构建产物
 joyarm_code/joyarm_ros2_ws/build/

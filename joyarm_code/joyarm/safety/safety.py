@@ -1,6 +1,6 @@
 """状态监测与安全软防护（安全层，Ch11 占位）。
 
-三层监控（对齐 ``chapter4_1.md`` 第十一章）：
+三层监控（对齐 ``chapt11_safety.md`` 第十一章）：
 
 1. **关节层**（§11.1）：位置 / 速度 / 加速度 / 力矩 / 温度 / 过压过流。
 2. **末端层**（§11.2）：位置范围 / 速度 / 力上限。
@@ -11,23 +11,24 @@
 :class:`list[Violation]`，:class:`SafetySupervisor` 据此发
 :class:`~joyarm.utils.types.SafetyAction`（阻尼保持 / 构型维持 / 急停等策略可换）。
 
-对应章节：Ch11（``chapter4_1.md``）。
+对应章节：Ch11（``chapt11_safety.md``）。
 当前状态：仅签名 + docstring + ``raise NotImplementedError("Ch11 实现")``。
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 from ..utils.types import (
     ArmState,
     JointLimits,
     SafetyAction,
-    Severity,
     TcpLimits,
     Violation,
 )
 
 __all__ = [
+    "CollisionReport",
     "StateMonitor",
     "SelfCollisionChecker",
     "ExternalCollisionDetector",
@@ -58,10 +59,20 @@ class StateMonitor:
         raise NotImplementedError("StateMonitor.check 待 Ch11 实现")
 
 
+@dataclass
+class CollisionReport:
+    """自碰撞检测报告（§11.3）。
+
+    占位：Ch11 实现——碰撞连杆对列表，可扩展最近距离等信息。
+    """
+
+    collision_pairs: List[Tuple[str, str]]
+
+
 class SelfCollisionChecker:
     """§11.3 自碰撞检测：URDF 连杆 + FK（BVH / SDF 可插拔）。"""
 
-    def check(self, arm, q) -> "CollisionReport":
+    def check(self, arm, q) -> CollisionReport:
         """检查位形 ``q`` 是否自碰撞。
 
         :return: 碰撞报告（碰撞对列表）。

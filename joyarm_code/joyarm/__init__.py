@@ -116,6 +116,7 @@ from .robotics.control import (
 
 # ---- 安全层 ----
 from .safety.safety import (
+    CollisionReport,
     StateMonitor,
     SelfCollisionChecker,
     ExternalCollisionDetector,
@@ -223,6 +224,7 @@ __all__ = [
     "AdmittanceControl",
     "compute_cartesian_impedance",
     # 安全层
+    "CollisionReport",
     "StateMonitor",
     "SelfCollisionChecker",
     "ExternalCollisionDetector",

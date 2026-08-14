@@ -1,4 +1,4 @@
-"""``joyarm.types`` 的单元测试：模块契约 / 枚举 / 数据类读写 / 序列化 /
+"""``joyarm.utils.types`` 的单元测试：模块契约 / 枚举 / 数据类读写 / 序列化 /
 相等性 / clamp_to_limits。"""
 from __future__ import annotations
 

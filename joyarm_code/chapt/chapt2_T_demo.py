@@ -380,7 +380,7 @@ class PoseDemoWindow(QMainWindow):
 
     @staticmethod
     def _matrix_to_rpy(R: np.ndarray):
-        """由旋转矩阵反算固定轴 XYZ 的 RPY 角（度）；与 §2.4 公式一致。"""
+        """由旋转矩阵反算固定轴 XYZ 的 RPY 角（度）；与第二章 §2.5 公式一致。"""
         ry = np.degrees(np.arctan2(-R[2, 0], np.hypot(R[0, 0], R[1, 0])))
         rz = np.degrees(np.arctan2(R[1, 0], R[0, 0]))
         rx = np.degrees(np.arctan2(R[2, 1], R[2, 2]))
@@ -406,8 +406,7 @@ class PoseDemoWindow(QMainWindow):
     # ------------------------------------------------------------------ 预设
     def _apply_preset(self, kind: str):
         """应用四类典型变换预设（设置滑块位置）。"""
-        mid = SLIDER_STEPS // 2
-        if kind == "translate":       
+        if kind == "translate":
             tvals = (0.8, 0.5, 0.6)
             rvals = (0.0, 0.0, 0.0)
         elif kind == "rotate":         

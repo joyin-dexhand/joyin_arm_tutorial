@@ -7,15 +7,15 @@
 - **笛卡尔空间**（§5.2）：直线（位置线性 + 姿态 slerp）、圆弧、平滑拼接。
 - **工具**：定速重定时、轨迹校验（接 :mod:`joyarm.safety`）。
 
-:mod:`joyarm_ros2.apps.teleop` 的示教记录**直接复用**本模块的
+:mod:`joyarm.apps.teleop` 的示教记录**直接复用**本模块的
 :class:`Trajectory` 载体（不另定义子类）。
 
-对应章节：Ch5（``chapter2_5.md`` 第五章 轨迹生成）。
+对应章节：Ch5（``chapt5_trajectory.md`` 第五章 轨迹生成）。
 当前状态：仅签名 + docstring + ``raise NotImplementedError("Ch5 实现")``。
 """
 from __future__ import annotations
 
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import numpy as np
 
