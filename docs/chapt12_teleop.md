@@ -12,7 +12,7 @@
     ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
   · 💡 建议补一节「## 5 本章实践：JoyArm 示教与遥操作综合」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt12_teleop_demo.py。
-【全局写作规范】（详见 AGENTS.md / spec/项目架构.md）
+【全局写作规范】（详见 AGENTS.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
@@ -22,7 +22,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第三章](chapt3_ikine.md) IK 用于异构臂、[第十一章](chapt11_safety.md) 遥操作安全）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、application/teleop.py、arms/arm.py、arms/joyarm_rebot_dm.py、robotics/ikine.py、robotics/fkine.py。
+【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、joyarm/apps/teleop.py、arms/arm.py、arms/joyarm_rebot_dm.py、robotics/ikine.py、robotics/fkine.py。
 -->
 
 ## 1 同臂示教数据记录与回放
@@ -30,7 +30,7 @@
 <!-- ✍️ 本节写作要点：
   · 目标：讲清"同一台臂"的示教——拖动记录关节轨迹 → 回放复现。
   · 给"数据记录格式表"（采样字段|含义|单位|示例）+ "记录/回放流程表"（步骤|操作|目的）。
-  · 引用 application/teleop.py，用脚本引用句式。
+  · 引用 joyarm/apps/teleop.py，用脚本引用句式。
   · 收尾 > 💡：同臂示教最简单，常用于重复性作业的快速编程。
 -->
 
@@ -48,7 +48,7 @@
 <!-- ✍️ 本节写作要点：
   · 目标：讲清主从（异构构型）的遥操作——记录主臂"末端位姿"，经 IK 映射到从臂关节。
   · 给数据流：主臂末端位姿（FK）→ 坐标变换 → 从臂末端目标 → IK → 从臂关节指令；配 mermaid 数据流图。
-  · 强调对 IK 的依赖与奇异/多解处理（衔接 [第三章](chapt3_ikine.md)）；引用 application/teleop.py、robotics/ikine.py。
+  · 强调对 IK 的依赖与奇异/多解处理（衔接 [第三章](chapt3_ikine.md)）；引用 joyarm/apps/teleop.py、robotics/ikine.py。
 -->
 
 ## 4 主端VR空间手柄数据记录

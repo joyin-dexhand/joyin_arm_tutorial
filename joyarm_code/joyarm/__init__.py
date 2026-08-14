@@ -13,9 +13,8 @@
     utils/        基础层：transforms(数学) · types(共享类型) · interfaces(ArmProtocol)
     robots/       URDF + meshes 资产    configs/  per-model YAML 配置
 
-> ROS2 封装（arm_nodes / apps / rviz2 可视化）在**兄弟包** ``joyarm_ros2``，
-> 本包保持 ROS2-free，``import joyarm`` 不需要 ``rclpy``。
-> 详见 ``joyarm/架构设计.md``。
+> ROS2 封装（节点/launch/rviz2）在 ``joyarm_ros2_ws`` 的``src/joyarm_node`` ，本包保持 ROS2-free，
+> 详见 ``joyarm_code/AGENTS.md``（子库项目记忆）。
 
 命名约定：类名驼峰（Arm/Backend…），文件名小写 snake_case。
 

@@ -12,7 +12,7 @@
     ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
   · 末节固定为「## 6 本章实践：JoyArm 的 ROS2 结构与实现」，对应脚本 joyarm_code/chapt/chapt10_ros2_demo.py。
-【全局写作规范】（详见 AGENTS.md / spec/项目架构.md）
+【全局写作规范】（详见 AGENTS.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
@@ -22,7 +22,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第七章](chapt7_urdf.md) URDF、[第六章](chapt6_control.md) 控制为 moveit2 底层）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt10_ros2_demo.py、application/ros2.py、arms/arm.py、robotics/control.py、robotics/fkine.py、robotics/ikine.py。
+【本章可引用的脚本/库】chapt10_ros2_demo.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）、arms/arm.py、robotics/control.py、robotics/fkine.py、robotics/ikine.py。
 -->
 
 ## 1 基本概念和工作空间结构
@@ -64,7 +64,7 @@ rviz，rqt，nav2，moveit2。
 <!-- ✍️ 本节写作要点：
   · 目标：讲清 moveit2 如何为机械臂做运动规划——规划组、运动学求解器（IK）、规划接口、与 [第二章](chapt2_fkine.md)~[第六章](chapt6_control.md) 的对应。
   · 给"配置→规划→执行"流程，配 moveit2 节点框图（mermaid）；说明 IK 求解器选择（衔接 [第三章](chapt3_ikine.md)）。
-  · 引用 application/ros2.py（封装）与 chapt 脚本，用脚本引用句式。
+  · 引用 joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）（封装）与 chapt 脚本，用脚本引用句式。
 -->
 
 ## 6 本章实践：JoyArm 的 ROS2 结构与实现

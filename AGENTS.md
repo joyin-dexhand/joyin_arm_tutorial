@@ -1,19 +1,54 @@
 # 项目说明（ZCode 项目记忆）
 
-本仓库为 JoyArm 机械臂教程文档站点，使用 MkDocs + Material 主题构建。
+本仓库是 **JoyArm 机械臂教程的文档站点源码**：用 MkDocs + Material for MkDocs 主题，把"使用 / 基础 / 进阶 / 应用"四篇教程编译成静态网站，经 GitHub Pages 发布。教程正文（`docs/*.md`）是核心产出；`joyarm_code/` 为配套代码（可复用核心库 + 章节演示脚本）。
 
-## 项目架构与维护文档（spec/）
+> ⚠️ **两类内容**：`docs/` 下是面向读者的教程正文（会渲染上网）；`AGENTS.md` 等内部文档不进站点。
+> **文档层级**（自上而下只概述 + 链接，不重复展开）：根 `AGENTS.md`（教程站点）→ [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)（代码库，agent/开发者向）→ [`joyarm_code/README.md`](./joyarm_code/README.md)（使用者向基础）。子库 AGENTS 依赖其 README 并在其上**补充**维护信息，不重复；README 给人看、AGENTS 给 agent 看。
+> **职责分离**：本文件只维护**教程站点**部分；代码库 `joyarm_code/` 的架构、命名约定、API 与维护规则由子库自含的 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md) 负责，用户向介绍见 [`joyarm_code/README.md`](./joyarm_code/README.md)。本文件提及代码库时只**概述 + 链接**，不展开细节。
 
-> 💡 **接手任何任务前，先读 [`spec/项目架构.md`](spec/项目架构.md)** —— 它用最短篇幅讲清仓库目录结构、四篇十五章组织、命名/编号约定、构建部署链路与常见陷阱，是快速建立全局认知的入口。
+## 仓库结构
 
-`spec/` 为面向维护者与 Agent 的内部文档区（**不进站点**，且在 `.gitignore` 中，新增文件需 `git add -f` 才会被跟踪）：
+```
+joyin_arm_tutorial/
+├── docs/                 # ★ 教程正文源（MkDocs 文档根）——核心产出
+│   ├── index.md          #   站点首页
+│   ├── *.md              #   各章正文（命名规则见下）
+│   ├── images/           #   章内配图（按正文文件同名子目录，如 images/chapt1_intro/）
+│   ├── reference/        #   参考资料
+│   ├── stylesheets/      #   extra.css（表格居中等）、mermaid.css
+│   └── javascripts/      #   mathjax.js（数学公式渲染配置）
+├── joyarm_code/          # ★ 配套代码库（用户向见其 README.md；架构/约定/维护规则见其 AGENTS.md）
+├── mkdocs.yml            # ★ 站点配置（主题、扩展、nav 目录树）
+├── .github/workflows/    # deploy.yml：推 main 自动构建发布到 gh-pages
+├── AGENTS.md             # 本文件：教程站点部分的项目记忆
+└── site/                 # 构建产物（gitignore，勿提交、勿手改）
+```
 
-| 文档 | 作用 |
-|:---:|:---|
-| [项目架构.md](spec/项目架构.md) | 仓库架构速览（目录、编号、构建、Agent 上手清单）—— **首选入口** |
-| [spec_readme.md](spec/spec_readme.md) | MkDocs 环境安装/预览/构建/部署命令速查 |
+带 `★` 的为日常维护最常接触的目录/文件。
 
-## `docs/chapter*.md`写作规范
+### 四篇各章教程与文件命名
+
+教程按"先用起来 → 讲清原理 → 进阶 → 应用"的顺序组织。**使用篇用主题式命名（无章号），其余篇用 `chapt<全局章号>_<主题>.md`**（全局章号 = 侧边栏"第N章"，跨篇连续累加）：
+
+| 篇 | 文件命名 | 章范围 | 定位 |
+|:---:|:---:|:---:|:---:|
+| **使用篇** | 主题式：`quickstart` / `joint_motor` / `arm_6dof` / `gripper` | 无章号 | 面向"想立刻用起来"，无需理论，按操作让机械臂动起来 |
+| **基础篇** | `chapt1~6_<主题>.md` | 第 1~6 章 | 机器人学必备知识（位姿、运动学、轨迹、控制） |
+| **进阶篇** | `chapt7~10_<主题>.md` | 第 7~10 章 | 构型设计/动力学/力控制/ROS2 等专业进阶 |
+| **应用篇** | `chapt11~15_<主题>.md` | 第 11~15 章 | 状态监测、示教遥操作、末端执行器、用户接口、综合项目 |
+
+- 例：`chapt2_fkine.md` = 第二章 空间位姿与位置正运动学。完整映射见 `mkdocs.yml` 的 `nav` 段。
+- 配图目录与正文文件同名：`docs/images/<正文文件名>/`。
+- 跨章引用一律用相对链接（如 `[第三章](chapt3_ikine.md)`），勿用绝对路径。
+
+## 构建与部署
+
+- **本地预览**：`python3 -m mkdocs serve`（默认 `http://127.0.0.1:8000`），改 `docs/` 或 `mkdocs.yml` 自动刷新。
+- **自动部署**：`.github/workflows/deploy.yml` 监听 `main` 分支 push → `mkdocs gh-deploy --force` → 构建产物推 `gh-pages` 分支 → GitHub Pages。
+- **线上地址**：https://joyin-dexhand.github.io/joyin_arm_tutorial/
+- `site/` 为构建产物（已 `.gitignore`），**不要提交、不要手改**。
+
+## `docs/chapt*.md`写作规范
 
 ### 表格
 
@@ -24,61 +59,29 @@
 ### 标题编号
 
 - H1（章标题）：使用篇不加序号，其余篇格式为“第N章”，N为汉字，如:`第一章`
-- H2：阿拉伯数字 `1, 2, 3`（每章内从 1 重新编号） 
+- H2：阿拉伯数字 `1, 2, 3`（每章内从 1 重新编号）
 - H3：`父H2.序号`，如 `2.1`
 - H4+：依次类推 `2.1.1`
 - `mkdocs.yml` 侧边栏的章序号用中文数字（第一章、第二章…），使用篇无章号
 
 ### 文档风格
 
-- 文档保持简洁、清晰、无歧义，避免废话和讲解不清晰
-- 结构化有条理，不允许思维过于跳跃，要对新手友好
-- 每章内容（分别对应于一个独立的md文件）不设置本章小结，采用概要去总结全章内容（类似学术论文摘要），摘要不设置标题等级，直接紧随在章标题后面（第二行）
+- 文档务必保持**结构化、清晰、表达简洁、指代无歧义**，**避免啰嗦和讲解不清晰**
+- **结构化有条理**，**不允许思维过于跳跃**，要对**新手友好**
+- 每章（对应一个独立 md 文件）不设"本章小结"，用**概要**总结全章（类似论文摘要）：概要不设标题等级，直接紧随章标题后（第二行），用 `> 📌 **概述**：……` 引用块形式；正文按 H2 → H3 → H4 展开，最后一节通常为"本章实践"（对应程序脚本位于 `joyarm_code/chapt/` ）
 
 ### 教程各章对应的脚本文件
 
-- 各章对应的脚本文件存放于`./joyarm_code/chapt/<章序_功能>.py`，如`chapt2_T_demo.py`
-- 各章脚本文件前几行必须添加使用说明的段落注释，包括：脚本功能概要以及新建环境、激活环境、安装py和依赖库、切换目录、脚本运行等必要说明
-- 各章脚本文件仅作为讲解时的示例，可复用的核心功能和库均位于`./joyarm_code/joyarm/`，如：fkine、dyn、Arm 类、JoyArm类等。各章的脚本将调用这些功能
+- 各章脚本存放于 `joyarm_code/chapt/<章序_功能>.py`（如 `chapt2_T_demo.py`），仅作一次性教学示例，**优先调用**核心库 `joyarm_code/joyarm/` 的功能（`fkine`、`Arm` 类等）。
+- 脚本前几行必须添加使用说明段落注释：功能概要，以及新建/激活环境、安装 Python 与依赖、切换目录、运行脚本等步骤。
+- 代码规范（命名 / 注释 / 结构）与代码库维护规则见 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)，本文件不展开。
 
-### 机械臂代码库
+## 常见陷阱
 
-位置：`./joyarm_code/joyarm`（核心 SDK，ROS2-free）+ `./joyarm_code/joyarm_ros2`（ROS2 兄弟包）。
-
-#### 命名约定（类 / 文件 / backend）—— 全仓库强制遵循
-
-- **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
-- **设备模型**（`arms/`）：
-  - `Arm` = 完整机械臂基类（多轴本体 + 末端执行器），直接持有两个后端 `backend_mas` / `backend_end`，提供运动学算法门面与本体/末端控制逻辑。文件 `arms/arm.py`。
-  - 具体型号：`JoyArmRebotDM(Arm)` 等——在子类绑定 `backend_mas_cls` / `backend_end_cls` 两个后端**类**。文件 `arms/joyarm_rebot_dm.py`。
-- **Backend 三层**（`Backend` 前缀，`backends/`）：
-  - 根：`Backend`（`backend.py`）—— 通用硬件通信抽象（`connect/disconnect/read_state`）。
-  - 类型层（按硬件类型派生）：`BackendMas` / `BackendEnd` …。
-  - 型号层（按具体型号派生）：`BackendMasRebotDM` / `BackendEndJoyGripper` …。
-  - 文件名：`backend.py` / `backend_mas.py` / `backend_end.py` / `backend_mas_rebot_dm.py` / `backend_end_joygripper.py`。
-- **属性 / 形参**：本体后端 = `backend_mas`、末端后端 = `backend_end`（均由 `Arm` 直接持有）；robotics/safety 算法形参用 `arm`（依赖 `utils.ArmProtocol`，**不 import** `arms`）。
-- **末端控制方法**：统一 `end_` 前缀（`end_open` / `end_close` / `set_end_position` / `set_end_force` / `get_end_state`），与本体方法（`get_state` / `command`）区分。
-- **yaml**：`configs/<model>.yaml` 按 backend 分段——`backend_mas:` / `backend_end:`（不再用单一 `comm:`）。子类绑 backend **类**（`backend_mas_cls` / `backend_end_cls`），基类按 config 段实例化。
-- **算法默认 pinocchio**：robotics 不带 `method` 参数，默认走 urdf+pin；手写实现请在 `Arm` 子类覆盖对应方法。
-- 约定针对**系统组件**（arm/backend）；项目品牌名 `joyarm`/`joyarm_code` 不改。
-- 详见 `joyarm_code/joyarm/架构设计.md`。
-
-## 代码库文档与注释维护（`joyarm_code/`）
-
-`joyarm_code/README.md`（用户向：结构/功能/用法）与 `joyarm_code/架构与API.md`（开发者向：整体结构 → 各 py 文件 → 类与函数 → API）是代码库两大入口文档。
-
-### 文档定位：精简概述、代码即详则
-
-- 两份 md 文档**只写精简化概述**（结构速览、用法、API 速查），**不复述**代码已有内容。
-- **详细规则写进代码注释**（同样尽量精简）：各包 `__init__.py` 写模块职责一句话；类与函数写精简 docstring（`:param:`/`:return:`/`:raises:`/章节标记）。
-- 查细节请看源码 docstring 或 `help(符号)`，不要在 md 中重复抄写。
-
-### 同步维护强制原则
-
-> ⚠️ 凡改动 `joyarm_code/` 下任何 `.py` / `.yaml` / 目录结构，**必须同步更新**对应代码 docstring 与这两份文档，使其与代码保持一致：
->
-> - 公开 API（`joyarm/__init__.py` 的 `__all__` 导出）变化 → 更新 `架构与API.md` 的「API 参考」节；
-> - 目录 / 文件结构变化 → 更新两份文档的结构节与目录树；
-> - 安装 / 用法 / 示例变化 → 更新 `README.md`。
->
-> 提交前自检：新增的公开符号已收录、且已补精简 docstring；删除的符号已从文档移除；文件清单与目录树一致。
+- ❌ 在本文件详细展开代码库内容 → ✅ 只概述并链接 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)。
+- ❌ 忘记把 AGENTS.md 纳入提交 → ✅ 两份 AGENTS.md（根 + `joyarm_code/`）**正常跟踪**。
+- ❌ 在 `docs/` 写"本章小结" → ✅ 改为章标题第二行的概要引用块。
+- ❌ 手改或提交 `site/` → ✅ 它是构建产物，已忽略。
+- ❌ 把内部文档放进 `docs/`（会被渲染上网）→ ✅ 放 `spec/`（需 `git add -f` 跟踪）。
+- ❌ 跨章链接用绝对路径 → ✅ 用相对链接（如 `chapt3_ikine.md`）。
+- ❌ 章号写成阿拉伯数字"第2章" → ✅ H1 与 nav 均用汉字"第二章"。
