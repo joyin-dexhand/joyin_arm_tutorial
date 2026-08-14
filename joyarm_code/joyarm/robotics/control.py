@@ -48,10 +48,10 @@ __all__ = [
 # ============================================================
 # Part 1：基于运动学的控制（Ch6）
 # ============================================================
-def joint_position_control(mas, q_target: np.ndarray, kp: float, kd: float):
+def joint_position_control(arm, q_target: np.ndarray, kp: float, kd: float):
     """§6.1 单关节闭环位置控制。
 
-    :param mas: :class:`joyarm.arms.mas.Mas` 实例。
+    :param arm: :class:`joyarm.arms.arm.Arm` 实例。
     :param q_target: ``(n,)`` 目标关节角。
     :param kp: 位置增益。
     :param kd: 速度增益。
@@ -59,7 +59,7 @@ def joint_position_control(mas, q_target: np.ndarray, kp: float, kd: float):
     raise NotImplementedError("joint_position_control 待 Ch6 实现")
 
 
-def joint_velocity_control(mas, dq_target: np.ndarray):
+def joint_velocity_control(arm, dq_target: np.ndarray):
     """§6.1 速度模式。
 
     :param dq_target: ``(n,)`` 目标关节速度。
@@ -67,7 +67,7 @@ def joint_velocity_control(mas, dq_target: np.ndarray):
     raise NotImplementedError("joint_velocity_control 待 Ch6 实现")
 
 
-def torque_control(mas, tau_target: np.ndarray):
+def torque_control(arm, tau_target: np.ndarray):
     """§6.1 力矩模式。
 
     :param tau_target: ``(n,)`` 目标关节力矩。
@@ -75,17 +75,17 @@ def torque_control(mas, tau_target: np.ndarray):
     raise NotImplementedError("torque_control 待 Ch6 实现")
 
 
-def arm_position_control(mas, T_target: np.ndarray, q0=None):
+def arm_position_control(arm, T_target: np.ndarray, q0=None):
     """§6.2 整机位置：IK → 6 关节角 → 下发。
 
-    :param mas: :class:`joyarm.arms.mas.Mas` 实例。
+    :param arm: :class:`joyarm.arms.arm.Arm` 实例。
     :param T_target: ``(4,4)`` 目标末端位姿。
     :param q0: IK 初值。
     """
     raise NotImplementedError("arm_position_control 待 Ch6 实现")
 
 
-def arm_velocity_control(mas, twist_target):
+def arm_velocity_control(arm, twist_target):
     """§6.3 整机速度：Jacobian → 6 关节速度 → 下发。
 
     :param twist_target: 末端目标旋量（线/角速度）。
@@ -100,14 +100,14 @@ class ControlLoop:
 
     用法::
 
-        loop = ControlLoop(mas, policy, hz=200)
+        loop = ControlLoop(arm, policy, hz=200)
         loop.start()
         ...
         loop.stop()
     """
 
-    def __init__(self, mas, policy=None, hz: int = 200):
-        self.mas = mas
+    def __init__(self, arm, policy=None, hz: int = 200):
+        self.arm = arm
         self.policy = policy
         self.hz = hz
 
@@ -120,15 +120,15 @@ class ControlLoop:
         raise NotImplementedError("ControlLoop.stop 待 Ch6 实现")
 
 
-def play_trajectory(mas, traj, mode: ControlMode = ControlMode.POSITION, hz: int = 200):
+def play_trajectory(arm, traj, mode: ControlMode = ControlMode.POSITION, hz: int = 200):
     """按时间序列回放轨迹（§6 例程 6/7）。
 
-    :param mas: :class:`joyarm.arms.mas.Mas` 实例。
+    :param arm: :class:`joyarm.arms.arm.Arm` 实例。
     :param traj: :class:`joyarm.robotics.trajectory.Trajectory`。
     :param mode: 回放控制模式。
     :param hz: 回放频率。
     """
-    # 占位：Ch6 实现——按时间戳逐帧把轨迹的关节角/位姿下发给 mas，等价于"自动重放示教"。
+    # 占位：Ch6 实现——按时间戳逐帧把轨迹的关节角/位姿下发给 arm，等价于"自动重放示教"。
     raise NotImplementedError("play_trajectory 待 Ch6 实现")
 
 
@@ -136,7 +136,7 @@ def play_trajectory(mas, traj, mode: ControlMode = ControlMode.POSITION, hz: int
 # Part 2：基于动力学的控制（Ch8）
 # ============================================================
 def computed_torque_control(
-    mas,
+    arm,
     q_des: np.ndarray,
     dq_des: np.ndarray,
     ddq_des: np.ndarray,
@@ -154,7 +154,7 @@ def computed_torque_control(
 
 
 def inverse_dynamics_control(
-    mas,
+    arm,
     q: np.ndarray,
     dq: np.ndarray,
     ddq_des: np.ndarray,
@@ -203,7 +203,7 @@ class JointTorqueSensor:
         raise NotImplementedError("JointTorqueSensor.read 待 Ch9 实现")
 
 
-def pure_force_control(mas, F_desired, frame=None):
+def pure_force_control(arm, F_desired, frame=None):
     """§9.1 纯力控：``τ = Jᵀ F``（Ch4 静力学）。
 
     :param F_desired: ``(6,)`` 期望末端力。
@@ -258,6 +258,6 @@ class AdmittanceControl:
         self.M_a = M_a
 
 
-def compute_cartesian_impedance(mas, K_d=None, D_d=None, **kwargs):
+def compute_cartesian_impedance(arm, K_d=None, D_d=None, **kwargs):
     """底层计算，复用 :func:`joyarm.robotics.dyn.cartesian_inertia`。"""
     raise NotImplementedError("compute_cartesian_impedance 待 Ch9 实现")

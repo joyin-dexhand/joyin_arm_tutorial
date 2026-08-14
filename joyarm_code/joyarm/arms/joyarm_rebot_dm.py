@@ -1,4 +1,4 @@
-"""``JoyArmRebotDM`` —— JoyArm 6 自由度机械臂（完整臂 = Mas + End，型号预设）。
+"""``JoyArmRebotDM`` —— JoyArm 6 自由度机械臂（完整臂 = 本体 + 末端，型号预设）。
 
 固化 JoyArm（reBot-DevArm 硬件平台）特有默认值（URDF 路径、末端帧、MDH 参考表、
 home 位形）。两个后端类在本类绑定：
@@ -86,7 +86,7 @@ class JoyArmRebotDM(Arm):
         if urdf_path is None:
             urdf_path = self._resolve_default_urdf(cfg.get("urdf"))
         ee = ee_frame_name or cfg.get("ee_frame") or self.EE_FRAME
-        # 传 config 给 Arm/Mas：由它们按 backend_mas/backend_end 实例化两个后端
+        # 传 config 给 Arm：由基类按 backend_mas/backend_end 段实例化两个后端
         super().__init__(
             urdf_path=urdf_path,
             ee_frame_name=ee,
@@ -101,7 +101,7 @@ class JoyArmRebotDM(Arm):
             cfg.get("q_home", self.Q_HOME), dtype=float
         ).reshape(-1)
 
-        # ---- 末端限位：config 提供则覆盖 Mas 的占位 TcpLimits ----
+        # ---- 末端限位：config 提供则覆盖 Arm 的占位 TcpLimits ----
         if cfg.get("tcp_limits"):
             self._apply_tcp_limits(cfg["tcp_limits"])
 

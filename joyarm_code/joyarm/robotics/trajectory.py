@@ -178,13 +178,13 @@ def cart_arc(
 
 
 def cart_to_joint(
-    mas,
+    arm,
     cart_traj: Trajectory,
     q0: Optional[np.ndarray] = None,
 ) -> Trajectory:
     """笛卡尔轨迹 → 关节轨迹（逐点 IK，处理奇异 / 不可达 / 多解）。
 
-    :param mas: :class:`joyarm.arms.mas.Mas` 实例。
+    :param arm: :class:`joyarm.arms.arm.Arm` 实例。
     :param cart_traj: 笛卡尔空间 :class:`Trajectory`。
     :param q0: IK 初值（连续性种子）。
     :return: 关节空间 :class:`Trajectory`。
@@ -205,7 +205,7 @@ def constant_velocity_retime(traj: Trajectory, v_max: float) -> Trajectory:
     raise NotImplementedError("constant_velocity_retime 待 Ch5 实现")
 
 
-def validate(traj: Trajectory, mas) -> List[Violation]:
+def validate(traj: Trajectory, arm) -> List[Violation]:
     """轨迹校验：途经点是否超限位 / 奇异（接 :mod:`joyarm.safety`）。
 
     :return: 违规列表 ``list[Violation]``。

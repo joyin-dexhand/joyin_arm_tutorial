@@ -10,7 +10,7 @@
 joyarm_code/
 ├── joyarm/                          # ★ 核心 SDK（ROS2-free）
 │   ├── __init__.py                  #   公开 API 扁平导出（__all__）
-│   ├── arms/                        #   设备模型层（Mas / End / Arm / joyarm_rebot_dm）
+│   ├── arms/                        #   设备模型层（Arm / joyarm_rebot_dm）
 │   ├── robotics/                    #   算法层（fkine / ikine / jacobian / trajectory / dyn / control）
 │   ├── safety/                      #   安全层（safety）
 │   ├── backends/                    #   通信层（三层 Backend）
@@ -32,16 +32,16 @@ joyarm_code/
         joyarm_ros2/  （兄弟包，依赖 joyarm + rclpy）
               ↓
    ┌──────────────────────────────────────────────┐
-   │  arms/      设备模型：Mas · End · Arm(Mas+End) · joyarm_rebot_dm  ← arm.xx 门面
+   │  arms/      设备模型：Arm（本体+末端基类） · joyarm_rebot_dm  ← arm.xx 门面
    ├──────────────────────────────────────────────┤
-   │  robotics/  算法    safety/  安全    backends/  通信   │ ← 仅依赖 utils + MasProtocol
+   │  robotics/  算法    safety/  安全    backends/  通信   │ ← 仅依赖 utils + ArmProtocol
    ├──────────────────────────────────────────────┤
-   │  utils/  types · transforms · interfaces(MasProtocol) │
+   │  utils/  types · transforms · interfaces(ArmProtocol) │
    └──────────────────────────────────────────────┘
       robots/  configs/   ← 数据/资产，由 arms 运行期加载
 ```
 
-> 关键：`robotics`/`safety` **不 import `arms`**，仅依赖 `utils.MasProtocol`（依赖倒置，保证无环）。
+> 关键：`robotics`/`safety` **不 import `arms`**，仅依赖 `utils.ArmProtocol`（依赖倒置，保证无环）。
 
 ### 模块导览
 
@@ -49,11 +49,9 @@ joyarm_code/
 |:---:|:---:|:---:|:---:|:---|
 | `utils/types.py` | — | Ch2 | ✅ | 共享数据类型 + 枚举 + `clamp_to_limits` |
 | `utils/transforms.py` | — | Ch2 | ✅ | 纯 numpy SO(3)/SE(3) 数学（23 函数） |
-| `utils/interfaces.py` | `MasProtocol` | Ch2 | ✅ | 算法层接口契约（依赖倒置） |
+| `utils/interfaces.py` | `ArmProtocol` | Ch2 | ✅ | 算法层接口契约（依赖倒置） |
 | `configs/joyarm_rebot_dm.yaml` | — | Ch2/7 | ✅ | 型号 YAML（限位/home/`backend_mas`/`backend_end`） |
-| `arms/mas.py` | `Mas` | Ch2 | ✅ | 多轴本体（model/限位/`backend_mas`/运动学门面） |
-| `arms/end.py` | `End` | Ch13 | 🟡 | 末端执行器（`backend_end`） |
-| `arms/arm.py` | `Arm(Mas)` | Ch2 | ✅ | 完整臂 = Mas + End |
+| `arms/arm.py` | `Arm` | Ch2 | ✅ | 完整臂基类（本体+末端，持有 backend_mas + backend_end） |
 | `arms/joyarm_rebot_dm.py` | `JoyArmRebotDM(Arm)` | Ch2 | ✅ | 型号预设（绑两个 backend 类） |
 | `robotics/fkine.py` | `fkine` | Ch2 | ✅ | 正运动学（形状重载，默认 pin） |
 | `robotics/{ikine,jacobian,trajectory,dyn,control}.py` | … | Ch3-9 | 🟡 | 占位（无 `method` 参数） |
@@ -73,7 +71,7 @@ joyarm_code/
 |:---:|:---|:---|:---:|
 | `utils` | `transforms.py` | `rot_x/y/z`、`rpy_to_R`/`R_to_rpy`、`rodrigues`/`axis_angle_to_R`/`R_to_axis_angle`、`quat_*`、`Rp_to_T`/`T_to_Rp`/`T_inv`/`T_mul`/`adT`、`slerp` | ✅ |
 | `utils` | `types.py` | 枚举 `ControlMode`/`Severity`/`SafetyAction`/`TrajectorySpace`；数据类 `Pose`/`JointState`/`TcpState`/`ArmState`/`JointLimits`/`TcpLimits`/`Wrench`/`Twist`/`Violation`/`IKResult`/`ComplianceParams`；`clamp_to_limits` | ✅ |
-| `utils` | `interfaces.py` | `MasProtocol`（`@runtime_checkable Protocol`） | ✅ |
+| `utils` | `interfaces.py` | `ArmProtocol`（`@runtime_checkable Protocol`） | ✅ |
 | `backends` | `backend.py` | `Backend(ABC)`：`connect`/`disconnect`/`read_state` | ✅ |
 | `backends` | `backend_mas.py` | `BackendMas(Backend)`：`enable`/`disable`/`set_zero`/`scan`/`send_position`/`send_velocity`/`send_torque`/`send_mit` | ✅ |
 | `backends` | `backend_end.py` | `BackendEnd(Backend)`：`send_position`/`send_force`/`send_action` | ✅ |
@@ -82,9 +80,7 @@ joyarm_code/
 | `robotics` | `fkine.py` | `fkine`（+ `_fkine_single`/`_fkine_batch` 内部） | ✅ |
 | `robotics` | `ikine.py` / `jacobian.py` / `trajectory.py` / `dyn.py` / `control.py` | 逆运动学 / 雅可比 / 轨迹 / 动力学 / 控制（占位函数族） | 🟡 |
 | `safety` | `safety.py` | `StateMonitor`/`SelfCollisionChecker`/`ExternalCollisionDetector`/`SafetySupervisor`/`joint_limits_check`/`tcp_limits_check` | 🟡 |
-| `arms` | `mas.py` | `Mas` | ✅ |
-| `arms` | `end.py` | `End` | 🟡 |
-| `arms` | `arm.py` | `Arm(Mas)` | ✅ |
+| `arms` | `arm.py` | `Arm`（本体+末端基类） | ✅ |
 | `arms` | `joyarm_rebot_dm.py` | `JoyArmRebotDM(Arm)` | ✅ |
 
 ### `joyarm_ros2/`（ROS2 兄弟包，全部占位）
@@ -99,22 +95,20 @@ joyarm_code/
 ### `chapt/` 与 `test/`
 
 - `chapt/chapt2_T_demo.py`、`chapt2_pose_demo.py`：PySide6 + matplotlib GUI 示例（齐次变换 / 位姿表示），独立运行、不复用 SDK。
-- `test/`：`conftest.py`（fixtures）+ `test_init.py`（导入烟测）/`test_interfaces.py`（`MasProtocol` 契约）/`test_transforms.py`（23 变换）/`test_types.py`（类型与裁剪）。
+- `test/`：`conftest.py`（fixtures）+ `test_init.py`（导入烟测）/`test_interfaces.py`（`ArmProtocol` 契约）/`test_transforms.py`（23 变换）/`test_types.py`（类型与裁剪）。
 
 ## 三、函数和类
 
 ### 设备模型（`arms/`）继承链
 
 ```
-JoyArmRebotDM ──▶ Arm(Mas) ──组合──▶ End
-        │            │                   │
-   绑两个 backend 类  继承 Mas 全部能力      持 backend_end
-   (mas + end)      arm.fkine()/command()  end.open()/close()
+JoyArmRebotDM ──▶ Arm（持有 backend_mas + backend_end）
+        │
+   绑两个 backend 类（mas + end）
+   arm.fkine()/command()/end_open()/end_close()
 ```
 
-- **`Mas`**：多轴本体基类。持有 pinocchio `model`/`data` + 软硬限位 + `backend_mas`；对外提供运动学/动力学/安全**门面**（薄委托 `robotics`/`safety`，默认 pinocchio）与执行类方法（`get_state`/`command`，连后可用）。
-- **`End`**：末端执行器基类。持有 `backend_end`，提供夹爪语义（`open`/`close`/`set_position`/`set_force`）。
-- **`Arm(Mas)`**：完整臂。继承 `Mas` 全部能力，并组合一个 `self.end`；`connect()` 同时连接本体 + 末端。
+- **`Arm`**：完整臂基类。持有 pinocchio `model`/`data` + 软硬限位 + `backend_mas` + `backend_end`；对外提供本体运动学/动力学/安全**门面**（薄委托 `robotics`/`safety`，默认 pinocchio）与执行类方法（`get_state`/`command`，连后可用），并直接提供末端夹爪语义（`end_open`/`end_close`/`set_end_position`/`set_end_force`）；`connect()` 同时连接本体 + 末端。
 - **`JoyArmRebotDM(Arm)`**：具体型号预设。无参即用（自动解析随包 URDF + `configs/joyarm_rebot_dm.yaml`），绑定 `backend_mas_cls=BackendMasRebotDM`、`backend_end_cls=BackendEndJoyGripper`。
 
 ### Backend 三层（`backends/`）继承链
@@ -128,13 +122,13 @@ Backend(ABC) ──┬─▶ BackendMas ──▶ BackendMasRebotDM   （本体�
 
 ### 算法层（`robotics/` / `safety/`）
 
-模块级函数，形参 `mas`（按 `MasProtocol` 访问），**不 import `arms`**、不带 `method` 参数、默认 pinocchio。仅 `fkine` 已实现，其余为占位签名。
+模块级函数，形参 `arm`（按 `ArmProtocol` 访问），**不 import `arms`**、不带 `method` 参数、默认 pinocchio。仅 `fkine` 已实现，其余为占位签名。
 
 ### 基础层（`utils/`）
 
 - `transforms.py`：纯 numpy SO(3)/SE(3) 数学，无第三方依赖。
 - `types.py`：跨层共享 `@dataclass` 快照 + 枚举（继承 `_ArrayEqMixin`，ndarray 字段安全比较）。
-- `interfaces.py`：`MasProtocol`——算法层对本体对象的最小契约（结构化鸭子类型）。
+- `interfaces.py`：`ArmProtocol`——算法层对臂对象的最小契约（结构化鸭子类型）。
 
 ## 四、API 参考
 
@@ -143,30 +137,31 @@ Backend(ABC) ──┬─▶ BackendMas ──▶ BackendMasRebotDM   （本体�
 ### 设备模型 API
 
 ```python
-Mas(urdf_path, ee_frame_name="ee", mesh_dirs=None, load_geometry=False, name="Mas", config=None)
-    # 建 pin model + 软硬限位 + backend_mas（config 驱动）✅
-Mas.connect() / disconnect()                          # 连接 / 断开本体真机 ✅
-Mas.rand_q(size=None, rng=None) → ndarray             # 软限位内采样 (n,) 或 (N,n) ✅
-Mas.clamp_q(q) → ndarray                              # 裁剪到软限位 ✅
-Mas.is_q_valid(q) → bool                              # 是否在软限位内 ✅
-Mas.frame_placement(q, frame=None) → (4,4)            # 底层单次 FK（含 T_base 偏移）✅
-Mas.fkine(q, frame=None, rep="T")                     # 正运动学门面 ✅
-Mas.ikine(T_target, q0=None, frame=None, **kw)        # 逆运动学门面 🟡
-Mas.jac(q, frame=None, ref="local")                   # 雅可比门面 🟡
-Mas.fdyn(q, dq, tau, **kw) / idyn(q, dq, ddq, **kw)   # 动力学门面 🟡
-Mas.mass_matrix(q) / coriolis(q, dq) / gravity(q)     # 动力学项门面 🟡
-Mas.cartesian_inertia(q, frame=None)                  # 笛卡尔惯量门面 🟡
-Mas.check_joint_limits(state) / check_tcp_limits(state)  # 安全校验门面 🟡
-Mas.get_state() → ArmState                            # 读状态（需 connect）✅
-Mas.command(q=None, dq=None, tau=None, kp=None, kd=None, mode=ControlMode.POSITION)  # 下发指令（需 connect）✅
+Arm(urdf_path, ee_frame_name="ee", mesh_dirs=None, load_geometry=False, name="Arm", config=None)
+    # 完整臂基类：建 pin model + 软硬限位 + backend_mas + backend_end（config 驱动）✅
+# 类属性：backend_mas_cls / backend_end_cls（子类绑定具体型号后端）
+# 本体方法
+Arm.connect() / disconnect()                          # 连接 / 断开（本体 + 末端）✅
+Arm.rand_q(size=None, rng=None) → ndarray             # 软限位内采样 (n,) 或 (N,n) ✅
+Arm.clamp_q(q) → ndarray                              # 裁剪到软限位 ✅
+Arm.is_q_valid(q) → bool                              # 是否在软限位内 ✅
+Arm.frame_placement(q, frame=None) → (4,4)            # 底层单次 FK（含 T_base 偏移）✅
+Arm.fkine(q, frame=None, rep="T")                     # 正运动学门面 ✅
+Arm.ikine(T_target, q0=None, frame=None, **kw)        # 逆运动学门面 🟡
+Arm.jac(q, frame=None, ref="local")                   # 雅可比门面 🟡
+Arm.fdyn(q, dq, tau, **kw) / idyn(q, dq, ddq, **kw)   # 动力学门面 🟡
+Arm.mass_matrix(q) / coriolis(q, dq) / gravity(q)     # 动力学项门面 🟡
+Arm.cartesian_inertia(q, frame=None)                  # 笛卡尔惯量门面 🟡
+Arm.check_joint_limits(state) / check_tcp_limits(state)  # 安全校验门面 🟡
+Arm.get_state() → ArmState                            # 读状态（需 connect）✅
+Arm.command(q=None, dq=None, tau=None, kp=None, kd=None, mode=ControlMode.POSITION)  # 下发指令（需 connect）✅
+# 末端方法（需 connect）
+Arm.end_open() / end_close()                          # 夹爪开/合 ✅
+Arm.set_end_position(position) / set_end_force(force) # 末端位置/力 🟡
+Arm.get_end_state() → dict                            # 末端状态 🟡
 # 关键属性：model / data / n / nv / ee_frame_name / ee_frame_id / joint_limits / joint_limits_soft
-#           / qlow / qhigh / q_neutral / tcp_limits / T_base / backend_mas / connected
+#           / qlow / qhigh / q_neutral / tcp_limits / T_base / backend_mas / backend_end / connected
 
-End(backend_cls=None, backend_params=None)            # 末端基类 🟡
-End.connect() / disconnect() / get_state() → dict     # 🟡
-End.open() / close() / set_position(position) / set_force(force)  # 夹爪语义（需 connect）🟡
-
-Arm(Mas)：签名同 Mas + 组合 self.end；connect() 连本体+末端 ✅
 JoyArmRebotDM(urdf_path=None, ee_frame_name=None, mesh_dirs=None, load_geometry=False, name="JoyArmRebotDM")
     # 无参即用 ✅；属性 mdh_table / q_home；绑两个 backend 类
 ```
@@ -182,13 +177,13 @@ BackendEnd(Backend): read_state() → dict · send_position(position) · send_fo
 BackendMasRebotDM(BackendMas) / BackendEndJoyGripper(BackendEnd)                   # 具体型号，占位 🟡
 ```
 
-### Robotics 算法 API（形参 `mas`，满足 `MasProtocol`）
+### Robotics 算法 API（形参 `arm`，满足 `ArmProtocol`）
 
 ```python
-fkine(mas, q, frame=None, rep="T")                                  # 正运动学（形状重载）✅
-ikine(mas, T_target, q0=None, frame=None, **kw) → IKResult          # 逆运动学 🟡
+fkine(arm, q, frame=None, rep="T")                                  # 正运动学（形状重载）✅
+ikine(arm, T_target, q0=None, frame=None, **kw) → IKResult          # 逆运动学 🟡
 ikine_constrained(...)                                              # 约束 IK 🟡
-jac(mas, q, frame=None, ref="local")                                # 雅可比 🟡
+jac(arm, q, frame=None, ref="local")                                # 雅可比 🟡
 manipulability(...) / cond_number(...) / statics(...)               # 性能指标 🟡
 # 轨迹 🟡：Trajectory · joint_cubic / joint_quintic / joint_lspb / joint_waypoints
 #          · cart_line / cart_arc / cart_to_joint · constant_velocity_retime · validate
@@ -248,7 +243,7 @@ clamp_to_limits(targets, limits: JointLimits) → ndarray   # 逐元素裁剪到
 
 ```python
 @runtime_checkable
-class MasProtocol(Protocol):
+class ArmProtocol(Protocol):
     # 属性：model / data / n / nv / ee_frame_name / ee_frame_id / T_base
     #       joint_limits / joint_limits_soft / tcp_limits / q_neutral
     def frame_placement(self, q, frame=None) -> (4,4): ...   # 算法层依赖的最小本体契约

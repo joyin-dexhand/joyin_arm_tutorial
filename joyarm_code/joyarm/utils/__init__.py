@@ -4,7 +4,7 @@
 
 - :mod:`joyarm.utils.transforms` ：  SE(3)/SO(3) 数学（旋转矩阵、RPY、轴角、四元数、齐次变换、球面插值 slerp）。
 - :mod:`joyarm.utils.types`      ：  跨层共享的 ``@dataclass`` 数据类型（``ArmState``、``Pose``、``JointLimits`` 等）与枚举（``ControlMode`` 等）。
-- :mod:`joyarm.utils.interfaces` ：  ``MasProtocol`` 接口契约（依赖倒置——算法层依赖它而非 ``arms``）。
+- :mod:`joyarm.utils.interfaces` ：  ``ArmProtocol`` 接口契约（依赖倒置——算法层依赖它而非 ``arms``）。
 
 """
 
@@ -28,6 +28,7 @@ from .types import (
     Severity,
     SafetyAction,
     TrajectorySpace,
+    clamp_to_limits,
 )
 from .transforms import (
     rot_x,
@@ -54,7 +55,7 @@ from .transforms import (
     adT,
     slerp,
 )
-from .interfaces import MasProtocol
+from .interfaces import ArmProtocol
 
 __all__ = [
     # types
@@ -99,5 +100,5 @@ __all__ = [
     "adT",
     "slerp",
     # interfaces
-    "MasProtocol",
+    "ArmProtocol",
 ]

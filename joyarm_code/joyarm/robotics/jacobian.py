@@ -3,7 +3,7 @@
 雅可比矩阵 ``J(q)`` 描述关节速度 → 末端旋量的线性映射：``V = J(q)q̇``，
 并衍生可操作度、条件数（椭球分析）与静力学关系 ``τ = JᵀF``。
 
-默认走 **pinocchio 黑盒**；手写白盒请在 ``Mas`` 子类中覆盖。
+默认走 **pinocchio 黑盒**；手写白盒请在 ``Arm`` 子类中覆盖。
 
 对应章节：Ch4。
 当前状态：仅签名 + docstring + ``raise NotImplementedError("Ch4 实现")``。
@@ -18,14 +18,14 @@ __all__ = ["jac", "manipulability", "cond_number", "statics"]
 
 
 def jac(
-    mas,
+    arm,
     q: np.ndarray,
     frame: Optional[Union[str, int]] = None,
     ref: str = "local",
 ) -> np.ndarray:
     """雅可比矩阵 ``J(q)``。
 
-    :param mas: :class:`joyarm.arms.mas.Mas` 实例（满足 :class:`~joyarm.utils.interfaces.MasProtocol`）。
+    :param arm: :class:`joyarm.arms.arm.Arm` 实例（满足 :class:`~joyarm.utils.interfaces.ArmProtocol`）。
     :param q: ``(n,)`` 关节角，弧度。
     :param frame: 帧名/索引；缺省为末端帧。
     :param ref: 参考系：``"local"``（body）/ ``"world"``（基）。
@@ -34,18 +34,18 @@ def jac(
     raise NotImplementedError("jac 待 Ch4 实现")
 
 
-def manipulability(mas, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
+def manipulability(arm, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
     """Yoshikawa 可操作度 ``w = sqrt(det(J Jᵀ))``（椭球体积度量）。"""
     raise NotImplementedError("manipulability 待 Ch4 实现")
 
 
-def cond_number(mas, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
+def cond_number(arm, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
     """雅可比条件数（椭球各向异性度量）。"""
     raise NotImplementedError("cond_number 待 Ch4 实现")
 
 
 def statics(
-    mas,
+    arm,
     q: np.ndarray,
     F: np.ndarray,
     frame: Optional[Union[str, int]] = None,

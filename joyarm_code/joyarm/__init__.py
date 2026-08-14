@@ -1,8 +1,8 @@
 """``joyarm`` —— JoyArm 机械臂教程核心 SDK 库（ROS2-free）。
 
-分层架构（仅允许向下依赖；``arms`` 作富门面 ``mas.xx`` / ``arm.xx``）::
+分层架构（仅允许向下依赖；``arms`` 作富门面 ``arm.xx``）::
 
-    arms/         设备模型：Mas(多轴本体) · End(末端) · Arm(Mas+End) · joyarm_rebot_dm
+    arms/         设备模型：Arm(本体+末端) · joyarm_rebot_dm
     ─────────────────────────────────────────────
     robotics/     算法层：fkine · ikine(Ch3) · jacobian(Ch4) · trajectory(Ch5)
                    · dyn(Ch8) · control(Ch6/8/9)
@@ -10,20 +10,20 @@
     backends/     通信层（三层）：Backend → BackendMas/BackendEnd
                    → BackendMasRebotDM / BackendEndJoyGripper
     ─────────────────────────────────────────────
-    utils/        基础层：transforms(数学) · types(共享类型) · interfaces(MasProtocol)
+    utils/        基础层：transforms(数学) · types(共享类型) · interfaces(ArmProtocol)
     robots/       URDF + meshes 资产    configs/  per-model YAML 配置
 
 > ROS2 封装（arm_nodes / apps / rviz2 可视化）在**兄弟包** ``joyarm_ros2``，
 > 本包保持 ROS2-free，``import joyarm`` 不需要 ``rclpy``。
 > 详见 ``joyarm/架构设计.md``。
 
-命名约定：类名驼峰（Mas/End/Arm/Backend…），文件名小写 snake_case。
+命名约定：类名驼峰（Arm/Backend…），文件名小写 snake_case。
 
 使用方式::
 
     from joyarm import JoyArmRebotDM
 
-    arm = JoyArmRebotDM()            # 默认未连接（离线）；Arm = Mas + End
+    arm = JoyArmRebotDM()            # 默认未连接（离线）；Arm = 本体 + 末端
     Q  = arm.rand_q(size=100_000)    # 限位内采样 (N,6)
     P  = arm.fkine(Q, rep="pos")     # 门面：arm.fkine → (N,3)
 """
@@ -73,15 +73,13 @@ from .utils.transforms import (
     adT,
     slerp,
 )
-from .utils.interfaces import MasProtocol
+from .utils.interfaces import ArmProtocol
 
-# ---- 设备模型层（Mas / End / Arm）----
-from .arms.mas import Mas
-from .arms.end import End
+# ---- 设备模型层（Arm / JoyArmRebotDM）----
 from .arms.arm import Arm
 from .arms.joyarm_rebot_dm import JoyArmRebotDM
 
-# ---- 算法层（robotics；operate on MasProtocol，不 import arms）----
+# ---- 算法层（robotics；operate on ArmProtocol，不 import arms）----
 from .robotics.fkine import fkine
 from .robotics.ikine import ikine, ikine_constrained
 from .robotics.jacobian import jac, manipulability, cond_number, statics
@@ -181,10 +179,8 @@ __all__ = [
     "T_mul",
     "adT",
     "slerp",
-    "MasProtocol",
+    "ArmProtocol",
     # 设备模型层
-    "Mas",
-    "End",
     "Arm",
     "JoyArmRebotDM",
     # 算法层

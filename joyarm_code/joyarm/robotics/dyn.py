@@ -11,7 +11,7 @@
     求加速度"的数学函数提供（教学推导 / 控制律设计用）。整机运动可视化预演
     由兄弟包 :mod:`joyarm_ros2` 的 rviz2 承担（核心包不做可视化）。
 
-默认走 **pinocchio rnea/aba/crba（黑盒）**；手写牛顿欧拉递推请在 ``Mas`` 子类覆盖。
+默认走 **pinocchio rnea/aba/crba（黑盒）**；手写牛顿欧拉递推请在 ``Arm`` 子类覆盖。
 
 对应章节：Ch8。
 当前状态：仅签名 + docstring + ``raise NotImplementedError("Ch8 实现")``。
@@ -26,7 +26,7 @@ __all__ = ["fdyn", "idyn", "mass_matrix", "coriolis", "gravity", "cartesian_iner
 
 
 def fdyn(
-    mas,
+    arm,
     q: np.ndarray,
     dq: np.ndarray,
     tau: np.ndarray,
@@ -46,7 +46,7 @@ def fdyn(
 
 
 def idyn(
-    mas,
+    arm,
     q: np.ndarray,
     dq: np.ndarray,
     ddq: np.ndarray,
@@ -60,7 +60,7 @@ def idyn(
     raise NotImplementedError("idyn 待 Ch8 实现")
 
 
-def mass_matrix(mas, q: np.ndarray) -> np.ndarray:
+def mass_matrix(arm, q: np.ndarray) -> np.ndarray:
     """关节空间惯量矩阵 ``M(q)``（CRBA）。
 
     :return: ``(n,n)``。
@@ -68,7 +68,7 @@ def mass_matrix(mas, q: np.ndarray) -> np.ndarray:
     raise NotImplementedError("mass_matrix 待 Ch8 实现")
 
 
-def coriolis(mas, q: np.ndarray, dq: np.ndarray) -> np.ndarray:
+def coriolis(arm, q: np.ndarray, dq: np.ndarray) -> np.ndarray:
     """科氏力 + 向心力项 ``C(q,q̇)q̇``（向量形式）。
 
     :return: ``(n,)``。
@@ -76,7 +76,7 @@ def coriolis(mas, q: np.ndarray, dq: np.ndarray) -> np.ndarray:
     raise NotImplementedError("coriolis 待 Ch8 实现")
 
 
-def gravity(mas, q: np.ndarray) -> np.ndarray:
+def gravity(arm, q: np.ndarray) -> np.ndarray:
     """重力项 ``G(q)``。
 
     :return: ``(n,)``。
@@ -85,7 +85,7 @@ def gravity(mas, q: np.ndarray) -> np.ndarray:
 
 
 def cartesian_inertia(
-    mas,
+    arm,
     q: np.ndarray,
     frame: Optional[Union[str, int]] = None,
 ) -> np.ndarray:

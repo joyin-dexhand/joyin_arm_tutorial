@@ -1,7 +1,7 @@
-"""``MasProtocol`` 契约测试：成员钉扎 / 实现一致性 / 鸭子类型充分性 / 负控 / 依赖方向。
+"""``ArmProtocol`` 契约测试：成员钉扎 / 实现一致性 / 鸭子类型充分性 / 负控 / 依赖方向。
 
 验证 ``joyarm/utils/interfaces.py`` 定义的协议**充分、不冗余、有效**：真实
-``JoyArmRebotDM`` 与仅实现协议成员的 ``FakeMas``（2 关节平面臂手写 FK）均满足
+``JoyArmRebotDM`` 与仅实现协议成员的 ``FakeArm``（2 关节平面臂手写 FK）均满足
 契约；缺任一成员即判定失败；``robotics`` / ``safety`` 不 import ``arms``。
 """
 from __future__ import annotations
@@ -16,9 +16,9 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm.arms.mas import Mas
+from joyarm.arms.arm import Arm
 from joyarm.robotics.fkine import fkine
-from joyarm.utils.interfaces import MasProtocol
+from joyarm.utils.interfaces import ArmProtocol
 from joyarm.utils.transforms import Rp_to_T
 from joyarm.utils.types import JointLimits, Pose, TcpLimits
 
@@ -33,7 +33,7 @@ PROTOCOL_MEMBERS = PROTOCOL_ATTRS | PROTOCOL_METHODS
 JOYARM_ROOT = Path(importlib.import_module("joyarm").__file__).resolve().parent
 
 
-class FakeMas:
+class FakeArm:
     """仅实现协议成员的最小假本体：2 关节平面臂（l1=l2=1），手写 FK。"""
 
     def __init__(self):
@@ -69,9 +69,9 @@ def arm():
 
 
 @pytest.fixture
-def fake_mas():
+def fake_arm():
     # 函数级：个别用例会修改 T_base，不可复用
-    return FakeMas()
+    return FakeArm()
 
 
 # ============================================================
@@ -80,23 +80,23 @@ def fake_mas():
 class TestContractPinning:
     def test_member_set_frozen(self):
         """11 个数据属性 + 唯一方法 frame_placement，无多余成员。"""
-        assert set(MasProtocol.__annotations__) == PROTOCOL_ATTRS
+        assert set(ArmProtocol.__annotations__) == PROTOCOL_ATTRS
         public_callables = {
-            name for name in dir(MasProtocol)
-            if not name.startswith("_") and callable(getattr(MasProtocol, name))
+            name for name in dir(ArmProtocol)
+            if not name.startswith("_") and callable(getattr(ArmProtocol, name))
         }
         assert public_callables == PROTOCOL_METHODS
 
     def test_module_defines_exactly_one_object(self):
-        """模块 __all__ 恰为 ["MasProtocol"]，无其他本模块定义（无冗余）。"""
+        """模块 __all__ 恰为 ["ArmProtocol"]，无其他本模块定义（无冗余）。"""
         from joyarm.utils import interfaces
 
-        assert interfaces.__all__ == ["MasProtocol"]
+        assert interfaces.__all__ == ["ArmProtocol"]
         defined = {
             name for name, obj in vars(interfaces).items()
             if getattr(obj, "__module__", None) == "joyarm.utils.interfaces"
         }
-        assert defined == {"MasProtocol"}
+        assert defined == {"ArmProtocol"}
 
 
 # ============================================================
@@ -106,25 +106,25 @@ class TestProtocolSemantics:
     def test_cannot_instantiate(self):
         """契约只能被结构化满足，不能实例化。"""
         with pytest.raises(TypeError):
-            MasProtocol()
+            ArmProtocol()
 
     def test_isinstance_executable_on_plain_object(self):
         """@runtime_checkable 生效：isinstance 可执行，对裸对象返回 False。"""
-        assert isinstance(object(), MasProtocol) is False
+        assert isinstance(object(), ArmProtocol) is False
 
     def test_top_level_reexport_identity(self):
         """顶层再导出与源定义同源且列入 __all__。"""
         joyarm = importlib.import_module("joyarm")
-        assert joyarm.MasProtocol is MasProtocol
-        assert "MasProtocol" in joyarm.__all__
+        assert joyarm.ArmProtocol is ArmProtocol
+        assert "ArmProtocol" in joyarm.__all__
 
 
 # ============================================================
-# 真实实现一致性（JoyArmRebotDM 经 Arm ← Mas 满足协议）
+# 真实实现一致性（JoyArmRebotDM 经 Arm 满足协议）
 # ============================================================
-class TestMasConformance:
+class TestArmConformance:
     def test_arm_satisfies_protocol(self, arm):
-        assert isinstance(arm, MasProtocol) is True
+        assert isinstance(arm, ArmProtocol) is True
 
     @pytest.mark.parametrize("attr, expected", [
         ("n", int), ("nv", int), ("ee_frame_id", int),
@@ -150,7 +150,7 @@ class TestMasConformance:
             assert jl.q_max.shape == (n,)
 
     def test_frame_placement_signature_matches_protocol(self):
-        """Mas 实现与协议声明的 frame_placement 签名逐字一致。"""
+        """Arm 实现与协议声明的 frame_placement 签名逐字一致。"""
 
         def shape_of(fn):
             return tuple(
@@ -158,7 +158,7 @@ class TestMasConformance:
                 for p in inspect.signature(fn).parameters.values()
             )
 
-        assert shape_of(Mas.frame_placement) == shape_of(MasProtocol.frame_placement)
+        assert shape_of(Arm.frame_placement) == shape_of(ArmProtocol.frame_placement)
 
     def test_frame_placement_returns_valid_T(self, arm):
         """返回 (4,4) 齐次变换：旋转块正交、底行 [0,0,0,1]。"""
@@ -177,9 +177,9 @@ class TestMasConformance:
 # 鸭子类型充分性：仅实现协议成员即可驱动算法层
 # ============================================================
 class TestDuckTyping:
-    def test_fake_satisfies_protocol(self, fake_mas):
+    def test_fake_satisfies_protocol(self, fake_arm):
         """纯鸭子类型（不继承任何基类）即满足协议。"""
-        assert isinstance(fake_mas, MasProtocol) is True
+        assert isinstance(fake_arm, ArmProtocol) is True
 
     @pytest.mark.parametrize("q, expected", [
         ([0.0, 0.0], [2.0, 0.0, 0.0]),          # 完全伸展
@@ -187,40 +187,40 @@ class TestDuckTyping:
         ([0.0, np.pi / 2], [1.0, 1.0, 0.0]),    # 肘部折 90°
         ([0.0, np.pi], [0.0, 0.0, 0.0]),        # 完全折叠
     ], ids=["stretch", "rot90", "elbow90", "fold"])
-    def test_fkine_pos_matches_hand_computed(self, fake_mas, q, expected):
+    def test_fkine_pos_matches_hand_computed(self, fake_arm, q, expected):
         """rep="pos" 与平面 2R 臂手工算例一致。"""
-        assert_allclose(fkine(fake_mas, np.array(q), rep="pos"), expected, atol=1e-12)
+        assert_allclose(fkine(fake_arm, np.array(q), rep="pos"), expected, atol=1e-12)
 
-    def test_fkine_T_pose_roundtrip(self, fake_mas):
+    def test_fkine_T_pose_roundtrip(self, fake_arm):
         """rep="T" 返回 Pose，position / 重建的 T 与手写 FK 一致（任意位形）。"""
         q = np.array([0.3, -0.8])
-        pose = fkine(fake_mas, q, rep="T")
+        pose = fkine(fake_arm, q, rep="T")
         assert isinstance(pose, Pose)
-        T_ref = fake_mas.frame_placement(q)
+        T_ref = fake_arm.frame_placement(q)
         assert_allclose(pose.position, T_ref[:3, 3], atol=1e-9)
         assert_allclose(pose.T, T_ref, atol=1e-9)
 
-    def test_fkine_batch_consistent_with_single(self, fake_mas):
+    def test_fkine_batch_consistent_with_single(self, fake_arm):
         """批量 (N,2) → (N,3)，逐行与单点结果一致。"""
         Q = np.array([[0.0, 0.0], [np.pi / 2, 0.0], [0.0, np.pi / 2]])
-        P = fkine(fake_mas, Q, rep="pos")
+        P = fkine(fake_arm, Q, rep="pos")
         assert P.shape == (3, 3)
         for i in range(3):
-            assert_allclose(P[i], fkine(fake_mas, Q[i], rep="pos"), atol=1e-12)
+            assert_allclose(P[i], fkine(fake_arm, Q[i], rep="pos"), atol=1e-12)
 
-    def test_fkine_se3(self, fake_mas):
+    def test_fkine_se3(self, fake_arm):
         """rep="se3" 返回 pinocchio.SE3，齐次矩阵与手写 FK 一致。"""
         import pinocchio as pin
 
         q = np.array([0.0, np.pi / 2])
-        M = fkine(fake_mas, q, rep="se3")
+        M = fkine(fake_arm, q, rep="se3")
         assert isinstance(M, pin.SE3)
-        assert_allclose(M.homogeneous, fake_mas.frame_placement(q), atol=1e-12)
+        assert_allclose(M.homogeneous, fake_arm.frame_placement(q), atol=1e-12)
 
-    def test_fkine_T_base_offset_applied(self, fake_mas):
+    def test_fkine_T_base_offset_applied(self, fake_arm):
         """T_base 基坐标系偏移生效：基座抬升 5 m 后末端随之偏移。"""
-        fake_mas.T_base = Rp_to_T(np.eye(3), np.array([0.0, 0.0, 5.0]))
-        pos = fkine(fake_mas, np.array([0.0, 0.0]), rep="pos")
+        fake_arm.T_base = Rp_to_T(np.eye(3), np.array([0.0, 0.0, 5.0]))
+        pos = fkine(fake_arm, np.array([0.0, 0.0]), rep="pos")
         assert_allclose(pos, [2.0, 0.0, 5.0], atol=1e-12)
 
 
@@ -228,24 +228,24 @@ class TestDuckTyping:
 # 负控：缺任一成员 → isinstance 失败（每个成员都不冗余）
 # ============================================================
 def _protocol_members() -> dict:
-    """构造完整满足协议的成员字典（值取自 FakeMas）。"""
-    fake = FakeMas()
+    """构造完整满足协议的成员字典（值取自 FakeArm）。"""
+    fake = FakeArm()
     members = {name: getattr(fake, name) for name in PROTOCOL_ATTRS}
-    members["frame_placement"] = FakeMas.frame_placement
+    members["frame_placement"] = FakeArm.frame_placement
     return members
 
 
 class TestNegativeControls:
     def test_complete_namespace_passes(self):
         """对照组：具备全部成员的对象通过判定。"""
-        assert isinstance(SimpleNamespace(**_protocol_members()), MasProtocol) is True
+        assert isinstance(SimpleNamespace(**_protocol_members()), ArmProtocol) is True
 
     @pytest.mark.parametrize("missing", sorted(PROTOCOL_MEMBERS))
     def test_missing_each_member_fails(self, missing):
         """逐一删成员均判定失败——每个成员都参与运行时契约。"""
         members = _protocol_members()
         del members[missing]
-        assert isinstance(SimpleNamespace(**members), MasProtocol) is False
+        assert isinstance(SimpleNamespace(**members), ArmProtocol) is False
 
 
 # ============================================================

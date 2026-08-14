@@ -23,7 +23,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意（接触/碰撞安全）。
   · 跨章引用用相对链接（如 [第八章](chapt8_dyn.md)、[第十一章](chapt11_safety.md) 安全防护）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt9_force_demo.py（待建）、robotics/control.py、robotics/dyn.py、arm/arm.py、robotics/jacobian.py。
+【本章可引用的脚本/库】chapt9_force_demo.py（待建）、robotics/control.py、robotics/dyn.py、arms/arm.py、robotics/jacobian.py。
 -->
 
 ![力控制分类](images/chapt9_force/force_control_classification.png)

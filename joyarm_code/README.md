@@ -18,20 +18,20 @@ joyarm_code/
 
 ## 核心包 joyarm 速览
 
-**设备三概念**：`Mas`（多轴本体）/ `End`（末端执行器）/ `Arm`（= Mas + End）。
+**设备模型**：`Arm`（完整臂 = 多轴本体 + 末端执行器，直接持有 `backend_mas` + `backend_end`）。
 **Backend 三层**：`Backend` → `BackendMas`/`BackendEnd` → 型号层（`BackendMasRebotDM`/`BackendEndJoyGripper`）。
 
 ```
-arms/       设备模型：Mas · End · Arm(Mas+End) · joyarm_rebot_dm   ← arm.xx 门面
+arms/       设备模型：Arm（本体+末端基类） · joyarm_rebot_dm   ← arm.xx 门面
 robotics/   算法：fkine · ikine · jacobian · trajectory · dyn · control
 safety/     安全
 backends/   通信（三层 Backend）
-utils/      基础：transforms(数学) · types(类型) · interfaces(MasProtocol)
+utils/      基础：transforms(数学) · types(类型) · interfaces(ArmProtocol)
 robots/     URDF + meshes     configs/  per-model YAML（backend_mas/backend_end）
 ```
 
 > 导入方向（自底向上、无环）：`utils` → `robotics`/`safety`/`backends` → `arms`；
-> `robotics`/`safety` 仅依赖 `MasProtocol`（不 import `arms`）。算法默认 pinocchio。
+> `robotics`/`safety` 仅依赖 `ArmProtocol`（不 import `arms`）。算法默认 pinocchio。
 
 ## 环境安装
 
@@ -49,13 +49,13 @@ uv pip install -e .            # 核心 joyarm + 兄弟包 joyarm_ros2（含 num
 ```python
 from joyarm import JoyArmRebotDM
 
-arm = JoyArmRebotDM()              # 默认未连接（离线）；Arm = Mas + End，自动加载 configs + URDF
+arm = JoyArmRebotDM()              # 默认未连接（离线）；Arm = 本体 + 末端，自动加载 configs + URDF
 Q   = arm.rand_q(size=100_000)     # 软限位内采样 (N,6)
 P   = arm.fkine(Q, rep="pos")      # 门面 arm.fkine → (N,3)
-# arm.connect(); arm.end.open()    # 真机：先 connect() 再操作末端
+# arm.connect(); arm.end_open()    # 真机：先 connect() 再操作末端
 ```
 
-> **离线语义**：`connected=False`（默认）时计算类（`fkine`/`rand_q`/…）可用；执行类（`get_state`/`command`/`end.open()`）`raise RuntimeError`，`connect()` 后可用。
+> **离线语义**：`connected=False`（默认）时计算类（`fkine`/`rand_q`/…）可用；执行类（`get_state`/`command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用。
 
 ## 运行测试 / 章节示例
 
@@ -68,7 +68,7 @@ cd joyarm_code/chapt && python chapt2_T_demo.py        # 运行章节示例（Py
 
 | 章节 | 内容 | 状态 |
 |:---:|:---|:---:|
-| Ch2 | `utils/*`、`arms/{mas,end,arm,joyarm_rebot_dm}`、`configs`、`backends` 抽象层、`robotics/fkine`、`__init__` | ✅ |
+| Ch2 | `utils/*`、`arms/{arm,joyarm_rebot_dm}`、`configs`、`backends` 抽象层、`robotics/fkine`、`__init__` | ✅ |
 | Ch3+ | `robotics/{ikine,jacobian,trajectory,dyn,control}`、`safety`、`backends` 型号层、`joyarm_ros2/*` | 🟡 |
 
 ## 进阶文档

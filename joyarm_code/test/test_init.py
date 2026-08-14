@@ -46,10 +46,8 @@ class TestImportSmoke:
             "rpy_to_R",
             "slerp",
             "clamp_to_limits",
-            "MasProtocol",
-            # 设备模型层（Mas / End / Arm）
-            "Mas",
-            "End",
+            "ArmProtocol",
+            # 设备模型层（Arm / JoyArmRebotDM）
             "Arm",
             "JoyArmRebotDM",
             # 算法层
@@ -79,14 +77,13 @@ class TestImportSmoke:
 # ============================================================
 class TestInstantiation:
     def test_default_offline(self, joyarm_pkg):
-        """默认参数 → 未连接的 Arm 实例（Arm = Mas + End；backends 由 config 实例化）。"""
+        """默认参数 → 未连接的 Arm 实例（Arm = 本体 + 末端；backends 由 config 实例化）。"""
         arm = joyarm_pkg.JoyArmRebotDM()
         assert isinstance(arm, joyarm_pkg.Arm)
-        assert isinstance(arm, joyarm_pkg.Mas)               # Arm is-a Mas
         assert isinstance(arm, joyarm_pkg.JoyArmRebotDM)
         # 两个 backend 已按 config 实例化；默认未连接（离线）
         assert isinstance(arm.backend_mas, joyarm_pkg.BackendMasRebotDM)
-        assert isinstance(arm.end.backend_end, joyarm_pkg.BackendEndJoyGripper)
+        assert isinstance(arm.backend_end, joyarm_pkg.BackendEndJoyGripper)
         assert arm.connected is False
 
     def test_arm_supports_offline_compute(self, joyarm_pkg):

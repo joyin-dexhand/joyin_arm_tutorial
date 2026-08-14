@@ -7,7 +7,7 @@
     └── BackendEnd               # 末端执行器 → BackendEndJoyGripper
 
 按**硬件类型**派生、再按**具体型号**派生。不设物理仿真后端：仿真 / 预演 / 教学
-走 ``Mas`` 离线模式（``connected=False``，纯运动学计算）；可视化在兄弟包
+走 ``Arm`` 离线模式（``connected=False``，纯运动学计算）；可视化在兄弟包
 :mod:`joyarm_ros2` 用 rviz2 呈现。
 """
 from .backend import Backend
