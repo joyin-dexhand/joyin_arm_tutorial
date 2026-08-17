@@ -34,11 +34,11 @@ __all__ = ["Arm"]
 class Arm:
     """完整机械臂基类
 
+    :param name: 名称。
     :param urdf_path: URDF 文件路径。
     :param ee_frame_name: 末端参考帧名（默认 ``"ee"``）。
     :param mesh_dirs: URDF 引用的 mesh 搜索目录列表；缺省时不加载几何。
     :param load_geometry: 是否加载 visual/collision 几何。
-    :param name: 名称。
     :param config: 型号 YAML 配置字典（含 ``backend_mas`` / ``backend_end`` 等段）；缺省无后端。
     """
 
@@ -47,17 +47,17 @@ class Arm:
     backend_end_cls: Optional[type] = None
 
     def __init__(self,
+        name: str,
         urdf_path: str,
         ee_frame_name: str = "ee",
         mesh_dirs: Optional[List[str]] = None,
         load_geometry: bool = False,
-        name: str = "Arm",
         config: Optional[dict] = None,
     ):
         if pin is None:
             raise ImportError(
                 "Arm 需要 pinocchio 才能加载 URDF 与计算运动学。请安装：\n"
-                "  conda install -c conda-forge pinocchio\n"
+                "  uv pip install pin\n"
                 "  # 或：pip install pin"
             )
 
@@ -117,9 +117,10 @@ class Arm:
                 )
 
         # ---- 关节限位（硬 + 软）----
+        # margin 具体值由 yaml 的 joint_limits_soft_margin 提供；未配置时取 0（软=硬）
         self.joint_limits: JointLimits = self._build_joint_limits(self.model)
         self.joint_limits_soft: JointLimits = self._build_soft_limits(
-            self.joint_limits, margin=cfg.get("joint_limits_soft_margin", 0.05)
+            self.joint_limits, margin=float(cfg.get("joint_limits_soft_margin", 0.0))
         )
         self.qlow: np.ndarray = self.joint_limits_soft.q_min
         self.qhigh: np.ndarray = self.joint_limits_soft.q_max
@@ -202,8 +203,8 @@ class Arm:
         )
 
     @staticmethod
-    def _build_soft_limits(hard: JointLimits, margin: float = 0.05) -> JointLimits:
-        """由硬限位内缩 ``margin`` 比例生成软限位。"""
+    def _build_soft_limits(hard: JointLimits, margin: float) -> JointLimits:
+        """由硬限位内缩 ``margin`` 比例生成软限位（``margin=0`` 时软=硬）。"""
         span = hard.q_max - hard.q_min
         qlow = hard.q_min + margin * span
         qhigh = hard.q_max - margin * span
@@ -234,8 +235,7 @@ class Arm:
     # ----------------------------------------------------------
     # 关节角采样 / 裁剪 / 校验（基于软限位）
     # ----------------------------------------------------------
-    def rand_q(
-        self,
+    def rand_q(self,
         size: Optional[int] = None,
         rng: Optional[np.random.Generator] = None,
     ) -> np.ndarray:
@@ -247,7 +247,9 @@ class Arm:
         return rng.uniform(low, high, size=(size, self.n))
 
     def clamp_q(self, q: np.ndarray) -> np.ndarray:
-        """将关节角裁剪到**软限位**内。"""
+        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm.safety.joint.clamp_to_limits`）。"""
+        from ..safety.joint import clamp_to_limits
+
         return clamp_to_limits(q, self.joint_limits_soft)
 
     def is_q_valid(self, q: np.ndarray) -> bool:
@@ -256,10 +258,14 @@ class Arm:
         return bool(np.all(q >= self.qlow - 1e-9) and np.all(q <= self.qhigh + 1e-9))
 
     # ----------------------------------------------------------
-    # 正运动学（底层 + 门面委托；默认 pinocchio，手写请于子类覆盖）
+    # robotics求解算法（默认 pinocchio，手写请于子类覆盖）
     # ----------------------------------------------------------
     def frame_placement(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> np.ndarray:
-        """底层单次 FK：返回指定帧在基坐标系下的 ``(4,4)`` 位姿。"""
+        """底层单次 FK：返回指定帧在基坐标系下的 ``(4,4)`` 位姿。
+
+        **Arm 基本能力 / FK 唯一覆盖缝**：:class:`~joyarm.utils.interfaces.ArmProtocol`
+        唯一方法——机械臂对象向算法层承诺"给定 q，任意帧在哪"。
+        """
         fid = self._resolve_frame(frame)
         q_arr = np.asarray(q, dtype=float).reshape(self.n)
         pin.forwardKinematics(self.model, self.data, q_arr)
@@ -279,14 +285,12 @@ class Arm:
         raise ValueError(f"找不到帧 '{frame}'")
 
     def fkine(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, rep: str = "T"):
-        """正运动学（薄委托 :func:`joyarm.robotics.fkine.fkine`，默认 pinocchio）。"""
+        """正运动学（薄委托 :func:`joyarm.robotics.fkine.fkine`，默认 pinocchio；
+        单点求解内核为 :meth:`frame_placement`，批量即对其循环）。"""
         from ..robotics.fkine import fkine
 
         return fkine(self, q, frame=frame, rep=rep)
 
-    # ----------------------------------------------------------
-    # 占位门面委托（Ch3+ 实现；默认 pinocchio，手写请于子类覆盖）
-    # ----------------------------------------------------------
     def ikine(self, T_target, q0=None, frame=None, **kw):
         """逆运动学（薄委托，Ch3 实现）。"""
         from ..robotics.ikine import ikine
@@ -340,13 +344,13 @@ class Arm:
     # ----------------------------------------------------------
     def check_joint_limits(self, state):
         """关节层安全校验（薄委托，Ch11 实现）。"""
-        from ..safety.safety import joint_limits_check
+        from ..safety.joint import joint_limits_check
 
         return joint_limits_check(state, self.joint_limits)
 
     def check_tcp_limits(self, state):
         """末端层安全校验（薄委托，Ch11 实现）。"""
-        from ..safety.safety import tcp_limits_check
+        from ..safety.tcp import tcp_limits_check
 
         return tcp_limits_check(state, self.tcp_limits)
 
@@ -362,8 +366,7 @@ class Arm:
             raise RuntimeError(f"[{self.name}] 未连接真机（离线）；请先 connect()。")
         return self.backend_mas.read_state()
 
-    def command(
-        self,
+    def command(self,
         q: Optional[np.ndarray] = None,
         dq: Optional[np.ndarray] = None,
         tau: Optional[np.ndarray] = None,

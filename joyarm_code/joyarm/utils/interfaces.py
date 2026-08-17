@@ -47,5 +47,10 @@ class ArmProtocol(Protocol):
     def frame_placement(
         self, q: np.ndarray, frame: Optional[Union[str, int]] = None
     ) -> np.ndarray:
-        """底层单次 FK：返回指定帧在基坐标系下的 ``(4,4)`` 位姿。"""
+        """底层单次 FK：返回指定帧在基坐标系下的 ``(4,4)`` 位姿。
+
+        协议**唯一方法**：算法层所有 FK 需求的分发点与覆盖缝——机械臂对象承诺
+        "给定 q，任意帧在哪"；``fkine``/``ikine``/自碰撞等消费方一律经它求解，
+        不自算 pinocchio。子类覆盖本方法即整体替换 FK 实现。
+        """
         ...

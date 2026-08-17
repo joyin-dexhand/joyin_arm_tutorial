@@ -48,11 +48,11 @@ class JoyArmRebotDM(Arm):
         ``nq=6``）；第七章导出正式版 ``joyarm1.urdf`` 后替换 ``DEFAULT_URDF``
         与对应 config。
 
+    :param name: 名称。
     :param urdf_path: URDF 文件路径；缺省解析随包资源（config > 类常量）。
     :param ee_frame_name: 末端帧名；缺省用 config / 类常量 ``EE_FRAME``。
     :param mesh_dirs: mesh 搜索目录列表。
     :param load_geometry: 是否加载 visual/collision 几何；缺省 ``False``。
-    :param name: 名称。
     """
 
     # ---- 类常量（joyarm_rebot_dm 预设；config 缺失时的兜底）----
@@ -72,11 +72,11 @@ class JoyArmRebotDM(Arm):
 
     def __init__(
         self,
+        name: str = "JoyArmRebotDM",
         urdf_path: Optional[str] = None,
         ee_frame_name: Optional[str] = None,
         mesh_dirs: Optional[List[str]] = None,
         load_geometry: bool = False,
-        name: str = "JoyArmRebotDM",
     ):
         # ---- 加载型号 YAML 配置（可选：缺 PyYAML/文件时返回 None，回退类常量）----
         self.config: Optional[dict] = self._load_config(self.CONFIG_NAME)
@@ -88,11 +88,11 @@ class JoyArmRebotDM(Arm):
         ee = ee_frame_name or cfg.get("ee_frame") or self.EE_FRAME
         # 传 config 给 Arm：由基类按 backend_mas/backend_end 段实例化两个后端
         super().__init__(
+            name=name,
             urdf_path=urdf_path,
             ee_frame_name=ee,
             mesh_dirs=mesh_dirs,
             load_geometry=load_geometry,
-            name=name,
             config=cfg,
         )
 

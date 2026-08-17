@@ -28,7 +28,6 @@ from .types import (
     Severity,
     SafetyAction,
     TrajectorySpace,
-    clamp_to_limits,
 )
 from .transforms import (
     rot_x,
@@ -74,7 +73,6 @@ __all__ = [
     "Severity",
     "SafetyAction",
     "TrajectorySpace",
-    "clamp_to_limits",
     # transforms
     "rot_x",
     "rot_y",

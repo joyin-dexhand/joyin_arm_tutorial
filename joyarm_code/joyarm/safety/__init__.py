@@ -1,29 +1,25 @@
-"""``joyarm.safety`` —— 安全层子包（Ch11）。
+"""``joyarm.safety`` —— 安全层，按监控层级分文件。
 
-三级安全监控：关节限位、TCP 限位、整机自碰撞（URDF + 正运动学）与外部
-碰撞检测（力矩残差）。向上提供状态监控、碰撞检测与安全监督器：
+- :mod:`joyarm.safety.joint`      ： 关节层——关节裁剪 + 限位校验。
+- :mod:`joyarm.safety.tcp`        ： 末端层——TCP 限位校验。
+- :mod:`joyarm.safety.machine`    ： 整机层——自碰撞检测（URDF + FK）。
+- :mod:`joyarm.safety.external`   ： 外部层——外部碰撞检测（力矩残差）。
+- :mod:`joyarm.safety.supervisor` ： 跨层——状态监控（StateMonitor）与安全策略。
 
-- :class:`StateMonitor`：关节 / TCP 限位监控。
-- :class:`SelfCollisionChecker`：整机自碰撞检测（输出 :class:`CollisionReport`）。
-- :class:`ExternalCollisionDetector`：外部碰撞检测（力矩残差）。
-- :class:`SafetySupervisor`：聚合上述检查器，输出安全动作决策。
 """
-from .safety import (
-    CollisionReport,
-    StateMonitor,
-    SelfCollisionChecker,
-    ExternalCollisionDetector,
-    SafetySupervisor,
-    joint_limits_check,
-    tcp_limits_check,
-)
+from .joint import clamp_to_limits, joint_limits_check
+from .tcp import tcp_limits_check
+from .machine import CollisionReport, SelfCollisionChecker
+from .external import ExternalCollisionDetector
+from .supervisor import StateMonitor, SafetySupervisor
 
 __all__ = [
-    "CollisionReport",
-    "StateMonitor",
-    "SelfCollisionChecker",
-    "ExternalCollisionDetector",
-    "SafetySupervisor",
+    "clamp_to_limits",
     "joint_limits_check",
     "tcp_limits_check",
+    "CollisionReport",
+    "SelfCollisionChecker",
+    "ExternalCollisionDetector",
+    "StateMonitor",
+    "SafetySupervisor",
 ]

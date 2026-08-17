@@ -31,8 +31,6 @@ __all__ = [
     "Violation",        # 安全违规: layer + joint_idx + metric + value + limit + severity
     "IKResult",         # 逆运动学结果： q + success + err + n_iter
     "ComplianceParams", # Compliance 参数 : K/D/M
-    # 纯函数
-    "clamp_to_limits",  # 关节角裁剪到限位内
 ]
 
 
@@ -241,7 +239,7 @@ class JointLimits(_ArrayEqMixin):
     所有数组维度均为 ``(n,)``，``n`` 为机械臂自由度数。
 
     - **硬限位**实例（``Arm.joint_limits``）：URDF/电机物理极限；
-      ``q_min/q_max`` 为位置硬限位，供 :func:`safety.joint_limits_check`
+      ``q_min/q_max`` 为位置硬限位，供 :func:`safety.joint.joint_limits_check`
       监测报警（硬限位违规 → :attr:`Severity.ERROR` / :attr:`Severity.CRITICAL`）。
     - **软限位**实例（``Arm.joint_limits_soft``）：略窄于硬限位、留余量；
       其 ``q_min/q_max`` 即 ``Arm.qlow/qhigh``，供
@@ -346,47 +344,3 @@ class ComplianceParams(_ArrayEqMixin):
     K: np.ndarray = field(default_factory=lambda: np.eye(6))
     D: np.ndarray = field(default_factory=lambda: np.eye(6))
     M: np.ndarray = field(default_factory=lambda: np.eye(6))
-
-
-# ============================================================
-# 纯函数
-# ============================================================
-def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
-    """将运动指令裁剪到关节硬限位内（软防护共享底层）。
-
-    所有运动指令下发前都应过本函数：对 ``q_min/q_max`` 做逐元素裁剪。
-    若需软限位裁剪，传入 :attr:`Arm.joint_limits_soft` 即可（其
-    ``q_min/q_max`` 即软限位 ``qlow/qhigh``）。
-
-    :param targets: ``(n,)`` 或 ``(N,n)`` 目标关节角，弧度。
-    :param limits: 关节限位声明。
-    :return: 与 ``targets`` 同形状的裁剪后关节角。
-    :raises ValueError: ``targets`` 与限位维度不匹配，或限位自身
-                        ``q_min > q_max``（配置错误）时抛出。
-    """
-    targets = np.asarray(targets, dtype=float)
-    q_min = np.asarray(limits.q_min, dtype=float)
-    q_max = np.asarray(limits.q_max, dtype=float)
-
-    # q_min > q_max 属配置错误，静默裁剪会掩盖问题
-    bad = np.where(q_min > q_max)[0]
-    if bad.size > 0:
-        raise ValueError(
-            f"限位配置错误：q_min > q_max（关节索引 {bad.tolist()}）"
-        )
-
-    # 标量（0-d）输入拦截：shape 为 ()，shape[-1] 会 IndexError
-    if targets.ndim == 0:
-        raise ValueError(
-            "目标关节角不能是标量，需为 (n,) 或 (N,n) 数组"
-        )
-
-    # 维度校验：目标最后一维必须等于关节数（限位数组长度）
-    if targets.shape[-1] != q_min.shape[0]:
-        raise ValueError(
-            f"目标关节角最后一维 {targets.shape[-1]} 与限位维度 "
-            f"{q_min.shape[0]} 不匹配"
-        )
-    # numpy.clip 逐元素裁剪：低于 q_min 的抬到 q_min，高于 q_max 的压到 q_max
-    # 支持 (n,) 和 (N,n) 两种形状（广播）
-    return np.clip(targets, q_min, q_max)

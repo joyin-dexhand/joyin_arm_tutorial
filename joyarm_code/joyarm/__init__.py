@@ -6,7 +6,7 @@
     ─────────────────────────────────────────────
     robotics/     算法层：fkine · ikine(Ch3) · jacobian(Ch4) · trajectory(Ch5)
                    · dyn(Ch8) · control(Ch6/8/9)
-    safety/       安全层：safety(Ch11)
+    safety/       安全层：joint/tcp/machine/external/supervisor(Ch11)
     backends/     通信层（三层）：Backend → BackendMas/BackendEnd
                    → BackendMasRebotDM / BackendEndJoyGripper
     ─────────────────────────────────────────────
@@ -45,7 +45,6 @@ from .utils.types import (
     Severity,
     SafetyAction,
     TrajectorySpace,
-    clamp_to_limits,
 )
 from .utils.transforms import (
     rot_x,
@@ -114,8 +113,9 @@ from .robotics.control import (
     compute_cartesian_impedance,
 )
 
-# ---- 安全层 ----
-from .safety.safety import (
+# ---- 安全层（clamp_to_limits 自 utils/types.py 迁入 safety/joint.py）----
+from .safety import (
+    clamp_to_limits,
     CollisionReport,
     StateMonitor,
     SelfCollisionChecker,
@@ -154,7 +154,6 @@ __all__ = [
     "Severity",
     "SafetyAction",
     "TrajectorySpace",
-    "clamp_to_limits",
     # 基础：数学 / 接口
     "rot_x",
     "rot_y",
@@ -224,6 +223,7 @@ __all__ = [
     "AdmittanceControl",
     "compute_cartesian_impedance",
     # 安全层
+    "clamp_to_limits",
     "CollisionReport",
     "StateMonitor",
     "SelfCollisionChecker",
