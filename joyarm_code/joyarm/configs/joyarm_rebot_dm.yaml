@@ -1,44 +1,44 @@
 # JoyArm (reBot-DevArm, 达妙 DM 电机) 型号配置
-# 由 arms/joyarm_rebot_dm.py 按型号名加载；数据与代码分离（架构设计 §3.3）。
+# 由 arms/joyarm_rebot_dm.py 按型号名加载。
 # 注：关节位置/速度/力矩限位与 URDF <limit> 一致；FK 实际走 pinocchio（URDF）。
 
 name: joyarm_rebot_dm
-urdf: robots/reBot-DevArm_fixend/urdf/reBot-DevArm_fixend.urdf   # 相对 joyarm/ 包根
+urdf: robots/reBot-DevArm_fixend/urdf/reBot-DevArm_fixend.urdf
 ee_frame: end_link
-q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]                            # 实际 home 位形（第七章标定后核对）
+q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 实际 home 位形
 
 # MDH 参数 (α_{i-1}, a_{i-1}, d_i, θ_offset_i)，6 行——教学参考常量
-# FK 实际走 pinocchio；确切值以第七章 URDF 导出后核对为准
+# FK 实际走 pinocchio
 mdh:
-  alpha:        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  a:            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  d:            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  alpha: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  a: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  d: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   theta_offset: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # 关节硬限位（与 URDF <limit> 一致；弧度；速度 rad/s；力矩 N·m）
 joint_limits:
-  q_min:  [-2.80, -3.14, -3.14, -1.87, -1.57, -3.14]
-  q_max:  [ 2.80,  0.00,  0.00,  1.57,  1.57,  3.14]
-  dq_max: [50.0,  50.0,  50.0, 200.0, 200.0, 200.0]
-  tau_max: [27.0, 27.0, 27.0,  7.0,  7.0,  7.0]
+  q_min: [-2.80, -3.14, -3.14, -1.87, -1.57, -3.14]
+  q_max: [2.80, 0.00, 0.00, 1.57, 1.57, 3.14]
+  dq_max: [50.0, 50.0, 50.0, 200.0, 200.0, 200.0]
+  tau_max: [27.0, 27.0, 27.0, 7.0, 7.0, 7.0]
 
 # 软限位 = 硬限位向内缩该比例（供采样/裁剪/校验留缓冲）
 joint_limits_soft_margin: 0.05
 
 # 末端限位（Ch11 正式填；此处占位）
 tcp_limits:
-  workspace_box: [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]   # [min, max] (m)
-  v_lin_max: 1.0     # m/s
-  v_ang_max: 3.14    # rad/s
-  f_max: 20.0        # N
-  t_max: 5.0         # N·m
+  workspace_box: [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]] # [min, max] (m)
+  v_lin_max: 1.0 # m/s
+  v_ang_max: 3.14 # rad/s
+  f_max: 20.0 # N
+  t_max: 5.0 # N·m
 
 # 通信参数：按 backend 分开（CAN 总线）；构造时由 Mas/End 按 backend_cls 实例化
-backend_mas:                       # 多轴本体后端（BackendMasRebotDM）
+backend_mas: # 多轴本体后端（BackendMasRebotDM）
   can_interface: can0
   baudrate: 1000000
-  motor_ids: [1, 2, 3, 4, 5, 6]   # 6 个关节电机 ID（0x01~0x06）
-backend_end:                       # 末端后端（BackendEndJoyGripper）
+  motor_ids: [1, 2, 3, 4, 5, 6] # 6 个关节电机 ID（0x01~0x06）
+backend_end: # 末端后端（BackendEndJoyGripper）
   can_interface: can0
   baudrate: 1000000
-  id: 7                            # 两指夹爪 ID（0x07，与关节电机区分）
+  id: 7 # 两指夹爪 ID（0x07）

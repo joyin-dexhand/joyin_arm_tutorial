@@ -25,9 +25,7 @@ markdown_extensions:
       custom_fences:
         - name: mermaid
           class: mermaid
-          format:
-            !!python/name:pymdownx.superfences.fence_code_format
-
+          format: !!python/name:pymdownx.superfences.fence_code_format
 
   - pymdownx.arithmatex: # 数学公式：$...$ 与 $$...$$ 自动交给 MathJax 渲染
       generic: true
@@ -68,3 +66,9 @@ nav:
       - 第十三章 末端执行器: chapt13_endeffector.md
       - 第十四章 用户接口: chapt14_ui.md
       - 第十五章 JoyArm 综合实践项目: chapt15_project.md
+  - 附件:
+      - 理论部分主参考教材: 机器人学导论（第四版）.md
+      - 机械臂各型号参数: arm_config.md
+      - windows-linux 双系统安装: install_dual_system.md
+      - linux 开发环境配置: install_ros2_humble.md
+      - 机械臂 Python API: arm_api.md

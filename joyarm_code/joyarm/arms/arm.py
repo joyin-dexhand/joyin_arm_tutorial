@@ -1,13 +1,11 @@
 """``Arm`` 基类 —— 完整机械臂（多轴本体 + 末端执行器）。
 
-``Arm`` 持有 pinocchio 模型 ``model`` + 数据 ``data`` + 限位，并直接持有两个通信后端：
-``backend_mas``（本体）/``backend_end``（末端）。两个后端**类**由子类绑定
-（``backend_mas_cls`` / ``backend_end_cls``），构造时按 ``configs/*.yaml`` 的
-``backend_mas`` / ``backend_end`` 段实例化。
+``Arm`` 持有 pinocchio 模型 ``model`` + 数据 ``data`` + 限位，并直接持有两个通信后端：``backend_mas``（本体）/``backend_end``（末端）。
+后端绑定（``backend_mas_cls`` / ``backend_end_cls``），构造时按 ``configs/*.yaml`` 的``backend_mas`` / ``backend_end`` 段实例化。
 
 ``connected=False``（默认，离线）时：
 - 计算类方法（``fkine``/``jac``/...）不依赖真机，无硬件也能跑
-- 执行类方法（``get_state``/``command``/``end_open``/...）``raise RuntimeError``；``connect()`` 后可用
+- 执行类方法（``get_state``/``command``/``end_open``/...）``raise RuntimeError``；当``connect()`` 后才可用
 """
 from __future__ import annotations
 
@@ -20,22 +18,21 @@ from ..utils.types import (
     ControlMode,
     JointLimits,
     TcpLimits,
-    clamp_to_limits,
 )
 
-try:  # pinocchio 为重依赖，惰性导入：缺失时仅 Arm 实例化报错
+try:  
     import pinocchio as pin
-except ImportError:  # pragma: no cover
+except ImportError: 
     pin = None
 
-from ..backends.backend_mas import BackendMas  # noqa: E402  (type-only, no cycle)
-from ..backends.backend_end import BackendEnd  # noqa: E402  (type-only, no cycle)
+from ..backends.backend_mas import BackendMas 
+from ..backends.backend_end import BackendEnd 
 
 __all__ = ["Arm"]
 
 
 class Arm:
-    """完整机械臂基类（本体 pin 模型 + 限位 + 两个后端 + 运动/控制门面）。
+    """完整机械臂基类
 
     :param urdf_path: URDF 文件路径。
     :param ee_frame_name: 末端参考帧名（默认 ``"ee"``）。
@@ -45,12 +42,11 @@ class Arm:
     :param config: 型号 YAML 配置字典（含 ``backend_mas`` / ``backend_end`` 等段）；缺省无后端。
     """
 
-    # ---- 型号绑定：子类绑本体 / 末端后端**类**，构造时按 config 实例化 ----
+    # ---- 型号绑定，构造时按 config 实例化 ----
     backend_mas_cls: Optional[type] = None
     backend_end_cls: Optional[type] = None
 
-    def __init__(
-        self,
+    def __init__(self,
         urdf_path: str,
         ee_frame_name: str = "ee",
         mesh_dirs: Optional[List[str]] = None,
@@ -135,8 +131,8 @@ class Arm:
             self.joint_limits.q_max,
         )
 
-        self.tcp_limits: TcpLimits = TcpLimits()  # 末端限位（Ch11 才正式填；此处占位）
-        self.T_base: np.ndarray = np.eye(4)  # 基坐标系偏移（默认单位阵）
+        self.tcp_limits: TcpLimits = TcpLimits()  # 末端限位（占位）
+        self.T_base: np.ndarray = np.eye(4)  # 基坐标系偏移
 
         # ---- 两个通信后端：子类绑 *_cls，按 config 对应段实例化 ----
         self.backend_mas: Optional[BackendMas] = (
@@ -174,7 +170,7 @@ class Arm:
     # ----------------------------------------------------------
     @staticmethod
     def _build_joint_limits(model) -> JointLimits:
-        """从 pinocchio model 解析硬限位（位置/速度/力矩来自 URDF；其余 Ch11 填）。"""
+        """从 pinocchio model 解析硬限位（位置/速度/力矩来自 URDF；其余手动赋值）。"""
         n = model.nq
         q_min = np.asarray(model.lowerPositionLimit, dtype=float).reshape(n)
         q_max = np.asarray(model.upperPositionLimit, dtype=float).reshape(n)
@@ -225,7 +221,7 @@ class Arm:
         )
 
     # ----------------------------------------------------------
-    # 表示
+    # 打印表示
     # ----------------------------------------------------------
     def __repr__(self) -> str:
         return (
@@ -262,9 +258,7 @@ class Arm:
     # ----------------------------------------------------------
     # 正运动学（底层 + 门面委托；默认 pinocchio，手写请于子类覆盖）
     # ----------------------------------------------------------
-    def frame_placement(
-        self, q: np.ndarray, frame: Optional[Union[str, int]] = None
-    ) -> np.ndarray:
+    def frame_placement(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> np.ndarray:
         """底层单次 FK：返回指定帧在基坐标系下的 ``(4,4)`` 位姿。"""
         fid = self._resolve_frame(frame)
         q_arr = np.asarray(q, dtype=float).reshape(self.n)
