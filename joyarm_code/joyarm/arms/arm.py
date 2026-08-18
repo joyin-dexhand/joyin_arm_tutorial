@@ -5,7 +5,7 @@
 
 ``connected=False``（默认，离线）时：
 - 计算类方法（``fkine``/``jac``/...）不依赖真机，无硬件也能跑
-- 执行类方法（``get_state``/``command``/``end_open``/...）``raise RuntimeError``；当``connect()`` 后才可用
+- 执行类方法（``get_mas_state``/``set_mas_command``/``end_open``/...）``raise RuntimeError``；当``connect()`` 后才可用
 """
 from __future__ import annotations
 
@@ -148,7 +148,7 @@ class Arm:
         )
 
     # ----------------------------------------------------------
-    # 真机连接（connect 后才可执行 get_state/command/end_*）
+    # 真机连接（connect 后才可执行 mas_*/end_*）
     # ----------------------------------------------------------
     def connect(self) -> None:
         """连接本体 + 末端真机。"""
@@ -195,7 +195,7 @@ class Arm:
             dq_max=dq_max,
             tau_max=tau_max,
             ddq_max=np.full(n, np.inf),
-            temp_coil_max=np.zeros(n),
+            temp_motor_max=np.zeros(n),
             temp_driver_max=np.zeros(n),
             voltage_min=np.zeros(n),
             voltage_max=np.zeros(n),
@@ -214,7 +214,7 @@ class Arm:
             dq_max=hard.dq_max.copy(),
             tau_max=hard.tau_max.copy(),
             ddq_max=hard.ddq_max.copy(),
-            temp_coil_max=hard.temp_coil_max.copy(),
+            temp_motor_max=hard.temp_motor_max.copy(),
             temp_driver_max=hard.temp_driver_max.copy(),
             voltage_min=hard.voltage_min.copy(),
             voltage_max=hard.voltage_max.copy(),
@@ -355,10 +355,10 @@ class Arm:
         return tcp_limits_check(state, self.tcp_limits)
 
     # ----------------------------------------------------------
-    # 本体执行类方法（依赖 backend_mas；未连接 raise）
+    # 本体执行类方法（依赖 backend_mas；未连接 raise；mas_* 与 end_* 对应）
     # ----------------------------------------------------------
-    def get_state(self) -> ArmState:
-        """读取本体状态快照（委托 ``backend_mas.read_state()``）。
+    def get_mas_state(self) -> ArmState:
+        """读取本体状态快照（委托 ``backend_mas.read_state()``；与 ``get_end_state`` 对应）。
 
         :raises RuntimeError: 未连接真机（``connected=False``）时抛出。
         """
@@ -366,13 +366,13 @@ class Arm:
             raise RuntimeError(f"[{self.name}] 未连接真机（离线）；请先 connect()。")
         return self.backend_mas.read_state()
 
-    def command(self,
+    def set_mas_command(self,
+        mode: ControlMode = ControlMode.POSITION,
         q: Optional[np.ndarray] = None,
         dq: Optional[np.ndarray] = None,
         tau: Optional[np.ndarray] = None,
         kp: Optional[np.ndarray] = None,
         kd: Optional[np.ndarray] = None,
-        mode: ControlMode = ControlMode.POSITION,
     ) -> None:
         """按控制模式下发运动指令（委托 ``backend_mas``）。
 

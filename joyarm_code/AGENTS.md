@@ -106,7 +106,7 @@ ros2 launch joyarm_node arm.launch.py
 - **设备模型**（`arms/`）：`Arm` = 完整机械臂基类（多轴本体 + 末端执行器），直接持有 `backend_mas`/`backend_end` 两个后端；具体型号 `JoyArmRebotDM(Arm)` 在子类绑定 `backend_mas_cls`/`backend_end_cls` 后端**类**。文件 `arms/arm.py`、`arms/joyarm_rebot_dm.py`。
 - **Backend 三层**（`Backend` 前缀，`backends/`）：根 `Backend`（通用硬件通信抽象）→ 类型层 `BackendMas`/`BackendEnd`（按硬件类型派生）→ 型号层 `BackendMasRebotDM`/`BackendEndJoyGripper`（按具体型号派生）。文件 `backend.py` / `backend_mas.py` / `backend_end.py` / `backend_mas_rebot_dm.py` / `backend_end_joygripper.py`。
 - **属性 / 形参**：本体后端 = `backend_mas`、末端后端 = `backend_end`（均由 `Arm` 直接持有）；robotics/safety 算法形参用 `arm`（依赖 `utils.ArmProtocol`）。
-- **末端控制方法**：统一 `end_` 前缀（`end_open` / `end_close` / `set_end_position` / `set_end_force` / `get_end_state`），与本体方法（`get_state` / `command`）区分。
+- **执行类方法命名**：本体方法带 `mas`、末端方法带 `end`，两者对应——本体 `get_mas_state` / `set_mas_command`；末端 `end_open` / `end_close` / `set_end_position` / `set_end_force` / `get_end_state`。
 - **yaml**：`configs/<model>.yaml` 按 backend 分段——`backend_mas:` / `backend_end:`；子类绑 backend **类**，基类按 config 段实例化。
 - **算法默认 pinocchio**：robotics 不带 `method` 参数，默认走 urdf+pin；手写实现请在 `Arm` 子类覆盖对应方法（FK 特例：覆盖 `frame_placement`——基本能力/协议唯一方法，fkine/ikine/自碰撞统一消费）。
 - 约定针对**系统组件**（arm/backend）；项目品牌名 `joyarm`/`joyarm_code` 不改。
@@ -165,12 +165,12 @@ SDK（`arm.xx`）→ `joyarm/`；ROS2 节点/launch → `joyarm_ros2_ws/src/`（
 
 ```
 JoyArmRebotDM ──▶ Arm（持有 backend_mas + backend_end）
-        │  绑两个 backend 类（mas + end）；arm.fkine()/command()/end_open()/end_close()
+        │  绑两个 backend 类（mas + end）；arm.fkine()/set_mas_command()/end_open()/end_close()
 Backend(ABC) ──┬─▶ BackendMas ──▶ BackendMasRebotDM   （本体：关节电机，Ch6 占位）
                └─▶ BackendEnd ──▶ BackendEndJoyGripper（末端：夹爪，Ch13 占位）
 ```
 
-- **`Arm`**：完整臂基类。持有 pinocchio `model`/`data` + 软硬限位 + `backend_mas` + `backend_end`；对外提供本体运动学/动力学/安全**门面**（薄委托 `robotics`/`safety`，默认 pinocchio）与执行类方法（`get_state`/`command`），并直接提供末端夹爪语义（`end_*`）；`connect()` 同时连接本体 + 末端。
+- **`Arm`**：完整臂基类。持有 pinocchio `model`/`data` + 软硬限位 + `backend_mas` + `backend_end`；对外提供本体运动学/动力学/安全**门面**（薄委托 `robotics`/`safety`，默认 pinocchio）与执行类方法（`get_mas_state`/`set_mas_command`），并直接提供末端夹爪语义（`end_*`）；`connect()` 同时连接本体 + 末端。
 - **`JoyArmRebotDM(Arm)`**：具体型号预设。无参即用（自动解析随包 URDF + `configs/joyarm_rebot_dm.yaml`）。
 - **robotics / safety**：模块级函数，形参 `arm`（按 `ArmProtocol` 访问），不 import `arms`、无 `method` 参数、默认 pinocchio。
 
@@ -194,8 +194,8 @@ Arm.fkine(q, frame=None, rep="T")                     # 正运动学门面 ✅
 Arm.ikine(T_target, q0=None, ...) / Arm.jac(q, ref="local")    # IK / 雅可比门面 🟡
 Arm.fdyn / idyn / mass_matrix / coriolis / gravity / cartesian_inertia   # 动力学门面 🟡
 Arm.check_joint_limits(state) / check_tcp_limits(state)        # 安全校验门面 🟡
-Arm.get_state() → ArmState                            # 读状态（需 connect）✅
-Arm.command(q=None, dq=None, tau=None, kp=None, kd=None, mode=ControlMode.POSITION)  # 下发指令（需 connect）✅
+Arm.get_mas_state() → ArmState                        # 读本体状态（需 connect）✅
+Arm.set_mas_command(mode=ControlMode.POSITION, q=None, dq=None, tau=None, kp=None, kd=None)  # 下发指令（需 connect）✅
 # 末端方法（需 connect）
 Arm.end_open() / end_close()                          # 夹爪开/合 ✅
 Arm.set_end_position(position) / set_end_force(force) # 末端位置/力 🟡

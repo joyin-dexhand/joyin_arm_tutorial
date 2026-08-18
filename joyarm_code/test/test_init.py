@@ -91,10 +91,10 @@ class TestInstantiation:
         q = arm.rand_q(size=4)
         assert q.shape == (4, arm.n) or q.shape[-1] == arm.n
 
-    def test_offline_get_state_raises(self, joyarm_pkg):
-        """未连接真机：get_state / command 应 raise RuntimeError。"""
+    def test_offline_get_mas_state_raises(self, joyarm_pkg):
+        """未连接真机：get_mas_state / set_mas_command 应 raise RuntimeError。"""
         arm = joyarm_pkg.JoyArmRebotDM()
         with pytest.raises(RuntimeError):
-            arm.get_state()
+            arm.get_mas_state()
         with pytest.raises(RuntimeError):
-            arm.command(q=arm.rand_q())
+            arm.set_mas_command(q=arm.rand_q())

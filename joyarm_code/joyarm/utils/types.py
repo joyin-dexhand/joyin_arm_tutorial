@@ -23,10 +23,10 @@ __all__ = [
     "Wrench",           # 六维力/力矩：force + torque
     "Twist",            # 空间速度：linear + angular
     "Pose",             # 统一位姿表示：position + orientation（单位四元数）
-    "JointState",       # 关节状态：control_mode + q/dq/ddq/tau + status + temp_coil/temp_driver + voltage/current
+    "JointState",       # 关节状态：control_mode + q/dq/ddq/tau + enabled/error/comm_ok/angle_ok + temp_motor/temp_driver + voltage/current
     "TcpState",         # 工具中心点状态：pose + twist + wrench
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
-    "JointLimits",      # 关节限位: q_min/q_max + dq_max + ddq_max + tau_max + temp_coil_max/temp_driver_max + voltage_min/voltage_max + current_max
+    "JointLimits",      # 关节限位: q_min/q_max + dq_max + ddq_max + tau_max + temp_motor_max/temp_driver_max + voltage_min/voltage_max + current_max
     "TcpLimits",        # 工具中心点限位: workspace_box + v_lin_max + v_ang_max + f_max + t_max
     "Violation",        # 安全违规: layer + joint_idx + metric + value + limit + severity
     "IKResult",         # 逆运动学结果： q + success + err + n_iter
@@ -40,7 +40,7 @@ __all__ = [
 class ControlMode(Enum):
     """关节控制模式
 
-    下发指令时，``Arm.command()`` 根据 mode 调用 backend 的不同方法。
+    下发指令时，``Arm.set_mas_command()`` 根据 mode 调用 backend 的不同方法。
 
     :cvar POSITION: 位置模式，下发目标关节角 ``q``。
     :cvar VELOCITY: 速度模式，下发目标关节速度 ``dq``。
@@ -183,8 +183,11 @@ class JointState(_ArrayEqMixin):
     :ivar dq: ``(n,)`` 关节速度，弧度/秒。
     :ivar ddq: ``(n,)`` 关节加速度，弧度/秒²。
     :ivar tau: ``(n,)`` 关节力矩，N·m。
-    :ivar status: ``(n,)`` int 关节电机状态码；``0``=失能，``1``=使能，其他值代表过温/过流/通信异常等信息。
-    :ivar temp_coil: ``(n,)`` 线圈温度，单位 ℃。
+    :ivar enabled: ``(n,)`` bool 使能状态，``True``=使能，``False``=失能。
+    :ivar error: ``(n,)`` bool 异常状态，``True``=电机异常（过温/过流等），``False``=正常。
+    :ivar comm_ok: ``(n,)`` bool 通讯状态，``True``=正常，``False``=异常。
+    :ivar angle_ok: ``(n,)`` bool 角度状态（编码器角度有效性），``True``=正常，``False``=异常。
+    :ivar temp_motor: ``(n,)`` 电机温度，单位 ℃。
     :ivar temp_driver: ``(n,)`` 驱动器温度，单位 ℃。
     :ivar voltage: 总线电压，单位 V。
     :ivar current: 总线电流，单位 A。
@@ -195,8 +198,11 @@ class JointState(_ArrayEqMixin):
     dq: np.ndarray = field(default_factory=lambda: np.zeros(0))
     ddq: np.ndarray = field(default_factory=lambda: np.zeros(0))
     tau: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    status: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=int))
-    temp_coil: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    enabled: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
+    error: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
+    comm_ok: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
+    angle_ok: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
+    temp_motor: np.ndarray = field(default_factory=lambda: np.zeros(0))
     temp_driver: np.ndarray = field(default_factory=lambda: np.zeros(0))
     voltage: float = 0.0
     current: float = 0.0
@@ -251,7 +257,7 @@ class JointLimits(_ArrayEqMixin):
     :ivar dq_max: ``(n,)`` 关节速度上限，弧度/秒。
     :ivar ddq_max: ``(n,)`` 关节加速度上限，弧度/秒²。
     :ivar tau_max: ``(n,)`` 关节力矩上限，N·m。
-    :ivar temp_coil_max: ``(n,)`` 线圈温度上限，℃。
+    :ivar temp_motor_max: ``(n,)`` 电机温度上限，℃。
     :ivar temp_driver_max: ``(n,)`` 驱动器温度上限，℃。
     :ivar voltage_min: ``(n,)`` 电压下限，V。
     :ivar voltage_max: ``(n,)`` 电压上限，V。
@@ -263,7 +269,7 @@ class JointLimits(_ArrayEqMixin):
     dq_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
     ddq_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
     tau_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    temp_coil_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    temp_motor_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
     temp_driver_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
     voltage_min: np.ndarray = field(default_factory=lambda: np.zeros(0))
     voltage_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
@@ -296,7 +302,7 @@ class Violation(_ArrayEqMixin):
 
     :ivar layer: 监控层标识，``"joint"``/``"tcp"``/``"arm"`
     :ivar joint_idx: 关节索引（末端/整机层违规可置 ``-1``）。
-    :ivar metric: 违规指标名（如 ``"q"``/``"dq"``/``"temp_coil"``）。
+    :ivar metric: 违规指标名（如 ``"q"``/``"dq"``/``"temp_motor"``）。
     :ivar value: 实测值。
     :ivar limit: 限位阈值。
     :ivar severity: 严重程度分级。

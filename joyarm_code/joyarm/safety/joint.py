@@ -63,7 +63,7 @@ def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
 def joint_limits_check(state: ArmState, limits: JointLimits) -> List[Violation]:
     """纯函数：关节层限位校验。
 
-    校验项：位置 / 速度 / 加速度 / 力矩 / 线圈温度 / 驱动器温度 /
+    校验项：位置 / 速度 / 加速度 / 力矩 / 电机温度 / 驱动器温度 /
     过压 / 过流。违规分级为 :attr:`Severity.ERROR` /
     :attr:`Severity.CRITICAL`（硬限位）。
 

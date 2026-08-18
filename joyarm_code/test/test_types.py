@@ -19,7 +19,7 @@ JOINT_LIMITS_ARRAY_FIELDS = [
     "dq_max",
     "ddq_max",
     "tau_max",
-    "temp_coil_max",
+    "temp_motor_max",
     "temp_driver_max",
     "voltage_min",
     "voltage_max",
@@ -93,7 +93,11 @@ class TestStateSnapshots:
         assert js.q.shape == (0,)
         assert js.dq.shape == (0,)
         assert js.tau.shape == (0,)
-        assert js.status.dtype == int
+        assert js.enabled.dtype == bool
+        assert js.error.dtype == bool
+        assert js.comm_ok.dtype == bool
+        assert js.angle_ok.dtype == bool
+        assert js.temp_motor.shape == (0,)
         assert js.voltage == 0.0
         assert js.current == 0.0
 
@@ -301,14 +305,17 @@ class TestFieldReadWrite:
             "dq": rng.normal(size=n),
             "ddq": rng.normal(size=n),
             "tau": rng.normal(size=n),
-            "status": rng.integers(0, 3, size=n),
-            "temp_coil": 30.0 + rng.normal(size=n),
+            "enabled": rng.integers(0, 2, size=n).astype(bool),
+            "error": rng.integers(0, 2, size=n).astype(bool),
+            "comm_ok": rng.integers(0, 2, size=n).astype(bool),
+            "angle_ok": rng.integers(0, 2, size=n).astype(bool),
+            "temp_motor": 30.0 + rng.normal(size=n),
             "temp_driver": 40.0 + rng.normal(size=n),
         }
         js = types.JointState(voltage=48.0, current=3.5, **vals)
         for fname, v in vals.items():
             assert_allclose(getattr(js, fname), v)
-        assert js.status.dtype == int  # int dtype 保持
+        assert js.error.dtype == bool  # bool dtype 保持
         assert (js.voltage, js.current) == (48.0, 3.5)
 
     def test_tcp_state_read_write(self):
@@ -432,7 +439,8 @@ class TestSerialization:
         js = types.JointState(
             q=rng.normal(size=n),
             dq=rng.normal(size=n),
-            status=rng.integers(0, 2, size=n),
+            enabled=rng.integers(0, 2, size=n).astype(bool),
+            error=rng.integers(0, 2, size=n).astype(bool),
             voltage=48.0,
             current=2.0,
         )

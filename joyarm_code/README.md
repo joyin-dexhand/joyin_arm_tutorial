@@ -65,7 +65,7 @@ P   = arm.fkine(Q, rep="pos")      # 门面 arm.fkine → (N,3)
 # arm.connect(); arm.end_open()    # 真机：先 connect() 再操作末端
 ```
 
-> **离线语义**：`connected=False`（默认）时计算类（`fkine`/`rand_q`/…）可用；执行类（`get_state`/`command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用。
+> **离线语义**：`connected=False`（默认）时计算类（`fkine`/`rand_q`/…）可用；执行类（`get_mas_state`/`set_mas_command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用。
 
 ## 5. 运行测试 / 章节示例
 
