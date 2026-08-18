@@ -36,9 +36,9 @@
          [ 0,  0, 1, 0.0],
          [ 0,  0, 0, 1.0]]
 
-    特点：x轴转到了y轴（0 1 0），y轴转到了-x轴 （-1 0 0），z轴不变 （0 0 1），原点x 平移了0.5米
+    特点：x轴转到了y轴（0 1 0），y轴转到了-x轴 （-1 0 0），z轴不变 （0 0 1），原点沿 x 平移了0.5米
 
-    # 注：滑块控制的旋转矩阵 R = R_Z(rz)·R_Y(ry)·R_X(rx) —— 按 x-y-z 顺序的外旋（等价于按 z-y-x 顺序的内旋），即标准 RPY。具体原理详见后面的欧拉角和固定角的讲解。
+    # 注：滑块控制的旋转矩阵 R = R_Z(rz)·R_Y(ry)·R_X(rx) —— 按 x-y-z 顺序的外旋（等价于按 z-y-x 顺序的内旋），即标准 RPY。具体原理详见欧拉角和固定角的讲解。
 
 ==============================================================================
 """
@@ -366,7 +366,7 @@ class PoseDemoWindow(QMainWindow):
             return  # 非法输入忽略
         rx, ry, rz = self._matrix_to_rpy(R)
         tvals = np.clip(p, TRANS_MIN, TRANS_MAX)
-        rvals = np.clip([rx, ry, rz], ROT_MIN, ROT_MAX)
+        rvals = np.clip(np.degrees([rx, ry, rz]), ROT_MIN, ROT_MAX)
         for s, sp, v in zip(self.t_sliders, self.t_spins, tvals):
             with QSignalBlocker(s), QSignalBlocker(sp):
                 s.setValue(self._trans_to_slider(float(v)))
@@ -380,10 +380,11 @@ class PoseDemoWindow(QMainWindow):
 
     @staticmethod
     def _matrix_to_rpy(R: np.ndarray):
-        """由旋转矩阵反算固定轴 XYZ 的 RPY 角（度）；与第二章 §2.5 公式一致。"""
-        ry = np.degrees(np.arctan2(-R[2, 0], np.hypot(R[0, 0], R[1, 0])))
-        rz = np.degrees(np.arctan2(R[1, 0], R[0, 0]))
-        rx = np.degrees(np.arctan2(R[2, 1], R[2, 2]))
+        """由旋转矩阵反算固定轴 XYZ 的 RPY 角（弧度，与核心库 R_to_rpy 及
+        chapt2_pose_demo 同一约定）；与第二章 §2.5 公式一致。GUI 显示层就地转度。"""
+        ry = np.arctan2(-R[2, 0], np.hypot(R[0, 0], R[1, 0]))
+        rz = np.arctan2(R[1, 0], R[0, 0])
+        rx = np.arctan2(R[2, 1], R[2, 2])
         return rx, ry, rz
 
     def _update_table(self, silent: bool):
