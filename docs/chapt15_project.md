@@ -18,7 +18,7 @@
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt15_project_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm/：arm / joyarm_rebot_dm / fkine / ikine / jacobian / trajectory / control /
-    dyn / gripper / safety / teleop / vision / viz / ros2（几乎全库参与）。
+    dynamics / gripper / safety / teleop / vision / viz / ros2（几乎全库参与）。
   · 图示：配图放 docs/images/chapt15_project/；系统分层/数据流用 mermaid ```mermaid``` 围栏。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用（本章尤其多）  ｜  > ⚠️ 警告/注意（联调安全）。
   · 跨章引用用相对链接，覆盖基础/进阶/应用各篇。

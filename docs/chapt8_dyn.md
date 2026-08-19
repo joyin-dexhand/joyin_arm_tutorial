@@ -18,12 +18,12 @@
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 数学：行内 $...$、独立 $$...$$，动力学方程 $\bm{M}(q)\ddot{q}+\bm{C}(q,\dot{q})\dot{q}+\bm{g}(q)=\bm{\tau}$；矩阵用 \bm{}。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt8_dyn_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm/：dyn（动力学）/ control / fkine / arm。
+  · 可复用核心库 joyarm_code/joyarm/：dynamics（动力学）/ control / fkine / arm。
   · 图示：配图放 docs/images/chapt8_dyn/，未就绪用 ![图片占位：描述]()；控制/递推流程可用 mermaid。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 惯量等参数未知用 *待补充*；跨章引用用相对链接（如 [第六章](chapt6_control.md)、[第九章](chapt9_force.md)）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt8_dyn_demo.py、robotics/dyn.py、robotics/control.py、robotics/fkine.py、arms/arm.py。
+【本章可引用的脚本/库】chapt8_dyn_demo.py、robotics/dynamics.py、robotics/control.py、robotics/fkine.py、arms/arm.py。
 -->
 
 ## 1 牛顿欧拉递推动力学算法

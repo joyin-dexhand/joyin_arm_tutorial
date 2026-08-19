@@ -5,7 +5,7 @@
     arms/         设备模型：Arm(本体+末端) · joyarm_rebot_dm
     ─────────────────────────────────────────────
     robotics/     算法层：fkine · ikine(Ch3) · jacobian(Ch4) · trajectory(Ch5)
-                   · dyn(Ch8) · control(Ch6/8/9)
+                   · dynamics(Ch8) · control(Ch6/8/9)
     safety/       安全层：joint/tcp/machine/external/supervisor(Ch11)
     backends/     通信层（三层）：Backend → BackendMas/BackendEnd
                    → BackendMasRebotDM / BackendEndJoyGripper
@@ -93,7 +93,7 @@ from .robotics.trajectory import (
     constant_velocity_retime,
     validate,
 )
-from .robotics.dyn import fdyn, idyn, mass_matrix, coriolis, gravity, cartesian_inertia
+from .robotics.dynamics import fdyn, idyn, mass_matrix, coriolis, gravity, cartesian_inertia
 from .robotics.control import (
     ControlLoop,
     play_trajectory,

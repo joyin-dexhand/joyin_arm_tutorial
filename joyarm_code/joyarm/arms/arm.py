@@ -305,37 +305,37 @@ class Arm:
 
     def fdyn(self, q, dq, tau, **kw):
         """正动力学（薄委托，Ch8 实现）。"""
-        from ..robotics.dyn import fdyn
+        from ..robotics.dynamics import fdyn
 
         return fdyn(self, q, dq, tau, **kw)
 
     def idyn(self, q, dq, ddq, **kw):
         """逆动力学（薄委托，Ch8 实现）。"""
-        from ..robotics.dyn import idyn
+        from ..robotics.dynamics import idyn
 
         return idyn(self, q, dq, ddq, **kw)
 
     def mass_matrix(self, q):
         """关节空间惯量矩阵 M(q)（薄委托，Ch8 实现）。"""
-        from ..robotics.dyn import mass_matrix
+        from ..robotics.dynamics import mass_matrix
 
         return mass_matrix(self, q)
 
     def coriolis(self, q, dq):
         """科氏+向心项 C(q,q̇)（薄委托，Ch8 实现）。"""
-        from ..robotics.dyn import coriolis
+        from ..robotics.dynamics import coriolis
 
         return coriolis(self, q, dq)
 
     def gravity(self, q):
         """重力项 G(q)（薄委托，Ch8 实现）。"""
-        from ..robotics.dyn import gravity
+        from ..robotics.dynamics import gravity
 
         return gravity(self, q)
 
     def cartesian_inertia(self, q, frame=None):
         """笛卡尔惯量 Λ=J⁻ᵀMJ⁻¹（薄委托，Ch8/9 实现）。"""
-        from ..robotics.dyn import cartesian_inertia
+        from ..robotics.dynamics import cartesian_inertia
 
         return cartesian_inertia(self, q, frame=frame)
 

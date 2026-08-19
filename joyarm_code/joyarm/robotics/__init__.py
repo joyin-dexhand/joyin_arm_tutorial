@@ -6,7 +6,7 @@
 - :mod:`joyarm.robotics.ikine`：逆运动学（Ch3）。
 - :mod:`joyarm.robotics.jacobian`：速度运动学与静力学（Ch4）。
 - :mod:`joyarm.robotics.trajectory`：轨迹生成（Ch5）。
-- :mod:`joyarm.robotics.dyn`：正/逆动力学（Ch8）。
+- :mod:`joyarm.robotics.dynamics`：正/逆动力学（Ch8）。
 - :mod:`joyarm.robotics.control`：运动学/动力学/力控（Ch6/Ch8/Ch9）。
 """
 from .fkine import fkine
@@ -24,7 +24,7 @@ from .trajectory import (
     constant_velocity_retime,
     validate,
 )
-from .dyn import fdyn, idyn, mass_matrix, coriolis, gravity, cartesian_inertia
+from .dynamics import fdyn, idyn, mass_matrix, coriolis, gravity, cartesian_inertia
 from .control import (
     ControlLoop,
     play_trajectory,
@@ -64,7 +64,7 @@ __all__ = [
     "cart_to_joint",
     "constant_velocity_retime",
     "validate",
-    # dyn
+    # dynamics
     "fdyn",
     "idyn",
     "mass_matrix",

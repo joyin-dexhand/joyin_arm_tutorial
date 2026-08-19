@@ -21,7 +21,7 @@ joyarm_code/
 │   │   ├── types.py                 #     数据类 / 枚举
 │   │   ├── transforms.py            #     SO(3)/SE(3) 纯 numpy 数学
 │   │   └── interfaces.py            #     ArmProtocol（算法层接口契约）
-│   ├── robotics/                    #   算法层：fkine · ikine · jacobian · trajectory · dyn · control
+│   ├── robotics/                    #   算法层：fkine · ikine · jacobian · trajectory · dynamics · control
 │   ├── safety/                      #   安全层（按监控层级分文件，Ch11）
 │   │   ├── joint.py                 #     关节层：clamp_to_limits + joint_limits_check
 │   │   ├── tcp.py                   #     末端层：tcp_limits_check

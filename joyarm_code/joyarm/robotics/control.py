@@ -8,7 +8,7 @@
 - **Part 3 力控制（Ch9）**：六维力传感器抽象 + 纯力控 / 力位混合 /
   阻抗 / 导纳。
 
-依赖：Ch4 :mod:`joyarm.robotics.jacobian`、Ch8 :mod:`joyarm.robotics.dyn`、
+依赖：Ch4 :mod:`joyarm.robotics.jacobian`、Ch8 :mod:`joyarm.robotics.dynamics`、
 Ch5 :mod:`joyarm.robotics.trajectory`。按有 / 无力传感器分支。
 
 对应章节：Ch6 / Ch8 / Ch9。
@@ -146,7 +146,7 @@ def computed_torque_control(
     """计算力矩控制（§8.3）。
 
     ``τ = M(q)q̈_d + C(q,q̇)q̇ + G(q) + Kp·e + Kd·ė``，依赖
-    :func:`joyarm.robotics.dyn.idyn`。
+    :func:`joyarm.robotics.dynamics.idyn`。
 
     :return: ``(n,)`` 期望关节力矩。
     """
@@ -233,7 +233,7 @@ class ImpedanceControl:
     - 构造参数 ``K_d, D_d, M_d``（6×6 笛卡尔，默认对角）=
       :class:`~joyarm.utils.types.ComplianceParams` 的 ``K/D/M``。
     - 有力传感器：用实测 ``F_ext``；无力传感器：用关节力矩估计。
-    - 需 Ch8 :mod:`joyarm.robotics.dyn` 做重力 / 科氏补偿。
+    - 需 Ch8 :mod:`joyarm.robotics.dynamics` 做重力 / 科氏补偿。
     """
 
     def __init__(self, K_d=None, D_d=None, M_d=None, **kwargs):
@@ -259,5 +259,5 @@ class AdmittanceControl:
 
 
 def compute_cartesian_impedance(arm, K_d=None, D_d=None, **kwargs):
-    """底层计算，复用 :func:`joyarm.robotics.dyn.cartesian_inertia`。"""
+    """底层计算，复用 :func:`joyarm.robotics.dynamics.cartesian_inertia`。"""
     raise NotImplementedError("compute_cartesian_impedance 待 Ch9 实现")
