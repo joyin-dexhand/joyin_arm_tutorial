@@ -17,13 +17,13 @@
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt15_project_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm/：arm / joyarm_rebot_dm / fkine / ikine / jacobian / trajectory / control /
+  · 可复用核心库 joyarm_code/joyarm_core/：arm / joyarm_rebot_dm / fkine / ikine / jacobian / trajectory / control /
     dynamics / gripper / safety / teleop / vision / viz / ros2（几乎全库参与）。
   · 图示：配图放 docs/images/chapt15_project/；系统分层/数据流用 mermaid ```mermaid``` 围栏。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用（本章尤其多）  ｜  > ⚠️ 警告/注意（联调安全）。
   · 跨章引用用相对链接，覆盖基础/进阶/应用各篇。
   · 不写"本章小结"——第 3 行概述已替代它（作为全教程收尾，概述可适当拔高）。
-【本章可引用的脚本/库】chapt15_project_demo.py、以及 joyarm/ 全部核心库。
+【本章可引用的脚本/库】chapt15_project_demo.py、以及 joyarm_core/ 全部核心库。
 -->
 
 ## 1 任务定义与系统架构
@@ -39,7 +39,7 @@
 <!-- ✍️ 本节写作要点：
   · 目标：整合视觉/NFC/UWB 等感知（[第十四章](chapt14_ui.md)）完成任务所需的"看/读/定位"。
   · 给感知层数据流（图/mermaid）+ 输出信息表（感知量|来源|用途|对应章节）。
-  · 引用 joyarm/apps/vision.py，用脚本引用句式。
+  · 引用 joyarm_core/apps/vision.py，用脚本引用句式。
 -->
 
 ## 3 规划与控制层

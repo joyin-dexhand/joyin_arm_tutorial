@@ -15,7 +15,7 @@
 
 ```
 joyarm_code/
-├── joyarm/                          # ★ 核心 SDK（ROS2-free）
+├── joyarm_core/                          # ★ 核心 SDK（ROS2-free）
 │   ├── __init__.py                  #   公开 API 扁平导出（__all__）
 │   ├── utils/                       #   基础层
 │   │   ├── types.py                 #     数据类 / 枚举
@@ -44,7 +44,7 @@ joyarm_code/
 ├── chapt/                           # 章节教学示例脚本（一次性，不复用 SDK）
 ├── test/                            # pytest 测试套件
 ├── quickstart/                      # 快速上手（CLI/GUI/任务编排，占位）
-├── pyproject.toml                   # 工程配置（可编辑安装 joyarm；ws 不在此打包）
+├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core；ws 不在此打包）
 ├── README.md                        # 用户向入口（定位/架构/安装/用法）
 └── AGENTS.md                        # 本文件（维护者/Agent 项目记忆）
 ```
@@ -54,7 +54,7 @@ joyarm_code/
 - `utils` → 仅 numpy；
 - `robotics` / `safety` / `backends` → 仅依赖 `utils`；算法形参 `arm` 按 `ArmProtocol` 访问，**不 import `arms`**（依赖倒置）；
 - `arms` → 门面委托 `robotics`/`safety`/`backends`，运行期加载 `robots/`、`configs/`；
-- `joyarm_ros2_ws/src/*`（规划）→ 依赖 `joyarm`（pip 提供）+ `rclpy`（ROS 环境提供）；核心包保持 ROS2-free。
+- `joyarm_ros2_ws/src/*`（规划）→ 依赖 `joyarm_core`（pip 提供）+ `rclpy`（ROS 环境提供）；核心包保持 ROS2-free。
 
 ### 1.3 配置（yaml 分段）
 
@@ -82,12 +82,12 @@ joyarm_ros2_ws/
         └── test/test_adapters.py
 ```
 
-**接口约定**（标准消息起步）：状态广播走话题（`joint_states` 相对名对齐 robot_state_publisher、`~/tcp_pose`）；连接/夹爪走服务（`~/connect`、`~/disconnect`、`~/set_end`，std_srvs）；单点位置指令走 `~/command` 订阅；**轨迹执行规划为 action**，待自定义接口包 `joyarm_interfaces`（ament_cmake，含 ControlMode/轨迹 action 等）随需要建立。规划中的应用包：`joyarm_teleop`(Ch12)、`joyarm_vision`(Ch14)、`joyarm_agent`(Ch15，语音/NFC/UWB/智能体)；纯算法（teleop/vision 管线）规划放 `joyarm/apps/`（ROS2-free），落地时再建。
+**接口约定**（标准消息起步）：状态广播走话题（`joint_states` 相对名对齐 robot_state_publisher、`~/tcp_pose`）；连接/夹爪走服务（`~/connect`、`~/disconnect`、`~/set_end`，std_srvs）；单点位置指令走 `~/command` 订阅；**轨迹执行规划为 action**，待自定义接口包 `joyarm_interfaces`（ament_cmake，含 ControlMode/轨迹 action 等）随需要建立。规划中的应用包：`joyarm_teleop`(Ch12)、`joyarm_vision`(Ch14)、`joyarm_agent`(Ch15，语音/NFC/UWB/智能体)；纯算法（teleop/vision 管线）规划放 `joyarm_core/apps/`（ROS2-free），落地时再建。
 
 **环境与构建**（教程第十章环境节同此；与 ROS2 生态习惯一致）：
 
 ```bash
-python3 -m pip install --user -e joyarm_code     # 一次性：joyarm 装入 ~/.local（勿 sudo pip）
+python3 -m pip install --user -e joyarm_code     # 一次性：joyarm_core 装入 ~/.local（勿 sudo pip）
 source /opt/ros/humble/setup.bash
 cd joyarm_code/joyarm_ros2_ws && colcon build    # 系统 colcon：构建/运行解释器全链路一致
 source install/setup.bash
@@ -109,13 +109,13 @@ ros2 launch joyarm_node arm.launch.py
 - **执行类方法命名**：本体方法带 `mas`、末端方法带 `end`，两者对应——本体 `get_mas_state` / `set_mas_command`；末端 `end_open` / `end_close` / `set_end_position` / `set_end_force` / `get_end_state`。
 - **yaml**：`configs/<model>.yaml` 按 backend 分段——`backend_mas:` / `backend_end:`；子类绑 backend **类**，基类按 config 段实例化。
 - **算法默认 pinocchio**：robotics 不带 `method` 参数，默认走 urdf+pin；手写实现请在 `Arm` 子类覆盖对应方法（FK 特例：覆盖 `frame_placement`——基本能力/协议唯一方法，fkine/ikine/自碰撞统一消费）。
-- 约定针对**系统组件**（arm/backend）；项目品牌名 `joyarm`/`joyarm_code` 不改。
+- 约定针对**系统组件**（arm/backend）；项目品牌名 `JoyArm`/`joyarm_code` 不改，核心 Python 包目录/导入名固定为 `joyarm_core`。
 
 ### 2.2 设计原则与编码约定
 
 | 原则 | 落地 |
 |:--|:--|
-| **核心/ROS2 分层** | 核心 `joyarm/`（ROS2-free）+ colcon 工作空间 `joyarm_ros2_ws/src/`（rclpy，规划见 §1.4）；纯算法支撑层与 ws 薄封装分层同前述规划 |
+| **核心/ROS2 分层** | 核心 `joyarm_core/`（ROS2-free）+ colcon 工作空间 `joyarm_ros2_ws/src/`（rclpy，规划见 §1.4）；纯算法支撑层与 ws 薄封装分层同前述规划 |
 | **设备模型** | `Arm` 基类（本体+末端）直接持有两个后端；`arm.fkine()` 运动学门面，`arm.end_open()` 操作末端 |
 | **Backend 三层** | `Backend` → `BackendMas/BackendEnd` → 具体型号；按硬件类型、再按型号派生 |
 | **单向导入、无环** | `arms` import `robotics/safety/backends`；后者不 import `arms`，只依赖 `utils.ArmProtocol`（依赖倒置） |
@@ -128,13 +128,13 @@ ros2 launch joyarm_node arm.launch.py
 
 ### 2.3 库边界
 
-SDK（`arm.xx`）→ `joyarm/`；ROS2 节点/launch → `joyarm_ros2_ws/src/`（规划）；CLI/GUI/任务编排 → `joyarm_code/quickstart/`；教学脚本 → `joyarm_code/chapt/`。
+SDK（`arm.xx`）→ `joyarm_core/`；ROS2 节点/launch → `joyarm_ros2_ws/src/`（规划）；CLI/GUI/任务编排 → `joyarm_code/quickstart/`；教学脚本 → `joyarm_code/chapt/`。
 
 ## 3. 模块与 API 速查
 
 ### 3.1 模块导览
 
-`joyarm/`（核心 SDK）——✅ 已实现 / 🟡 占位：
+`joyarm_core/`（核心 SDK）——✅ 已实现 / 🟡 占位：
 
 | 文件 | 类 / 关键定义 | 章节 | 状态 |
 |:---|:---|:---:|:---:|
@@ -154,7 +154,7 @@ SDK（`arm.xx`）→ `joyarm/`；ROS2 节点/launch → `joyarm_ros2_ws/src/`（
 | `arms/joyarm_rebot_dm.py` | `JoyArmRebotDM(Arm)` | Ch2 | ✅ |
 | `configs/joyarm_rebot_dm.yaml` | 型号 YAML（限位 / home / backend 分段） | Ch2/7 | ✅ |
 
-`joyarm/apps/` 与 `joyarm_ros2_ws/src/joyarm_node/`：**规划落点，当前未建**（接口与结构规划见 §1.4；teleop/vision 纯算法 + joyarm_node 节点封装，Ch10/12/14 落地时创建）。
+`joyarm_core/apps/` 与 `joyarm_ros2_ws/src/joyarm_node/`：**规划落点，当前未建**（接口与结构规划见 §1.4；teleop/vision 纯算法 + joyarm_node 节点封装，Ch10/12/14 落地时创建）。
 
 `chapt/` 与 `test/`：
 
@@ -273,7 +273,7 @@ ArmProtocol  # @runtime_checkable Protocol——算法层最小本体契约
 
 > ⚠️ **每次 `joyarm_code/` 发生任何变化后（新增 / 修改 / 删除 `.py`、`.yaml`、目录结构、ws 功能包、章节脚本），必须同步更新本文件**，使其与代码保持一致；README 按受众需要同步：
 >
-> - 公开 API（`joyarm/__init__.py` 的 `__all__` 导出）变化 → 更新本文件「3.3 API 速查」与「3.1 模块导览」；
+> - 公开 API（`joyarm_core/__init__.py` 的 `__all__` 导出）变化 → 更新本文件「3.3 API 速查」与「3.1 模块导览」；
 > - 目录 / 文件结构变化 → 更新本文件「1.1 目录树」（ws 部分含「1.4」）与 README「目录结构」；
 > - 安装 / 用法 / 示例 / 章节落地状态变化 → 更新 README 对应小节；
 > - 架构 / 约定变化 → 更新本文件 §1-2 与 README「基本架构」中的相应概念。

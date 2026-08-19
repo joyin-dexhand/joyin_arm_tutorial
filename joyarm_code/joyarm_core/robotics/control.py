@@ -8,8 +8,8 @@
 - **Part 3 力控制（Ch9）**：六维力传感器抽象 + 纯力控 / 力位混合 /
   阻抗 / 导纳。
 
-依赖：Ch4 :mod:`joyarm.robotics.jacobian`、Ch8 :mod:`joyarm.robotics.dynamics`、
-Ch5 :mod:`joyarm.robotics.trajectory`。按有 / 无力传感器分支。
+依赖：Ch4 :mod:`joyarm_core.robotics.jacobian`、Ch8 :mod:`joyarm_core.robotics.dynamics`、
+Ch5 :mod:`joyarm_core.robotics.trajectory`。按有 / 无力传感器分支。
 
 对应章节：Ch6 / Ch8 / Ch9。
 当前状态：仅签名 + docstring + ``raise NotImplementedError("ChN 实现")``。
@@ -51,7 +51,7 @@ __all__ = [
 def joint_position_control(arm, q_target: np.ndarray, kp: float, kd: float):
     """§6.1 单关节闭环位置控制。
 
-    :param arm: :class:`joyarm.arms.arm.Arm` 实例。
+    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例。
     :param q_target: ``(n,)`` 目标关节角。
     :param kp: 位置增益。
     :param kd: 速度增益。
@@ -78,7 +78,7 @@ def torque_control(arm, tau_target: np.ndarray):
 def arm_position_control(arm, T_target: np.ndarray, q0=None):
     """§6.2 整机位置：IK → 6 关节角 → 下发。
 
-    :param arm: :class:`joyarm.arms.arm.Arm` 实例。
+    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例。
     :param T_target: ``(4,4)`` 目标末端位姿。
     :param q0: IK 初值。
     """
@@ -96,7 +96,7 @@ def arm_velocity_control(arm, twist_target):
 class ControlLoop:
     """实时控制循环：每 tick 读状态 → 策略 → 下发。
 
-    消费 :class:`joyarm.robotics.trajectory.Trajectory`，按 ``hz`` 频率执行。
+    消费 :class:`joyarm_core.robotics.trajectory.Trajectory`，按 ``hz`` 频率执行。
 
     用法::
 
@@ -123,8 +123,8 @@ class ControlLoop:
 def play_trajectory(arm, traj, mode: ControlMode = ControlMode.POSITION, hz: int = 200):
     """按时间序列回放轨迹（§6 例程 6/7）。
 
-    :param arm: :class:`joyarm.arms.arm.Arm` 实例。
-    :param traj: :class:`joyarm.robotics.trajectory.Trajectory`。
+    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例。
+    :param traj: :class:`joyarm_core.robotics.trajectory.Trajectory`。
     :param mode: 回放控制模式。
     :param hz: 回放频率。
     """
@@ -146,7 +146,7 @@ def computed_torque_control(
     """计算力矩控制（§8.3）。
 
     ``τ = M(q)q̈_d + C(q,q̇)q̇ + G(q) + Kp·e + Kd·ė``，依赖
-    :func:`joyarm.robotics.dynamics.idyn`。
+    :func:`joyarm_core.robotics.dynamics.idyn`。
 
     :return: ``(n,)`` 期望关节力矩。
     """
@@ -231,9 +231,9 @@ class ImpedanceControl:
     实现动力学关系 ``M_d ẍ + D_d(ẋ−ẋ_d) + K_d(x−x_d) = F_ext``。
 
     - 构造参数 ``K_d, D_d, M_d``（6×6 笛卡尔，默认对角）=
-      :class:`~joyarm.utils.types.ComplianceParams` 的 ``K/D/M``。
+      :class:`~joyarm_core.utils.types.ComplianceParams` 的 ``K/D/M``。
     - 有力传感器：用实测 ``F_ext``；无力传感器：用关节力矩估计。
-    - 需 Ch8 :mod:`joyarm.robotics.dynamics` 做重力 / 科氏补偿。
+    - 需 Ch8 :mod:`joyarm_core.robotics.dynamics` 做重力 / 科氏补偿。
     """
 
     def __init__(self, K_d=None, D_d=None, M_d=None, **kwargs):
@@ -248,7 +248,7 @@ class AdmittanceControl:
     积分 ``M_a ẍ + D_a ẋ + K_a(x−x_0) = F_ext`` → 位姿偏移 ``Δx`` →
     喂给 Part1 位置内环。
 
-    - 构造参数 ``K_a, D_a, M_a`` = :class:`~joyarm.utils.types.ComplianceParams` 的 ``K/D/M``。
+    - 构造参数 ``K_a, D_a, M_a`` = :class:`~joyarm_core.utils.types.ComplianceParams` 的 ``K/D/M``。
     - 同样支持有 / 无力传感器分支。
     """
 
@@ -259,5 +259,5 @@ class AdmittanceControl:
 
 
 def compute_cartesian_impedance(arm, K_d=None, D_d=None, **kwargs):
-    """底层计算，复用 :func:`joyarm.robotics.dynamics.cartesian_inertia`。"""
+    """底层计算，复用 :func:`joyarm_core.robotics.dynamics.cartesian_inertia`。"""
     raise NotImplementedError("compute_cartesian_impedance 待 Ch9 实现")

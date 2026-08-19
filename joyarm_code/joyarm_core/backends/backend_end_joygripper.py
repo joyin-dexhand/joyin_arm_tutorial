@@ -1,8 +1,8 @@
 """``BackendEndJoyGripper`` —— JoyArm 两指夹爪真机后端。
 
 基于 CAN 总线驱动两指夹爪（ID ``0x07``，与 6 个关节电机 ``0x01~0x06`` 区分）。
-派生自 :class:`~joyarm.backends.backend_end.BackendEnd`，Ch13 实现；当前为占位。
-是 :class:`~joyarm.arms.arm.Arm` 末端执行器的通信载体（``Arm.backend_end``）。
+派生自 :class:`~joyarm_core.backends.backend_end.BackendEnd`，Ch13 实现；当前为占位。
+是 :class:`~joyarm_core.arms.arm.Arm` 末端执行器的通信载体（``Arm.backend_end``）。
 """
 from __future__ import annotations
 

@@ -14,7 +14,7 @@ import sys
 import numpy as np
 import pytest
 
-# 把 joyarm_code/ 父目录加进 sys.path，使 ``import joyarm`` 可达
+# 把 joyarm_code/ 父目录加进 sys.path，使 ``import joyarm_core`` 可达
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _CODE_ROOT = os.path.dirname(_THIS_DIR)  # .../joyarm_code
 if _CODE_ROOT not in sys.path:
@@ -45,6 +45,6 @@ def random_R(rng):
     k = v / np.linalg.norm(v)
     theta = rng.uniform(0.0, 2.0 * np.pi)
     # 用 axis_angle_to_R 构造（已归一化轴）
-    from joyarm.utils.transforms import axis_angle_to_R
+    from joyarm_core.utils.transforms import axis_angle_to_R
 
     return axis_angle_to_R(k, theta)

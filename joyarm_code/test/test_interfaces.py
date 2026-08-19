@@ -1,6 +1,6 @@
 """``ArmProtocol`` 契约测试：成员钉扎 / 实现一致性 / 鸭子类型充分性 / 负控 / 依赖方向。
 
-验证 ``joyarm/utils/interfaces.py`` 定义的协议**充分、不冗余、有效**：真实
+验证 ``joyarm_core/utils/interfaces.py`` 定义的协议**充分、不冗余、有效**：真实
 ``JoyArmRebotDM`` 与仅实现协议成员的 ``FakeArm``（2 关节平面臂手写 FK）均满足
 契约；缺任一成员即判定失败；``robotics`` / ``safety`` 不 import ``arms``。
 """
@@ -16,11 +16,11 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm.arms.arm import Arm
-from joyarm.robotics.fkine import fkine
-from joyarm.utils.interfaces import ArmProtocol
-from joyarm.utils.transforms import Rp_to_T
-from joyarm.utils.types import JointLimits, Pose, TcpLimits
+from joyarm_core.arms.arm import Arm
+from joyarm_core.robotics.fkine import fkine
+from joyarm_core.utils.interfaces import ArmProtocol
+from joyarm_core.utils.transforms import Rp_to_T
+from joyarm_core.utils.types import JointLimits, Pose, TcpLimits
 
 # 协议契约冻结清单（与 interfaces.py 逐字对应；有意改动时同步这里）
 PROTOCOL_ATTRS = frozenset({
@@ -30,7 +30,7 @@ PROTOCOL_ATTRS = frozenset({
 PROTOCOL_METHODS = frozenset({"frame_placement"})
 PROTOCOL_MEMBERS = PROTOCOL_ATTRS | PROTOCOL_METHODS
 
-JOYARM_ROOT = Path(importlib.import_module("joyarm").__file__).resolve().parent
+JOYARM_ROOT = Path(importlib.import_module("joyarm_core").__file__).resolve().parent
 
 
 class FakeArm:
@@ -65,7 +65,7 @@ class FakeArm:
 @pytest.fixture(scope="module")
 def arm():
     """离线 JoyArmRebotDM（默认未连接，纯计算可用）。"""
-    return importlib.import_module("joyarm").JoyArmRebotDM()
+    return importlib.import_module("joyarm_core").JoyArmRebotDM()
 
 
 @pytest.fixture
@@ -89,12 +89,12 @@ class TestContractPinning:
 
     def test_module_defines_exactly_one_object(self):
         """模块 __all__ 恰为 ["ArmProtocol"]，无其他本模块定义（无冗余）。"""
-        from joyarm.utils import interfaces
+        from joyarm_core.utils import interfaces
 
         assert interfaces.__all__ == ["ArmProtocol"]
         defined = {
             name for name, obj in vars(interfaces).items()
-            if getattr(obj, "__module__", None) == "joyarm.utils.interfaces"
+            if getattr(obj, "__module__", None) == "joyarm_core.utils.interfaces"
         }
         assert defined == {"ArmProtocol"}
 
@@ -114,9 +114,9 @@ class TestProtocolSemantics:
 
     def test_top_level_reexport_identity(self):
         """顶层再导出与源定义同源且列入 __all__。"""
-        joyarm = importlib.import_module("joyarm")
-        assert joyarm.ArmProtocol is ArmProtocol
-        assert "ArmProtocol" in joyarm.__all__
+        joyarm_core = importlib.import_module("joyarm_core")
+        assert joyarm_core.ArmProtocol is ArmProtocol
+        assert "ArmProtocol" in joyarm_core.__all__
 
 
 # ============================================================
@@ -254,7 +254,7 @@ class TestNegativeControls:
 def _absolute_imports(path: Path) -> list:
     """AST 解析文件的全部 import，相对导入解析为绝对模块名。"""
     rel = path.relative_to(JOYARM_ROOT).with_suffix("")
-    package = ("joyarm",) + rel.parts[:-1]
+    package = ("joyarm_core",) + rel.parts[:-1]
     mods = []
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Import):
@@ -271,7 +271,7 @@ def _absolute_imports(path: Path) -> list:
 
 class TestDependencyDirection:
     def test_algorithm_layer_never_imports_arms(self):
-        """依赖倒置：robotics/、safety/、interfaces.py 禁止 import joyarm.arms。"""
+        """依赖倒置：robotics/、safety/、interfaces.py 禁止 import joyarm_core.arms。"""
         files = [*(JOYARM_ROOT / "robotics").glob("*.py"),
                  *(JOYARM_ROOT / "safety").glob("*.py"),
                  JOYARM_ROOT / "utils" / "interfaces.py"]
@@ -279,12 +279,12 @@ class TestDependencyDirection:
             f"{f.relative_to(JOYARM_ROOT)} -> {m}"
             for f in files
             for m in _absolute_imports(f)
-            if m == "joyarm.arms" or m.startswith("joyarm.arms.")
+            if m == "joyarm_core.arms" or m.startswith("joyarm_core.arms.")
         ]
         assert violations == []
 
     def test_interfaces_only_depends_on_utils_types(self):
-        """interfaces.py 处最底层：joyarm 内依赖仅 utils.types。"""
+        """interfaces.py 处最底层：joyarm_core 内依赖仅 utils.types。"""
         mods = [m for m in _absolute_imports(JOYARM_ROOT / "utils" / "interfaces.py")
-                if m.startswith("joyarm")]
-        assert mods == ["joyarm.utils.types"]
+                if m.startswith("joyarm_core")]
+        assert mods == ["joyarm_core.utils.types"]

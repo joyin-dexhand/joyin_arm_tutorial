@@ -1,4 +1,4 @@
-"""``joyarm`` —— JoyArm 机械臂教程核心 SDK 库（ROS2-free）。
+"""``joyarm_core`` —— JoyArm 机械臂教程核心 SDK 库（ROS2-free）。
 
 分层架构（仅允许向下依赖；``arms`` 作富门面 ``arm.xx``）::
 
@@ -20,7 +20,7 @@
 
 使用方式::
 
-    from joyarm import JoyArmRebotDM
+    from joyarm_core import JoyArmRebotDM
 
     arm = JoyArmRebotDM()            # 默认未连接（离线）；Arm = 本体 + 末端
     Q  = arm.rand_q(size=100_000)    # 限位内采样 (N,6)

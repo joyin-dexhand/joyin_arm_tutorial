@@ -1,4 +1,4 @@
-"""``joyarm.utils.transforms`` 的纯 numpy 单元测试。
+"""``joyarm_core.utils.transforms`` 的纯 numpy 单元测试。
 
 覆盖全部 23 个公共函数，并包含三条 bug 回归用例：
 
@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm.utils import transforms as T
+from joyarm_core.utils import transforms as T
 
 
 # ============================================================

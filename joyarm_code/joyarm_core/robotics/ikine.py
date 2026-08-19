@@ -30,13 +30,13 @@ def ikine(
 ) -> IKResult:
     """逆运动学：目标位姿 → 关节角。
 
-    :param arm: :class:`joyarm.arms.arm.Arm` 实例（满足 :class:`~joyarm.utils.interfaces.ArmProtocol`）。
+    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
     :param T_target: ``(4,4)`` 目标齐次位姿。
     :param q0: ``(n,)`` 初值；缺省用 ``arm.q_neutral``。
     :param frame: 末端帧名/索引；缺省为 ``arm.ee_frame_name``。
     :param tol: 收敛精度（末端位姿残差范数）。
     :param iters: 最大迭代次数。
-    :return: :class:`~joyarm.utils.types.IKResult`。
+    :return: :class:`~joyarm_core.utils.types.IKResult`。
     """
     raise NotImplementedError(
         "ikine 待实现"
@@ -56,6 +56,6 @@ def ikine_constrained(
 
     在 :func:`ikine` 基础上增加关节软/硬限位约束，确保解在可行域内。
 
-    :return: :class:`~joyarm.utils.types.IKResult`（解满足 ``arm.joint_limits``）。
+    :return: :class:`~joyarm_core.utils.types.IKResult`（解满足 ``arm.joint_limits``）。
     """
     raise NotImplementedError("ikine_constrained 待 Ch3 实现")

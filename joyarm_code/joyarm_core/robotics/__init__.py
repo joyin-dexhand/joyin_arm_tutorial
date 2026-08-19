@@ -1,13 +1,13 @@
-"""``joyarm.robotics`` —— 算法层子包。
+"""``joyarm_core.robotics`` —— 算法层子包。
 
-收口全部机器人算法实现（仅依赖 :mod:`joyarm.utils` 基础层与 numpy）：
+收口全部机器人算法实现（仅依赖 :mod:`joyarm_core.utils` 基础层与 numpy）：
 
-- :mod:`joyarm.robotics.fkine`：正运动学（Ch2，已实现）。
-- :mod:`joyarm.robotics.ikine`：逆运动学（Ch3）。
-- :mod:`joyarm.robotics.jacobian`：速度运动学与静力学（Ch4）。
-- :mod:`joyarm.robotics.trajectory`：轨迹生成（Ch5）。
-- :mod:`joyarm.robotics.dynamics`：正/逆动力学（Ch8）。
-- :mod:`joyarm.robotics.control`：运动学/动力学/力控（Ch6/Ch8/Ch9）。
+- :mod:`joyarm_core.robotics.fkine`：正运动学（Ch2，已实现）。
+- :mod:`joyarm_core.robotics.ikine`：逆运动学（Ch3）。
+- :mod:`joyarm_core.robotics.jacobian`：速度运动学与静力学（Ch4）。
+- :mod:`joyarm_core.robotics.trajectory`：轨迹生成（Ch5）。
+- :mod:`joyarm_core.robotics.dynamics`：正/逆动力学（Ch8）。
+- :mod:`joyarm_core.robotics.control`：运动学/动力学/力控（Ch6/Ch8/Ch9）。
 """
 from .fkine import fkine
 from .ikine import ikine, ikine_constrained

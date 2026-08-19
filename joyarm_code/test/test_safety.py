@@ -1,4 +1,4 @@
-"""``joyarm.safety`` 子包的单元测试：包导出契约 / Ch11 占位语义 /
+"""``joyarm_core.safety`` 子包的单元测试：包导出契约 / Ch11 占位语义 /
 ``joint.clamp_to_limits``（自 ``utils/types.py`` 迁入）。"""
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm.safety import joint
-from joyarm.utils import types
+from joyarm_core.safety import joint
+from joyarm_core.utils import types
 
 
 # ============================================================
@@ -158,7 +158,7 @@ class TestClampToLimits:
 # 模块契约（包导出 / 三层导入一致性）
 # ============================================================
 class TestPackageContract:
-    """``joyarm.safety`` 子包导出契约与迁移后导入路径一致性。"""
+    """``joyarm_core.safety`` 子包导出契约与迁移后导入路径一致性。"""
 
     EXPECTED = [
         "clamp_to_limits",
@@ -172,12 +172,12 @@ class TestPackageContract:
     ]
 
     def test_all_matches_expected(self):
-        import joyarm.safety as pkg
+        import joyarm_core.safety as pkg
 
         assert pkg.__all__ == self.EXPECTED
 
     def test_all_names_gettable_no_duplicates(self):
-        import joyarm.safety as pkg
+        import joyarm_core.safety as pkg
 
         assert [n for n in pkg.__all__ if not hasattr(pkg, n)] == []
         dups = [n for n in set(pkg.__all__) if pkg.__all__.count(n) > 1]
@@ -185,29 +185,29 @@ class TestPackageContract:
 
     def test_layer_modules_exist(self):
         # 五个分层模块：关节 / 末端 / 整机 / 外部 / 跨层
-        import joyarm.safety as pkg
+        import joyarm_core.safety as pkg
 
         for mod in ("joint", "tcp", "machine", "external", "supervisor"):
             assert hasattr(pkg, mod), f"缺少分层模块 {mod}"
 
     def test_clamp_reexported_identically(self):
-        # 三条路径（safety.joint / safety / joyarm）指向同一对象
-        import joyarm
-        import joyarm.safety as pkg
+        # 三条路径（safety.joint / safety / joyarm_core）指向同一对象
+        import joyarm_core
+        import joyarm_core.safety as pkg
 
         assert (
             joint.clamp_to_limits
             is pkg.clamp_to_limits
-            is joyarm.clamp_to_limits
+            is joyarm_core.clamp_to_limits
         )
-        assert "clamp_to_limits" in joyarm.__all__
+        assert "clamp_to_limits" in joyarm_core.__all__
 
     def test_utils_no_longer_exports_clamp(self):
         # 迁移后 utils 不再导出（依赖方向 safety→utils，反向禁止）
-        import joyarm.utils
+        import joyarm_core.utils
 
-        assert "clamp_to_limits" not in joyarm.utils.__all__
-        assert not hasattr(joyarm.utils, "clamp_to_limits")
+        assert "clamp_to_limits" not in joyarm_core.utils.__all__
+        assert not hasattr(joyarm_core.utils, "clamp_to_limits")
 
 
 # ============================================================
@@ -217,7 +217,7 @@ class TestCh11Placeholders:
     """除 clamp_to_limits 外，占位符号调用统一抛 NotImplementedError。"""
 
     def test_placeholders_raise_not_implemented(self):
-        from joyarm.safety import (
+        from joyarm_core.safety import (
             ExternalCollisionDetector,
             SafetySupervisor,
             SelfCollisionChecker,
@@ -225,7 +225,7 @@ class TestCh11Placeholders:
             joint_limits_check,
             tcp_limits_check,
         )
-        from joyarm.utils.types import ArmState, JointLimits, TcpLimits
+        from joyarm_core.utils.types import ArmState, JointLimits, TcpLimits
 
         state, jl, tl = ArmState(), JointLimits(), TcpLimits()
         with pytest.raises(NotImplementedError):

@@ -17,13 +17,13 @@
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt14_ui_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm/：vision（视觉）/ viz（可视化/UI）/ arm / ros2。
+  · 可复用核心库 joyarm_code/joyarm_core/：vision（视觉）/ viz（可视化/UI）/ arm / ros2。
   · 图示：配图放 docs/images/chapt14_ui/（各接口示意/标定图），未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第十二章](chapt12_teleop.md) 体感/VR、[第十五章](chapt15_project.md) 综合项目）。
   · 未知参数/型号用 *待补充*。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt14_ui_demo.py（待建）、joyarm/apps/vision.py、viz.py（待建，建议 quickstart/ 或 joyarm/apps/）、arms/arm.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）。
+【本章可引用的脚本/库】chapt14_ui_demo.py（待建）、joyarm_core/apps/vision.py、viz.py（待建，建议 quickstart/ 或 joyarm_core/apps/）、arms/arm.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）。
 -->
 
 ## 1 UI界面
@@ -31,7 +31,7 @@
 <!-- ✍️ 本节写作要点：
   · 目标：讲清机械臂控制/监控的图形界面设计——布局、关键控件、状态显示与指令下发。
   · 给"界面布局示意"（图占位）+ "关键功能表"（功能|交互方式|对应后端|说明）。
-  · 引用 viz.py（待建，建议 quickstart/ 或 joyarm/apps/），用脚本引用句式。
+  · 引用 viz.py（待建，建议 quickstart/ 或 joyarm_core/apps/），用脚本引用句式。
   · 收尾 > 💡：好的 UI 把复杂能力封装成一两个按钮，降低使用门槛。
 -->
 
@@ -50,7 +50,7 @@
   · 已有两条要点（手眼标定 eye-in-hand/eye-to-hand；经典视觉检测/位姿估计、VLM 理解），建议：
     - 一张"手眼标定对比表"（方式|相机位置|标定对象|适用场景|备注）；
     - 一张"经典视觉 vs VLM 对比表"（方法|输出|数据需求|实时性|可解释性|适用）。
-  · 引用 joyarm/apps/vision.py，用脚本引用句式；给出"识别结果 → 末端目标位姿"的衔接（用到 [第三章](chapt3_ikine.md) IK）。
+  · 引用 joyarm_core/apps/vision.py，用脚本引用句式；给出"识别结果 → 末端目标位姿"的衔接（用到 [第三章](chapt3_ikine.md) IK）。
 -->
 
 * 手眼标定（eye-in-hand / eye-to-hand）

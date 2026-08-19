@@ -2,7 +2,7 @@
 
 统一各类硬件（多轴本体 / 末端执行器 / …）的通信入口，仅约束最通用的
 「连接 / 断开 / 读状态」契约；具体指令接口由硬件类型层扩展。
-继承层次见 :mod:`joyarm.backends`。
+继承层次见 :mod:`joyarm_core.backends`。
 """
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ __all__ = ["Backend"]
 class Backend(ABC):
     """所有硬件通信后端的抽象根。
 
-    子类先按**硬件类型**派生（:class:`~joyarm.backends.backend_mas.BackendMas` /
-    :class:`~joyarm.backends.backend_end.BackendEnd`），
+    子类先按**硬件类型**派生（:class:`~joyarm_core.backends.backend_mas.BackendMas` /
+    :class:`~joyarm_core.backends.backend_end.BackendEnd`），
     再按**具体型号**派生（如 ``BackendMasRebotDM``）。
     """
 

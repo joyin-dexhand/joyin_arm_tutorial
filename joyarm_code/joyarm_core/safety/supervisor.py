@@ -1,9 +1,9 @@
 """跨层监控与安全策略（§11.4）。
 
-:class:`StateMonitor` 消费 :class:`~joyarm.utils.types.ArmState` 输出
+:class:`StateMonitor` 消费 :class:`~joyarm_core.utils.types.ArmState` 输出
 :class:`list[Violation]`（内部三层：关节 §11.1 / 末端 §11.2 / 整机 §11.3），
 :class:`SafetySupervisor` 据此发
-:class:`~joyarm.utils.types.SafetyAction`（阻尼保持 / 构型维持 / 急停等
+:class:`~joyarm_core.utils.types.SafetyAction`（阻尼保持 / 构型维持 / 急停等
 策略可换）。
 
 对应章节：Ch11（``chapt11_safety.md`` §11.4）。当前状态：仅签名 + docstring +

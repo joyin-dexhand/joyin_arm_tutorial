@@ -25,7 +25,7 @@ def jac(
 ) -> np.ndarray:
     """雅可比矩阵 ``J(q)``。
 
-    :param arm: :class:`joyarm.arms.arm.Arm` 实例（满足 :class:`~joyarm.utils.interfaces.ArmProtocol`）。
+    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
     :param q: ``(n,)`` 关节角，弧度。
     :param frame: 帧名/索引；缺省为末端帧。
     :param ref: 参考系：``"local"``（body）/ ``"world"``（基）。

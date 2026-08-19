@@ -18,7 +18,7 @@
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 数学：行内 $...$、独立 $$...$$，矩阵用 \bm{J}、\bm{F}，速度记法 $\dot{q}$、$\dot{x}$；可沿用前章记号。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt4_jacobian_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm/：jacobian（雅可比）/ fkine / ikine。
+  · 可复用核心库 joyarm_code/joyarm_core/：jacobian（雅可比）/ fkine / ikine。
   · 图示：配图放 docs/images/chapt4_jacobian/，未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接（如 [第二章](chapt2_fkine.md)、[第六章](chapt6_control.md)）。

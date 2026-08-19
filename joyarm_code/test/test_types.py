@@ -1,4 +1,4 @@
-"""``joyarm.utils.types`` 的单元测试：模块契约 / 枚举 / 数据类读写 / 序列化 /
+"""``joyarm_core.utils.types`` 的单元测试：模块契约 / 枚举 / 数据类读写 / 序列化 /
 相等性。"""
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm.utils import types
-from joyarm.utils import transforms as T
+from joyarm_core.utils import types
+from joyarm_core.utils import transforms as T
 
 # JointLimits 的 10 个数组字段名（读/写与默认值独立性测试共用）
 JOINT_LIMITS_ARRAY_FIELDS = [
@@ -214,19 +214,19 @@ class TestModuleContract:
         assert missing == [], f"存在未列入 __all__ 的公共名: {missing}"
 
     def test_reexported_identically_at_all_levels(self):
-        # 三条导入路径（types / joyarm.utils / joyarm）指向同一对象，
+        # 三条导入路径（types / joyarm_core.utils / joyarm_core）指向同一对象，
         # 且均列入两个上层包的 __all__
-        import joyarm
-        import joyarm.utils
+        import joyarm_core
+        import joyarm_core.utils
 
         for name in types.__all__:
             assert (
                 getattr(types, name)
-                is getattr(joyarm.utils, name)
-                is getattr(joyarm, name)
+                is getattr(joyarm_core.utils, name)
+                is getattr(joyarm_core, name)
             ), f"{name} 三层导入不是同一对象"
-            assert name in joyarm.__all__
-            assert name in joyarm.utils.__all__
+            assert name in joyarm_core.__all__
+            assert name in joyarm_core.utils.__all__
 
 
 # ============================================================

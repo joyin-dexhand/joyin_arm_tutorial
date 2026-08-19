@@ -1,7 +1,7 @@
 """``BackendMasRebotDM`` —— JoyArm（reBot-DevArm，达妙 DM 电机）多轴本体真机后端。
 
 基于 CAN 总线驱动 6 个关节电机（ID ``0x01~0x06``）。派生自
-:class:`~joyarm.backends.backend_mas.BackendMas`，Ch6 实现；当前为占位。
+:class:`~joyarm_core.backends.backend_mas.BackendMas`，Ch6 实现；当前为占位。
 """
 from __future__ import annotations
 

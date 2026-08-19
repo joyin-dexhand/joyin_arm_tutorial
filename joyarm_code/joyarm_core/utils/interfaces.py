@@ -1,4 +1,4 @@
-"""``joyarm.utils.interfaces`` —— 核心接口协议（依赖倒置）。
+"""``joyarm_core.utils.interfaces`` —— 核心接口协议（依赖倒置）。
 
 - :class:`ArmProtocol`：``robotics`` / ``safety`` 算法层对机械臂对象的最小结构化契约。保证 **单向依赖、无环**——
 
@@ -24,7 +24,7 @@ class ArmProtocol(Protocol):
 
     任何具备下列属性/方法的对象均可作为 ``arm`` 传入算法函数（结构化鸭子类型）：
 
-    :class:`~joyarm.arms.arm.Arm` 及其子类即满足本契约。
+    :class:`~joyarm_core.arms.arm.Arm` 及其子类即满足本契约。
     """
 
     # ---- pinocchio 模型 / 数据 ----

@@ -134,7 +134,7 @@ class JoyArmRebotDM(Arm):
         try:
             from importlib.resources import files
 
-            ref = files("joyarm").joinpath(f"configs/{name}.yaml")
+            ref = files("joyarm_core").joinpath(f"configs/{name}.yaml")
             path = str(ref)
             if not os.path.isfile(path):
                 return None
@@ -166,14 +166,14 @@ class JoyArmRebotDM(Arm):
         try:
             from importlib.resources import files
 
-            # 以顶层 joyarm/ 包为根（robots/ 在 joyarm/robots/）
-            ref = files("joyarm").joinpath(rel)
+            # 以顶层 joyarm_core/ 包为根（robots/ 在 joyarm_core/robots/）
+            ref = files("joyarm_core").joinpath(rel)
             path = str(ref)
             if os.path.isfile(path):
                 return path
         except Exception:
             pass
 
-        # 回退：相对顶层 joyarm/ 包目录解析（本文件在 joyarm/arms/，需上溯一级）
+        # 回退：相对顶层 joyarm_core/ 包目录解析（本文件在 joyarm_core/arms/，需上溯一级）
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         return os.path.join(here, rel)

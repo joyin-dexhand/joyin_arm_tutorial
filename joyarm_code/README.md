@@ -1,6 +1,6 @@
 # `joyarm_code/` —— JoyArm 机械臂教程配套代码库
 
-> JoyArm 教程的代码工程根目录：核心 SDK 库 [`joyarm/`](joyarm/)（ROS2-free）、章节示例
+> JoyArm 教程的代码工程根目录：核心 SDK 库 [`joyarm_core/`](joyarm_core/)（ROS2-free）、章节示例
 > [`chapt/`](chapt/) 与测试 [`test/`](test/)；ROS2 工作空间 `joyarm_ros2_ws/` 规划中（第十章落地）。
 > 教程正文（原理讲解）见[线上教程站点](https://joyin-dexhand.github.io/joyin_arm_tutorial/)；
 > 面向开发者 / Agent 的维护文档见 [`AGENTS.md`](AGENTS.md)。
@@ -9,20 +9,20 @@
 
 ```
 joyarm_code/
-├── joyarm/          # ★ 核心 SDK（ROS2-free）：arms / robotics / safety / backends / utils / robots / configs
+├── joyarm_core/          # ★ 核心 SDK（ROS2-free）：arms / robotics / safety / backends / utils / robots / configs
 ├── joyarm_ros2_ws/  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 AGENTS.md §1.4）
 ├── chapt/           # 章节教学示例脚本（一次性，不复用）
 ├── test/            # pytest 测试套件
 ├── quickstart/      # 快速上手（CLI/GUI/任务编排，占位）
-└── pyproject.toml   # 工程配置：可编辑安装 joyarm（ws 功能包由 colcon 另行构建）
+└── pyproject.toml   # 工程配置：可编辑安装 joyarm_core（ws 功能包由 colcon 另行构建）
 ```
 
 ## 2. 基本架构
 
-核心包 `joyarm` 自底向上分层，导入单向、无环：
+核心包 `joyarm_core` 自底向上分层，导入单向、无环：
 
 ```
-   joyarm_ros2_ws/src/joyarm_node  （ROS2 功能包：joyarm(pip) + rclpy(ROS)；规划中）
+   joyarm_ros2_ws/src/joyarm_node  （ROS2 功能包：joyarm_core(pip) + rclpy(ROS)；规划中）
               ↓ 依赖
    ┌──────────────────────────────────────────────┐
    │  arms/      设备模型：Arm（本体+末端） · joyarm_rebot_dm  ← arm.xx 门面
@@ -47,17 +47,17 @@ joyarm_code/
 ```bash
 cd joyarm_code
 uv venv --python 3.10 && source .venv/bin/activate
-uv pip install -e .            # 核心 joyarm（含 numpy/pin/pyyaml）
+uv pip install -e .            # 核心 joyarm_core（含 numpy/pin/pyyaml）
 ```
 
 **ROS2 部分（第十章起）**：工作空间 `joyarm_ros2_ws/` 与环境步骤**规划中**，落地时补充（规划见 [`AGENTS.md`](AGENTS.md) §1.4）。
 
-> 安装后 `import joyarm` 全局可用；`pytest` 无需手动设 `PYTHONPATH`（见 `pyproject.toml`）。核心包不依赖 rclpy。
+> 安装后 `import joyarm_core` 全局可用；`pytest` 无需手动设 `PYTHONPATH`（由 `test/conftest.py` 注入 `sys.path`）。核心包不依赖 rclpy。
 
 ## 4. 快速开始（离线，无需真机）
 
 ```python
-from joyarm import JoyArmRebotDM
+from joyarm_core import JoyArmRebotDM
 
 arm = JoyArmRebotDM()              # 默认未连接（离线）；Arm = 本体 + 末端，自动加载 configs + URDF
 Q   = arm.rand_q(size=100_000)     # 软限位内采样 (N,6)

@@ -42,7 +42,7 @@ def fkine(
 ):
     """正运动学：关节角 → 末端（或任意帧）位姿。
 
-    :param arm: :class:`joyarm.arms.arm.Arm` 实例（满足 :class:`~joyarm.utils.interfaces.ArmProtocol`）。
+    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
     :param q: ``(n,)`` 或 ``(N,n)`` 关节角，弧度。
     :param frame: 帧名（``str``）或帧索引（``int``）；缺省为末端帧。
     :param rep: 返回表示，``"T"``/``"pos"``/``"se3"``。

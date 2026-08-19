@@ -1,7 +1,7 @@
 """``BackendMas`` —— 多轴本体（MAS）通信后端抽象基类。
 
-负责多轴机械臂**本体**（关节电机）的通信；派生自通用 :class:`~joyarm.backends.backend.Backend`。
-具体型号如 :class:`~joyarm.backends.backend_mas_rebot_dm.BackendMasRebotDM`。
+负责多轴机械臂**本体**（关节电机）的通信；派生自通用 :class:`~joyarm_core.backends.backend.Backend`。
+具体型号如 :class:`~joyarm_core.backends.backend_mas_rebot_dm.BackendMasRebotDM`。
 """
 from __future__ import annotations
 

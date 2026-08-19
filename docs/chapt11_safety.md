@@ -17,7 +17,7 @@
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt11_safety_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm/：safety（安全）/ arm / jacobian（碰撞检测/奇异）/ control（急停）。
+  · 可复用核心库 joyarm_code/joyarm_core/：safety（安全）/ arm / jacobian（碰撞检测/奇异）/ control（急停）。
   · 图示：配图放 docs/images/chapt11_safety/（分级防护示意），未就绪用 ![图片占位：描述]()；防护流程可用 mermaid。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意（安全相关尤需醒目）。
   · 阈值未知用 *待补充*；跨章引用用相对链接（如 [第四章](chapt4_jacobian.md) 雅可比、[第九章](chapt9_force.md) 力觉）。

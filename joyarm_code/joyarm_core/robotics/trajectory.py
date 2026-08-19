@@ -1,13 +1,13 @@
 """轨迹生成（轨迹层，Ch5 占位）。
 
 在关节空间或笛卡尔空间生成平滑轨迹（时间序列），供
-:mod:`joyarm.robotics.control` 回放。
+:mod:`joyarm_core.robotics.control` 回放。
 
 - **关节空间**（§5.1）：三次 / 五次多项式、抛物线过渡线性（LSPB）、多点途经。
 - **笛卡尔空间**（§5.2）：直线（位置线性 + 姿态 slerp）、圆弧、平滑拼接。
-- **工具**：定速重定时、轨迹校验（接 :mod:`joyarm.safety`）。
+- **工具**：定速重定时、轨迹校验（接 :mod:`joyarm_core.safety`）。
 
-:mod:`joyarm.apps.teleop` 的示教记录**直接复用**本模块的
+:mod:`joyarm_core.apps.teleop` 的示教记录**直接复用**本模块的
 :class:`Trajectory` 载体（不另定义子类）。
 
 对应章节：Ch5（``chapt5_trajectory.md`` 第五章 轨迹生成）。
@@ -44,7 +44,7 @@ __all__ = [
 class Trajectory:
     """轨迹主体：时间戳 + 采样点序列 + 元数据。
 
-    :ivar space: :class:`~joyarm.utils.types.TrajectorySpace`，关节 / 笛卡尔。
+    :ivar space: :class:`~joyarm_core.utils.types.TrajectorySpace`，关节 / 笛卡尔。
     :ivar t: ``(K,)`` 时间戳序列，秒。
     :ivar q: ``(K,n)`` 关节空间采样点（``space=JOINT`` 时使用）。
     :ivar poses: ``list[Pose]`` 笛卡尔空间采样点（``space=CARTESIAN`` 时使用）。
@@ -184,7 +184,7 @@ def cart_to_joint(
 ) -> Trajectory:
     """笛卡尔轨迹 → 关节轨迹（逐点 IK，处理奇异 / 不可达 / 多解）。
 
-    :param arm: :class:`joyarm.arms.arm.Arm` 实例。
+    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例。
     :param cart_traj: 笛卡尔空间 :class:`Trajectory`。
     :param q0: IK 初值（连续性种子）。
     :return: 关节空间 :class:`Trajectory`。
@@ -206,7 +206,7 @@ def constant_velocity_retime(traj: Trajectory, v_max: float) -> Trajectory:
 
 
 def validate(traj: Trajectory, arm) -> List[Violation]:
-    """轨迹校验：途经点是否超限位 / 奇异（接 :mod:`joyarm.safety`）。
+    """轨迹校验：途经点是否超限位 / 奇异（接 :mod:`joyarm_core.safety`）。
 
     :return: 违规列表 ``list[Violation]``。
     """

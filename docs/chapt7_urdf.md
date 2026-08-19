@@ -19,7 +19,7 @@
   · 数学/参数：选型计算用公式（力矩、惯量）；URDF 的 MDH/惯性参数未知时用 *待补充*。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt7_urdf_demo.py`，使用说明见脚本头部注释。」
     URDF 片段可用 ```xml``` 围栏展示。
-  · 可复用核心库 joyarm_code/joyarm/：fkine（用导出的 URDF 校验正运动学）。
+  · 可复用核心库 joyarm_code/joyarm_core/：fkine（用导出的 URDF 校验正运动学）。
   · 图示：配图放 docs/images/chapt7_urdf/（构型/结构/装配示意），未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第二章](chapt2_fkine.md) MDH、[第八章](chapt8_dyn.md) 动力学惯量）。

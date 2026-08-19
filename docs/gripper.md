@@ -17,7 +17,7 @@
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/xxx.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm/：gripper（夹爪控制）。
+  · 可复用核心库 joyarm_code/joyarm_core/：gripper（夹爪控制）。
   · 图示：配图放 docs/images/gripper/，未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接 [第十三章](chapt13_endeffector.md)。

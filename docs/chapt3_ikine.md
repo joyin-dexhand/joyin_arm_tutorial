@@ -19,7 +19,7 @@
   · 数学：行内 $...$、独立 $$...$$，矩阵用 \bm{T}，坐标系记法 $^A_B\bm{T}$；可沿用第二章的 $c\cdot,s\cdot$ 约定并说明"本章下同"。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt3_ikine_demo.py`，使用说明见脚本头部注释。」
     仅为说明概念时才内联短片段；脚本头部须含【功能概要】【环境与运行】注释。
-  · 可复用核心库 joyarm_code/joyarm/：ikine（逆运动学）/ fkine（正运动学，用于校验逆解）。
+  · 可复用核心库 joyarm_code/joyarm_core/：ikine（逆运动学）/ fkine（正运动学，用于校验逆解）。
   · 图示：配图放 docs/images/chapt3_ikine/，未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接（如 [第二章](chapt2_fkine.md)、[第四章](chapt4_jacobian.md)）。

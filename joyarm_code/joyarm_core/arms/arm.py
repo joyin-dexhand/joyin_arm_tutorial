@@ -66,7 +66,7 @@ class Arm:
         if not os.path.isfile(urdf_path):
             raise FileNotFoundError(
                 f"未找到 URDF 文件：{urdf_path}\n"
-                f"请将正式 URDF 放入 joyarm/robots/。"
+                f"请将正式 URDF 放入 joyarm_core/robots/。"
             )
 
         cfg = config or {}
@@ -247,7 +247,7 @@ class Arm:
         return rng.uniform(low, high, size=(size, self.n))
 
     def clamp_q(self, q: np.ndarray) -> np.ndarray:
-        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm.safety.joint.clamp_to_limits`）。"""
+        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm_core.safety.joint.clamp_to_limits`）。"""
         from ..safety.joint import clamp_to_limits
 
         return clamp_to_limits(q, self.joint_limits_soft)
@@ -263,7 +263,7 @@ class Arm:
     def frame_placement(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> np.ndarray:
         """底层单次 FK：返回指定帧在基坐标系下的 ``(4,4)`` 位姿。
 
-        **Arm 基本能力 / FK 唯一覆盖缝**：:class:`~joyarm.utils.interfaces.ArmProtocol`
+        **Arm 基本能力 / FK 唯一覆盖缝**：:class:`~joyarm_core.utils.interfaces.ArmProtocol`
         唯一方法——机械臂对象向算法层承诺"给定 q，任意帧在哪"。
         """
         fid = self._resolve_frame(frame)
@@ -285,7 +285,7 @@ class Arm:
         raise ValueError(f"找不到帧 '{frame}'")
 
     def fkine(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, rep: str = "T"):
-        """正运动学（薄委托 :func:`joyarm.robotics.fkine.fkine`，默认 pinocchio；
+        """正运动学（薄委托 :func:`joyarm_core.robotics.fkine.fkine`，默认 pinocchio；
         单点求解内核为 :meth:`frame_placement`，批量即对其循环）。"""
         from ..robotics.fkine import fkine
 
