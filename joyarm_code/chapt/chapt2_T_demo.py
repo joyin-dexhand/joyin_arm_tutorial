@@ -14,23 +14,19 @@
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 2. 进入项目根目录并创建虚拟环境（Python 3.10）
-    cd joyin_arm_tutorial
-    uv venv --python 3.10
-    source .venv/bin/activate                                   # Windows: .venv\\Scripts\\activate
+    # 2. 创建虚拟环境并同步依赖
+    cd ~/joyarm_code
+    uv sync
+    source .venv/bin/activate
+    # Linux 缺少 libxcb-cursor.so.0 时执行
+    sudo apt-get install -y libxcb-cursor0 
 
-    # 3. 安装依赖
-    uv pip install PySide6 numpy matplotlib
-    sudo apt-get install -y libxcb-cursor0 # Linux: 解决 Qt5/6 运行时缺少 libxcb-cursor.so.0 的问题
-
-    # 4. 运行本脚本
-    cd joyarm_code/chapt
+    # 3. 运行本脚本
+    cd ./chapt
     python chapt2_T_demo.py
 
-    # 5. T矩阵数值简单实例：绕 Z 轴旋转 90° + 平移 (0.5, 0.0, 0.0)
-
+    # T矩阵数值简单实例：绕 Z 轴旋转 90° + 平移 (0.5, 0.0, 0.0)
     输入下面数值到表格中，观察效果：
-
     T = [[ 0, -1, 0, 0.5],
          [ 1,  0, 0, 0.0],
          [ 0,  0, 1, 0.0],

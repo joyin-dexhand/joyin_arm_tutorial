@@ -1,48 +1,15 @@
-# ──────────────────────────────────────────────────────────────────────────
-# JoyArm 教程 Python 工程配置（核心包 joyarm）
-# 本文件位于 joyarm_code/，即 Python 工程根目录。
-# 安装：cd joyarm_code && uv pip install -e .            # venv 内可编辑安装（第 1~9 章）
-#      cd joyarm_code && python3 -m pip install --user -e .  # 系统用户级（ROS2 章节用）
-# ROS2 功能包（joyarm_node 等）在 joyarm_ros2_ws/ colcon 工作空间，另行构建。
-# ──────────────────────────────────────────────────────────────────────────
-
-[build-system]
-# setuptools>=64：支持 PEP 660（pip install -e 的 build_editable 钩子，系统 pip 22 可用）
-requires = ["setuptools>=64.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "joyarm"
+name = "joyarm_code"
 version = "0.1.0"
-description = "JoyArm 机械臂教程核心 SDK 库（ROS2-free）"
+description = "sdk-ros2-chapt code for JoyArm"
 readme = "README.md"
-requires-python = ">=3.10"
-authors = [{ name = "JoyArm" }]
+requires-python = ">=3.10,<3.12"
 dependencies = [
-    "numpy",  # 数值计算
-    "pin",    # pinocchio：URDF 加载 + 运动学/动力学（重依赖）
-    "pyyaml", # 读取 configs/*.yaml 型号配置
+    "meshcat>=0.3.2",
+    "pin>=3.9.0",
+    "numpy>=1.23.4",
+    "pyyaml>=6.0",
+    "matplotlib>=3.10.0",
+    "motorbridge>=0.4.9",
+    "pyside6>=6.5.2",
 ]
-
-[project.optional-dependencies]
-dev = ["pytest"]
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["joyarm", "joyarm.*"]
-exclude = ["test*", "chapt*", "quickstart*", "joyarm_ros2_ws*"]
-
-# 随包数据：URDF / meshes / YAML 配置（importlib.resources 解析）
-[tool.setuptools.package-data]
-joyarm = [
-    "configs/*.yaml",
-    "robots/*/urdf/*.urdf",
-    "robots/*/urdf/*.csv",
-    "robots/*/meshes/*.STL",
-    "robots/*/meshes/*.stl",
-]
-
-# ── pytest：免去 PYTHONPATH=joyarm_code ──
-[tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["test"]
