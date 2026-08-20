@@ -72,7 +72,7 @@ joyin_arm_tutorial/
 
 ### 教程各章对应的脚本文件
 
-- 各章脚本存放于 `joyarm_code/chapt/<章序_功能>.py`（如 `chapt2_T_demo.py`），仅作一次性教学示例，**优先调用**核心库 `joyarm_code/joyarm_core/` 的功能（`fkine`、`Arm` 类等）。
+- 各章脚本存放于 `joyarm_code/chapt/<章序_功能>.py`（如 `chapt2_T_demo.py`），仅作一次性教学示例，**优先调用**核心库 `joyarm_code/joyarm_core/` 的功能（`fkine`、`JoyArm` 类等）。
 - 脚本前几行必须添加使用说明段落注释：功能概要，以及新建/激活环境、安装 Python 与依赖、切换目录、运行脚本等步骤。
 - 代码规范（命名 / 注释 / 结构）与代码库维护规则见 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)，本文件不展开。
 

@@ -1,12 +1,12 @@
-"""``joyarm_core.safety`` 子包的单元测试：包导出契约 / Ch11 占位语义 /
-``joint.clamp_to_limits``（自 ``utils/types.py`` 迁入）。"""
+"""``joyarm_core.safe_monitors`` 子包的单元测试：包导出契约 / Ch11 占位语义 /
+``arm_monitor.clamp_to_limits``（自 ``utils/types.py`` 迁入）。"""
 from __future__ import annotations
 
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm_core.safety import joint
+from joyarm_core.safe_monitors import arm_monitor
 from joyarm_core.utils import types
 
 
@@ -22,19 +22,19 @@ class TestClampToLimits:
     def test_clamp_within_limits_unchanged(self):
         limits = self._make_limits(n=3, lo=-1.0, hi=1.0)
         targets = np.array([0.5, -0.5, 0.0])
-        out = joint.clamp_to_limits(targets, limits)
+        out = arm_monitor.clamp_to_limits(targets, limits)
         assert_allclose(out, targets)
 
     def test_clamp_above_max(self):
         limits = self._make_limits(n=2, lo=-1.0, hi=1.0)
         targets = np.array([1.5, 0.5])
-        out = joint.clamp_to_limits(targets, limits)
+        out = arm_monitor.clamp_to_limits(targets, limits)
         assert_allclose(out, [1.0, 0.5])
 
     def test_clamp_below_min(self):
         limits = self._make_limits(n=2, lo=-1.0, hi=1.0)
         targets = np.array([-2.0, 0.0])
-        out = joint.clamp_to_limits(targets, limits)
+        out = arm_monitor.clamp_to_limits(targets, limits)
         assert_allclose(out, [-1.0, 0.0])
 
     def test_clamp_batch_N_n(self):
@@ -43,7 +43,7 @@ class TestClampToLimits:
         targets = np.array(
             [[1.0, 0.0, -1.0], [0.2, 0.9, -0.3]]
         )
-        out = joint.clamp_to_limits(targets, limits)
+        out = arm_monitor.clamp_to_limits(targets, limits)
         assert_allclose(
             out, [[0.5, 0.0, -0.5], [0.2, 0.5, -0.3]]
         )
@@ -52,7 +52,7 @@ class TestClampToLimits:
         limits = self._make_limits(n=3, lo=-1.0, hi=1.0)
         targets = np.array([0.5, 0.5])  # 2 维，限位 3 维
         with pytest.raises(ValueError, match="不匹配"):
-            joint.clamp_to_limits(targets, limits)
+            arm_monitor.clamp_to_limits(targets, limits)
 
     def test_clamp_per_joint_different_limits(self):
         # 不同关节不同限位
@@ -61,24 +61,24 @@ class TestClampToLimits:
             q_max=np.array([1.0, 0.5, 2.0]),
         )
         targets = np.array([-2.0, 0.9, -0.5])
-        out = joint.clamp_to_limits(targets, limits)
+        out = arm_monitor.clamp_to_limits(targets, limits)
         assert_allclose(out, [-1.0, 0.5, 0.0])
 
     def test_clamp_accepts_list_input(self):
         # list / 嵌套 list 输入（内部 asarray 强转 float）
         limits = self._make_limits(n=2, lo=-1.0, hi=1.0)
         assert_allclose(
-            joint.clamp_to_limits([2.0, -2.0], limits), [1.0, -1.0]
+            arm_monitor.clamp_to_limits([2.0, -2.0], limits), [1.0, -1.0]
         )
         assert_allclose(
-            joint.clamp_to_limits([[2.0, -2.0], [0.0, 0.5]], limits),
+            arm_monitor.clamp_to_limits([[2.0, -2.0], [0.0, 0.5]], limits),
             [[1.0, -1.0], [0.0, 0.5]],
         )
 
     def test_clamp_int_targets_promoted_to_float(self):
         # int 目标数组 → float 输出
         limits = self._make_limits(n=3, lo=-1.0, hi=1.0)
-        out = joint.clamp_to_limits(np.array([0, 2, -2]), limits)
+        out = arm_monitor.clamp_to_limits(np.array([0, 2, -2]), limits)
         assert out.dtype == np.float64
         assert_allclose(out, [0.0, 1.0, -1.0])
 
@@ -87,7 +87,7 @@ class TestClampToLimits:
         limits = self._make_limits(n=3, lo=-1.0, hi=1.0)
         targets = np.array([5.0, -5.0, 0.0])
         orig = targets.copy()
-        joint.clamp_to_limits(targets, limits)
+        arm_monitor.clamp_to_limits(targets, limits)
         assert_allclose(targets, orig)
 
     def test_clamp_min_greater_than_max_raises(self):
@@ -96,11 +96,11 @@ class TestClampToLimits:
             q_min=np.array([1.0, -1.0]), q_max=np.array([-1.0, 1.0])
         )
         with pytest.raises(ValueError, match="限位配置错误"):
-            joint.clamp_to_limits(np.zeros(2), limits)
+            arm_monitor.clamp_to_limits(np.zeros(2), limits)
 
     def test_clamp_empty_targets_with_empty_limits(self):
         # 空目标 + 空限位：维度匹配（0 == 0），返回空数组
-        out = joint.clamp_to_limits(np.zeros(0), types.JointLimits())
+        out = arm_monitor.clamp_to_limits(np.zeros(0), types.JointLimits())
         assert out.shape == (0,)
 
     def test_clamp_degenerate_min_eq_max(self):
@@ -110,7 +110,7 @@ class TestClampToLimits:
         )
         for target in (-1.0, 2.0):
             assert_allclose(
-                joint.clamp_to_limits(np.array([target]), limits), [0.5]
+                arm_monitor.clamp_to_limits(np.array([target]), limits), [0.5]
             )
 
     # ---- Bug 回归：标量输入崩溃 ----
@@ -123,13 +123,13 @@ class TestClampToLimits:
         """
         limits = self._make_limits(n=3, lo=-1.0, hi=1.0)
         with pytest.raises(ValueError, match="标量|scalar"):
-            joint.clamp_to_limits(5.0, limits)
+            arm_monitor.clamp_to_limits(5.0, limits)
 
     def test_clamp_nan_targets_propagates(self):
         """NaN 目标不被裁剪修正，原样传播（clip 语义）。"""
         limits = self._make_limits(n=3, lo=-1.0, hi=1.0)
         targets = np.array([0.5, np.nan, -0.5])
-        out = joint.clamp_to_limits(targets, limits)
+        out = arm_monitor.clamp_to_limits(targets, limits)
         assert np.isnan(out[1])
         assert_allclose(out[[0, 2]], [0.5, -0.5])
 
@@ -137,7 +137,7 @@ class TestClampToLimits:
         """±inf 目标被夹到 q_max / q_min。"""
         limits = self._make_limits(n=2, lo=-1.0, hi=1.0)
         targets = np.array([np.inf, -np.inf])
-        out = joint.clamp_to_limits(targets, limits)
+        out = arm_monitor.clamp_to_limits(targets, limits)
         assert_allclose(out, [1.0, -1.0])
 
     def test_clamp_large_batch(self):
@@ -148,7 +148,7 @@ class TestClampToLimits:
         )
         rng = np.random.default_rng(99)
         targets = rng.uniform(-2.0, 2.0, size=(1000, n))
-        out = joint.clamp_to_limits(targets, limits)
+        out = arm_monitor.clamp_to_limits(targets, limits)
         assert out.shape == (1000, n)
         assert np.all(out >= -0.5 - 1e-12)
         assert np.all(out <= 0.5 + 1e-12)
@@ -158,11 +158,12 @@ class TestClampToLimits:
 # 模块契约（包导出 / 三层导入一致性）
 # ============================================================
 class TestPackageContract:
-    """``joyarm_core.safety`` 子包导出契约与迁移后导入路径一致性。"""
+    """``joyarm_core.safe_monitors`` 子包导出契约与迁移后导入路径一致性。"""
 
     EXPECTED = [
         "clamp_to_limits",
         "joint_limits_check",
+        "end_limits_check",
         "tcp_limits_check",
         "CollisionReport",
         "SelfCollisionChecker",
@@ -172,12 +173,12 @@ class TestPackageContract:
     ]
 
     def test_all_matches_expected(self):
-        import joyarm_core.safety as pkg
+        import joyarm_core.safe_monitors as pkg
 
         assert pkg.__all__ == self.EXPECTED
 
     def test_all_names_gettable_no_duplicates(self):
-        import joyarm_core.safety as pkg
+        import joyarm_core.safe_monitors as pkg
 
         assert [n for n in pkg.__all__ if not hasattr(pkg, n)] == []
         dups = [n for n in set(pkg.__all__) if pkg.__all__.count(n) > 1]
@@ -185,25 +186,25 @@ class TestPackageContract:
 
     def test_layer_modules_exist(self):
         # 五个分层模块：关节 / 末端 / 整机 / 外部 / 跨层
-        import joyarm_core.safety as pkg
+        import joyarm_core.safe_monitors as pkg
 
-        for mod in ("joint", "tcp", "machine", "external", "supervisor"):
+        for mod in ("arm_monitor", "end_monitor", "joyarm_monitor", "external_monitor", "supervisor_monitor"):
             assert hasattr(pkg, mod), f"缺少分层模块 {mod}"
 
     def test_clamp_reexported_identically(self):
-        # 三条路径（safety.joint / safety / joyarm_core）指向同一对象
+        # 三条路径（safe_monitors.arm_monitor / safe_monitors / joyarm_core）指向同一对象
         import joyarm_core
-        import joyarm_core.safety as pkg
+        import joyarm_core.safe_monitors as pkg
 
         assert (
-            joint.clamp_to_limits
+            arm_monitor.clamp_to_limits
             is pkg.clamp_to_limits
             is joyarm_core.clamp_to_limits
         )
         assert "clamp_to_limits" in joyarm_core.__all__
 
     def test_utils_no_longer_exports_clamp(self):
-        # 迁移后 utils 不再导出（依赖方向 safety→utils，反向禁止）
+        # 迁移后 utils 不再导出（依赖方向 safe_monitors→utils，反向禁止）
         import joyarm_core.utils
 
         assert "clamp_to_limits" not in joyarm_core.utils.__all__
@@ -217,7 +218,7 @@ class TestCh11Placeholders:
     """除 clamp_to_limits 外，占位符号调用统一抛 NotImplementedError。"""
 
     def test_placeholders_raise_not_implemented(self):
-        from joyarm_core.safety import (
+        from joyarm_core.safe_monitors import (
             ExternalCollisionDetector,
             SafetySupervisor,
             SelfCollisionChecker,

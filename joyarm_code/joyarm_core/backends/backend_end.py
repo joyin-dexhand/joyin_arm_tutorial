@@ -2,7 +2,7 @@
 
 负责**末端执行器**（夹爪 / 灵巧手 / 电磁吸附 / 气压吸附等）的通信；
 派生自通用 :class:`~joyarm_core.backends.backend.Backend`。
-具体型号如 :class:`~joyarm_core.backends.backend_end_joygripper.BackendEndJoyGripper`。
+具体型号如 :class:`~joyarm_core.backends.backend_end_gripper.BackendEndGripper`。
 """
 from __future__ import annotations
 

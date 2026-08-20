@@ -1,7 +1,7 @@
-"""``BackendMas`` —— 多轴本体（MAS）通信后端抽象基类。
+"""``BackendArm`` —— 多轴本体通信后端抽象基类。
 
 负责多轴机械臂**本体**（关节电机）的通信；派生自通用 :class:`~joyarm_core.backends.backend.Backend`。
-具体型号如 :class:`~joyarm_core.backends.backend_mas_rebot_dm.BackendMasRebotDM`。
+具体型号如 :class:`~joyarm_core.backends.backend_arm_dm.BackendArmDM`。
 """
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ import numpy as np
 from ..utils.types import ArmState
 from .backend import Backend
 
-__all__ = ["BackendMas"]
+__all__ = ["BackendArm"]
 
 
-class BackendMas(Backend):
+class BackendArm(Backend):
     """多轴本体通信后端抽象基类。
 
     覆盖关节电机的：连接/断开、使能/失能、状态读取、位置/速度/力矩/MIT 指令、

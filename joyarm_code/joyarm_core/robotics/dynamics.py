@@ -11,7 +11,7 @@
     求加速度"的数学函数提供（教学推导 / 控制律设计用）。整机运动可视化预演
     由兄弟包 :mod:`joyarm_ros2_ws` 的 rviz2 承担（核心包不做可视化）。
 
-默认走 **pinocchio rnea/aba/crba（黑盒）**；手写牛顿欧拉递推请在 ``Arm`` 子类覆盖。
+默认走 **pinocchio rnea/aba/crba（黑盒）**；手写牛顿欧拉递推请在 ``JoyArm`` 子类覆盖。
 
 对应章节：Ch8。
 当前状态：仅签名 + docstring + ``raise NotImplementedError("Ch8 实现")``。

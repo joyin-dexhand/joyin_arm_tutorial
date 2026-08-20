@@ -17,12 +17,12 @@
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 命令/代码：ROS2 命令用 ```shell``` 围栏；节点/话题示例可用 ```python```；脚本用"脚本引用句式"。
-  · 可复用核心库 joyarm_code/joyarm_core/：ros2（ROS2 封装）/ arm / control / fkine / ikine。
+  · 可复用核心库 joyarm_code/joyarm_core/：ros2（ROS2 封装）/ joyarm / control / fkine / ikine。
   · 图示：配图放 docs/images/chapt10_ros2/，节点关系图可用 mermaid ```mermaid```。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第七章](chapt7_urdf.md) URDF、[第六章](chapt6_control.md) 控制为 moveit2 底层）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt10_ros2_demo.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）、arms/arm.py、robotics/control.py、robotics/fkine.py、robotics/ikine.py。
+【本章可引用的脚本/库】chapt10_ros2_demo.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）、joyarms/joyarm.py、robotics/control.py、robotics/fkine.py、robotics/ikine.py。
 -->
 
 ## 1 基本概念和工作空间结构

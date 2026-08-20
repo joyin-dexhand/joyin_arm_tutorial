@@ -17,12 +17,12 @@
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/xxx.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm_core/：arm（Arm 类）/ joyarm_rebot_dm（JoyArmRebotDM 类）/ fkine / ikine / control / teleop。
+  · 可复用核心库 joyarm_code/joyarm_core/：joyarm（JoyArm 类）/ joyarm_dm（JoyArmDM 类）/ fkine / ikine / control / teleop。
   · 图示：配图放 docs/images/arm_6dof/，未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接 [第N章](chapterN_M.md)。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】arms/arm.py、arms/joyarm_rebot_dm.py、robotics/control.py、joyarm_core/apps/teleop.py。
+【本章可引用的脚本/库】joyarms/joyarm.py、joyarms/joyarm_dm.py、robotics/control.py、joyarm_core/apps/teleop.py。
 -->
 
 ## 1 操作安全须知
@@ -40,7 +40,7 @@
   · 目标：让读者安全完成整臂上电与零位标定。
   · 主体用步骤流程表（步骤|具体操作|操作目的|操作演示图），格式参考 quickstart §7。
   · 配图：上电接线图、零位标定示意，放 docs/images/arm_6dof/；未就绪用 ![图片占位：...]()。
-  · 引用 arms/joyarm_rebot_dm.py（JoyArmRebotDM 类的初始化/标定方法），用脚本引用句式。
+  · 引用 joyarms/joyarm_dm.py（JoyArmDM 类的初始化/标定方法），用脚本引用句式。
 -->
 
 ## 3 整臂关节控制
@@ -48,7 +48,7 @@
 <!-- ✍️ 本节写作要点：
   · 目标：在关节空间逐关节控制整臂（对比单关节控制，强调六个关节的协同）。
   · 建议一张"位置/速度模式"对比表（模式|适用场景|关键参数|注意事项）。
-  · 原理留到第六章，此处只给操作；引用 arms/arm.py 与 chapt 脚本。
+  · 原理留到第六章，此处只给操作；引用 joyarms/joyarm.py 与 chapt 脚本。
   · 收尾可加 > 💡：关节控制是末端控制的基础。
 -->
 
@@ -58,7 +58,7 @@
   · 目标：在操作层面让读者用末端位姿控制整臂（输入 xyz/姿态 → 机械臂自动到位）。
   · 对比"末端控制 vs 关节控制"（控制对象|输入量|直观性|适用场景），点明底层走的是正运动学（原理见第二章）。
   · ⚠️ 必须提示工作空间边界与奇异点附近可能无法到位（原理见第四章）。
-  · 引用 robotics/fkine.py / arms/arm.py，配 chapt 脚本。
+  · 引用 robotics/fkine.py / joyarms/joyarm.py，配 chapt 脚本。
 -->
 
 ## 5 示教与轨迹复现

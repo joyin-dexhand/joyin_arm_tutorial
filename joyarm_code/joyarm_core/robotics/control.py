@@ -51,7 +51,7 @@ __all__ = [
 def joint_position_control(arm, q_target: np.ndarray, kp: float, kd: float):
     """§6.1 单关节闭环位置控制。
 
-    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例。
+    :param arm: :class:`joyarm_core.joyarms.joyarm.JoyArm` 实例。
     :param q_target: ``(n,)`` 目标关节角。
     :param kp: 位置增益。
     :param kd: 速度增益。
@@ -78,7 +78,7 @@ def torque_control(arm, tau_target: np.ndarray):
 def arm_position_control(arm, T_target: np.ndarray, q0=None):
     """§6.2 整机位置：IK → 6 关节角 → 下发。
 
-    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例。
+    :param arm: :class:`joyarm_core.joyarms.joyarm.JoyArm` 实例。
     :param T_target: ``(4,4)`` 目标末端位姿。
     :param q0: IK 初值。
     """
@@ -123,7 +123,7 @@ class ControlLoop:
 def play_trajectory(arm, traj, mode: ControlMode = ControlMode.POSITION, hz: int = 200):
     """按时间序列回放轨迹（§6 例程 6/7）。
 
-    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例。
+    :param arm: :class:`joyarm_core.joyarms.joyarm.JoyArm` 实例。
     :param traj: :class:`joyarm_core.robotics.trajectory.Trajectory`。
     :param mode: 回放控制模式。
     :param hz: 回放频率。

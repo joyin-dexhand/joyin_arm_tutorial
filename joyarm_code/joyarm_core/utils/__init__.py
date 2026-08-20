@@ -4,7 +4,7 @@
 
 - :mod:`joyarm_core.utils.transforms` ：  SE(3)/SO(3) 数学（旋转矩阵、RPY、轴角、四元数、齐次变换、球面插值 slerp）。
 - :mod:`joyarm_core.utils.types`      ：  跨层共享的 ``@dataclass`` 数据类型（``ArmState``、``Pose``、``JointLimits`` 等）与枚举（``ControlMode`` 等）。
-- :mod:`joyarm_core.utils.interfaces` ：  ``ArmProtocol`` 接口契约（依赖倒置——算法层依赖它而非 ``arms``）。
+- :mod:`joyarm_core.utils.interfaces` ：  ``ArmProtocol`` 接口契约（依赖倒置——算法层依赖它而非 ``joyarms``）。
 
 """
 

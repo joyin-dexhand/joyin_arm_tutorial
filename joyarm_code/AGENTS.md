@@ -9,7 +9,7 @@
 
 ## 1. 架构细化
 
-> 补充 README「基本架构」：分层图与核心概念（`Arm` / Backend 三层 / `ArmProtocol`）见 README，本节给文件级细节。
+> 补充 README「基本架构」：分层图与核心概念（`JoyArm` / Backend 三层 / `ArmProtocol`）见 README，本节给文件级细节。
 
 ### 1.1 目录树（文件级）
 
@@ -22,24 +22,24 @@ joyarm_code/
 │   │   ├── transforms.py            #     SO(3)/SE(3) 纯 numpy 数学
 │   │   └── interfaces.py            #     ArmProtocol（算法层接口契约）
 │   ├── robotics/                    #   算法层：fkine · ikine · jacobian · trajectory · dynamics · control
-│   ├── safety/                      #   安全层（按监控层级分文件，Ch11）
-│   │   ├── joint.py                 #     关节层：clamp_to_limits + joint_limits_check
-│   │   ├── tcp.py                   #     末端层：tcp_limits_check
-│   │   ├── machine.py               #     整机层：自碰撞检测
-│   │   ├── external.py              #     外部层：外部碰撞检测
-│   │   └── supervisor.py            #     跨层：StateMonitor + SafetySupervisor
+│   ├── safe_monitors/               #   监测层（按监测对象分文件，Ch11）
+│   │   ├── arm_monitor.py           #     arm（关节）：clamp_to_limits + joint_limits_check
+│   │   ├── end_monitor.py           #     end（执行器）：end_limits_check
+│   │   ├── joyarm_monitor.py        #     joyarm（整机）：tcp_limits_check + 自碰撞检测
+│   │   ├── external_monitor.py      #     external（外部）：外部碰撞检测
+│   │   └── supervisor_monitor.py    #     跨层：StateMonitor + SafetySupervisor
 │   ├── backends/                    #   通信层（三层 Backend）
 │   │   ├── backend.py               #     Backend（通用根）
-│   │   ├── backend_mas.py           #     BackendMas（本体抽象）
+│   │   ├── backend_arm.py           #     BackendArm（本体抽象）
 │   │   ├── backend_end.py           #     BackendEnd（末端抽象）
-│   │   ├── backend_mas_rebot_dm.py  #     BackendMasRebotDM（reBot-DM 本体，占位）
-│   │   └── backend_end_joygripper.py#     BackendEndJoyGripper（Joy 夹爪，占位）
-│   ├── arms/                        #   设备模型层
-│   │   ├── arm.py                   #     Arm 基类（本体+末端，持有两个后端）
-│   │   └── joyarm_rebot_dm.py       #     JoyArmRebotDM(Arm)
+│   │   ├── backend_arm_dm.py  #     BackendArmDM（达妙 DM 本体，占位）
+│   │   └── backend_end_gripper.py#     BackendEndGripper（Joy 夹爪，占位）
+│   ├── joyarms/                        #   设备模型层
+│   │   ├── joyarm.py                   #     JoyArm 基类（本体+末端，持有两个后端）
+│   │   └── joyarm_dm.py       #     JoyArmDM(JoyArm)
 │   ├── robots/                      #   URDF + meshes 资产（运行期加载）
 │   └── configs/
-│       └── joyarm_rebot_dm.yaml     #   per-model YAML（backend_mas/backend_end 分段）
+│       └── joyarm_dm.yaml     #   per-model YAML（backend_arm/backend_end 分段）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性，不复用 SDK）
 ├── test/                            # pytest 测试套件
@@ -52,8 +52,8 @@ joyarm_code/
 ### 1.2 依赖规则（无环明细）
 
 - `utils` → 仅 numpy；
-- `robotics` / `safety` / `backends` → 仅依赖 `utils`；算法形参 `arm` 按 `ArmProtocol` 访问，**不 import `arms`**（依赖倒置）；
-- `arms` → 门面委托 `robotics`/`safety`/`backends`，运行期加载 `robots/`、`configs/`；
+- `robotics` / `safe_monitors` / `backends` → 仅依赖 `utils`；算法形参 `arm` 按 `ArmProtocol` 访问，**不 import `joyarms`**（依赖倒置）；
+- `joyarms` → 门面委托 `robotics`/`safe_monitors`/`backends`，运行期加载 `robots/`、`configs/`；
 - `joyarm_ros2_ws/src/*`（规划）→ 依赖 `joyarm_core`（pip 提供）+ `rclpy`（ROS 环境提供）；核心包保持 ROS2-free。
 
 ### 1.3 配置（yaml 分段）
@@ -61,7 +61,7 @@ joyarm_code/
 `configs/<model>.yaml` 按 backend 分段（另含 urdf / ee_frame / q_home / mdh / joint_limits / tcp_limits；未装 PyYAML 时回退类常量）：
 
 ```yaml
-backend_mas: {can_interface: can0, baudrate: 1000000, motor_ids: [1,2,3,4,5,6]}
+backend_arm: {can_interface: can0, baudrate: 1000000, motor_ids: [1,2,3,4,5,6]}
 backend_end: {can_interface: can0, baudrate: 1000000, id: 7}
 ```
 
@@ -77,7 +77,7 @@ joyarm_ros2_ws/
         ├── joyarm_node/
         │   ├── arm_node.py     #   ArmNode：每机械臂实例一个节点（话题/服务，离线可跑）
         │   └── adapters.py     #   内部类型 ↔ ROS2 标准消息互转（四元数 wxyz↔xyzw 换序）
-        ├── config/joyarm_rebot_dm.yaml   # ROS 参数（model/rate/offline；型号细节在核心库 YAML 单一来源）
+        ├── config/joyarm_dm.yaml   # ROS 参数（model/rate/offline；型号细节在核心库 YAML 单一来源）
         ├── launch/arm.launch.py          # ArmNode + robot_state_publisher(+rviz2)，namespace 即多臂
         └── test/test_adapters.py
 ```
@@ -103,22 +103,22 @@ ros2 launch joyarm_node arm.launch.py
 ### 2.1 命名约定（全仓库强制，含 `chapt/` 章节脚本）
 
 - **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
-- **设备模型**（`arms/`）：`Arm` = 完整机械臂基类（多轴本体 + 末端执行器），直接持有 `backend_mas`/`backend_end` 两个后端；具体型号 `JoyArmRebotDM(Arm)` 在子类绑定 `backend_mas_cls`/`backend_end_cls` 后端**类**。文件 `arms/arm.py`、`arms/joyarm_rebot_dm.py`。
-- **Backend 三层**（`Backend` 前缀，`backends/`）：根 `Backend`（通用硬件通信抽象）→ 类型层 `BackendMas`/`BackendEnd`（按硬件类型派生）→ 型号层 `BackendMasRebotDM`/`BackendEndJoyGripper`（按具体型号派生）。文件 `backend.py` / `backend_mas.py` / `backend_end.py` / `backend_mas_rebot_dm.py` / `backend_end_joygripper.py`。
-- **属性 / 形参**：本体后端 = `backend_mas`、末端后端 = `backend_end`（均由 `Arm` 直接持有）；robotics/safety 算法形参用 `arm`（依赖 `utils.ArmProtocol`）。
-- **执行类方法命名**：本体方法带 `mas`、末端方法带 `end`，两者对应——本体 `get_mas_state` / `set_mas_command`；末端 `end_open` / `end_close` / `set_end_position` / `set_end_force` / `get_end_state`。
-- **yaml**：`configs/<model>.yaml` 按 backend 分段——`backend_mas:` / `backend_end:`；子类绑 backend **类**，基类按 config 段实例化。
-- **算法默认 pinocchio**：robotics 不带 `method` 参数，默认走 urdf+pin；手写实现请在 `Arm` 子类覆盖对应方法（FK 特例：覆盖 `frame_placement`——基本能力/协议唯一方法，fkine/ikine/自碰撞统一消费）。
-- 约定针对**系统组件**（arm/backend）；项目品牌名 `JoyArm`/`joyarm_code` 不改，核心 Python 包目录/导入名固定为 `joyarm_core`。
+- **设备模型**（`joyarms/`）：`JoyArm` = 完整机械臂基类（多轴本体 + 末端执行器），直接持有 `backend_arm`/`backend_end` 两个后端；具体型号 `JoyArmDM(JoyArm)` 在子类绑定 `backend_arm_cls`/`backend_end_cls` 后端**类**。文件 `joyarms/joyarm.py`、`joyarms/joyarm_dm.py`。
+- **Backend 三层**（`Backend` 前缀，`backends/`）：根 `Backend`（通用硬件通信抽象）→ 类型层 `BackendArm`/`BackendEnd`（按硬件类型派生）→ 型号层 `BackendArmDM`/`BackendEndGripper`（按具体型号派生）。文件 `backend.py` / `backend_arm.py` / `backend_end.py` / `backend_arm_dm.py` / `backend_end_gripper.py`。
+- **属性 / 形参**：本体后端 = `backend_arm`、末端后端 = `backend_end`（均由 `JoyArm` 直接持有）；robotics/safe_monitors 算法形参用 `arm`（依赖 `utils.ArmProtocol`）。
+- **执行类方法命名**：本体方法带 `arm`、末端方法带 `end`，两者对应——本体 `get_arm_state` / `set_arm_command`；末端 `end_open` / `end_close` / `set_end_position` / `set_end_force` / `get_end_state`。
+- **yaml**：`configs/<model>.yaml` 按 backend 分段——`backend_arm:` / `backend_end:`；子类绑 backend **类**，基类按 config 段实例化。
+- **算法默认 pinocchio**：robotics 不带 `method` 参数，默认走 urdf+pin；手写实现请在 `JoyArm` 子类覆盖对应方法（FK 特例：覆盖 `frame_placement`——基本能力/协议唯一方法，fkine/ikine/自碰撞统一消费）。
+- 约定针对**系统组件**（joyarm/backend）；项目品牌名 `JoyArm`/`joyarm_code` 不改，核心 Python 包目录/导入名固定为 `joyarm_core`。
 
 ### 2.2 设计原则与编码约定
 
 | 原则 | 落地 |
 |:--|:--|
 | **核心/ROS2 分层** | 核心 `joyarm_core/`（ROS2-free）+ colcon 工作空间 `joyarm_ros2_ws/src/`（rclpy，规划见 §1.4）；纯算法支撑层与 ws 薄封装分层同前述规划 |
-| **设备模型** | `Arm` 基类（本体+末端）直接持有两个后端；`arm.fkine()` 运动学门面，`arm.end_open()` 操作末端 |
-| **Backend 三层** | `Backend` → `BackendMas/BackendEnd` → 具体型号；按硬件类型、再按型号派生 |
-| **单向导入、无环** | `arms` import `robotics/safety/backends`；后者不 import `arms`，只依赖 `utils.ArmProtocol`（依赖倒置） |
+| **设备模型** | `JoyArm` 基类（本体+末端）直接持有两个后端；`arm.fkine()` 运动学门面，`arm.end_open()` 操作末端 |
+| **Backend 三层** | `Backend` → `BackendArm/BackendEnd` → 具体型号；按硬件类型、再按型号派生 |
+| **单向导入、无环** | `joyarms` import `robotics/safe_monitors/backends`；后者不 import `joyarms`，只依赖 `utils.ArmProtocol`（依赖倒置） |
 | **backend 由 yaml 驱动** | 子类绑 backend **类**，基类按 `configs/<model>.yaml` 段实例化 |
 | **离线模式** | 默认 `connected=False`（计算类可用）；`connect()` 后才可执行类操作（语义详见 README「快速开始」）；ROS2 节点同语义（`offline:=true` 时指令等效执行） |
 | **共享类型单定义** | 跨层数据类型只在 `utils/types.py` 定义一次；ROS2 消息仅在 ws 的 `adapters.py` 做互转（含四元数 wxyz↔xyzw 换序） |
@@ -142,17 +142,17 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 节点/launch → `joyarm_ros2_ws/src
 | `utils/transforms.py` | 23 个纯 numpy 函数：`rot_x/y/z`、`rpy_to_R`/`R_to_rpy`、`rodrigues`/`axis_angle_to_R`/`R_to_axis_angle`、`quat_*`、`Rp_to_T`/`T_to_Rp`/`T_inv`/`T_mul`/`adT`、`slerp` | Ch2 | ✅ |
 | `utils/interfaces.py` | `ArmProtocol`（`@runtime_checkable Protocol`） | Ch2 | ✅ |
 | `backends/backend.py` | `Backend(ABC)`：`connect`/`disconnect`/`read_state` | Ch2 | ✅ |
-| `backends/backend_mas.py` | `BackendMas(Backend)`：`enable`/`disable`/`set_zero`/`scan`/`send_position`/`send_velocity`/`send_torque`/`send_mit` | Ch2 | ✅ |
+| `backends/backend_arm.py` | `BackendArm(Backend)`：`enable`/`disable`/`set_zero`/`scan`/`send_position`/`send_velocity`/`send_torque`/`send_mit` | Ch2 | ✅ |
 | `backends/backend_end.py` | `BackendEnd(Backend)`：`send_position`/`send_force`/`send_action` | Ch2 | ✅ |
-| `backends/backend_mas_rebot_dm.py` | `BackendMasRebotDM(BackendMas)`（CAN，6 电机） | Ch6 | 🟡 |
-| `backends/backend_end_joygripper.py` | `BackendEndJoyGripper(BackendEnd)`（CAN，2 指夹爪） | Ch13 | 🟡 |
+| `backends/backend_arm_dm.py` | `BackendArmDM(BackendArm)`（CAN，6 电机） | Ch6 | 🟡 |
+| `backends/backend_end_gripper.py` | `BackendEndGripper(BackendEnd)`（CAN，2 指夹爪） | Ch13 | 🟡 |
 | `robotics/fkine.py` | `fkine`（+ `_fkine_single`/`_fkine_batch` 内部） | Ch2 | ✅ |
 | `robotics/ikine.py` 等 | 逆运动学 / 雅可比 / 轨迹 / 动力学 / 控制函数族 | Ch3-9 | 🟡 |
-| `safety/joint.py` | `clamp_to_limits`（关节裁剪 ✅）+ `joint_limits_check`（🟡） | Ch11 | ✅/🟡 |
-| `safety/`（tcp / machine / external / supervisor） | `tcp_limits_check` · `CollisionReport`+`SelfCollisionChecker` · `ExternalCollisionDetector` · `StateMonitor`+`SafetySupervisor`（均 🟡） | Ch11 | 🟡 |
-| `arms/arm.py` | `Arm`（本体+末端基类） | Ch2 | ✅ |
-| `arms/joyarm_rebot_dm.py` | `JoyArmRebotDM(Arm)` | Ch2 | ✅ |
-| `configs/joyarm_rebot_dm.yaml` | 型号 YAML（限位 / home / backend 分段） | Ch2/7 | ✅ |
+| `safe_monitors/arm_monitor.py` | `clamp_to_limits`（关节裁剪 ✅）+ `joint_limits_check`（🟡） | Ch11 | ✅/🟡 |
+| `safe_monitors/`（joyarm / end / external / supervisor） | `tcp_limits_check` · `CollisionReport`+`SelfCollisionChecker` · `ExternalCollisionDetector` · `end_limits_check` · `StateMonitor`+`SafetySupervisor`（均 🟡） | Ch11 | 🟡 |
+| `joyarms/joyarm.py` | `JoyArm`（本体+末端基类） | Ch2 | ✅ |
+| `joyarms/joyarm_dm.py` | `JoyArmDM(JoyArm)` | Ch2 | ✅ |
+| `configs/joyarm_dm.yaml` | 型号 YAML（限位 / home / backend 分段） | Ch2/7 | ✅ |
 
 `joyarm_core/apps/` 与 `joyarm_ros2_ws/src/joyarm_node/`：**规划落点，当前未建**（接口与结构规划见 §1.4；teleop/vision 纯算法 + joyarm_node 节点封装，Ch10/12/14 落地时创建）。
 
@@ -164,15 +164,15 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 节点/launch → `joyarm_ros2_ws/src
 ### 3.2 继承链与职责
 
 ```
-JoyArmRebotDM ──▶ Arm（持有 backend_mas + backend_end）
-        │  绑两个 backend 类（mas + end）；arm.fkine()/set_mas_command()/end_open()/end_close()
-Backend(ABC) ──┬─▶ BackendMas ──▶ BackendMasRebotDM   （本体：关节电机，Ch6 占位）
-               └─▶ BackendEnd ──▶ BackendEndJoyGripper（末端：夹爪，Ch13 占位）
+JoyArmDM ──▶ JoyArm（持有 backend_arm + backend_end）
+        │  绑两个 backend 类（arm + end）；arm.fkine()/set_arm_command()/end_open()/end_close()
+Backend(ABC) ──┬─▶ BackendArm ──▶ BackendArmDM   （本体：关节电机，Ch6 占位）
+               └─▶ BackendEnd ──▶ BackendEndGripper（末端：夹爪，Ch13 占位）
 ```
 
-- **`Arm`**：完整臂基类。持有 pinocchio `model`/`data` + 软硬限位 + `backend_mas` + `backend_end`；对外提供本体运动学/动力学/安全**门面**（薄委托 `robotics`/`safety`，默认 pinocchio）与执行类方法（`get_mas_state`/`set_mas_command`），并直接提供末端夹爪语义（`end_*`）；`connect()` 同时连接本体 + 末端。
-- **`JoyArmRebotDM(Arm)`**：具体型号预设。无参即用（自动解析随包 URDF + `configs/joyarm_rebot_dm.yaml`）。
-- **robotics / safety**：模块级函数，形参 `arm`（按 `ArmProtocol` 访问），不 import `arms`、无 `method` 参数、默认 pinocchio。
+- **`JoyArm`**：完整臂基类。持有 pinocchio `model`/`data` + 软硬限位 + `backend_arm` + `backend_end`；对外提供本体运动学/动力学/安全**门面**（薄委托 `robotics`/`safe_monitors`，默认 pinocchio）与执行类方法（`get_arm_state`/`set_arm_command`），并直接提供末端夹爪语义（`end_*`）；`connect()` 同时连接本体 + 末端。
+- **`JoyArmDM(JoyArm)`**：具体型号预设。无参即用（自动解析随包 URDF + `configs/joyarm_dm.yaml`）。
+- **robotics / safe_monitors**：模块级函数，形参 `arm`（按 `ArmProtocol` 访问），不 import `joyarms`、无 `method` 参数、默认 pinocchio。
 
 ### 3.3 API 速查
 
@@ -181,28 +181,28 @@ Backend(ABC) ──┬─▶ BackendMas ──▶ BackendMasRebotDM   （本体�
 #### 设备模型 API
 
 ```python
-Arm(name, urdf_path, ee_frame_name="ee", mesh_dirs=None, load_geometry=False, config=None)
-    # 完整臂基类：建 pin model + 软硬限位 + backend_mas + backend_end（config 驱动）✅
-# 类属性：backend_mas_cls / backend_end_cls（子类绑定具体型号后端）
+JoyArm(name, urdf_path, ee_frame_name="ee", mesh_dirs=None, load_geometry=False, config=None)
+    # 完整臂基类：建 pin model + 软硬限位 + backend_arm + backend_end（config 驱动）✅
+# 类属性：backend_arm_cls / backend_end_cls（子类绑定具体型号后端）
 # 本体方法
-Arm.connect() / disconnect()                          # 连接 / 断开（本体 + 末端）✅
-Arm.rand_q(size=None, rng=None) → ndarray             # 软限位内采样 (n,) 或 (N,n) ✅
-Arm.clamp_q(q) → ndarray                              # 裁剪到软限位 ✅
-Arm.is_q_valid(q) → bool                              # 是否在软限位内 ✅
-Arm.frame_placement(q, frame=None) → (4,4)            # 底层单次 FK（含 T_base 偏移）✅
-Arm.fkine(q, frame=None, rep="T")                     # 正运动学门面 ✅
-Arm.ikine(T_target, q0=None, ...) / Arm.jac(q, ref="local")    # IK / 雅可比门面 🟡
-Arm.fdyn / idyn / mass_matrix / coriolis / gravity / cartesian_inertia   # 动力学门面 🟡
-Arm.check_joint_limits(state) / check_tcp_limits(state)        # 安全校验门面 🟡
-Arm.get_mas_state() → ArmState                        # 读本体状态（需 connect）✅
-Arm.set_mas_command(mode=ControlMode.POSITION, q=None, dq=None, tau=None, kp=None, kd=None)  # 下发指令（需 connect）✅
+JoyArm.connect() / disconnect()                          # 连接 / 断开（本体 + 末端）✅
+JoyArm.rand_q(size=None, rng=None) → ndarray             # 软限位内采样 (n,) 或 (N,n) ✅
+JoyArm.clamp_q(q) → ndarray                              # 裁剪到软限位 ✅
+JoyArm.is_q_valid(q) → bool                              # 是否在软限位内 ✅
+JoyArm.frame_placement(q, frame=None) → (4,4)            # 底层单次 FK（含 T_base 偏移）✅
+JoyArm.fkine(q, frame=None, rep="T")                     # 正运动学门面 ✅
+JoyArm.ikine(T_target, q0=None, ...) / JoyArm.jac(q, ref="local")    # IK / 雅可比门面 🟡
+JoyArm.fdyn / idyn / mass_matrix / coriolis / gravity / cartesian_inertia   # 动力学门面 🟡
+JoyArm.check_joint_limits(state) / check_tcp_limits(state)        # 安全校验门面 🟡
+JoyArm.get_arm_state() → ArmState                        # 读本体状态（需 connect）✅
+JoyArm.set_arm_command(mode=ControlMode.POSITION, q=None, dq=None, tau=None, kp=None, kd=None)  # 下发指令（需 connect）✅
 # 末端方法（需 connect）
-Arm.end_open() / end_close()                          # 夹爪开/合 ✅
-Arm.set_end_position(position) / set_end_force(force) # 末端位置/力 🟡
-Arm.get_end_state() → dict                            # 末端状态 🟡
-# 关键属性：model / data / n / nv / ee_frame_name / ee_frame_id / joint_limits(_soft) / qlow / qhigh / q_neutral / tcp_limits / T_base / backend_mas / backend_end / connected
+JoyArm.end_open() / end_close()                          # 夹爪开/合 ✅
+JoyArm.set_end_position(position) / set_end_force(force) # 末端位置/力 🟡
+JoyArm.get_end_state() → dict                            # 末端状态 🟡
+# 关键属性：model / data / n / nv / ee_frame_name / ee_frame_id / joint_limits(_soft) / qlow / qhigh / q_neutral / tcp_limits / T_base / backend_arm / backend_end / connected
 
-JoyArmRebotDM(name="JoyArmRebotDM", urdf_path=None, ee_frame_name=None, mesh_dirs=None, load_geometry=False)
+JoyArmDM(name="JoyArmDM", urdf_path=None, ee_frame_name=None, mesh_dirs=None, load_geometry=False)
     # 无参即用 ✅；属性 mdh_table / q_home；绑两个 backend 类
 ```
 
@@ -210,10 +210,10 @@ JoyArmRebotDM(name="JoyArmRebotDM", urdf_path=None, ee_frame_name=None, mesh_dir
 
 ```python
 Backend(ABC): connect() / disconnect() / read_state()                     # 通用根 ✅
-BackendMas(Backend): enable/disable · set_zero · scan · read_state() → ArmState
+BackendArm(Backend): enable/disable · set_zero · scan · read_state() → ArmState
     · send_position(q) / send_velocity(dq) / send_torque(tau) / send_mit(q, dq, tau, kp, kd)   # 本体 ✅
 BackendEnd(Backend): read_state() → dict · send_position / send_force / send_action          # 末端 ✅
-BackendMasRebotDM(BackendMas) / BackendEndJoyGripper(BackendEnd)          # 具体型号 🟡
+BackendArmDM(BackendArm) / BackendEndGripper(BackendEnd)          # 具体型号 🟡
 ```
 
 #### Robotics 算法 API（形参 `arm`，满足 `ArmProtocol`；除 fkine ✅ 外均 🟡 占位）
@@ -229,11 +229,11 @@ jac(arm, q, frame=None, ref="local") · manipulability / cond_number / statics  
 #        · HybridForcePosition · ImpedanceControl / AdmittanceControl · ForceTorqueSensor / JointTorqueSensor
 ```
 
-#### Safety API（`safety/`，按层分文件；除 clamp ✅ 外占位 🟡）
+#### Safety API（`safe_monitors/`，按层分文件；除 clamp ✅ 外占位 🟡）
 
 ```python
-clamp_to_limits(targets, limits: JointLimits) → ndarray   # 关节裁剪（joint.py）✅
-joint_limits_check(state, limits) / tcp_limits_check(state, limits)   # 限位校验纯函数 🟡
+clamp_to_limits(targets, limits: JointLimits) → ndarray   # 关节裁剪（arm_monitor.py）✅
+joint_limits_check / end_limits_check / tcp_limits_check(state, limits)   # 限位校验纯函数 🟡
 StateMonitor / SelfCollisionChecker / ExternalCollisionDetector / SafetySupervisor   # 监控器族 🟡
 ```
 

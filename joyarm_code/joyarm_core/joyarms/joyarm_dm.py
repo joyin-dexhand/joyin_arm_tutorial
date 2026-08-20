@@ -1,25 +1,25 @@
-"""``JoyArmRebotDM`` —— JoyArm 6 自由度机械臂（完整臂 = 本体 + 末端，型号预设）。
+"""``JoyArmDM`` —— JoyArm 6 自由度机械臂（完整臂 = 本体 + 末端，型号预设）。
 
-固化 JoyArm（reBot-DevArm 硬件平台）特有默认值（URDF 路径、末端帧、MDH 参考表、
+固化 JoyArm（joyarm_dm 硬件平台）特有默认值（URDF 路径、末端帧、MDH 参考表、
 home 位形）。两个后端类在本类绑定：
 
-- ``backend_mas_cls = BackendMasRebotDM`` —— 多轴本体后端（reBot-DM，CAN，关节电机）
-- ``backend_end_cls  = BackendEndJoyGripper`` —— 末端后端（两指夹爪）
+- ``backend_arm_cls = BackendArmDM`` —— 多轴本体后端（达妙 DM，CAN，关节电机）
+- ``backend_end_cls  = BackendEndGripper`` —— 末端后端（两指夹爪）
 
-二者构造时按 ``configs/joyarm_rebot_dm.yaml`` 的 ``backend_mas`` / ``backend_end``
+二者构造时按 ``configs/joyarm_dm.yaml`` 的 ``backend_arm`` / ``backend_end``
 段实例化。
 
 配置驱动
 --------
 
 可调参数（末端帧、home、MDH、末端限位、后端参数）优先取自
-``configs/joyarm_rebot_dm.yaml``；未装 PyYAML 或配置缺失时**回退到类常量**，
+``configs/joyarm_dm.yaml``；未装 PyYAML 或配置缺失时**回退到类常量**，
 保证无 YAML 也能实例化。
 
 MDH 参数：``MDH_TABLE`` 为教学参考常量；FK 实际走 pinocchio（默认 auto）。
 确切数值以第七章 URDF 导出后核对为准。
 
-对应章节：Ch2 即用（joyarm_rebot_dm 预设）。
+对应章节：Ch2 即用（joyarm_dm 预设）。
 """
 from __future__ import annotations
 
@@ -28,23 +28,23 @@ from typing import List, Optional
 
 import numpy as np
 
-from .arm import Arm
+from .joyarm import JoyArm
 from ..utils.types import TcpLimits
-from ..backends.backend_mas_rebot_dm import BackendMasRebotDM
-from ..backends.backend_end_joygripper import BackendEndJoyGripper
+from ..backends.backend_arm_dm import BackendArmDM
+from ..backends.backend_end_gripper import BackendEndGripper
 
-__all__ = ["JoyArmRebotDM"]
+__all__ = ["JoyArmDM"]
 
 
-class JoyArmRebotDM(Arm):
-    """JoyArm（reBot-DevArm）6 自由度机械臂型号预设（完整臂 = 本体 + 夹爪）。
+class JoyArmDM(JoyArm):
+    """JoyArm（joyarm_dm）6 自由度机械臂型号预设（完整臂 = 本体 + 夹爪）。
 
-    ``urdf_path`` / ``ee_frame_name`` 缺省时**优先取 ``configs/joyarm_rebot_dm.yaml``**，
+    ``urdf_path`` / ``ee_frame_name`` 缺省时**优先取 ``configs/joyarm_dm.yaml``**，
     配置缺失再回退到类常量与随包默认 URDF。
 
     .. note::
 
-        当前随包 URDF 为过渡型号 ``reBot-DevArm_fixend``（纯 6 转动臂，
+        当前随包 URDF 为过渡型号 ``joyarm_dm_fixend``（纯 6 转动臂，
         ``nq=6``）；第七章导出正式版 ``joyarm1.urdf`` 后替换 ``DEFAULT_URDF``
         与对应 config。
 
@@ -55,14 +55,14 @@ class JoyArmRebotDM(Arm):
     :param load_geometry: 是否加载 visual/collision 几何；缺省 ``False``。
     """
 
-    # ---- 类常量（joyarm_rebot_dm 预设；config 缺失时的兜底）----
-    CONFIG_NAME: str = "joyarm_rebot_dm"       # 对应 configs/<CONFIG_NAME>.yaml
-    DEFAULT_URDF: str = "robots/reBot-DevArm_fixend/urdf/reBot-DevArm_fixend.urdf"
+    # ---- 类常量（joyarm_dm 预设；config 缺失时的兜底）----
+    CONFIG_NAME: str = "joyarm_dm"       # 对应 configs/<CONFIG_NAME>.yaml
+    DEFAULT_URDF: str = "robots/joyarm_dm_fixend/urdf/joyarm_dm_fixend.urdf"
     EE_FRAME: str = "end_link"                 # 末端帧在 URDF 里的名字
 
     # ---- 两个后端类：子类在类体绑定（构造时按 config 实例化）----
-    backend_mas_cls = BackendMasRebotDM        # 多轴本体后端
-    backend_end_cls = BackendEndJoyGripper     # 末端执行器后端
+    backend_arm_cls = BackendArmDM        # 多轴本体后端
+    backend_end_cls = BackendEndGripper     # 末端执行器后端
 
     # MDH 参数：(α_{i-1}, a_{i-1}, d_i, θ_offset_i)，6 行——教学参考常量
     MDH_TABLE: np.ndarray = np.zeros((6, 4))
@@ -72,7 +72,7 @@ class JoyArmRebotDM(Arm):
 
     def __init__(
         self,
-        name: str = "JoyArmRebotDM",
+        name: str = "JoyArmDM",
         urdf_path: Optional[str] = None,
         ee_frame_name: Optional[str] = None,
         mesh_dirs: Optional[List[str]] = None,
@@ -86,7 +86,7 @@ class JoyArmRebotDM(Arm):
         if urdf_path is None:
             urdf_path = self._resolve_default_urdf(cfg.get("urdf"))
         ee = ee_frame_name or cfg.get("ee_frame") or self.EE_FRAME
-        # 传 config 给 Arm：由基类按 backend_mas/backend_end 段实例化两个后端
+        # 传 config 给 JoyArm：由基类按 backend_arm/backend_end 段实例化两个后端
         super().__init__(
             name=name,
             urdf_path=urdf_path,
@@ -101,7 +101,7 @@ class JoyArmRebotDM(Arm):
             cfg.get("q_home", self.Q_HOME), dtype=float
         ).reshape(-1)
 
-        # ---- 末端限位：config 提供则覆盖 Arm 的占位 TcpLimits ----
+        # ---- 末端限位：config 提供则覆盖 JoyArm 的占位 TcpLimits ----
         if cfg.get("tcp_limits"):
             self._apply_tcp_limits(cfg["tcp_limits"])
 

@@ -1,14 +1,14 @@
 """``joyarm_core`` —— JoyArm 机械臂教程核心 SDK 库（ROS2-free）。
 
-分层架构（仅允许向下依赖；``arms`` 作富门面 ``arm.xx``）::
+分层架构（仅允许向下依赖；``joyarms`` 作富门面 ``arm.xx``）::
 
-    arms/         设备模型：Arm(本体+末端) · joyarm_rebot_dm
+    joyarms/         设备模型：JoyArm(本体+末端) · joyarm_dm
     ─────────────────────────────────────────────
     robotics/     算法层：fkine · ikine(Ch3) · jacobian(Ch4) · trajectory(Ch5)
                    · dynamics(Ch8) · control(Ch6/8/9)
-    safety/       安全层：joint/tcp/machine/external/supervisor(Ch11)
-    backends/     通信层（三层）：Backend → BackendMas/BackendEnd
-                   → BackendMasRebotDM / BackendEndJoyGripper
+    safe_monitors/  监测层：arm/end/joyarm/external/supervisor(Ch11)
+    backends/     通信层（三层）：Backend → BackendArm/BackendEnd
+                   → BackendArmDM / BackendEndGripper
     ─────────────────────────────────────────────
     utils/        基础层：transforms(数学) · types(共享类型) · interfaces(ArmProtocol)
     robots/       URDF + meshes 资产    configs/  per-model YAML 配置
@@ -16,13 +16,13 @@
 > ROS2 封装（节点/launch/rviz2）在 ``joyarm_ros2_ws`` 的``src/joyarm_node`` ，本包保持 ROS2-free，
 > 详见 ``joyarm_code/AGENTS.md``（子库项目记忆）。
 
-命名约定：类名驼峰（Arm/Backend…），文件名小写 snake_case。
+命名约定：类名驼峰（JoyArm/Backend…），文件名小写 snake_case。
 
 使用方式::
 
-    from joyarm_core import JoyArmRebotDM
+    from joyarm_core import JoyArmDM
 
-    arm = JoyArmRebotDM()            # 默认未连接（离线）；Arm = 本体 + 末端
+    arm = JoyArmDM()            # 默认未连接（离线）；JoyArm = 本体 + 末端
     Q  = arm.rand_q(size=100_000)    # 限位内采样 (N,6)
     P  = arm.fkine(Q, rep="pos")     # 门面：arm.fkine → (N,3)
 """
@@ -73,11 +73,11 @@ from .utils.transforms import (
 )
 from .utils.interfaces import ArmProtocol
 
-# ---- 设备模型层（Arm / JoyArmRebotDM）----
-from .arms.arm import Arm
-from .arms.joyarm_rebot_dm import JoyArmRebotDM
+# ---- 设备模型层（JoyArm / JoyArmDM）----
+from .joyarms.joyarm import JoyArm
+from .joyarms.joyarm_dm import JoyArmDM
 
-# ---- 算法层（robotics；operate on ArmProtocol，不 import arms）----
+# ---- 算法层（robotics；operate on ArmProtocol，不 import joyarms）----
 from .robotics.fkine import fkine
 from .robotics.ikine import ikine, ikine_constrained
 from .robotics.jacobian import jac, manipulability, cond_number, statics
@@ -113,8 +113,8 @@ from .robotics.control import (
     compute_cartesian_impedance,
 )
 
-# ---- 安全层（clamp_to_limits 自 utils/types.py 迁入 safety/joint.py）----
-from .safety import (
+# ---- 安全层（clamp_to_limits 自 utils/types.py 迁入 safe_monitors/arm_monitor.py）----
+from .safe_monitors import (
     clamp_to_limits,
     CollisionReport,
     StateMonitor,
@@ -122,6 +122,7 @@ from .safety import (
     ExternalCollisionDetector,
     SafetySupervisor,
     joint_limits_check,
+    end_limits_check,
     tcp_limits_check,
 )
 
@@ -129,10 +130,10 @@ from .safety import (
 from . import backends
 from .backends import (
     Backend,
-    BackendMas,
+    BackendArm,
     BackendEnd,
-    BackendMasRebotDM,
-    BackendEndJoyGripper,
+    BackendArmDM,
+    BackendEndGripper,
 )
 
 __version__ = "0.1.0"
@@ -180,8 +181,8 @@ __all__ = [
     "slerp",
     "ArmProtocol",
     # 设备模型层
-    "Arm",
-    "JoyArmRebotDM",
+    "JoyArm",
+    "JoyArmDM",
     # 算法层
     "fkine",
     "ikine",
@@ -230,14 +231,15 @@ __all__ = [
     "ExternalCollisionDetector",
     "SafetySupervisor",
     "joint_limits_check",
+    "end_limits_check",
     "tcp_limits_check",
     # 通信层（三层）
     "backends",
     "Backend",
-    "BackendMas",
+    "BackendArm",
     "BackendEnd",
-    "BackendMasRebotDM",
-    "BackendEndJoyGripper",
+    "BackendArmDM",
+    "BackendEndGripper",
     # 版本
     "__version__",
 ]

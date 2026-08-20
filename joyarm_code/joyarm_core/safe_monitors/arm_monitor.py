@@ -22,8 +22,8 @@ def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
     """将运动指令逐元素裁剪到关节限位内（关节层软防护底层）。
 
     所有运动指令下发前都应过本函数：对 ``q_min/q_max`` 做逐元素裁剪。
-    传入硬限位实例（:attr:`Arm.joint_limits`）裁剪到硬限位；传入软限位
-    实例（:attr:`Arm.joint_limits_soft`，其 ``q_min/q_max`` 即软限位
+    传入硬限位实例（:attr:`JoyArm.joint_limits`）裁剪到硬限位；传入软限位
+    实例（:attr:`JoyArm.joint_limits_soft`，其 ``q_min/q_max`` 即软限位
     ``qlow/qhigh``）则留缓冲。
 
     :param targets: ``(n,)`` 或 ``(N,n)`` 目标关节角，弧度。

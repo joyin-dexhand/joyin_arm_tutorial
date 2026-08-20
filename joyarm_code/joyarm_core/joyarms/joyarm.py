@@ -1,11 +1,11 @@
-"""``Arm`` 基类 —— 完整机械臂（多轴本体 + 末端执行器）。
+"""``JoyArm`` 基类 —— 完整机械臂（多轴本体 + 末端执行器）。
 
-``Arm`` 持有 pinocchio 模型 ``model`` + 数据 ``data`` + 限位，并直接持有两个通信后端：``backend_mas``（本体）/``backend_end``（末端）。
-后端绑定（``backend_mas_cls`` / ``backend_end_cls``），构造时按 ``configs/*.yaml`` 的``backend_mas`` / ``backend_end`` 段实例化。
+``JoyArm`` 持有 pinocchio 模型 ``model`` + 数据 ``data`` + 限位，并直接持有两个通信后端：``backend_arm``（本体）/``backend_end``（末端）。
+后端绑定（``backend_arm_cls`` / ``backend_end_cls``），构造时按 ``configs/*.yaml`` 的``backend_arm`` / ``backend_end`` 段实例化。
 
 ``connected=False``（默认，离线）时：
 - 计算类方法（``fkine``/``jac``/...）不依赖真机，无硬件也能跑
-- 执行类方法（``get_mas_state``/``set_mas_command``/``end_open``/...）``raise RuntimeError``；当``connect()`` 后才可用
+- 执行类方法（``get_arm_state``/``set_arm_command``/``end_open``/...）``raise RuntimeError``；当``connect()`` 后才可用
 """
 from __future__ import annotations
 
@@ -25,13 +25,13 @@ try:
 except ImportError: 
     pin = None
 
-from ..backends.backend_mas import BackendMas 
+from ..backends.backend_arm import BackendArm 
 from ..backends.backend_end import BackendEnd 
 
-__all__ = ["Arm"]
+__all__ = ["JoyArm"]
 
 
-class Arm:
+class JoyArm:
     """完整机械臂基类
 
     :param name: 名称。
@@ -39,11 +39,11 @@ class Arm:
     :param ee_frame_name: 末端参考帧名（默认 ``"ee"``）。
     :param mesh_dirs: URDF 引用的 mesh 搜索目录列表；缺省时不加载几何。
     :param load_geometry: 是否加载 visual/collision 几何。
-    :param config: 型号 YAML 配置字典（含 ``backend_mas`` / ``backend_end`` 等段）；缺省无后端。
+    :param config: 型号 YAML 配置字典（含 ``backend_arm`` / ``backend_end`` 等段）；缺省无后端。
     """
 
     # ---- 型号绑定，构造时按 config 实例化 ----
-    backend_mas_cls: Optional[type] = None
+    backend_arm_cls: Optional[type] = None
     backend_end_cls: Optional[type] = None
 
     def __init__(self,
@@ -56,7 +56,7 @@ class Arm:
     ):
         if pin is None:
             raise ImportError(
-                "Arm 需要 pinocchio 才能加载 URDF 与计算运动学。请安装：\n"
+                "JoyArm 需要 pinocchio 才能加载 URDF 与计算运动学。请安装：\n"
                 "  uv pip install pin\n"
                 "  # 或：pip install pin"
             )
@@ -136,9 +136,9 @@ class Arm:
         self.T_base: np.ndarray = np.eye(4)  # 基坐标系偏移
 
         # ---- 两个通信后端：子类绑 *_cls，按 config 对应段实例化 ----
-        self.backend_mas: Optional[BackendMas] = (
-            self.backend_mas_cls(**cfg.get("backend_mas", {}))
-            if self.backend_mas_cls is not None
+        self.backend_arm: Optional[BackendArm] = (
+            self.backend_arm_cls(**cfg.get("backend_arm", {}))
+            if self.backend_arm_cls is not None
             else None
         )
         self.backend_end: Optional[BackendEnd] = (
@@ -148,20 +148,20 @@ class Arm:
         )
 
     # ----------------------------------------------------------
-    # 真机连接（connect 后才可执行 mas_*/end_*）
+    # 真机连接（connect 后才可执行 arm_*/end_*）
     # ----------------------------------------------------------
     def connect(self) -> None:
         """连接本体 + 末端真机。"""
-        if self.backend_mas is not None:
-            self.backend_mas.connect()
+        if self.backend_arm is not None:
+            self.backend_arm.connect()
         if self.backend_end is not None:
             self.backend_end.connect()
         self.connected = True
 
     def disconnect(self) -> None:
         """断开本体 + 末端真机。"""
-        if self.backend_mas is not None:
-            self.backend_mas.disconnect()
+        if self.backend_arm is not None:
+            self.backend_arm.disconnect()
         if self.backend_end is not None:
             self.backend_end.disconnect()
         self.connected = False
@@ -247,8 +247,8 @@ class Arm:
         return rng.uniform(low, high, size=(size, self.n))
 
     def clamp_q(self, q: np.ndarray) -> np.ndarray:
-        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm_core.safety.joint.clamp_to_limits`）。"""
-        from ..safety.joint import clamp_to_limits
+        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm_core.safe_monitors.arm_monitor.clamp_to_limits`）。"""
+        from ..safe_monitors.arm_monitor import clamp_to_limits
 
         return clamp_to_limits(q, self.joint_limits_soft)
 
@@ -263,7 +263,7 @@ class Arm:
     def frame_placement(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> np.ndarray:
         """底层单次 FK：返回指定帧在基坐标系下的 ``(4,4)`` 位姿。
 
-        **Arm 基本能力 / FK 唯一覆盖缝**：:class:`~joyarm_core.utils.interfaces.ArmProtocol`
+        **JoyArm 基本能力 / FK 唯一覆盖缝**：:class:`~joyarm_core.utils.interfaces.ArmProtocol`
         唯一方法——机械臂对象向算法层承诺"给定 q，任意帧在哪"。
         """
         fid = self._resolve_frame(frame)
@@ -340,33 +340,33 @@ class Arm:
         return cartesian_inertia(self, q, frame=frame)
 
     # ----------------------------------------------------------
-    # 安全校验（薄委托 safety；不依赖 backend，离线可用）
+    # 安全校验（薄委托 safe_monitors；不依赖 backend，离线可用）
     # ----------------------------------------------------------
     def check_joint_limits(self, state):
         """关节层安全校验（薄委托，Ch11 实现）。"""
-        from ..safety.joint import joint_limits_check
+        from ..safe_monitors.arm_monitor import joint_limits_check
 
         return joint_limits_check(state, self.joint_limits)
 
     def check_tcp_limits(self, state):
         """末端层安全校验（薄委托，Ch11 实现）。"""
-        from ..safety.tcp import tcp_limits_check
+        from ..safe_monitors.joyarm_monitor import tcp_limits_check
 
         return tcp_limits_check(state, self.tcp_limits)
 
     # ----------------------------------------------------------
-    # 本体执行类方法（依赖 backend_mas；未连接 raise；mas_* 与 end_* 对应）
+    # 本体执行类方法（依赖 backend_arm；未连接 raise；arm_* 与 end_* 对应）
     # ----------------------------------------------------------
-    def get_mas_state(self) -> ArmState:
-        """读取本体状态快照（委托 ``backend_mas.read_state()``；与 ``get_end_state`` 对应）。
+    def get_arm_state(self) -> ArmState:
+        """读取本体状态快照（委托 ``backend_arm.read_state()``；与 ``get_end_state`` 对应）。
 
         :raises RuntimeError: 未连接真机（``connected=False``）时抛出。
         """
         if not self.connected:
             raise RuntimeError(f"[{self.name}] 未连接真机（离线）；请先 connect()。")
-        return self.backend_mas.read_state()
+        return self.backend_arm.read_state()
 
-    def set_mas_command(self,
+    def set_arm_command(self,
         mode: ControlMode = ControlMode.POSITION,
         q: Optional[np.ndarray] = None,
         dq: Optional[np.ndarray] = None,
@@ -374,7 +374,7 @@ class Arm:
         kp: Optional[np.ndarray] = None,
         kd: Optional[np.ndarray] = None,
     ) -> None:
-        """按控制模式下发运动指令（委托 ``backend_mas``）。
+        """按控制模式下发运动指令（委托 ``backend_arm``）。
 
         :raises RuntimeError: 未连接真机时抛出。
         :raises ValueError: 对应模式所需参数缺失时抛出。
@@ -384,15 +384,15 @@ class Arm:
         if mode == ControlMode.POSITION:
             if q is None:
                 raise ValueError("POSITION 模式需要 q")
-            self.backend_mas.send_position(q)
+            self.backend_arm.send_position(q)
         elif mode == ControlMode.VELOCITY:
             if dq is None:
                 raise ValueError("VELOCITY 模式需要 dq")
-            self.backend_mas.send_velocity(dq)
+            self.backend_arm.send_velocity(dq)
         elif mode == ControlMode.TORQUE:
             if tau is None:
                 raise ValueError("TORQUE 模式需要 tau")
-            self.backend_mas.send_torque(tau)
+            self.backend_arm.send_torque(tau)
         elif mode == ControlMode.MIT:
             missing = [
                 name for name, val in (("q", q), ("dq", dq), ("tau", tau),
@@ -400,7 +400,7 @@ class Arm:
             ]
             if missing:
                 raise ValueError(f"MIT 模式缺少参数：{missing}")
-            self.backend_mas.send_mit(q, dq, tau, kp, kd)
+            self.backend_arm.send_mit(q, dq, tau, kp, kd)
         else:
             raise ValueError(f"未知控制模式：{mode}")
 

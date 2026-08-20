@@ -6,7 +6,7 @@
 - ``q`` 为 ``(N,n)`` → 返回批量结果。
 
 默认走 **pinocchio 黑盒**（``urdf + pin``，应用版），单点求解内核为 ``arm.frame_placement``
-（Arm 基本能力 / 协议唯一方法）。若需手写 MDH 递归（白盒原理版），请在 ``Arm`` 子类中
+（JoyArm 基本能力 / 协议唯一方法）。若需手写 MDH 递归（白盒原理版），请在 ``JoyArm`` 子类中
 覆盖 ``frame_placement``——它是 FK 唯一覆盖缝，本函数及 ``ikine``/自碰撞等所有消费方
 自动使用新实现（不在本函数加 ``method`` 参数）。
 
@@ -42,7 +42,7 @@ def fkine(
 ):
     """正运动学：关节角 → 末端（或任意帧）位姿。
 
-    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
+    :param arm: :class:`joyarm_core.joyarms.joyarm.JoyArm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
     :param q: ``(n,)`` 或 ``(N,n)`` 关节角，弧度。
     :param frame: 帧名（``str``）或帧索引（``int``）；缺省为末端帧。
     :param rep: 返回表示，``"T"``/``"pos"``/``"se3"``。

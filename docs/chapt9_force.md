@@ -18,12 +18,12 @@
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 数学：行内 $...$、独立 $$...$$，阻抗/导纳方程用 \bm{F}、\bm{x}、刚度/阻尼 $K_d, B_d, M_d$。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt9_force_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm_core/：control / dynamics / arm / jacobian / fkine。
+  · 可复用核心库 joyarm_code/joyarm_core/：control / dynamics / joyarm / jacobian / fkine。
   · 图示：配图放 docs/images/chapt9_force/。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意（接触/碰撞安全）。
   · 跨章引用用相对链接（如 [第八章](chapt8_dyn.md)、[第十一章](chapt11_safety.md) 安全防护）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt9_force_demo.py（待建）、robotics/control.py、robotics/dynamics.py、arms/arm.py、robotics/jacobian.py。
+【本章可引用的脚本/库】chapt9_force_demo.py（待建）、robotics/control.py、robotics/dynamics.py、joyarms/joyarm.py、robotics/jacobian.py。
 -->
 
 ![力控制分类](images/chapt9_force/force_control_classification.png)

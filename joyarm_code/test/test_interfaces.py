@@ -1,8 +1,8 @@
 """``ArmProtocol`` 契约测试：成员钉扎 / 实现一致性 / 鸭子类型充分性 / 负控 / 依赖方向。
 
 验证 ``joyarm_core/utils/interfaces.py`` 定义的协议**充分、不冗余、有效**：真实
-``JoyArmRebotDM`` 与仅实现协议成员的 ``FakeArm``（2 关节平面臂手写 FK）均满足
-契约；缺任一成员即判定失败；``robotics`` / ``safety`` 不 import ``arms``。
+``JoyArmDM`` 与仅实现协议成员的 ``FakeArm``（2 关节平面臂手写 FK）均满足
+契约；缺任一成员即判定失败；``robotics`` / ``safe_monitors`` 不 import ``joyarms``。
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from joyarm_core.arms.arm import Arm
+from joyarm_core.joyarms.joyarm import JoyArm
 from joyarm_core.robotics.fkine import fkine
 from joyarm_core.utils.interfaces import ArmProtocol
 from joyarm_core.utils.transforms import Rp_to_T
@@ -64,8 +64,8 @@ class FakeArm:
 
 @pytest.fixture(scope="module")
 def arm():
-    """离线 JoyArmRebotDM（默认未连接，纯计算可用）。"""
-    return importlib.import_module("joyarm_core").JoyArmRebotDM()
+    """离线 JoyArmDM（默认未连接，纯计算可用）。"""
+    return importlib.import_module("joyarm_core").JoyArmDM()
 
 
 @pytest.fixture
@@ -120,7 +120,7 @@ class TestProtocolSemantics:
 
 
 # ============================================================
-# 真实实现一致性（JoyArmRebotDM 经 Arm 满足协议）
+# 真实实现一致性（JoyArmDM 经 JoyArm 满足协议）
 # ============================================================
 class TestArmConformance:
     def test_arm_satisfies_protocol(self, arm):
@@ -150,7 +150,7 @@ class TestArmConformance:
             assert jl.q_max.shape == (n,)
 
     def test_frame_placement_signature_matches_protocol(self):
-        """Arm 实现与协议声明的 frame_placement 签名逐字一致。"""
+        """JoyArm 实现与协议声明的 frame_placement 签名逐字一致。"""
 
         def shape_of(fn):
             return tuple(
@@ -158,7 +158,7 @@ class TestArmConformance:
                 for p in inspect.signature(fn).parameters.values()
             )
 
-        assert shape_of(Arm.frame_placement) == shape_of(ArmProtocol.frame_placement)
+        assert shape_of(JoyArm.frame_placement) == shape_of(ArmProtocol.frame_placement)
 
     def test_frame_placement_returns_valid_T(self, arm):
         """返回 (4,4) 齐次变换：旋转块正交、底行 [0,0,0,1]。"""
@@ -249,7 +249,7 @@ class TestNegativeControls:
 
 
 # ============================================================
-# 依赖方向不变量：robotics / safety / interfaces 不 import arms
+# 依赖方向不变量：robotics / safe_monitors / interfaces 不 import joyarms
 # ============================================================
 def _absolute_imports(path: Path) -> list:
     """AST 解析文件的全部 import，相对导入解析为绝对模块名。"""
@@ -271,15 +271,15 @@ def _absolute_imports(path: Path) -> list:
 
 class TestDependencyDirection:
     def test_algorithm_layer_never_imports_arms(self):
-        """依赖倒置：robotics/、safety/、interfaces.py 禁止 import joyarm_core.arms。"""
+        """依赖倒置：robotics/、safe_monitors/、interfaces.py 禁止 import joyarm_core.joyarms。"""
         files = [*(JOYARM_ROOT / "robotics").glob("*.py"),
-                 *(JOYARM_ROOT / "safety").glob("*.py"),
+                 *(JOYARM_ROOT / "safe_monitors").glob("*.py"),
                  JOYARM_ROOT / "utils" / "interfaces.py"]
         violations = [
             f"{f.relative_to(JOYARM_ROOT)} -> {m}"
             for f in files
             for m in _absolute_imports(f)
-            if m == "joyarm_core.arms" or m.startswith("joyarm_core.arms.")
+            if m == "joyarm_core.joyarms" or m.startswith("joyarm_core.joyarms.")
         ]
         assert violations == []
 

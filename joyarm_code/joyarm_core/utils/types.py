@@ -40,7 +40,7 @@ __all__ = [
 class ControlMode(Enum):
     """关节控制模式
 
-    下发指令时，``Arm.set_mas_command()`` 根据 mode 调用 backend 的不同方法。
+    下发指令时，``JoyArm.set_arm_command()`` 根据 mode 调用 backend 的不同方法。
 
     :cvar POSITION: 位置模式，下发目标关节角 ``q``。
     :cvar VELOCITY: 速度模式，下发目标关节速度 ``dq``。
@@ -244,12 +244,12 @@ class JointLimits(_ArrayEqMixin):
 
     所有数组维度均为 ``(n,)``，``n`` 为机械臂自由度数。
 
-    - **硬限位**实例（``Arm.joint_limits``）：URDF/电机物理极限；
-      ``q_min/q_max`` 为位置硬限位，供 :func:`safety.joint.joint_limits_check`
+    - **硬限位**实例（``JoyArm.joint_limits``）：URDF/电机物理极限；
+      ``q_min/q_max`` 为位置硬限位，供 :func:`safe_monitors.arm_monitor.joint_limits_check`
       监测报警（硬限位违规 → :attr:`Severity.ERROR` / :attr:`Severity.CRITICAL`）。
-    - **软限位**实例（``Arm.joint_limits_soft``）：略窄于硬限位、留余量；
-      其 ``q_min/q_max`` 即 ``Arm.qlow/qhigh``，供
-      :meth:`Arm.rand_q` / :meth:`Arm.clamp_q` / :meth:`Arm.is_q_valid`
+    - **软限位**实例（``JoyArm.joint_limits_soft``）：略窄于硬限位、留余量；
+      其 ``q_min/q_max`` 即 ``JoyArm.qlow/qhigh``，供
+      :meth:`JoyArm.rand_q` / :meth:`JoyArm.clamp_q` / :meth:`JoyArm.is_q_valid`
       运行时裁剪（软限位违规 → :attr:`SafetyAction.CLAMP`）。
 
     :ivar q_min: ``(n,)`` 关节角下限，弧度。

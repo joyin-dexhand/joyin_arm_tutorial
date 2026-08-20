@@ -17,12 +17,12 @@
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt12_teleop_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm_core/：teleop（示教/遥操作）/ arm / joyarm_rebot_dm / ikine（异构臂末端→关节映射）/ fkine。
+  · 可复用核心库 joyarm_code/joyarm_core/：teleop（示教/遥操作）/ joyarm / joyarm_dm / ikine（异构臂末端→关节映射）/ fkine。
   · 图示：配图放 docs/images/chapt12_teleop/（主从/VR 示意），未就绪用 ![图片占位：描述]()；数据流可用 mermaid。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第三章](chapt3_ikine.md) IK 用于异构臂、[第十一章](chapt11_safety.md) 遥操作安全）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、joyarm_core/apps/teleop.py、arms/arm.py、arms/joyarm_rebot_dm.py、robotics/ikine.py、robotics/fkine.py。
+【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、joyarm_core/apps/teleop.py、joyarms/joyarm.py、joyarms/joyarm_dm.py、robotics/ikine.py、robotics/fkine.py。
 -->
 
 ## 1 同臂示教数据记录与回放

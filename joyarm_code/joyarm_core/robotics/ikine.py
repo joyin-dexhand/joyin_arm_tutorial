@@ -1,9 +1,9 @@
 """逆运动学（运动学模型层，Ch3 占位）。
 
 求解 ``T_target → q``，默认走 **数值解**（Levenberg-Marquardt / pinocchio 黑盒）。
-实现约定：迭代内部经 ``arm.frame_placement(q)`` 求当前位姿/残差（Arm 基本能力，
+实现约定：迭代内部经 ``arm.frame_placement(q)`` 求当前位姿/残差（JoyArm 基本能力，
 FK 唯一覆盖缝），勿直接调 pinocchio 摸 ``model``/``data``——以尊重子类覆盖。
-若需解析解 / 手写白盒，请在 ``Arm`` 子类中覆盖。
+若需解析解 / 手写白盒，请在 ``JoyArm`` 子类中覆盖。
 
 对应章节：Ch3。
 当前状态：仅签名 + docstring + ``raise NotImplementedError("Ch3 实现")``。
@@ -30,7 +30,7 @@ def ikine(
 ) -> IKResult:
     """逆运动学：目标位姿 → 关节角。
 
-    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
+    :param arm: :class:`joyarm_core.joyarms.joyarm.JoyArm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
     :param T_target: ``(4,4)`` 目标齐次位姿。
     :param q0: ``(n,)`` 初值；缺省用 ``arm.q_neutral``。
     :param frame: 末端帧名/索引；缺省为 ``arm.ee_frame_name``。

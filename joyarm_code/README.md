@@ -9,7 +9,7 @@
 
 ```
 joyarm_code/
-├── joyarm_core/          # ★ 核心 SDK（ROS2-free）：arms / robotics / safety / backends / utils / robots / configs
+├── joyarm_core/          # ★ 核心 SDK（ROS2-free）：joyarms / robotics / safe_monitors / backends / utils / robots / configs
 ├── joyarm_ros2_ws/  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 AGENTS.md §1.4）
 ├── chapt/           # 章节教学示例脚本（一次性，不复用）
 ├── test/            # pytest 测试套件
@@ -25,20 +25,20 @@ joyarm_code/
    joyarm_ros2_ws/src/joyarm_node  （ROS2 功能包：joyarm_core(pip) + rclpy(ROS)；规划中）
               ↓ 依赖
    ┌──────────────────────────────────────────────┐
-   │  arms/      设备模型：Arm（本体+末端） · joyarm_rebot_dm  ← arm.xx 门面
+   │  joyarms/      设备模型：JoyArm（本体+末端） · joyarm_dm  ← arm.xx 门面
    ├──────────────────────────────────────────────┤
-   │  robotics/  算法    safety/  安全    backends/  通信    │ ← 仅依赖 utils + ArmProtocol
+   │  robotics/  算法    safe_monitors/  安全    backends/  通信    │ ← 仅依赖 utils + ArmProtocol
    ├──────────────────────────────────────────────┤
    │  utils/  types（共享类型） · transforms（数学） · interfaces（ArmProtocol） │
    └──────────────────────────────────────────────┘
-      robots/（URDF + meshes）  configs/（per-model YAML）   ← 资产，由 arms 运行期加载
+      robots/（URDF + meshes）  configs/（per-model YAML）   ← 资产，由 joyarms 运行期加载
 ```
 
 三个核心概念：
 
-- **设备模型 `Arm`**：完整机械臂 = 多轴本体 + 末端执行器，直接持有两个通信后端 `backend_mas` / `backend_end`；`arm.fkine()` 等为运动学**门面**，`arm.end_open()` 操作末端，`connect()` 后才可执行硬件操作。
-- **Backend 三层**：`Backend`（通用根）→ `BackendMas` / `BackendEnd`（按硬件类型）→ `BackendMasRebotDM` / `BackendEndJoyGripper`（按具体型号）。
-- **算法层解耦**：`robotics` / `safety` 通过最小接口 `ArmProtocol` 访问臂对象，不依赖具体实现（依赖倒置）；算法默认基于 pinocchio（URDF 驱动）。
+- **设备模型 `JoyArm`**：完整机械臂 = 多轴本体 + 末端执行器，直接持有两个通信后端 `backend_arm` / `backend_end`；`arm.fkine()` 等为运动学**门面**，`arm.end_open()` 操作末端，`connect()` 后才可执行硬件操作。
+- **Backend 三层**：`Backend`（通用根）→ `BackendArm` / `BackendEnd`（按硬件类型）→ `BackendArmDM` / `BackendEndGripper`（按具体型号）。
+- **算法层解耦**：`robotics` / `safe_monitors` 通过最小接口 `ArmProtocol` 访问臂对象，不依赖具体实现（依赖倒置）；算法默认基于 pinocchio（URDF 驱动）。
 
 ## 3. 环境安装
 
@@ -57,15 +57,15 @@ uv pip install -e .            # 核心 joyarm_core（含 numpy/pin/pyyaml）
 ## 4. 快速开始（离线，无需真机）
 
 ```python
-from joyarm_core import JoyArmRebotDM
+from joyarm_core import JoyArmDM
 
-arm = JoyArmRebotDM()              # 默认未连接（离线）；Arm = 本体 + 末端，自动加载 configs + URDF
+arm = JoyArmDM()              # 默认未连接（离线）；JoyArm = 本体 + 末端，自动加载 configs + URDF
 Q   = arm.rand_q(size=100_000)     # 软限位内采样 (N,6)
 P   = arm.fkine(Q, rep="pos")      # 门面 arm.fkine → (N,3)
 # arm.connect(); arm.end_open()    # 真机：先 connect() 再操作末端
 ```
 
-> **离线语义**：`connected=False`（默认）时计算类（`fkine`/`rand_q`/…）可用；执行类（`get_mas_state`/`set_mas_command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用。
+> **离线语义**：`connected=False`（默认）时计算类（`fkine`/`rand_q`/…）可用；执行类（`get_arm_state`/`set_arm_command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用。
 
 ## 5. 运行测试 / 章节示例
 

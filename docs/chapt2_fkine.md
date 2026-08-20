@@ -581,11 +581,11 @@ T_ee = pin.updateFramePlacement(model, data, model.getFrameId("ee")) # 获取结
 
 #### 5.2.1 实现方案
 
-脚本 `joyarm_code/chapt/chapt2_workspace.py` 完成如下流程（核心功能调用 `joyarm_core` 的 `fkine` 与 `JoyArmRebotDM` 类）：
+脚本 `joyarm_code/chapt/chapt2_workspace.py` 完成如下流程（核心功能调用 `joyarm_core` 的 `fkine` 与 `JoyArmDM` 类）：
 
 | 模块 | 功能 | 实现要点 |
 |:---:|:---:|:---:|
-| 模型加载 | 读取 MDH 参数（或 URDF） | 调用 `joyarm_core` 的 `JoyArmRebotDM` 类 |
+| 模型加载 | 读取 MDH 参数（或 URDF） | 调用 `joyarm_core` 的 `JoyArmDM` 类 |
 | 关节采样 | 六维关节空间均匀随机采样 $N$ 组 | `numpy.random.uniform(qlow, qhigh, (N,6))` |
 | 正运动学 | 对每组关节角求末端位置 | 批量调用 `fkine` |
 | 可视化 | MeshCat / Matplotlib 3D 绘点云 | 动态刷新，逐批添加点 |

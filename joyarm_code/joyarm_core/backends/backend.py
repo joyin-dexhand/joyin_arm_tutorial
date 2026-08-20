@@ -14,9 +14,9 @@ __all__ = ["Backend"]
 class Backend(ABC):
     """所有硬件通信后端的抽象根。
 
-    子类先按**硬件类型**派生（:class:`~joyarm_core.backends.backend_mas.BackendMas` /
+    子类先按**硬件类型**派生（:class:`~joyarm_core.backends.backend_arm.BackendArm` /
     :class:`~joyarm_core.backends.backend_end.BackendEnd`），
-    再按**具体型号**派生（如 ``BackendMasRebotDM``）。
+    再按**具体型号**派生（如 ``BackendArmDM``）。
     """
 
     @abstractmethod

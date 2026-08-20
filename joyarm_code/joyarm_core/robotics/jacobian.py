@@ -3,7 +3,7 @@
 雅可比矩阵 ``J(q)`` 描述关节速度 → 末端旋量的线性映射：``V = J(q)q̇``，
 并衍生可操作度、条件数（椭球分析）与静力学关系 ``τ = JᵀF``。
 
-默认走 **pinocchio 黑盒**；手写白盒请在 ``Arm`` 子类中覆盖。
+默认走 **pinocchio 黑盒**；手写白盒请在 ``JoyArm`` 子类中覆盖。
 
 对应章节：Ch4。
 当前状态：仅签名 + docstring + ``raise NotImplementedError("Ch4 实现")``。
@@ -25,7 +25,7 @@ def jac(
 ) -> np.ndarray:
     """雅可比矩阵 ``J(q)``。
 
-    :param arm: :class:`joyarm_core.arms.arm.Arm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
+    :param arm: :class:`joyarm_core.joyarms.joyarm.JoyArm` 实例（满足 :class:`~joyarm_core.utils.interfaces.ArmProtocol`）。
     :param q: ``(n,)`` 关节角，弧度。
     :param frame: 帧名/索引；缺省为末端帧。
     :param ref: 参考系：``"local"``（body）/ ``"world"``（基）。

@@ -1,9 +1,9 @@
-# JoyArm (reBot-DevArm, 达妙 DM 电机) 型号配置
-# 由 arms/joyarm_rebot_dm.py 按型号名加载。
+# JoyArm (joyarm_dm, 达妙 DM 电机) 型号配置
+# 由 joyarms/joyarm_dm.py 按型号名加载。
 # 注：关节位置/速度/力矩限位与 URDF <limit> 一致；FK 实际走 pinocchio（URDF）。
 
-name: joyarm_rebot_dm
-urdf: robots/reBot-DevArm_fixend/urdf/reBot-DevArm_fixend.urdf
+name: joyarm_dm
+urdf: robots/joyarm_dm_fixend/urdf/joyarm_dm_fixend.urdf
 ee_frame: end_link
 q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 实际 home 位形
 
@@ -33,12 +33,12 @@ tcp_limits:
   f_max: 20.0 # N
   t_max: 5.0 # N·m
 
-# 通信参数：按 backend 分开（CAN 总线）；构造时由 Mas/End 按 backend_cls 实例化
-backend_mas: # 多轴本体后端（BackendMasRebotDM）
+# 通信参数：按 backend 分开（CAN 总线）；构造时由 JoyArm 基类按 backend_arm / backend_end 段实例化
+backend_arm: # 多轴本体后端（BackendArmDM）
   can_interface: can0
   baudrate: 1000000
   motor_ids: [1, 2, 3, 4, 5, 6] # 6 个关节电机 ID（0x01~0x06）
-backend_end: # 末端后端（BackendEndJoyGripper）
+backend_end: # 末端后端（BackendEndGripper）
   can_interface: can0
   baudrate: 1000000
   id: 7 # 两指夹爪 ID（0x07）

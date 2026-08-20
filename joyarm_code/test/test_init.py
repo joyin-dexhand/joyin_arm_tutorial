@@ -1,4 +1,4 @@
-"""``joyarm_core`` 包入口测试：导入冒烟、``__all__`` 一致性、``JoyArmRebotDM()`` 离线实例化。
+"""``joyarm_core`` 包入口测试：导入冒烟、``__all__`` 一致性、``JoyArmDM()`` 离线实例化。
 
 依赖：pinocchio（环境已装 4.1.0）。
 """
@@ -46,9 +46,9 @@ class TestImportSmoke:
             "slerp",
             "clamp_to_limits",
             "ArmProtocol",
-            # 设备模型层（Arm / JoyArmRebotDM）
-            "Arm",
-            "JoyArmRebotDM",
+            # 设备模型层（JoyArm / JoyArmDM）
+            "JoyArm",
+            "JoyArmDM",
             # 算法层
             "fkine",
             "ikine",
@@ -60,10 +60,10 @@ class TestImportSmoke:
             # 通信层（三层）
             "backends",
             "Backend",
-            "BackendMas",
+            "BackendArm",
             "BackendEnd",
-            "BackendMasRebotDM",
-            "BackendEndJoyGripper",
+            "BackendArmDM",
+            "BackendEndGripper",
             # 版本
             "__version__",
         ]:
@@ -72,29 +72,29 @@ class TestImportSmoke:
 
 
 # ============================================================
-# JoyArmRebotDM() 离线实例化
+# JoyArmDM() 离线实例化
 # ============================================================
 class TestInstantiation:
     def test_default_offline(self, joyarm_core_pkg):
-        """默认参数 → 未连接的 Arm 实例（Arm = 本体 + 末端；backends 由 config 实例化）。"""
-        arm = joyarm_core_pkg.JoyArmRebotDM()
-        assert isinstance(arm, joyarm_core_pkg.Arm)
-        assert isinstance(arm, joyarm_core_pkg.JoyArmRebotDM)
+        """默认参数 → 未连接的 JoyArm 实例（JoyArm = 本体 + 末端；backends 由 config 实例化）。"""
+        arm = joyarm_core_pkg.JoyArmDM()
+        assert isinstance(arm, joyarm_core_pkg.JoyArm)
+        assert isinstance(arm, joyarm_core_pkg.JoyArmDM)
         # 两个 backend 已按 config 实例化；默认未连接（离线）
-        assert isinstance(arm.backend_mas, joyarm_core_pkg.BackendMasRebotDM)
-        assert isinstance(arm.backend_end, joyarm_core_pkg.BackendEndJoyGripper)
+        assert isinstance(arm.backend_arm, joyarm_core_pkg.BackendArmDM)
+        assert isinstance(arm.backend_end, joyarm_core_pkg.BackendEndGripper)
         assert arm.connected is False
 
     def test_arm_supports_offline_compute(self, joyarm_core_pkg):
         """离线模式下计算路径可用：rand_q / fkine。"""
-        arm = joyarm_core_pkg.JoyArmRebotDM()
+        arm = joyarm_core_pkg.JoyArmDM()
         q = arm.rand_q(size=4)
         assert q.shape == (4, arm.n) or q.shape[-1] == arm.n
 
-    def test_offline_get_mas_state_raises(self, joyarm_core_pkg):
-        """未连接真机：get_mas_state / set_mas_command 应 raise RuntimeError。"""
-        arm = joyarm_core_pkg.JoyArmRebotDM()
+    def test_offline_get_arm_state_raises(self, joyarm_core_pkg):
+        """未连接真机：get_arm_state / set_arm_command 应 raise RuntimeError。"""
+        arm = joyarm_core_pkg.JoyArmDM()
         with pytest.raises(RuntimeError):
-            arm.get_mas_state()
+            arm.get_arm_state()
         with pytest.raises(RuntimeError):
-            arm.set_mas_command(q=arm.rand_q())
+            arm.set_arm_command(q=arm.rand_q())
