@@ -9,7 +9,7 @@
 
 ```
 joyarm_code/
-├── joyarm_core/          # ★ 核心 SDK（ROS2-free）：joyarms / robotics / safe_monitors / backends / utils / robots / configs
+├── joyarm_core/          # ★ 核心 SDK（ROS2-free）：joyarms / robotics / backends / utils / robots / configs
 ├── joyarm_ros2_ws/  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 AGENTS.md §1.4）
 ├── chapt/           # 章节教学示例脚本（一次性，不复用）
 ├── test/            # pytest 测试套件
@@ -24,21 +24,24 @@ joyarm_code/
 ```
    joyarm_ros2_ws/src/joyarm_node  （ROS2 功能包：joyarm_core(pip) + rclpy(ROS)；规划中）
               ↓ 依赖
-   ┌──────────────────────────────────────────────┐
-   │  joyarms/      设备模型：JoyArm（本体+末端） · joyarm_dm  ← arm.xx 门面
-   ├──────────────────────────────────────────────┤
-   │  robotics/  算法    safe_monitors/  安全    backends/  通信    │ ← 仅依赖 utils + ArmProtocol
-   ├──────────────────────────────────────────────┤
-   │  utils/  types（共享类型） · transforms（数学） · interfaces（ArmProtocol） │
-   └──────────────────────────────────────────────┘
+   ┌──────────────────────────────────────────────────────────────┐
+   │  joyarms/   组合根：JoyArm（成员组装 + 公开门面） · joyarm_dm      │
+   ├──────────────────────────────────────────────────────────────┤
+   │  robotics/  算法（一域一子包：ABC + 实现 + REGISTRY）              │
+   │             · fkine / ikine / jacobian / trajectory            │
+   │             · dynamics / control       ← 仅依赖 utils（鸭子类型）│
+   │  backends/  通信（三层 Backend）                                 │
+   ├──────────────────────────────────────────────────────────────┤
+   │  utils/  types（共享类型） · transforms（数学） · limits（限位守卫）│
+   └──────────────────────────────────────────────────────────────┘
       robots/（URDF + meshes）  configs/（per-model YAML）   ← 资产，由 joyarms 运行期加载
 ```
 
 三个核心概念：
 
-- **设备模型 `JoyArm`**：完整机械臂 = 多轴本体 + 末端执行器，直接持有两个通信后端 `backend_arm` / `backend_end`；`arm.fkine()` 等为运动学**门面**，`arm.end_open()` 操作末端，`connect()` 后才可执行硬件操作。
+- **组合根 `JoyArm`**：完整机械臂 = 多轴本体 + 末端执行器。持有两个通信后端 `backend_arm` / `backend_end` 与六个**策略成员**（`_fkine_solver` / `_ikine_solver` / `_jacobian_solver` / `_dynamics_solver` / `_traj_planner` / `_controller`）；公开门面（`arm.fkine()` / `arm.plan_joint()` / `arm.play()` / `arm.end_open()`…）全部委托私有成员，`connect()` 后才可执行硬件操作。
+- **成员即策略（config 可换）**：`configs/<model>.yaml` 的 `solvers:` 段按注册名选型（`fkine: pin|mdh`、`traj: default|toppra`…）；黑盒默认 pinocchio（URDF 驱动），白盒教学实现是同 ABC 子类，也可运行期注入 `arm._fkine_solver = ...`。
 - **Backend 三层**：`Backend`（通用根）→ `BackendArm` / `BackendEnd`（按硬件类型）→ `BackendArmDM` / `BackendEndGripper`（按具体型号）。
-- **算法层解耦**：`robotics` / `safe_monitors` 通过最小接口 `ArmProtocol` 访问臂对象，不依赖具体实现（依赖倒置）；算法默认基于 pinocchio（URDF 驱动）。
 
 ## 3. 环境安装
 
@@ -59,9 +62,11 @@ uv pip install -e .            # 核心 joyarm_core（含 numpy/pin/pyyaml）
 ```python
 from joyarm_core import JoyArmDM
 
-arm = JoyArmDM()              # 默认未连接（离线）；JoyArm = 本体 + 末端，自动加载 configs + URDF
+arm = JoyArmDM()              # 默认未连接（离线）；组合根：自动加载 configs + URDF，
+                              # 并按 yaml solvers: 段组装全部策略成员
 Q   = arm.rand_q(size=100_000)     # 软限位内采样 (N,6)
-P   = arm.fkine(Q, rep="pos")      # 门面 arm.fkine → (N,3)
+P   = arm.fkine(Q, rep="pos")      # 门面 → _fkine_solver.solve → (N,3)
+traj = arm.plan_joint(arm.q_neutral, arm.q_home, method="quintic")   # 轨迹规划门面（Ch5 实现）
 # arm.connect(); arm.end_open()    # 真机：先 connect() 再操作末端
 ```
 

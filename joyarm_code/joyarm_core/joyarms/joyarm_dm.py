@@ -1,25 +1,10 @@
-"""``JoyArmDM`` —— JoyArm 6 自由度机械臂（完整臂 = 本体 + 末端，型号预设）。
+"""``JoyArmDM`` —— JoyArm 6 自由度机械臂型号预设（完整臂 = 本体 + 夹爪，Ch2 即用）。
 
-固化 JoyArm（joyarm_dm 硬件平台）特有默认值（URDF 路径、末端帧、MDH 参考表、
-home 位形）。两个后端类在本类绑定：
-
-- ``backend_arm_cls = BackendArmDM`` —— 多轴本体后端（达妙 DM，CAN，关节电机）
-- ``backend_end_cls  = BackendEndGripper`` —— 末端后端（两指夹爪）
-
-二者构造时按 ``configs/joyarm_dm.yaml`` 的 ``backend_arm`` / ``backend_end``
-段实例化。
-
-配置驱动
---------
-
-可调参数（末端帧、home、MDH、末端限位、后端参数）优先取自
-``configs/joyarm_dm.yaml``；未装 PyYAML 或配置缺失时**回退到类常量**，
-保证无 YAML 也能实例化。
-
-MDH 参数：``MDH_TABLE`` 为教学参考常量；FK 实际走 pinocchio（默认 auto）。
-确切数值以第七章 URDF 导出后核对为准。
-
-对应章节：Ch2 即用（joyarm_dm 预设）。
+固化 joyarm_dm 硬件平台（达妙 DM 电机，CAN）默认值：URDF 路径、末端帧、MDH 参考
+表、home 位形；绑定 ``backend_arm_cls = BackendArmDM`` / ``backend_end_cls =
+BackendEndGripper``，构造时按 ``configs/joyarm_dm.yaml`` 的对应段实例化。可调参数
+（末端帧/home/MDH/末端限位/后端参数）config 优先、缺失回退类常量（无 YAML 也能
+实例化）；``MDH_TABLE`` 仅教学参考，FK 走 pinocchio，数值以第七章 URDF 导出为准。
 """
 from __future__ import annotations
 
@@ -66,6 +51,8 @@ class JoyArmDM(JoyArm):
 
     # MDH 参数：(α_{i-1}, a_{i-1}, d_i, θ_offset_i)，6 行——教学参考常量
     MDH_TABLE: np.ndarray = np.zeros((6, 4))
+    # link6 → end_link 固定位姿（URDF end_joint，fixed）：MDH 白盒递推后的固定尾巴
+    T_LINK6_END: np.ndarray = np.eye(4)
 
     # home 位形（实际 home，未必等于中性位形）；第七章标定后核对
     Q_HOME: np.ndarray = np.zeros(6)
@@ -100,6 +87,10 @@ class JoyArmDM(JoyArm):
         self._q_home: np.ndarray = np.asarray(
             cfg.get("q_home", self.Q_HOME), dtype=float
         ).reshape(-1)
+        if cfg.get("mdh") is not None:
+            self.MDH_TABLE = np.asarray(cfg["mdh"], dtype=float).reshape(6, 4)
+        if cfg.get("T_link6_end") is not None:
+            self.T_LINK6_END = np.asarray(cfg["T_link6_end"], dtype=float).reshape(4, 4)
 
         # ---- 末端限位：config 提供则覆盖 JoyArm 的占位 TcpLimits ----
         if cfg.get("tcp_limits"):
@@ -112,6 +103,11 @@ class JoyArmDM(JoyArm):
     def mdh_table(self) -> np.ndarray:
         """返回 MDH 参数 ``(6,4)`` ndarray（教学查阅用）。"""
         return self.MDH_TABLE.copy()
+
+    @property
+    def T_link6_end(self) -> np.ndarray:
+        """返回 link6 → end_link 固定位姿 ``(4,4)`` ndarray（教学查阅用）。"""
+        return self.T_LINK6_END.copy()
 
     @property
     def q_home(self) -> np.ndarray:

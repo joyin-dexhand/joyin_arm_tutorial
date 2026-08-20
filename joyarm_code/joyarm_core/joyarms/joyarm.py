@@ -1,11 +1,11 @@
-"""``JoyArm`` 基类 —— 完整机械臂（多轴本体 + 末端执行器）。
+"""``JoyArm`` —— 完整机械臂基类（多轴本体 + 末端执行器），**组合根**。
 
-``JoyArm`` 持有 pinocchio 模型 ``model`` + 数据 ``data`` + 限位，并直接持有两个通信后端：``backend_arm``（本体）/``backend_end``（末端）。
-后端绑定（``backend_arm_cls`` / ``backend_end_cls``），构造时按 ``configs/*.yaml`` 的``backend_arm`` / ``backend_end`` 段实例化。
-
-``connected=False``（默认，离线）时：
-- 计算类方法（``fkine``/``jac``/...）不依赖真机，无硬件也能跑
-- 执行类方法（``get_arm_state``/``set_arm_command``/``end_open``/...）``raise RuntimeError``；当``connect()`` 后才可用
+持有 pinocchio ``model``/``data`` + 限位；两个通信后端（``backend_arm``/``backend_end``，
+子类绑 ``*_cls``）与六个策略成员（``_fkine_solver``/``_ikine_solver``/``_jacobian_solver``/
+``_dynamics_solver``/``_traj_planner``/``_controller``）——后者按 yaml ``solvers:`` 段经各域
+REGISTRY 选型组装；公开门面（``fkine``/``plan_joint``/``play`` 等）全部委托私有成员，
+换配置即换算法。离线（``connected=False`` 默认）：计算类（``fkine``/``jac``/…）随时可用；
+执行类（``get_arm_state``/``set_arm_command``/``end_open``/…）``connect()`` 前抛 RuntimeError。
 """
 from __future__ import annotations
 
@@ -20,26 +20,43 @@ from ..utils.types import (
     TcpLimits,
 )
 
-try:  
+try:
     import pinocchio as pin
-except ImportError: 
+except ImportError:
     pin = None
 
-from ..backends.backend_arm import BackendArm 
-from ..backends.backend_end import BackendEnd 
+from ..backends.backend_arm import BackendArm
+from ..backends.backend_end import BackendEnd
+from ..robotics.fkine import REGISTRY as _FKINE_REGISTRY
+from ..robotics.ikine import REGISTRY as _IKINE_REGISTRY
+from ..robotics.jacobian import REGISTRY as _JACOBIAN_REGISTRY
+from ..robotics.dynamics import REGISTRY as _DYNAMICS_REGISTRY
+from ..robotics.trajectory import REGISTRY as _TRAJ_REGISTRY
+from ..robotics.control import REGISTRY as _CONTROL_REGISTRY
 
 __all__ = ["JoyArm"]
 
 
-class JoyArm:
-    """完整机械臂基类
+def _build_component(registry: dict, spec, domain: str):
+    """按 config 规格实例化策略成员：值为注册名字符串，或 ``{name: ..., **参数}``。"""
+    if isinstance(spec, str):
+        name, params = spec, {}
+    else:
+        params = dict(spec)
+        name = params.pop("name", None)
+        if name is None:
+            raise ValueError(f"solvers.{domain} 需为名字字符串或含 name 键的映射")
+    if name not in registry:
+        raise ValueError(f"未知 solvers.{domain}={name!r}，可用：{sorted(registry)}")
+    return registry[name](**params)
 
-    :param name: 名称。
-    :param urdf_path: URDF 文件路径。
-    :param ee_frame_name: 末端参考帧名（默认 ``"ee"``）。
-    :param mesh_dirs: URDF 引用的 mesh 搜索目录列表；缺省时不加载几何。
-    :param load_geometry: 是否加载 visual/collision 几何。
-    :param config: 型号 YAML 配置字典（含 ``backend_arm`` / ``backend_end`` 等段）；缺省无后端。
+
+class JoyArm:
+    """完整机械臂基类。
+
+    :param name: 名称；``urdf_path``: URDF 路径；``ee_frame_name``: 末端帧名（默认 ``"ee"``）。
+    :param mesh_dirs: mesh 搜索目录；``load_geometry``: 是否加载 visual/collision 几何。
+    :param config: 型号 YAML 字典（``solvers``/``backend_arm``/``backend_end`` 等段）；缺省无后端。
     """
 
     # ---- 型号绑定，构造时按 config 实例化 ----
@@ -147,6 +164,15 @@ class JoyArm:
             else None
         )
 
+        # ---- 策略成员：按 config solvers 段 + 各域注册表组装（算法可换）----
+        solvers_cfg = cfg.get("solvers", {})
+        self._fkine_solver = _build_component(_FKINE_REGISTRY, solvers_cfg.get("fkine", "pin"), "fkine")
+        self._ikine_solver = _build_component(_IKINE_REGISTRY, solvers_cfg.get("ikine", "pin"), "ikine")
+        self._jacobian_solver = _build_component(_JACOBIAN_REGISTRY, solvers_cfg.get("jacobian", "pin"), "jacobian")
+        self._dynamics_solver = _build_component(_DYNAMICS_REGISTRY, solvers_cfg.get("dynamics", "pin"), "dynamics")
+        self._traj_planner = _build_component(_TRAJ_REGISTRY, solvers_cfg.get("traj", "default"), "traj")
+        self._controller = _build_component(_CONTROL_REGISTRY, solvers_cfg.get("control", "position"), "control")
+
     # ----------------------------------------------------------
     # 真机连接（connect 后才可执行 arm_*/end_*）
     # ----------------------------------------------------------
@@ -247,8 +273,8 @@ class JoyArm:
         return rng.uniform(low, high, size=(size, self.n))
 
     def clamp_q(self, q: np.ndarray) -> np.ndarray:
-        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm_core.safe_monitors.arm_monitor.clamp_to_limits`）。"""
-        from ..safe_monitors.arm_monitor import clamp_to_limits
+        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm_core.utils.limits.clamp_to_limits`）。"""
+        from ..utils.limits import clamp_to_limits
 
         return clamp_to_limits(q, self.joint_limits_soft)
 
@@ -258,101 +284,82 @@ class JoyArm:
         return bool(np.all(q >= self.qlow - 1e-9) and np.all(q <= self.qhigh + 1e-9))
 
     # ----------------------------------------------------------
-    # robotics求解算法（默认 pinocchio，手写请于子类覆盖）
+    # robotics 求解算法（门面 → 私有策略成员，config solvers 段可换实现）
     # ----------------------------------------------------------
-    def frame_placement(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> np.ndarray:
-        """底层单次 FK：返回指定帧在基坐标系下的 ``(4,4)`` 位姿。
-
-        **JoyArm 基本能力 / FK 唯一覆盖缝**：:class:`~joyarm_core.utils.interfaces.ArmProtocol`
-        唯一方法——机械臂对象向算法层承诺"给定 q，任意帧在哪"。
-        """
-        fid = self._resolve_frame(frame)
-        q_arr = np.asarray(q, dtype=float).reshape(self.n)
-        pin.forwardKinematics(self.model, self.data, q_arr)
-        pin.updateFramePlacement(self.model, self.data, fid)
-        T = self.data.oMf[fid].homogeneous
-        return self.T_base @ T
-
-    def _resolve_frame(self, frame) -> int:
-        """将帧名/索引/None 解析为 pinocchio frame id。"""
-        if frame is None:
-            return self.ee_frame_id
-        if isinstance(frame, (int, np.integer)):
-            return int(frame)
-        for i, f in enumerate(self.model.frames):
-            if f.name == frame:
-                return i
-        raise ValueError(f"找不到帧 '{frame}'")
-
     def fkine(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, rep: str = "T"):
-        """正运动学（薄委托 :func:`joyarm_core.robotics.fkine.fkine`，默认 pinocchio；
-        单点求解内核为 :meth:`frame_placement`，批量即对其循环）。"""
-        from ..robotics.fkine import fkine
-
-        return fkine(self, q, frame=frame, rep=rep)
+        """正运动学（委托 ``_fkine_solver``；默认 pinocchio 黑盒，config ``solvers.fkine`` 可换）。"""
+        return self._fkine_solver.solve(self, q, frame=frame, rep=rep)
 
     def ikine(self, T_target, q0=None, frame=None, **kw):
-        """逆运动学（薄委托，Ch3 实现）。"""
-        from ..robotics.ikine import ikine
+        """逆运动学（委托 ``_ikine_solver``；数值/解析可换，Ch3 实现）。"""
+        return self._ikine_solver.solve(self, T_target, q0=q0, frame=frame, **kw)
 
-        return ikine(self, T_target, q0=q0, frame=frame, **kw)
+    def ikine_constrained(self, T_target, q0=None, frame=None, **kw):
+        """带关节限位约束的逆运动学（Ch3 实现）。"""
+        return self._ikine_solver.solve_constrained(self, T_target, q0=q0, frame=frame, **kw)
 
     def jac(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, ref: str = "local"):
-        """雅可比（薄委托，Ch4 实现）。"""
-        from ..robotics.jacobian import jac
+        """雅可比 J(q)（委托 ``_jacobian_solver``，Ch4 实现）。"""
+        return self._jacobian_solver.jac(self, q, frame=frame, ref=ref)
 
-        return jac(self, q, frame=frame, ref=ref)
+    def manipulability(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
+        """Yoshikawa 可操作度（雅可比衍生量，Ch4 实现）。"""
+        return self._jacobian_solver.manipulability(self, q, frame=frame)
 
-    def fdyn(self, q, dq, tau, **kw):
-        """正动力学（薄委托，Ch8 实现）。"""
-        from ..robotics.dynamics import fdyn
+    def cond_number(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
+        """雅可比条件数（雅可比衍生量，Ch4 实现）。"""
+        return self._jacobian_solver.cond_number(self, q, frame=frame)
 
-        return fdyn(self, q, dq, tau, **kw)
+    def statics(self, q: np.ndarray, F: np.ndarray, frame: Optional[Union[str, int]] = None):
+        """静力学 τ = JᵀF（雅可比衍生量，Ch4 实现）。"""
+        return self._jacobian_solver.statics(self, q, F, frame=frame)
 
-    def idyn(self, q, dq, ddq, **kw):
-        """逆动力学（薄委托，Ch8 实现）。"""
-        from ..robotics.dynamics import idyn
+    def fdyn(self, q, dq, tau, f_ext=None):
+        """正动力学（委托 ``_dynamics_solver``，Ch8 实现）。"""
+        return self._dynamics_solver.fdyn(self, q, dq, tau, f_ext=f_ext)
 
-        return idyn(self, q, dq, ddq, **kw)
+    def idyn(self, q, dq, ddq, f_ext=None):
+        """逆动力学（委托 ``_dynamics_solver``，Ch8 实现）。"""
+        return self._dynamics_solver.idyn(self, q, dq, ddq, f_ext=f_ext)
 
     def mass_matrix(self, q):
-        """关节空间惯量矩阵 M(q)（薄委托，Ch8 实现）。"""
-        from ..robotics.dynamics import mass_matrix
-
-        return mass_matrix(self, q)
+        """关节空间惯量矩阵 M(q)（委托 ``_dynamics_solver``，Ch8 实现）。"""
+        return self._dynamics_solver.mass_matrix(self, q)
 
     def coriolis(self, q, dq):
-        """科氏+向心项 C(q,q̇)（薄委托，Ch8 实现）。"""
-        from ..robotics.dynamics import coriolis
-
-        return coriolis(self, q, dq)
+        """科氏+向心项 C(q,q̇)（委托 ``_dynamics_solver``，Ch8 实现）。"""
+        return self._dynamics_solver.coriolis(self, q, dq)
 
     def gravity(self, q):
-        """重力项 G(q)（薄委托，Ch8 实现）。"""
-        from ..robotics.dynamics import gravity
-
-        return gravity(self, q)
+        """重力项 G(q)（委托 ``_dynamics_solver``，Ch8 实现）。"""
+        return self._dynamics_solver.gravity(self, q)
 
     def cartesian_inertia(self, q, frame=None):
-        """笛卡尔惯量 Λ=J⁻ᵀMJ⁻¹（薄委托，Ch8/9 实现）。"""
-        from ..robotics.dynamics import cartesian_inertia
+        """笛卡尔惯量 Λ=J⁻ᵀMJ⁻¹（M ⊕ ``arm.jac`` 模板，Ch8/9 实现）。"""
+        return self._dynamics_solver.cartesian_inertia(self, q, frame=frame)
 
-        return cartesian_inertia(self, q, frame=frame)
+    def plan_joint(self, q0, qf, *, method="quintic", **kw):
+        """关节空间点到点轨迹（委托 ``_traj_planner``；method 选 cubic/quintic/lspb）。"""
+        return self._traj_planner.plan_joint(self, q0, qf, method=method, **kw)
 
-    # ----------------------------------------------------------
-    # 安全校验（薄委托 safe_monitors；不依赖 backend，离线可用）
-    # ----------------------------------------------------------
-    def check_joint_limits(self, state):
-        """关节层安全校验（薄委托，Ch11 实现）。"""
-        from ..safe_monitors.arm_monitor import joint_limits_check
+    def plan_waypoints(self, qs, Ts, **kw):
+        """关节空间多点途经轨迹（段间平滑拼接）。"""
+        return self._traj_planner.plan_waypoints(self, qs, Ts, **kw)
 
-        return joint_limits_check(state, self.joint_limits)
+    def plan_cart(self, *, method="line", **kw):
+        """笛卡尔空间轨迹（method 选 line/arc；line 需 T0/Tf，arc 需 center/radius/T_start/angle）。"""
+        return self._traj_planner.plan_cart(self, method=method, **kw)
 
-    def check_tcp_limits(self, state):
-        """末端层安全校验（薄委托，Ch11 实现）。"""
-        from ..safe_monitors.joyarm_monitor import tcp_limits_check
+    def set_controller(self, name):
+        """运行期切换控制律（按注册名，如 ``"position"``）。"""
+        self._controller = _build_component(_CONTROL_REGISTRY, name, "control")
+        return self._controller
 
-        return tcp_limits_check(state, self.tcp_limits)
+    def play(self, traj, mode=ControlMode.POSITION, hz: int = 200):
+        """按时间序列回放轨迹（ControlLoop 驱动 ``_controller``，Ch6 实现）。"""
+        from ..robotics.control import play_trajectory
+
+        return play_trajectory(self, traj, mode=mode, hz=hz)
 
     # ----------------------------------------------------------
     # 本体执行类方法（依赖 backend_arm；未连接 raise；arm_* 与 end_* 对应）
@@ -374,7 +381,10 @@ class JoyArm:
         kp: Optional[np.ndarray] = None,
         kd: Optional[np.ndarray] = None,
     ) -> None:
-        """按控制模式下发运动指令（委托 ``backend_arm``）。
+        """按控制模式下发运动指令（委托 ``backend_arm``；三态 POSITION/VELOCITY/MIT）。
+
+        MIT 模式 ``kp/kd`` 可缺省（``None`` 透传后端回退 config 增益）；
+        纯力矩不设独立模式，经 MIT（``kp=kd=0``）实现。
 
         :raises RuntimeError: 未连接真机时抛出。
         :raises ValueError: 对应模式所需参数缺失时抛出。
@@ -389,14 +399,9 @@ class JoyArm:
             if dq is None:
                 raise ValueError("VELOCITY 模式需要 dq")
             self.backend_arm.send_velocity(dq)
-        elif mode == ControlMode.TORQUE:
-            if tau is None:
-                raise ValueError("TORQUE 模式需要 tau")
-            self.backend_arm.send_torque(tau)
         elif mode == ControlMode.MIT:
             missing = [
-                name for name, val in (("q", q), ("dq", dq), ("tau", tau),
-                                       ("kp", kp), ("kd", kd)) if val is None
+                name for name, val in (("q", q), ("dq", dq), ("tau", tau)) if val is None
             ]
             if missing:
                 raise ValueError(f"MIT 模式缺少参数：{missing}")

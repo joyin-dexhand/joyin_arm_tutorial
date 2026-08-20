@@ -15,7 +15,7 @@ from .transforms import T_to_Rp, R_to_quat, quat_to_R, Rp_to_T
 
 __all__ = [
     # 枚举
-    "ControlMode",      # 关节控制模式：POSITION / VELOCITY / TORQUE / MIT
+    "ControlMode",      # 关节控制模式：POSITION / VELOCITY / MIT
     "Severity",         # 安全违规分级：INFO / WARNING / ERROR / CRITICAL
     "SafetyAction",     # 安全响应策略：NONE / CLAMP / DAMPING_HOLD / FREEZE / ESTOP
     "TrajectorySpace",  # 轨迹空间标识：JOINT / CARTESIAN
@@ -44,13 +44,12 @@ class ControlMode(Enum):
 
     :cvar POSITION: 位置模式，下发目标关节角 ``q``。
     :cvar VELOCITY: 速度模式，下发目标关节速度 ``dq``。
-    :cvar TORQUE: 力矩模式，下发目标关节力矩 ``tau``。
-    :cvar MIT: MIT 阻抗/前馈模式，下发 ``(q, dq, tau_ff, kp, kd)``，
+    :cvar MIT: MIT 阻抗/前馈模式，下发 ``(q, dq, tau_ff, kp, kd)``；
+        纯力矩经 MIT（``kp=kd=0``，仅前馈 ``tau_ff``）实现，不设独立力矩模式。
     """
 
     POSITION = "position"
     VELOCITY = "velocity"
-    TORQUE = "torque"
     MIT = "mit"
 
 
@@ -245,8 +244,8 @@ class JointLimits(_ArrayEqMixin):
     所有数组维度均为 ``(n,)``，``n`` 为机械臂自由度数。
 
     - **硬限位**实例（``JoyArm.joint_limits``）：URDF/电机物理极限；
-      ``q_min/q_max`` 为位置硬限位，供 :func:`safe_monitors.arm_monitor.joint_limits_check`
-      监测报警（硬限位违规 → :attr:`Severity.ERROR` / :attr:`Severity.CRITICAL`）。
+      ``q_min/q_max`` 为位置硬限位，供 :func:`joyarm_core.utils.limits.clamp_to_limits`
+      指令裁剪守卫（硬限位违规 → :attr:`Severity.ERROR` / :attr:`Severity.CRITICAL`）。
     - **软限位**实例（``JoyArm.joint_limits_soft``）：略窄于硬限位、留余量；
       其 ``q_min/q_max`` 即 ``JoyArm.qlow/qhigh``，供
       :meth:`JoyArm.rand_q` / :meth:`JoyArm.clamp_q` / :meth:`JoyArm.is_q_valid`

@@ -22,7 +22,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第七章](chapt7_urdf.md) URDF、[第六章](chapt6_control.md) 控制为 moveit2 底层）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt10_ros2_demo.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）、joyarms/joyarm.py、robotics/control.py、robotics/fkine.py、robotics/ikine.py。
+【本章可引用的脚本/库】chapt10_ros2_demo.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）、joyarms/joyarm.py、robotics/control/、robotics/fkine/、robotics/ikine/。
 -->
 
 ## 1 基本概念和工作空间结构

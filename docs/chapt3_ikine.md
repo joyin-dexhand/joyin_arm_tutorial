@@ -24,7 +24,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接（如 [第二章](chapt2_fkine.md)、[第四章](chapt4_jacobian.md)）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt3_ikine_demo.py、robotics/ikine.py、robotics/fkine.py。
+【本章可引用的脚本/库】chapt3_ikine_demo.py、robotics/ikine/、robotics/fkine/。
 -->
 
 ## 1 位置运动学逆解可解性
@@ -70,14 +70,14 @@
   · 目标：讲清通用的数值解（不依赖特殊构型），作为解析解的补充。
   · 介绍牛顿-拉夫森法、阻尼最小二乘（DLS/LM）等；给迭代流程 + 一张"各数值法对比表"（方法|收敛性|奇异附近表现|计算量）。
   · ⚠️ 必加一条警告：奇异点附近雅可比病态、数值解可能不收敛或抖动（原理见 [第四章](chapt4_jacobian.md) §3 奇异性）。
-  · 引用 robotics/ikine.py（数值求解实现），用脚本引用句式。
+  · 引用 robotics/ikine/（数值求解实现），用脚本引用句式。
 -->
 
 ## 6 本章实践：JoyArm 位置逆运动学求解
 
 <!-- ✍️ 本节写作要点：
   · 目标：在 JoyArm 上完成 IK 求解并验证（末端位姿 → 关节角，再用第二章 FK 回算校验误差）。
-  · 建议结构：给定若干目标位姿 → 调用 robotics/ikine.py 求解 → 用 robotics/fkine.py 校验 → 分析多解/精度。
+  · 建议结构：给定若干目标位姿 → 调用 robotics/ikine/ 求解 → 用 robotics/fkine/ 校验 → 分析多解/精度。
   · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt3_ikine_demo.py`，使用说明见脚本头部注释。」
   · 可加 > 💡：工程上常固定一个"肘部在上/下"的解分支，避免多解来回跳变。
 -->

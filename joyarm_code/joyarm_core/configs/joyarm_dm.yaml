@@ -1,28 +1,39 @@
-# JoyArm (joyarm_dm, 达妙 DM 电机) 型号配置
+# JoyArmDM (joyarm_dm, 达妙 DM 电机) 型号配置
 # 由 joyarms/joyarm_dm.py 按型号名加载。
-# 注：关节位置/速度/力矩限位与 URDF <limit> 一致；FK 实际走 pinocchio（URDF）。
+# 注：关节位置/速度/力矩限位与 URDF <limit> 一致。
 
 name: joyarm_dm
 urdf: robots/joyarm_dm_fixend/urdf/joyarm_dm_fixend.urdf
 ee_frame: end_link
-q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 实际 home 位形
 
-# MDH 参数 (α_{i-1}, a_{i-1}, d_i, θ_offset_i)，6 行——教学参考常量
-# FK 实际走 pinocchio
+q_zero: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 零位形
+q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # home位形
+q_neutral: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 中性位形
+
+# MDH 参数：6 行 × [α_{i-1}, a_{i-1}, d_i, θ_offset_i]
 mdh:
-  alpha: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  a: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  d: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  theta_offset: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  - [0.0, 0.0, 0.0, 0.0] # base_to_link1
+  - [0.0, 0.0, 0.0, 0.0] # link1_to_link2
+  - [0.0, 0.0, 0.0, 0.0] # link2_to_link3
+  - [0.0, 0.0, 0.0, 0.0] # link3_to_link4
+  - [0.0, 0.0, 0.0, 0.0] # link4_to_link5
+  - [0.0, 0.0, 0.0, 0.0] # link5_to_link6
 
-# 关节硬限位（与 URDF <limit> 一致；弧度；速度 rad/s；力矩 N·m）
+# link6 → end_link 固定位姿：4×4 齐次矩阵
+T_link6_end:
+  - [3.6732051e-06, -9.2653590e-05, 1.0, 0.0]
+  - [-3.4033564e-10, -1.0, -9.2653590e-05, 0.0]
+  - [1.0, 0.0, -3.6732051e-06, 0.15539]
+  - [0.0, 0.0, 0.0, 1.0]
+
+# 关节硬限位（与 URDF <limit> 一致；角度 rad；速度 rad/s；力矩 N·m）
 joint_limits:
   q_min: [-2.80, -3.14, -3.14, -1.87, -1.57, -3.14]
   q_max: [2.80, 0.00, 0.00, 1.57, 1.57, 3.14]
   dq_max: [50.0, 50.0, 50.0, 200.0, 200.0, 200.0]
   tau_max: [27.0, 27.0, 27.0, 7.0, 7.0, 7.0]
 
-# 软限位 = 硬限位向内缩该比例（供采样/裁剪/校验留缓冲）；未配置时取 0（软=硬）
+# 关节软限位 = 硬限位向内缩该比例（供采样/裁剪/校验留缓冲）
 joint_limits_soft_margin: 0.05
 
 # 末端限位（Ch11 正式填；此处占位）
@@ -33,12 +44,138 @@ tcp_limits:
   f_max: 20.0 # N
   t_max: 5.0 # N·m
 
-# 通信参数：按 backend 分开（CAN 总线）；构造时由 JoyArm 基类按 backend_arm / backend_end 段实例化
-backend_arm: # 多轴本体后端（BackendArmDM）
-  can_interface: can0
-  baudrate: 1000000
-  motor_ids: [1, 2, 3, 4, 5, 6] # 6 个关节电机 ID（0x01~0x06）
-backend_end: # 末端后端（BackendEndGripper）
-  can_interface: can0
-  baudrate: 1000000
-  id: 7 # 两指夹爪 ID（0x07）
+# 夹爪行程（Ch11 正式填；此处占位）
+gripper_limits:
+  q_min: [0.0] # rad
+  q_max: [0.8] # rad
+
+# 求解器 / 规划器 / 控制律选型（JoyArm 策略成员；省略即用各域默认）
+# 可选：fkine(pin/mdh) · ikine(pin/analytic6r) · jacobian(pin/geometric)
+#      · dynamics(pin/lagrangian) · traj(default/toppra) · control(position)
+solvers:
+  fkine: pin
+  ikine: pin
+  jacobian: pin
+  dynamics: pin
+  traj: default
+  control: position
+
+# ---- arm与end的硬件通讯：达妙 DM 电机，USB-CAN ----
+backend:
+  name: backend_dm
+  arm: # arm本体后端
+    channel: /dev/ttyACM0
+    protocol: serial_can
+    bit_rate: 921600
+    control_rate: 500
+    joints:
+      - name: joint1
+        motor_id: 0x01
+        feedback_id: 0x11
+        model: "4340P"
+        vendor: "damiao"
+        MIT:
+          kp: 120.0
+          kd: 8.0
+        POS_VEL:
+          vel_kp: 0.0125
+          vel_ki: 0.004
+          pos_kp: 150.0
+          pos_ki: 0.5
+          vlim: 5.0
+
+      - name: joint2
+        motor_id: 0x02
+        feedback_id: 0x12
+        model: "4340P"
+        vendor: "damiao"
+        MIT:
+          kp: 120.0
+          kd: 8.0
+        POS_VEL:
+          vel_kp: 0.0125
+          vel_ki: 0.004
+          pos_kp: 150.0
+          pos_ki: 0.5
+          vlim: 5.0
+
+      - name: joint3
+        motor_id: 0x03
+        feedback_id: 0x13
+        model: "4340P"
+        vendor: "damiao"
+        MIT:
+          kp: 120.0
+          kd: 8.0
+        POS_VEL:
+          vel_kp: 0.0125
+          vel_ki: 0.004
+          pos_kp: 150.0
+          pos_ki: 0.5
+          vlim: 5.0
+
+      - name: joint4
+        motor_id: 0x04
+        feedback_id: 0x14
+        model: "4310"
+        vendor: "damiao"
+        MIT:
+          kp: 18.0
+          kd: 2.0
+        POS_VEL:
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 50.0
+          pos_ki: 1.0
+          vlim: 3.0
+
+      - name: joint5
+        motor_id: 0x05
+        feedback_id: 0x15
+        model: "4310"
+        vendor: "damiao"
+        MIT:
+          kp: 18.0
+          kd: 2.0
+        POS_VEL:
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 50.0
+          pos_ki: 1.0
+          vlim: 3.0
+
+      - name: joint6
+        motor_id: 0x06
+        feedback_id: 0x16
+        model: "4310"
+        vendor: "damiao"
+        MIT:
+          kp: 18.0
+          kd: 2.0
+        POS_VEL:
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 50.0
+          pos_ki: 1.0
+          vlim: 3.0
+
+  end: # 末端后端
+    channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
+    bit_rate: 921600
+    control_rate: 500
+    protocol: serial_can
+    joints:
+      - name: gripper
+        motor_id: 0x07
+        feedback_id: 0x17
+        model: "4310"
+        vendor: "damiao"
+        MIT:
+          kp: 8.0
+          kd: 1.0
+        POS_VEL:
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 50.0
+          pos_ki: 1.0
+          vlim: 3.0

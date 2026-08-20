@@ -22,7 +22,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接 [第N章](chapterN_M.md)。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】joyarms/joyarm.py、joyarms/joyarm_dm.py、robotics/control.py、joyarm_core/apps/teleop.py。
+【本章可引用的脚本/库】joyarms/joyarm.py、joyarms/joyarm_dm.py、robotics/control/、joyarm_core/apps/teleop.py。
 -->
 
 ## 1 操作安全须知
@@ -58,7 +58,7 @@
   · 目标：在操作层面让读者用末端位姿控制整臂（输入 xyz/姿态 → 机械臂自动到位）。
   · 对比"末端控制 vs 关节控制"（控制对象|输入量|直观性|适用场景），点明底层走的是正运动学（原理见第二章）。
   · ⚠️ 必须提示工作空间边界与奇异点附近可能无法到位（原理见第四章）。
-  · 引用 robotics/fkine.py / joyarms/joyarm.py，配 chapt 脚本。
+  · 引用 robotics/fkine/ / joyarms/joyarm.py，配 chapt 脚本。
 -->
 
 ## 5 示教与轨迹复现

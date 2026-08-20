@@ -1,30 +1,25 @@
 """``joyarm_core`` —— JoyArm 机械臂教程核心 SDK 库（ROS2-free）。
 
-分层架构（仅允许向下依赖；``joyarms`` 作富门面 ``arm.xx``）::
+组合根架构（仅向下依赖；robotics 一域一子包，REGISTRY 选型）::
 
-    joyarms/         设备模型：JoyArm(本体+末端) · joyarm_dm
+    joyarms/     组合根：JoyArm(门面+成员组装) · joyarm_dm
     ─────────────────────────────────────────────
-    robotics/     算法层：fkine · ikine(Ch3) · jacobian(Ch4) · trajectory(Ch5)
-                   · dynamics(Ch8) · control(Ch6/8/9)
-    safe_monitors/  监测层：arm/end/joyarm/external/supervisor(Ch11)
-    backends/     通信层（三层）：Backend → BackendArm/BackendEnd
-                   → BackendArmDM / BackendEndGripper
+    robotics/    算法层（一域一子包：ABC+实现+REGISTRY）：fkine · ikine · jacobian
+                 · trajectory · dynamics · control      ← 鸭子类型消费 arm
+    backends/    通信层：Backend → BackendArm/End → BackendArmDM/EndGripper
     ─────────────────────────────────────────────
-    utils/        基础层：transforms(数学) · types(共享类型) · interfaces(ArmProtocol)
-    robots/       URDF + meshes 资产    configs/  per-model YAML 配置
+    utils/       transforms(数学) · types(共享类型) · limits(限位守卫)
+    robots/ configs/   URDF+meshes 资产 / per-model YAML（solvers+backend 段）
 
-> ROS2 封装（节点/launch/rviz2）在 ``joyarm_ros2_ws`` 的``src/joyarm_node`` ，本包保持 ROS2-free，
-> 详见 ``joyarm_code/AGENTS.md``（子库项目记忆）。
-
-命名约定：类名驼峰（JoyArm/Backend…），文件名小写 snake_case。
-
-使用方式::
+ROS2 封装（节点/launch/rviz2）在 ``joyarm_ros2_ws/src/joyarm_node``（详见 AGENTS.md）；
+监测已裁撤：指令守卫在 utils/limits.py，状态监测归 ROS2 节点（Ch11）。
+命名约定：类名驼峰，文件名小写 snake_case。用法::
 
     from joyarm_core import JoyArmDM
 
-    arm = JoyArmDM()            # 默认未连接（离线）；JoyArm = 本体 + 末端
-    Q  = arm.rand_q(size=100_000)    # 限位内采样 (N,6)
-    P  = arm.fkine(Q, rep="pos")     # 门面：arm.fkine → (N,3)
+    arm = JoyArmDM()                 # 离线组合根：加载 configs+URDF，按 solvers: 组装成员
+    Q = arm.rand_q(size=100_000)     # 限位内采样 (N,6)
+    P = arm.fkine(Q, rep="pos")      # 门面 → (N,3)
 """
 from __future__ import annotations
 
@@ -71,13 +66,12 @@ from .utils.transforms import (
     adT,
     slerp,
 )
-from .utils.interfaces import ArmProtocol
 
 # ---- 设备模型层（JoyArm / JoyArmDM）----
 from .joyarms.joyarm import JoyArm
 from .joyarms.joyarm_dm import JoyArmDM
 
-# ---- 算法层（robotics；operate on ArmProtocol，不 import joyarms）----
+# ---- 算法层（robotics；鸭子类型消费 arm，不 import joyarms）----
 from .robotics.fkine import fkine
 from .robotics.ikine import ikine, ikine_constrained
 from .robotics.jacobian import jac, manipulability, cond_number, statics
@@ -94,8 +88,16 @@ from .robotics.trajectory import (
     validate,
 )
 from .robotics.dynamics import fdyn, idyn, mass_matrix, coriolis, gravity, cartesian_inertia
+# 求解器策略族（JoyArm._xxx 成员的可选实现；config solvers 段按注册名选型）
+from .robotics.fkine import FkineSolver, PinFkineSolver, MdhFkineSolver
+from .robotics.ikine import IkineSolver, PinIkineSolver, AnalyticIkine6R
+from .robotics.jacobian import JacobianSolver, PinJacobianSolver, GeometricJacobianSolver
+from .robotics.dynamics import DynamicsSolver, PinDynamicsSolver, LagrangianDynamicsSolver
+from .robotics.trajectory import TrajPlanner, DefaultTrajPlanner, ToppraTrajPlanner
 from .robotics.control import (
     ControlLoop,
+    Controller,
+    PositionController,
     play_trajectory,
     joint_position_control,
     joint_velocity_control,
@@ -113,18 +115,8 @@ from .robotics.control import (
     compute_cartesian_impedance,
 )
 
-# ---- 安全层（clamp_to_limits 自 utils/types.py 迁入 safe_monitors/arm_monitor.py）----
-from .safe_monitors import (
-    clamp_to_limits,
-    CollisionReport,
-    StateMonitor,
-    SelfCollisionChecker,
-    ExternalCollisionDetector,
-    SafetySupervisor,
-    joint_limits_check,
-    end_limits_check,
-    tcp_limits_check,
-)
+# ---- 指令路径守卫（clamp_to_limits；状态监测/日志归 ROS2 节点，Ch11）----
+from .utils.limits import clamp_to_limits
 
 # ---- 通信层（三层继承）----
 from . import backends
@@ -179,7 +171,6 @@ __all__ = [
     "T_mul",
     "adT",
     "slerp",
-    "ArmProtocol",
     # 设备模型层
     "JoyArm",
     "JoyArmDM",
@@ -207,7 +198,15 @@ __all__ = [
     "coriolis",
     "gravity",
     "cartesian_inertia",
+    # 求解器策略族
+    "FkineSolver", "PinFkineSolver", "MdhFkineSolver",
+    "IkineSolver", "PinIkineSolver", "AnalyticIkine6R",
+    "JacobianSolver", "PinJacobianSolver", "GeometricJacobianSolver",
+    "DynamicsSolver", "PinDynamicsSolver", "LagrangianDynamicsSolver",
+    "TrajPlanner", "DefaultTrajPlanner", "ToppraTrajPlanner",
     "ControlLoop",
+    "Controller",
+    "PositionController",
     "play_trajectory",
     "joint_position_control",
     "joint_velocity_control",
@@ -223,16 +222,8 @@ __all__ = [
     "ImpedanceControl",
     "AdmittanceControl",
     "compute_cartesian_impedance",
-    # 安全层
+    # 指令路径守卫（监测/日志归 ROS2 节点）
     "clamp_to_limits",
-    "CollisionReport",
-    "StateMonitor",
-    "SelfCollisionChecker",
-    "ExternalCollisionDetector",
-    "SafetySupervisor",
-    "joint_limits_check",
-    "end_limits_check",
-    "tcp_limits_check",
     # 通信层（三层）
     "backends",
     "Backend",

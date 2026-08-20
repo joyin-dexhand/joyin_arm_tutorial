@@ -23,7 +23,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接（如 [第四章](chapt4_jacobian.md)）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt5_trajectory_demo.py、robotics/trajectory.py、robotics/fkine.py、robotics/ikine.py。
+【本章可引用的脚本/库】chapt5_trajectory_demo.py、robotics/trajectory/、robotics/fkine/、robotics/ikine/。
 -->
 
 ## 1 关节空间规划

@@ -1,9 +1,7 @@
-"""``joyarm_core.joyarms`` —— 设备模型层子包。
+"""``joyarm_core.joyarms`` —— 设备模型层（组合根）。
 
-- :class:`JoyArm`（:mod:`joyarm_core.joyarms.joyarm`）：完整机械臂基类 = 多轴本体 + 末端执行器；
-  直接持有 ``backend_arm`` / ``backend_end``，提供运动学算法门面与本体/末端控制。
-- :class:`JoyArmDM`（:mod:`joyarm_core.joyarms.joyarm_dm`）：具体机械臂型号。
-
+JoyArm：策略成员组装 + 公开门面（:mod:`joyarm_core.joyarms.joyarm`）；
+JoyArmDM：具体型号预设（:mod:`joyarm_core.joyarms.joyarm_dm`）。
 """
 from .joyarm import JoyArm
 from .joyarm_dm import JoyArmDM

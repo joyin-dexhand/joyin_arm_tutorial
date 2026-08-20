@@ -1,17 +1,8 @@
-"""轨迹生成（轨迹层，Ch5 占位）。
+"""轨迹纯函数族（轨迹层零件，Ch5 占位）。
 
-在关节空间或笛卡尔空间生成平滑轨迹（时间序列），供
-:mod:`joyarm_core.robotics.control` 回放。
-
-- **关节空间**（§5.1）：三次 / 五次多项式、抛物线过渡线性（LSPB）、多点途经。
-- **笛卡尔空间**（§5.2）：直线（位置线性 + 姿态 slerp）、圆弧、平滑拼接。
-- **工具**：定速重定时、轨迹校验（接 :mod:`joyarm_core.safe_monitors`）。
-
-:mod:`joyarm_core.apps.teleop` 的示教记录**直接复用**本模块的
-:class:`Trajectory` 载体（不另定义子类）。
-
-对应章节：Ch5（``chapt5_trajectory.md`` 第五章 轨迹生成）。
-当前状态：仅签名 + docstring + ``raise NotImplementedError("Ch5 实现")``。
+关节空间（cubic/quintic/lspb/waypoints）+ 笛卡尔空间（line/arc）+ 工具（定速重定时 /
+校验）；供 control 回放，是各 TrajPlanner 的内部零件（DefaultTrajPlanner 按
+``method`` 分派）；teleop 示教记录直接复用 ``Trajectory`` 载体。
 """
 from __future__ import annotations
 
@@ -19,7 +10,7 @@ from typing import List, Optional
 
 import numpy as np
 
-from ..utils.types import Pose, TrajectorySpace, Violation
+from ...utils.types import Pose, TrajectorySpace, Violation
 
 __all__ = [
     "Trajectory",
@@ -206,7 +197,7 @@ def constant_velocity_retime(traj: Trajectory, v_max: float) -> Trajectory:
 
 
 def validate(traj: Trajectory, arm) -> List[Violation]:
-    """轨迹校验：途经点是否超限位 / 奇异（接 :mod:`joyarm_core.safe_monitors`）。
+    """轨迹校验：途经点是否超限位 / 奇异。
 
     :return: 违规列表 ``list[Violation]``。
     """

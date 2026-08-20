@@ -34,10 +34,9 @@ class TestEnums:
     def test_control_mode_values(self):
         assert types.ControlMode.POSITION.value == "position"
         assert types.ControlMode.VELOCITY.value == "velocity"
-        assert types.ControlMode.TORQUE.value == "torque"
         assert types.ControlMode.MIT.value == "mit"
-        # 共 4 个成员
-        assert len(list(types.ControlMode)) == 4
+        # 共 3 个成员（纯力矩经 MIT 实现，不设独立力矩模式）
+        assert len(list(types.ControlMode)) == 3
 
     def test_severity_values(self):
         assert [m.value for m in types.Severity] == [
@@ -448,7 +447,7 @@ class TestSerialization:
         return types.ArmState(
             joint=js,
             tcp=tcp,
-            mode=types.ControlMode.TORQUE,
+            mode=types.ControlMode.MIT,
             timestamp=99.5,
             errors=["overtemp"],
         )
@@ -459,14 +458,14 @@ class TestSerialization:
         assert s2 == s  # 深相等（numpy 安全 __eq__）
         assert isinstance(s2.joint, types.JointState)
         assert isinstance(s2.tcp.pose, types.Pose)
-        assert s2.mode is types.ControlMode.TORQUE
+        assert s2.mode is types.ControlMode.MIT
         assert s2.errors == ["overtemp"]
 
     def test_asdict_nested(self, rng):
         s = self._full_arm_state(rng)
         d = dataclasses.asdict(s)
         assert d["timestamp"] == 99.5
-        assert d["mode"] is types.ControlMode.TORQUE
+        assert d["mode"] is types.ControlMode.MIT
         assert_allclose(d["joint"]["q"], s.joint.q)
         # 嵌套 dataclass 递归展开为 dict
         assert isinstance(d["tcp"], dict)
@@ -580,7 +579,7 @@ class TestEqualityDeepEdgeCases:
                         orientation=tcp.pose.orientation.copy(),
                     )
                 ),
-                mode=types.ControlMode.TORQUE,
+                mode=types.ControlMode.MIT,
                 timestamp=42.0,
                 errors=["e1"],
             )

@@ -45,18 +45,20 @@ class TestImportSmoke:
             "rpy_to_R",
             "slerp",
             "clamp_to_limits",
-            "ArmProtocol",
             # 设备模型层（JoyArm / JoyArmDM）
             "JoyArm",
             "JoyArmDM",
-            # 算法层
+            # 算法层（函数式入口 + 求解器策略族）
             "fkine",
             "ikine",
             "Trajectory",
             "fdyn",
-            # 控制 / 安全
+            "FkineSolver",
+            "PinFkineSolver",
+            "TrajPlanner",
+            # 控制
             "ControlLoop",
-            "SafetySupervisor",
+            "Controller",
             # 通信层（三层）
             "backends",
             "Backend",

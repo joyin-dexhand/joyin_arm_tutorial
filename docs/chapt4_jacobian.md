@@ -23,7 +23,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接（如 [第二章](chapt2_fkine.md)、[第六章](chapt6_control.md)）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt4_jacobian_demo.py、robotics/jacobian.py、robotics/fkine.py、robotics/ikine.py。
+【本章可引用的脚本/库】chapt4_jacobian_demo.py、robotics/jacobian/、robotics/fkine/、robotics/ikine/。
 -->
 
 ## 1 连杆之间的速度传递与力传递特性
@@ -39,7 +39,7 @@
 <!-- ✍️ 本节写作要点：
   · 目标：给出核心关系 $\dot{x} = \bm{J}(q)\dot{q}$，并讲清雅可比的两种构造方法（矢量积法 / 微分法）。
   · 建议结构：关系推导 → 构造方法对比（方法|思路|适用|备注）→ JoyArm 雅可比示例。
-  · 引用 robotics/jacobian.py，用脚本引用句式；可内联一小段雅可比计算代码。
+  · 引用 robotics/jacobian/，用脚本引用句式；可内联一小段雅可比计算代码。
   · 收尾 > 📌：雅可比同时连接运动学（§1）、奇异性（§3）与静力学（§4），是本章枢纽。
 -->
 

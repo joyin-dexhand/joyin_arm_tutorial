@@ -1,6 +1,6 @@
 .zcode/
 site/
-.venv/
+*/.venv/
 spec/
 
 # Python 字节码缓存 / 打包元数据 / 测试缓存

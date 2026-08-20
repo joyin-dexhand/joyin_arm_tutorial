@@ -1,13 +1,15 @@
-"""``joyarm_core.robotics`` —— 算法层子包。
+"""``joyarm_core.robotics`` —— 算法层子包（一域一子包，策略族）。
 
-收口全部机器人算法实现（仅依赖 :mod:`joyarm_core.utils` 基础层与 numpy）：
+仅依赖 utils 与 numpy（鸭子类型消费 ``arm``，不 import joyarms）。每域 = 策略 ABC +
+实现们（一节点一文件）+ ``REGISTRY`` 注册表 + 函数式教学入口；JoyArm 构造时按
+config ``solvers:`` 段查表组装私有成员（``_fkine_solver`` 等），算法互调走公开门面：
 
-- :mod:`joyarm_core.robotics.fkine`：正运动学（Ch2，已实现）。
-- :mod:`joyarm_core.robotics.ikine`：逆运动学（Ch3）。
-- :mod:`joyarm_core.robotics.jacobian`：速度运动学与静力学（Ch4）。
-- :mod:`joyarm_core.robotics.trajectory`：轨迹生成（Ch5）。
-- :mod:`joyarm_core.robotics.dynamics`：正/逆动力学（Ch8）。
-- :mod:`joyarm_core.robotics.control`：运动学/动力学/力控（Ch6/Ch8/Ch9）。
+- fkine：正运动学（Ch2，pin ✅ / mdh 🟡）
+- ikine：逆运动学（Ch3，pin / analytic6r 🟡）
+- jacobian：速度运动学与静力学（Ch4，pin / geometric 🟡）
+- trajectory：轨迹规划（Ch5，default / toppra 🟡）
+- dynamics：正/逆动力学（Ch8，pin / lagrangian 🟡）
+- control：控制律与执行器（Ch6/8/9，position 默认 🟡）
 """
 from .fkine import fkine
 from .ikine import ikine, ikine_constrained
@@ -45,7 +47,6 @@ from .control import (
 )
 
 __all__ = [
-    # fkine / ikine / jacobian
     "fkine",
     "ikine",
     "ikine_constrained",
@@ -53,7 +54,6 @@ __all__ = [
     "manipulability",
     "cond_number",
     "statics",
-    # trajectory
     "Trajectory",
     "joint_cubic",
     "joint_quintic",
@@ -64,14 +64,12 @@ __all__ = [
     "cart_to_joint",
     "constant_velocity_retime",
     "validate",
-    # dynamics
     "fdyn",
     "idyn",
     "mass_matrix",
     "coriolis",
     "gravity",
     "cartesian_inertia",
-    # control
     "ControlLoop",
     "play_trajectory",
     "joint_position_control",

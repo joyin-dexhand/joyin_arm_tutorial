@@ -24,7 +24,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第二章](chapt2_fkine.md) MDH、[第八章](chapt8_dyn.md) 动力学惯量）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt7_urdf_demo.py、robotics/fkine.py。
+【本章可引用的脚本/库】chapt7_urdf_demo.py、robotics/fkine/。
 -->
 
 ## 1 构型设计
@@ -63,7 +63,7 @@
 
 <!-- ✍️ 本节写作要点：
   · 目标：在 JoyArm 上走通"CAD → URDF → fkine 校验"的完整流程。
-  · 建议结构：导出 URDF → 用 robotics/fkine.py 算若干位姿 → 与实测/设计值对比 → 标注误差。
+  · 建议结构：导出 URDF → 用 robotics/fkine/ 算若干位姿 → 与实测/设计值对比 → 标注误差。
   · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt7_urdf_demo.py`，使用说明见脚本头部注释。」
   · 可加 > 💡：URDF 导出后建议同步整理一张 MDH 参数表，方便后续章节引用。
 -->
