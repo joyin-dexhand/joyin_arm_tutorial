@@ -9,7 +9,7 @@ from typing import List
 
 import numpy as np
 
-from .traj_planner import TrajPlanner, _JOINT_METHODS, _CART_METHODS
+from .traj_planner import TrajPlanner, JOINT_METHODS, CART_METHODS
 from .segments import (
     Trajectory,
     joint_cubic,
@@ -33,7 +33,7 @@ class DefaultTrajPlanner(TrajPlanner):
             return joint_quintic(q0, qf, T, hz=hz, **kw)
         elif method == "lspb":
             return joint_lspb(q0, qf, T, hz=hz, **kw)
-        raise ValueError(f"未知 method={method!r}（关节空间可用：{_JOINT_METHODS}）")
+        raise ValueError(f"未知 method={method!r}（关节空间可用：{JOINT_METHODS}）")
 
     def plan_waypoints(self, arm, qs: List[np.ndarray], Ts: List[float],
                        *, smooth: bool = True) -> Trajectory:
@@ -45,4 +45,4 @@ class DefaultTrajPlanner(TrajPlanner):
         elif method == "arc":
             return cart_arc(kw["center"], kw["radius"], kw["T_start"],
                             kw["angle"], plane=kw.get("plane", "xy"), T=T, hz=hz)
-        raise ValueError(f"未知 method={method!r}（笛卡尔空间可用：{_CART_METHODS}）")
+        raise ValueError(f"未知 method={method!r}（笛卡尔空间可用：{CART_METHODS}）")

@@ -1,42 +1,34 @@
-# JoyArmDM (joyarm_dm, 达妙 DM 电机) 型号配置
-# 由 joyarms/joyarm_dm.py 按型号名加载。
-# 注：关节位置/速度/力矩限位与 URDF <limit> 一致。
+# JoyArmDM (joyarm_dm) 型号配置
+# 命名链（由 JoyArmFactory 校验）：工厂入参 = 文件名 = name 字段 = joyarms 注册名 = joyarm_dm；
+# backend_dm 为本型号专属整机后端（1:1），robot 指向 robots/ 下的 URDF 目录名
 
+# ===================================================
+# 基本信息
+# ===================================================
 name: joyarm_dm
-urdf: robots/joyarm_dm_fixend/urdf/joyarm_dm_fixend.urdf
+robot: joyarm_dm_fixend # robots下的urdf+mesh
 ee_frame: end_link
 
-q_zero: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 零位形
-q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # home位形
-q_neutral: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 中性位形
+# arm 的 MDH 参数及各关节限位：6 行 × [α_{i-1}, a_{i-1}, d_i, θ_i, q_min_i, q_max_i, dq_max_i, tau_max_i, soft_margin]，单位：rad, m, m, rad, rad, rad, rad/s, N·m, None
+arm_mdh_and_limits:
+  - [0.0, 0.0, 0.0, 0.0, -2.80, 2.80, 50.0, 27.0, 0.05]
+  - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
+  - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
+  - [0.0, 0.0, 0.0, 0.0, -1.87, 1.57, 200.0, 7.0, 0.05]
+  - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
+  - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
 
-# MDH 参数：6 行 × [α_{i-1}, a_{i-1}, d_i, θ_offset_i]
-mdh:
-  - [0.0, 0.0, 0.0, 0.0] # base_to_link1
-  - [0.0, 0.0, 0.0, 0.0] # link1_to_link2
-  - [0.0, 0.0, 0.0, 0.0] # link2_to_link3
-  - [0.0, 0.0, 0.0, 0.0] # link3_to_link4
-  - [0.0, 0.0, 0.0, 0.0] # link4_to_link5
-  - [0.0, 0.0, 0.0, 0.0] # link5_to_link6
-
-# link6 → end_link 固定位姿：4×4 齐次矩阵
-T_link6_end:
+# 末link系 → end系的固定位姿：4×4 齐次矩阵
+T_linkn_end:
   - [3.6732051e-06, -9.2653590e-05, 1.0, 0.0]
   - [-3.4033564e-10, -1.0, -9.2653590e-05, 0.0]
   - [1.0, 0.0, -3.6732051e-06, 0.15539]
   - [0.0, 0.0, 0.0, 1.0]
 
-# 关节硬限位（与 URDF <limit> 一致；角度 rad；速度 rad/s；力矩 N·m）
-joint_limits:
-  q_min: [-2.80, -3.14, -3.14, -1.87, -1.57, -3.14]
-  q_max: [2.80, 0.00, 0.00, 1.57, 1.57, 3.14]
-  dq_max: [50.0, 50.0, 50.0, 200.0, 200.0, 200.0]
-  tau_max: [27.0, 27.0, 27.0, 7.0, 7.0, 7.0]
+# end 执行器的电机限位 [q_min, q_max, dq_max, tau_max]
+end_limits: [0.0, 0.8, 1.0, 10.0]
 
-# 关节软限位 = 硬限位向内缩该比例（供采样/裁剪/校验留缓冲）
-joint_limits_soft_margin: 0.05
-
-# 末端限位（Ch11 正式填；此处占位）
+# 末端系空间限位
 tcp_limits:
   workspace_box: [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]] # [min, max] (m)
   v_lin_max: 1.0 # m/s
@@ -44,29 +36,31 @@ tcp_limits:
   f_max: 20.0 # N
   t_max: 5.0 # N·m
 
-# 夹爪行程（Ch11 正式填；此处占位）
-gripper_limits:
-  q_min: [0.0] # rad
-  q_max: [0.8] # rad
+# 关节角度组
+q_zero: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 零位形
+q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # home位形
+q_neutral: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 中性位形
 
-# 求解器 / 规划器 / 控制律选型（JoyArm 策略成员；省略即用各域默认）
-# 可选：fkine(pin/mdh) · ikine(pin/analytic6r) · jacobian(pin/geometric)
-#      · dynamics(pin/lagrangian) · traj(default/toppra) · control(position)
+# ===================================================================
+# 求解器 / 规划器 / 控制律（JoyArm 成员，省略即用默认）
+# ===================================================================
 solvers:
-  fkine: pin
-  ikine: pin
-  jacobian: pin
-  dynamics: pin
+  fkine: default
+  ikine: default
+  jacobian: default
+  dynamics: default
   traj: default
-  control: position
+  control: default
 
+# ===================================================================
 # ---- arm与end的硬件通讯：达妙 DM 电机，USB-CAN ----
+# ===================================================================
 backend:
   name: backend_dm
   arm: # arm本体后端
     channel: /dev/ttyACM0
     protocol: serial_can
-    bit_rate: 921600
+    baud_rate: 921600
     control_rate: 500
     joints:
       - name: joint1
@@ -161,7 +155,7 @@ backend:
 
   end: # 末端后端
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
-    bit_rate: 921600
+    baud_rate: 921600
     control_rate: 500
     protocol: serial_can
     joints:

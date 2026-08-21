@@ -12,10 +12,11 @@ import numpy as np
 
 from .segments import Trajectory
 
-__all__ = ["TrajPlanner"]
+__all__ = ["TrajPlanner", "JOINT_METHODS", "CART_METHODS"]
 
-_JOINT_METHODS = ("cubic", "quintic", "lspb")
-_CART_METHODS = ("line", "arc")
+# 公有参数 method 的合法取值表（plan_joint / plan_cart 契约，各实现类共享）
+JOINT_METHODS = ("cubic", "quintic", "lspb")
+CART_METHODS = ("line", "arc")
 
 
 class TrajPlanner(ABC):

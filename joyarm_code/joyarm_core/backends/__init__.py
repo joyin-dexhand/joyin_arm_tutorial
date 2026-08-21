@@ -1,25 +1,34 @@
-"""``joyarm_core.backends`` —— 硬件通信后端子包（三层继承）。
+"""``joyarm_core.backends`` —— 整机硬件通信后端子包（两层继承 + 注册表）。
 
 继承层次（类名驼峰、文件名小写）::
 
-    Backend                      # 通用根（backend.py）
-    ├── BackendArm               # 多轴本体 → BackendArmDM
-    └── BackendEnd               # 末端执行器 → BackendEndGripper
+    Backend                  # 整机后端抽象根（backend.py）：本体+末端一体，
+    └── BackendDM            #   方法以 _arm / _end 后缀区分两组
+        └── …                #   其他型号子类（结构同、参数异）
 
-按**硬件类型**派生、再按**具体型号**派生。不设物理仿真后端：仿真 / 预演 / 教学
-走 ``JoyArm`` 离线模式（``connected=False``，纯运动学计算）；可视化在兄弟包
-:mod:`joyarm_ros2_ws` 用 rviz2 呈现。
+子类与机械臂型号 **1:1 对应**派生（``backend(_joyarm)_dm`` ↔ ``joyarm_dm``，
+即每个型号一个专属整机后端）；``REGISTRY`` 供 config ``backend.name`` 选型
+（JoyArm 解析 yaml 后经 :func:`get_backend` 构建子类实例）。
+不设物理仿真后端：仿真 / 预演 / 教学走 ``JoyArm`` 离线模式（``connected=False``，
+纯运动学计算）；可视化在兄弟包 ``joyarm_ros2_ws`` 用 rviz2 呈现。
 """
 from .backend import Backend
-from .backend_arm import BackendArm
-from .backend_end import BackendEnd
-from .backend_arm_dm import BackendArmDM
-from .backend_end_gripper import BackendEndGripper
+from .backend_dm import BackendDM
 
-__all__ = [
-    "Backend",
-    "BackendArm",
-    "BackendEnd",
-    "BackendArmDM",
-    "BackendEndGripper",
-]
+REGISTRY = {
+    "backend_dm": BackendDM,
+}
+
+__all__ = ["Backend", "BackendDM", "REGISTRY", "get_backend"]
+
+
+def get_backend(name: str) -> type:
+    """按注册名解析后端类（config ``backend.name`` 选型入口）。
+
+    :param name: 注册名（如 ``"backend_dm"``）。
+    :return: 后端类（调用时传 yaml ``backend:`` 段字典，``name`` 已弹出）。
+    :raises ValueError: 注册名未知时抛出，并列出全部可选项。
+    """
+    if name not in REGISTRY:
+        raise ValueError(f"『{name}』型号在 backends 中未找到；可用：{sorted(REGISTRY)}")
+    return REGISTRY[name]

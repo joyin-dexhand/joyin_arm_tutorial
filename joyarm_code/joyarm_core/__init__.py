@@ -2,11 +2,11 @@
 
 组合根架构（仅向下依赖；robotics 一域一子包，REGISTRY 选型）::
 
-    joyarms/     组合根：JoyArm(门面+成员组装) · joyarm_dm
+    joyarms/     组合根：JoyArm(门面+成员组装) · joyarm_dm · JoyArmFactory(型号名选型)
     ─────────────────────────────────────────────
     robotics/    算法层（一域一子包：ABC+实现+REGISTRY）：fkine · ikine · jacobian
                  · trajectory · dynamics · control      ← 鸭子类型消费 arm
-    backends/    通信层：Backend → BackendArm/End → BackendArmDM/EndGripper
+    backends/    通信层：Backend(整机) → BackendDM（name 选型：REGISTRY + get_backend）
     ─────────────────────────────────────────────
     utils/       transforms(数学) · types(共享类型) · limits(限位守卫)
     robots/ configs/   URDF+meshes 资产 / per-model YAML（solvers+backend 段）
@@ -15,11 +15,12 @@ ROS2 封装（节点/launch/rviz2）在 ``joyarm_ros2_ws/src/joyarm_node``（详
 监测已裁撤：指令守卫在 utils/limits.py，状态监测归 ROS2 节点（Ch11）。
 命名约定：类名驼峰，文件名小写 snake_case。用法::
 
-    from joyarm_core import JoyArmDM
+    from joyarm_core import joyarm_factory   # 推荐：型号名唯一参数
 
-    arm = JoyArmDM()                 # 离线组合根：加载 configs+URDF，按 solvers: 组装成员
-    Q = arm.rand_q(size=100_000)     # 限位内采样 (N,6)
-    P = arm.fkine(Q, rep="pos")      # 门面 → (N,3)
+    arm = joyarm_factory("joyarm_dm")  # 离线组合根：加载 configs+URDF，按 solvers: 组装成员
+    Q = arm.rand_q(size=100_000)       # 限位内采样 (N,6)
+    P = arm.fkine(Q, rep="pos")        # 门面 → (N,3)
+    # 等价直用：from joyarm_core import JoyArmDM; arm = JoyArmDM()
 """
 from __future__ import annotations
 
@@ -67,9 +68,10 @@ from .utils.transforms import (
     slerp,
 )
 
-# ---- 设备模型层（JoyArm / JoyArmDM）----
+# ---- 设备模型层（JoyArm / JoyArmDM / 型号工厂）----
 from .joyarms.joyarm import JoyArm
 from .joyarms.joyarm_dm import JoyArmDM
+from .joyarms import JoyArmFactory, joyarm_factory
 
 # ---- 算法层（robotics；鸭子类型消费 arm，不 import joyarms）----
 from .robotics.fkine import fkine
@@ -118,14 +120,12 @@ from .robotics.control import (
 # ---- 指令路径守卫（clamp_to_limits；状态监测/日志归 ROS2 节点，Ch11）----
 from .utils.limits import clamp_to_limits
 
-# ---- 通信层（三层继承）----
+# ---- 通信层（整机后端，两层继承 + name 选型注册表）----
 from . import backends
 from .backends import (
     Backend,
-    BackendArm,
-    BackendEnd,
-    BackendArmDM,
-    BackendEndGripper,
+    BackendDM,
+    get_backend,
 )
 
 __version__ = "0.1.0"
@@ -174,6 +174,8 @@ __all__ = [
     # 设备模型层
     "JoyArm",
     "JoyArmDM",
+    "JoyArmFactory",
+    "joyarm_factory",
     # 算法层
     "fkine",
     "ikine",
@@ -224,13 +226,11 @@ __all__ = [
     "compute_cartesian_impedance",
     # 指令路径守卫（监测/日志归 ROS2 节点）
     "clamp_to_limits",
-    # 通信层（三层）
+    # 通信层（整机后端）
     "backends",
     "Backend",
-    "BackendArm",
-    "BackendEnd",
-    "BackendArmDM",
-    "BackendEndGripper",
+    "BackendDM",
+    "get_backend",
     # 版本
     "__version__",
 ]

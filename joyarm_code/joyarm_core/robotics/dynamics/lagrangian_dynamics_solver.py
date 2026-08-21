@@ -5,8 +5,6 @@ PinDynamicsSolver 黑盒互为对照；config ``solvers.dynamics: lagrangian`` �
 """
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from .dynamics_solver import DynamicsSolver
