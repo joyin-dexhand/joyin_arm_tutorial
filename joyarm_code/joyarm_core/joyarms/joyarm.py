@@ -1,12 +1,9 @@
 """``JoyArm`` —— 完整机械臂基类（arm本体 + end执行器），**组合根**。
 
-持有 pinocchio ``model``/``data`` + 限位；一个整机通信后端（``backend``，本体+末端
-一体，按 yaml ``backend:`` 段的 ``name`` 经 backends REGISTRY 选型构建）与六个策略
-成员（``_fkine_solver``/``_ikine_solver``/``_jacobian_solver``/``_dynamics_solver``/
-``_traj_planner``/``_controller``，按 yaml ``solvers:`` 段经各域 REGISTRY 选型组装）；
-公开门面（``fkine``/``plan_joint``/``play`` 等）全部委托私有成员，换配置即换算法。
-离线（``connected=False`` 默认）：计算类（``fkine``/``jac``/…）随时可用；
-执行类（``get_arm_state``/``set_arm_command``/``end_open``/…）``connect()`` 前抛 RuntimeError。
+持有 pinocchio ``model``/``data`` + 限位；一个整机通信后端（``backend``，按 yaml ``backend:`` 段的 ``name`` 经 backends REGISTRY 选型构建）
+与六个策略成员（``_fkine_solver``/``_ikine_solver``/``_jacobian_solver``/``_dynamics_solver``/``_traj_planner``/``_controller``，
+按 yaml ``solvers:`` 段经各域 REGISTRY 选型组装）；公开门面（``fkine``/``plan_joint_p2p``/``play_joint`` 等）全部委托私有成员，换配置即换算法。
+离线（``connected=False`` 默认）：计算类（``fkine``/``jac``/…）随时可用；执行类（``get_arm_state``/``set_arm_command``/``end_open``/…）``connect()`` 前抛 RuntimeError。
 """
 from __future__ import annotations
 
@@ -35,7 +32,7 @@ from ..robotics.ikine import REGISTRY as _IKINE_REGISTRY
 from ..robotics.jacobian import REGISTRY as _JACOBIAN_REGISTRY
 from ..robotics.dynamics import REGISTRY as _DYNAMICS_REGISTRY
 from ..robotics.trajectory import REGISTRY as _TRAJ_REGISTRY
-from ..robotics.control import REGISTRY as _CONTROL_REGISTRY, play_trajectory
+from ..robotics.control import REGISTRY as _CONTROL_REGISTRY, play_joint_trajectory, play_cart_trajectory
 
 __all__ = ["JoyArm", "load_config"]
 
@@ -177,25 +174,31 @@ class JoyArm:
         self.qlow: np.ndarray = self.joint_limits_soft.q_min
         self.qhigh: np.ndarray = self.joint_limits_soft.q_max
 
-        # ---- 中性位形 ----
-        self.q_neutral: np.ndarray = np.clip(
-            pin.neutral(self.model),
+        # ---- 特征位形（config 优先，缺失回退 q_zero）----
+        self._q_zero: np.ndarray = np.clip(
+            np.asarray(cfg.get("q_zero", np.zeros(self.n)), dtype=float).reshape(-1),
             self.joint_limits.q_min,
             self.joint_limits.q_max,
         )
+        self._q_home: np.ndarray = np.asarray(
+            cfg.get("q_home", self._q_zero), dtype=float
+        ).reshape(-1)
+        self._q_neutral: np.ndarray = np.asarray(
+            cfg.get("q_neutral", self._q_zero), dtype=float
+        ).reshape(-1)
 
         self.tcp_limits: TcpLimits = TcpLimits()  # 末端限位（占位）
         self.T_base: np.ndarray = np.eye(4)  # 基坐标系偏移
 
-        # ---- 整机通信后端：config backend 段 name 选型（本体+末端一体）----
-        self.backend = None
+        # ---- 整机通信后端：config backend 段 name 选型（本体+末端一体，私有）----
+        self._backend = None
         backend_cfg = cfg.get("backend")
         if backend_cfg:
             backend_cfg = dict(backend_cfg)
             backend_name = backend_cfg.pop("name", None)
             if backend_name is None:
                 raise ValueError("config backend 段缺少选型键 name")
-            self.backend = get_backend(backend_name)(backend_cfg)
+            self._backend = get_backend(backend_name)(backend_cfg)
 
         # ---- 策略成员：按 config solvers 段 + 各域注册表组装（算法可换）----
         solvers_cfg = cfg.get("solvers", {})
@@ -207,18 +210,36 @@ class JoyArm:
         self._controller = _build_component(_CONTROL_REGISTRY, solvers_cfg.get("control", "default"), "control")
 
     # ----------------------------------------------------------
+    # 特征位形（只读，返回拷贝）
+    # ----------------------------------------------------------
+    @property
+    def q_zero(self) -> np.ndarray:
+        """硬件零位 ``(n,)``（编码器标零基准）。"""
+        return self._q_zero.copy()
+
+    @property
+    def q_home(self) -> np.ndarray:
+        """上电初始位形 ``(n,)``。"""
+        return self._q_home.copy()
+
+    @property
+    def q_neutral(self) -> np.ndarray:
+        """数值求解默认初值 ``(n,)``（如 IK 迭代起点）。"""
+        return self._q_neutral.copy()
+
+    # ----------------------------------------------------------
     # 真机连接（connect 后才可执行 arm_*/end_*）
     # ----------------------------------------------------------
     def connect(self) -> None:
         """连接真机（整机后端：本体 + 末端）。"""
-        if self.backend is not None:
-            self.backend.connect()
+        if self._backend is not None:
+            self._backend.connect()
         self.connected = True
 
     def disconnect(self) -> None:
         """断开真机（整机后端：本体 + 末端）。"""
-        if self.backend is not None:
-            self.backend.disconnect()
+        if self._backend is not None:
+            self._backend.disconnect()
         self.connected = False
 
     def _require_connected(self) -> None:
@@ -275,7 +296,7 @@ class JoyArm:
         return (
             f"{type(self).__name__}(name={self.name!r}, n={self.n}, "
             f"ee_frame={self.ee_frame_name!r}, "
-            f"backend={'yes' if self.backend else 'no'}, "
+            f"backend={'yes' if self._backend else 'no'}, "
             f"{'connected' if self.connected else 'offline'})"
         )
 
@@ -306,7 +327,7 @@ class JoyArm:
     # robotics 求解算法（门面 → 私有策略成员，config solvers 段可换实现）
     # ----------------------------------------------------------
     def fkine(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, rep: str = "T"):
-        """正运动学（委托 ``_fkine_solver``；默认 pinocchio 黑盒，config ``solvers.fkine`` 可换）。"""
+        """正运动学（``rep`` 取 ``quat``/``T``/``se3``：Pose / 4×4 矩阵 / pin.SE3）。"""
         return self._fkine_solver.solve(self, q, frame=frame, rep=rep)
 
     def ikine(self, T_target, q0=None, frame=None, **kw):
@@ -318,7 +339,7 @@ class JoyArm:
         return self._ikine_solver.solve_constrained(self, T_target, q0=q0, frame=frame, **kw)
 
     def jac(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, ref: str = "local"):
-        """雅可比 J(q)（委托 ``_jacobian_solver``）。"""
+        """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端帧系 / 基座系）。"""
         return self._jacobian_solver.jac(self, q, frame=frame, ref=ref)
 
     def manipulability(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
@@ -332,10 +353,6 @@ class JoyArm:
     def statics(self, q: np.ndarray, F: np.ndarray, frame: Optional[Union[str, int]] = None):
         """静力学 τ = JᵀF（雅可比衍生量）。"""
         return self._jacobian_solver.statics(self, q, F, frame=frame)
-
-    def fdyn(self, q, dq, tau, f_ext=None):
-        """正动力学（委托 ``_dynamics_solver``）。"""
-        return self._dynamics_solver.fdyn(self, q, dq, tau, f_ext=f_ext)
 
     def idyn(self, q, dq, ddq, f_ext=None):
         """逆动力学（委托 ``_dynamics_solver``）。"""
@@ -357,37 +374,65 @@ class JoyArm:
         """笛卡尔惯量 Λ=J⁻ᵀMJ⁻¹（M ⊕ ``arm.jac`` 模板）。"""
         return self._dynamics_solver.cartesian_inertia(self, q, frame=frame)
 
-    def plan_joint(self, q0, qf, *, method="quintic", **kw):
-        """关节空间点到点轨迹（委托 ``_traj_planner``；method 选 cubic/quintic/lspb）。"""
-        return self._traj_planner.plan_joint(self, q0, qf, method=method, **kw)
+    def plan_joint_p2p(self, q0, qf, *, method="quintic", **kw):
+        """关节空间点到点轨迹（``method`` 选 cubic/quintic/lspb）。"""
+        return self._traj_planner.plan_joint_p2p(self, q0, qf, method=method, **kw)
 
-    def plan_waypoints(self, qs, Ts, **kw):
+    def plan_joint_waypoints(self, qs, Ts, **kw):
         """关节空间多点途经轨迹（段间平滑拼接）。"""
-        return self._traj_planner.plan_waypoints(self, qs, Ts, **kw)
+        return self._traj_planner.plan_joint_waypoints(self, qs, Ts, **kw)
 
-    def plan_cart(self, *, method="line", **kw):
-        """笛卡尔空间轨迹（method 选 line/arc；line 需 T0/Tf，arc 需 center/radius/T_start/angle）。"""
-        return self._traj_planner.plan_cart(self, method=method, **kw)
+    def plan_cart_p2p(self, *, method="line", **kw):
+        """笛卡尔点到点（``method`` 选 line/arc；line 需 T0/Tf，arc 需 center/radius/T_start/angle）。"""
+        return self._traj_planner.plan_cart_p2p(self, method=method, **kw)
+
+    def plan_cart_waypoints(self, poses, Ts, **kw):
+        """笛卡尔多点途经轨迹（段间平滑拼接）。"""
+        return self._traj_planner.plan_cart_waypoints(self, poses, Ts, **kw)
 
     def set_controller(self, name):
         """运行期切换控制律（按注册名，如 ``"position"``）。"""
         self._controller = _build_component(_CONTROL_REGISTRY, name, "control")
         return self._controller
 
-    def play(self, traj, mode=ControlMode.POSITION, hz: int = 200):
-        """按时间序列回放轨迹（ControlLoop 驱动 ``_controller``）。"""
-        return play_trajectory(self, traj, mode=mode, hz=hz)
+    def play_joint(self, traj, mode=ControlMode.POSITION, hz: int = 200):
+        """按时间序列回放关节轨迹（ControlLoop 驱动 ``_controller``）。"""
+        return play_joint_trajectory(self, traj, mode=mode, hz=hz)
+
+    def play_cart(self, traj, hz: int = 200, **kw):
+        """回放笛卡尔轨迹（OSC：任务空间 PD → JᵀF + 重力补偿 → MIT 下发）。"""
+        return play_cart_trajectory(self, traj, hz=hz, **kw)
 
     # ----------------------------------------------------------
-    # 本体执行类方法（依赖 backend；未连接 raise；arm_* 与 end_* 对应）
+    # 本体执行类方法（依赖 _backend；未连接 raise；arm_* 与 end_* 对应）
     # ----------------------------------------------------------
+    def enable_arm(self, joint: Optional[int] = None) -> None:
+        """使能本体关节电机（``joint=None`` 全部）。"""
+        self._require_connected()
+        self._backend.enable_arm(joint)
+
+    def disable_arm(self, joint: Optional[int] = None) -> None:
+        """失能本体关节电机。"""
+        self._require_connected()
+        self._backend.disable_arm(joint)
+
+    def set_zero_arm(self, joint: Optional[int] = None) -> None:
+        """本体零位标定（先失能，反馈无故障后再标零）。"""
+        self._require_connected()
+        self._backend.set_zero_arm(joint)
+
+    def set_mode_arm(self, mode: ControlMode) -> None:
+        """切换本体控制模式（收指令前必须先切到对应模式）。"""
+        self._require_connected()
+        self._backend.set_mode_arm(mode)
+
     def get_arm_state(self) -> ArmState:
-        """读取本体状态快照（委托 ``backend.read_state_arm()``；与 ``get_end_state`` 对应）。
+        """读取本体状态快照（委托 ``_backend.read_state_arm()``；与 ``get_end_state`` 对应）。
 
         :raises RuntimeError: 未连接真机（``connected=False``）时抛出。
         """
         self._require_connected()
-        return self.backend.read_state_arm()
+        return self._backend.read_state_arm()
 
     def set_arm_command(self,
         mode: ControlMode = ControlMode.POSITION,
@@ -397,7 +442,7 @@ class JoyArm:
         kp: Optional[np.ndarray] = None,
         kd: Optional[np.ndarray] = None,
     ) -> None:
-        """按控制模式下发运动指令（委托 ``backend``；三态 POSITION/VELOCITY/MIT）。
+        """按控制模式下发运动指令（委托 ``_backend``；三态 POSITION/VELOCITY/MIT）。
 
         MIT 模式 ``kp/kd`` 可缺省（``None`` 透传后端回退 config 增益）；
         纯力矩不设独立模式，经 MIT（``kp=kd=0``）实现。
@@ -409,43 +454,63 @@ class JoyArm:
         if mode == ControlMode.POSITION:
             if q is None:
                 raise ValueError("POSITION 模式需要 q")
-            self.backend.send_position_arm(q)
+            self._backend.send_position_arm(q)
         elif mode == ControlMode.VELOCITY:
             if dq is None:
                 raise ValueError("VELOCITY 模式需要 dq")
-            self.backend.send_velocity_arm(dq)
+            self._backend.send_velocity_arm(dq)
         elif mode == ControlMode.MIT:
             missing = [
                 name for name, val in (("q", q), ("dq", dq), ("tau", tau)) if val is None
             ]
             if missing:
                 raise ValueError(f"MIT 模式缺少参数：{missing}")
-            self.backend.send_mit_arm(q, dq, tau, kp, kd)
+            self._backend.send_mit_arm(q, dq, tau, kp, kd)
         else:
             raise ValueError(f"未知控制模式：{mode}")
 
     # ----------------------------------------------------------
-    # 末端执行类方法（依赖 backend；未连接 raise）
+    # 末端执行类方法（依赖 _backend；未连接 raise）
     # ----------------------------------------------------------
+    def enable_end(self) -> None:
+        """使能末端执行器电机。"""
+        self._require_connected()
+        self._backend.enable_end()
+
+    def disable_end(self) -> None:
+        """失能末端执行器电机。"""
+        self._require_connected()
+        self._backend.disable_end()
+
+    def set_zero_end(self) -> None:
+        """末端零位标定（先失能，反馈无故障后再标零）。"""
+        self._require_connected()
+        self._backend.set_zero_end()
+
+    def set_mode_end(self, mode: ControlMode) -> None:
+        """切换末端控制模式（收指令前必须先切到对应模式）。"""
+        self._require_connected()
+        self._backend.set_mode_end(mode)
+
     def end_open(self) -> None:
         """张开末端到最大（默认行程/力度）。"""
         self._require_connected()
-        self.backend.send_action_end("open")
+        self._backend.send_action_end("open")
 
     def end_close(self) -> None:
         """闭合末端（夹到默认力度即停）。"""
         self._require_connected()
-        self.backend.send_action_end("close")
+        self._backend.send_action_end("close")
 
     def set_end_position(self, position: float) -> None:
         """末端位置控制（如两指间距 mm）。"""
         self._require_connected()
-        self.backend.send_position_end(position)
+        self._backend.send_position_end(position)
 
     def set_end_force(self, force: float) -> None:
         """末端力度控制（如夹持力 N）。"""
         self._require_connected()
-        self.backend.send_force_end(force)
+        self._backend.send_force_end(force)
 
     def get_end_state(self) -> dict:
         """读取末端状态（如夹爪 ``{"width_mm","force_N","is_grasping"}``）。
@@ -453,4 +518,4 @@ class JoyArm:
         :raises RuntimeError: 未连接真机时抛出。
         """
         self._require_connected()
-        return self.backend.read_state_end()
+        return self._backend.read_state_end()

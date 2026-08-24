@@ -35,9 +35,9 @@ class FkineSolver(ABC):
         frame: Optional[Union[str, int]] = None,
         rep: str = "T",
     ):
-        """模板：``q`` 为 ``(n,)`` 单点 / ``(N,n)`` 批量；``rep`` 取 ``"T"``(Pose)/``"pos"``/``"se3"``。"""
-        if rep not in ("T", "pos", "se3"):
-            raise ValueError(f"未知 rep={rep!r}（仅支持 'T'/'pos'/'se3'）")
+        """模板：``q`` 为 ``(n,)`` 单点 / ``(N,n)`` 批量；``rep`` 取 ``"quat"``(Pose)/``"T"``(4×4)/``"se3"``。"""
+        if rep not in ("quat", "T", "se3"):
+            raise ValueError(f"未知 rep={rep!r}（仅支持 'quat'/'T'/'se3'）")
 
         q_arr = np.asarray(q, dtype=float)
         if q_arr.ndim == 1:
@@ -50,19 +50,19 @@ class FkineSolver(ABC):
     @staticmethod
     def _to_rep(T: np.ndarray, rep: str):
         """``(4,4)`` → 指定表示。"""
-        if rep == "T":
+        if rep == "quat":
             return Pose.from_T(T)
-        elif rep == "pos":
-            return T[:3, 3]
+        elif rep == "T":
+            return T
         else:  # se3
             return pin.SE3(T[:3, :3], T[:3, 3])
 
     def _solve_batch(self, arm, Q: np.ndarray, frame, rep: str):
-        """批量 FK：循环调内核，``data`` 缓冲区在内核内复用。"""
+        """批量 FK：循环调内核，``data`` 缓冲区在内核内复用（``rep="T"`` 返回 ``(N,4,4)`` 数组）。"""
         N = Q.shape[0]
-        if rep == "pos":
-            out = np.empty((N, 3))
+        if rep == "T":
+            out = np.empty((N, 4, 4))
             for i in range(N):
-                out[i] = self.frame_T(arm, Q[i], frame)[:3, 3]
+                out[i] = self.frame_T(arm, Q[i], frame)
             return out
         return [self._to_rep(self.frame_T(arm, Q[i], frame), rep) for i in range(N)]

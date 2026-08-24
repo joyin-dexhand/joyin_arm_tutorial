@@ -16,6 +16,7 @@ from .segments import (
     joint_waypoints,
     cart_line,
     cart_arc,
+    cart_waypoints,
     cart_to_joint,
     constant_velocity_retime,
     validate,
@@ -30,22 +31,27 @@ __all__ = [
     "TrajPlanner", "DefaultTrajPlanner", "ToppraTrajPlanner", "REGISTRY",
     "Trajectory",
     "joint_cubic", "joint_quintic", "joint_lspb", "joint_waypoints",
-    "cart_line", "cart_arc", "cart_to_joint",
+    "cart_line", "cart_arc", "cart_waypoints", "cart_to_joint",
     "constant_velocity_retime", "validate",
-    "plan_joint", "plan_waypoints", "plan_cart",
+    "plan_joint_p2p", "plan_joint_waypoints", "plan_cart_p2p", "plan_cart_waypoints",
 ]
 
 
-def plan_joint(arm, q0, qf, *, method="quintic", **kw):
-    """函数式入口（教学用）：委托 ``arm.plan_joint``，即 ``arm._traj_planner``。"""
-    return arm.plan_joint(q0, qf, method=method, **kw)
+def plan_joint_p2p(arm, q0, qf, *, method="quintic", **kw):
+    """函数式入口（教学用）：委托 ``arm.plan_joint_p2p``，即 ``arm._traj_planner``。"""
+    return arm.plan_joint_p2p(q0, qf, method=method, **kw)
 
 
-def plan_waypoints(arm, qs, Ts, **kw):
-    """函数式入口（教学用）：委托 ``arm.plan_waypoints``。"""
-    return arm.plan_waypoints(qs, Ts, **kw)
+def plan_joint_waypoints(arm, qs, Ts, **kw):
+    """函数式入口（教学用）：委托 ``arm.plan_joint_waypoints``。"""
+    return arm.plan_joint_waypoints(qs, Ts, **kw)
 
 
-def plan_cart(arm, *, method="line", **kw):
-    """函数式入口（教学用）：委托 ``arm.plan_cart``。"""
-    return arm.plan_cart(method=method, **kw)
+def plan_cart_p2p(arm, *, method="line", **kw):
+    """函数式入口（教学用）：委托 ``arm.plan_cart_p2p``。"""
+    return arm.plan_cart_p2p(method=method, **kw)
+
+
+def plan_cart_waypoints(arm, poses, Ts, **kw):
+    """函数式入口（教学用）：委托 ``arm.plan_cart_waypoints``。"""
+    return arm.plan_cart_waypoints(poses, Ts, **kw)

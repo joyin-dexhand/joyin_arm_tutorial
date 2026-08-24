@@ -22,6 +22,7 @@ __all__ = [
     # 笛卡尔空间
     "cart_line",
     "cart_arc",
+    "cart_waypoints",
     "cart_to_joint",
     # 工具
     "constant_velocity_retime",
@@ -137,13 +138,13 @@ def joint_waypoints(
 # 笛卡尔空间规划
 # ============================================================
 def cart_line(T0: np.ndarray, Tf: np.ndarray, T: float, hz: int = 200) -> Trajectory:
-    """笛卡尔直线（位置线性 + 姿态 slerp）。
+    """笛卡尔直线（位置线性 + 姿态 slerp，均配五次时间律 → C2 平滑）。
 
     :param T0: ``(4,4)`` 起点位姿。
     :param Tf: ``(4,4)`` 终点位置。
     :param T: 总时长，秒。
     """
-    # 占位：Ch5 实现——位置部分线性插值，姿态部分用 slerp（球面插值），合起来就是末端走直线。
+    # 占位：Ch5 实现——位置沿直线、姿态沿测地线，路径参数 s(t) 取五次时间律（起止速度/加速度为零）。
     raise NotImplementedError("cart_line 待 Ch5 实现")
 
 
@@ -156,7 +157,7 @@ def cart_arc(
     T: float = 1.0,
     hz: int = 200,
 ) -> Trajectory:
-    """笛卡尔圆弧。
+    """笛卡尔圆弧（弧线路径 + slerp 姿态，均配五次时间律 → C2 平滑）。
 
     :param center: ``(3,)`` 圆心。
     :param radius: 半径，m。
@@ -164,8 +165,23 @@ def cart_arc(
     :param angle: 扫过的角度，弧度。
     :param plane: 圆弧所在平面法向标识（``"xy"``/``"xz"``/``"yz"``）。
     """
-    # 占位：Ch5 实现——末端沿指定平面上的圆弧运动，常用于绕过障碍物或画圆。
+    # 占位：Ch5 实现——末端沿指定平面上的圆弧运动（绕障/画圆），扫角配五次时间律。
     raise NotImplementedError("cart_arc 待 Ch5 实现")
+
+
+def cart_waypoints(
+    poses: List[np.ndarray],
+    Ts: List[float],
+    smooth: bool = True,
+) -> Trajectory:
+    """笛卡尔多点途经：段间平滑拼接。
+
+    :param poses: ``[(4,4), ...]`` 途经位姿序列（含起止）。
+    :param Ts: 每段时长，秒。
+    :param smooth: 段间接缝是否平滑（C2 连续）。
+    """
+    # 占位：Ch5 实现——段间位置五次多项式、姿态 slerp，接缝保证位置/速度/加速度连续。
+    raise NotImplementedError("cart_waypoints 待 Ch5 实现")
 
 
 def cart_to_joint(

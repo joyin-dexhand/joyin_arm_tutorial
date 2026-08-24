@@ -16,7 +16,8 @@ __all__ = [
     "arm_position_control",
     "arm_velocity_control",
     "ControlLoop",
-    "play_trajectory",
+    "play_joint_trajectory",
+    "play_cart_trajectory",
 ]
 
 
@@ -67,6 +68,15 @@ class ControlLoop:
         raise NotImplementedError("ControlLoop.stop 待 Ch6 实现")
 
 
-def play_trajectory(arm, traj, mode: ControlMode = ControlMode.POSITION, hz: int = 200):
-    """按时间序列回放轨迹（§6 例程 6/7；等价"自动重放示教"）。"""
-    raise NotImplementedError("play_trajectory 待 Ch6 实现")
+def play_joint_trajectory(arm, traj, mode: ControlMode = ControlMode.POSITION, hz: int = 200):
+    """按时间序列回放关节轨迹（§6 例程 6/7；等价"自动重放示教"）。"""
+    raise NotImplementedError("play_joint_trajectory 待 Ch6 实现")
+
+
+def play_cart_trajectory(arm, traj, hz: int = 200, **kw):
+    """回放笛卡尔轨迹（OSC，§6/§9）。
+
+    设计：逐拍 FK 求当前位姿 → 任务空间 PD（Kp/Kd 位置+姿态误差）得期望 wrench
+    → ``τ = JᵀF + G(q)`` 重力补偿 → MIT 下发。
+    """
+    raise NotImplementedError("play_cart_trajectory 待 Ch6 实现")

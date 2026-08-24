@@ -1,7 +1,7 @@
 """PinJacobianSolver —— pinocchio 黑盒雅可比（默认实现，Ch4 占位）。
 
-内核 Ch4 落地：``pin.computeFrameJacobian``（local）或经 ``getFrameJacobian``
-转参考系；衍生量由基类模板给出。
+内核 Ch4 落地：``pin.computeFrameJacobian``（LOCAL）或经 ``getFrameJacobian``
+转 WORLD（即 ``base`` 基座系）；衍生量由基类模板给出。
 """
 from __future__ import annotations
 

@@ -1,8 +1,7 @@
 """PinDynamicsSolver —— pinocchio 黑盒动力学（默认实现，Ch8 占位）。
 
-内核即 pin 三件套 ``aba``/``rnea``/``crba``（C/G 由 ``rnea`` 特殊调用导出）。
-本库不做物理仿真：``fdyn`` 仅作"给力求加速度"的数学函数（教学 / 控制律设计用），
-整机预演由 ``joyarm_ros2_ws`` 的 rviz2 承担。
+内核即 pin 双件套 ``rnea``/``crba``（C/G 由 ``rnea`` 特殊调用导出）；本库不做
+物理仿真（无正动力学），整机预演由 ``joyarm_ros2_ws`` 的 rviz2 承担。
 """
 from __future__ import annotations
 
@@ -14,10 +13,7 @@ __all__ = ["PinDynamicsSolver"]
 
 
 class PinDynamicsSolver(DynamicsSolver):
-    """pinocchio（aba/rnea/crba）黑盒动力学。"""
-
-    def fdyn(self, arm, q, dq, tau, f_ext=None) -> np.ndarray:
-        raise NotImplementedError("PinDynamicsSolver.fdyn 待 Ch8 实现")
+    """pinocchio（rnea/crba）黑盒动力学。"""
 
     def idyn(self, arm, q, dq, ddq, f_ext=None) -> np.ndarray:
         raise NotImplementedError("PinDynamicsSolver.idyn 待 Ch8 实现")

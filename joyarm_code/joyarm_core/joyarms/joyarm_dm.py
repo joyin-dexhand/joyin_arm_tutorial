@@ -1,8 +1,8 @@
 """``JoyArmDM`` —— JoyArm 6 自由度机械臂型号预设（完整臂 = 本体 + 夹爪，Ch2 即用）。
 
-固化 joyarm_dm 硬件平台默认值：随包 URDF（``robot`` 键）、末端帧、MDH 参考表、home
-位形；整机后端不绑类——由基类按 ``configs/joyarm_dm.yaml`` 的 ``backend:`` 段
-``name`` 选型构建（``backend_dm`` 与本型号 1:1 对应）。可调参数（末端帧/home/MDH/
+固化 joyarm_dm 硬件平台默认值：随包 URDF（``robot`` 键）、末端帧、MDH 参考表；
+整机后端不绑类——由基类按 ``configs/joyarm_dm.yaml`` 的 ``backend:`` 段
+``name`` 选型构建（``backend_dm`` 与本型号 1:1 对应）。可调参数（末端帧/MDH/
 末端限位）config 优先、缺失回退类常量（无 YAML 也能实例化）；``MDH_TABLE``/
 ``MDH_LIMITS`` 仅供 MDH 白盒/手写运动学链路（可选数据源，不覆盖 URDF/pin 限位），
 FK 默认走 pinocchio（URDF 链路），数值以第七章 URDF 导出为准。
@@ -53,9 +53,6 @@ class JoyArmDM(JoyArm):
     # 末link系 → end系固定位姿（URDF end_joint，fixed）：MDH 白盒递推后的固定尾巴
     T_LINKN_END: np.ndarray = np.eye(4)
 
-    # home 位形（实际 home，未必等于中性位形）；第七章标定后核对
-    Q_HOME: np.ndarray = np.zeros(6)
-
     def __init__(
         self,
         name: str = "JoyArmDM",
@@ -86,9 +83,6 @@ class JoyArmDM(JoyArm):
         )
 
         # ---- config 驱动的属性（回退到类常量）----
-        self._q_home: np.ndarray = np.asarray(
-            cfg.get("q_home", self.Q_HOME), dtype=float
-        ).reshape(-1)
         # MDH 链路（可选）：arm_mdh_and_limits 6×9 → 前 4 列 MDH + 后 5 列限位
         if cfg.get("arm_mdh_and_limits") is not None:
             arr = np.asarray(cfg["arm_mdh_and_limits"], dtype=float).reshape(6, -1)
@@ -118,11 +112,6 @@ class JoyArmDM(JoyArm):
     def T_linkn_end(self) -> np.ndarray:
         """返回末link系 → end系固定位姿 ``(4,4)`` ndarray（教学查阅用）。"""
         return self.T_LINKN_END.copy()
-
-    @property
-    def q_home(self) -> np.ndarray:
-        """实际 home 位形 ``(6,)``（优先取自 config）。"""
-        return self._q_home.copy()
 
     # ----------------------------------------------------------
     # 内部：配置应用

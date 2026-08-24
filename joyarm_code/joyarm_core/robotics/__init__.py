@@ -8,7 +8,7 @@ config ``solvers:`` 段查表组装私有成员（``_fkine_solver`` 等），算
 - ikine：逆运动学（Ch3，pin / analytic6r 🟡）
 - jacobian：速度运动学与静力学（Ch4，pin / geometric 🟡）
 - trajectory：轨迹规划（Ch5，default / toppra 🟡）
-- dynamics：正/逆动力学（Ch8，pin / lagrangian 🟡）
+- dynamics：逆动力学与 M/C/G（Ch8，pin / lagrangian 🟡）
 - control：控制律与执行器（Ch6/8/9，position 默认 🟡）
 """
 from .fkine import fkine
@@ -22,14 +22,16 @@ from .trajectory import (
     joint_waypoints,
     cart_line,
     cart_arc,
+    cart_waypoints,
     cart_to_joint,
     constant_velocity_retime,
     validate,
 )
-from .dynamics import fdyn, idyn, mass_matrix, coriolis, gravity, cartesian_inertia
+from .dynamics import idyn, mass_matrix, coriolis, gravity, cartesian_inertia
 from .control import (
     ControlLoop,
-    play_trajectory,
+    play_joint,
+    play_cart,
     joint_position_control,
     joint_velocity_control,
     torque_control,
@@ -61,17 +63,18 @@ __all__ = [
     "joint_waypoints",
     "cart_line",
     "cart_arc",
+    "cart_waypoints",
     "cart_to_joint",
     "constant_velocity_retime",
     "validate",
-    "fdyn",
     "idyn",
     "mass_matrix",
     "coriolis",
     "gravity",
     "cartesian_inertia",
     "ControlLoop",
-    "play_trajectory",
+    "play_joint",
+    "play_cart",
     "joint_position_control",
     "joint_velocity_control",
     "torque_control",

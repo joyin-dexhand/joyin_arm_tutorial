@@ -2,7 +2,7 @@
 
 DynamicsSolver(ABC，Λ 模板) · PinDynamicsSolver(``"pin"``，默认，Ch8 占位) ·
 LagrangianDynamicsSolver(``"lagrangian"``，白盒占位)。``REGISTRY`` 供 config
-``solvers.dynamics`` 选型；``fdyn`` / ``idyn`` / ``mass_matrix`` / ``coriolis`` /
+``solvers.dynamics`` 选型；``idyn`` / ``mass_matrix`` / ``coriolis`` /
 ``gravity`` / ``cartesian_inertia`` 委托门面（教学用）。
 """
 from .dynamics_solver import DynamicsSolver
@@ -16,13 +16,8 @@ REGISTRY = {
 
 __all__ = [
     "DynamicsSolver", "PinDynamicsSolver", "LagrangianDynamicsSolver", "REGISTRY",
-    "fdyn", "idyn", "mass_matrix", "coriolis", "gravity", "cartesian_inertia",
+    "idyn", "mass_matrix", "coriolis", "gravity", "cartesian_inertia",
 ]
-
-
-def fdyn(arm, q, dq, tau, f_ext=None):
-    """函数式入口（教学用）：委托 ``arm.fdyn``，即 ``arm._dynamics_solver.fdyn``。"""
-    return arm.fdyn(q, dq, tau, f_ext=f_ext)
 
 
 def idyn(arm, q, dq, ddq, f_ext=None):

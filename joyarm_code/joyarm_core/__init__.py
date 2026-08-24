@@ -19,7 +19,7 @@ ROS2 封装（节点/launch/rviz2）在 ``joyarm_ros2_ws/src/joyarm_node``（详
 
     arm = joyarm_factory("joyarm_dm")  # 离线组合根：加载 configs+URDF，按 solvers: 组装成员
     Q = arm.rand_q(size=100_000)       # 限位内采样 (N,6)
-    P = arm.fkine(Q, rep="pos")        # 门面 → (N,3)
+    T = arm.fkine(Q)                   # 门面 → _fkine_solver.solve → (N,4,4)
     # 等价直用：from joyarm_core import JoyArmDM; arm = JoyArmDM()
 """
 from __future__ import annotations
@@ -85,11 +85,12 @@ from .robotics.trajectory import (
     joint_waypoints,
     cart_line,
     cart_arc,
+    cart_waypoints,
     cart_to_joint,
     constant_velocity_retime,
     validate,
 )
-from .robotics.dynamics import fdyn, idyn, mass_matrix, coriolis, gravity, cartesian_inertia
+from .robotics.dynamics import idyn, mass_matrix, coriolis, gravity, cartesian_inertia
 # 求解器策略族（JoyArm._xxx 成员的可选实现；config solvers 段按注册名选型）
 from .robotics.fkine import FkineSolver, PinFkineSolver, MdhFkineSolver
 from .robotics.ikine import IkineSolver, PinIkineSolver, AnalyticIkine6R
@@ -100,7 +101,8 @@ from .robotics.control import (
     ControlLoop,
     Controller,
     PositionController,
-    play_trajectory,
+    play_joint,
+    play_cart,
     joint_position_control,
     joint_velocity_control,
     torque_control,
@@ -191,10 +193,10 @@ __all__ = [
     "joint_waypoints",
     "cart_line",
     "cart_arc",
+    "cart_waypoints",
     "cart_to_joint",
     "constant_velocity_retime",
     "validate",
-    "fdyn",
     "idyn",
     "mass_matrix",
     "coriolis",
@@ -209,7 +211,8 @@ __all__ = [
     "ControlLoop",
     "Controller",
     "PositionController",
-    "play_trajectory",
+    "play_joint",
+    "play_cart",
     "joint_position_control",
     "joint_velocity_control",
     "torque_control",

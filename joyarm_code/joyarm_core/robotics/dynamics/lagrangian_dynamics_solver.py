@@ -15,9 +15,6 @@ __all__ = ["LagrangianDynamicsSolver"]
 class LagrangianDynamicsSolver(DynamicsSolver):
     """拉格朗日推导白盒动力学。"""
 
-    def fdyn(self, arm, q, dq, tau, f_ext=None) -> np.ndarray:
-        raise NotImplementedError("LagrangianDynamicsSolver 待 Ch8 实现")
-
     def idyn(self, arm, q, dq, ddq, f_ext=None) -> np.ndarray:
         raise NotImplementedError("LagrangianDynamicsSolver 待 Ch8 实现")
 

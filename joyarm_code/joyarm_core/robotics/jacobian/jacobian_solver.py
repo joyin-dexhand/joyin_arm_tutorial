@@ -25,7 +25,7 @@ class JacobianSolver(ABC):
         frame: Optional[Union[str, int]] = None,
         ref: str = "local",
     ) -> np.ndarray:
-        """内核：``(6,n)`` 雅可比（前 3 行线速度、后 3 行角速度）；``ref`` 取 local/world。"""
+        """内核：``(6,n)`` 雅可比（前 3 行线速度、后 3 行角速度）；``ref`` 取 local/base（末端帧自身系 / 基座系）。"""
 
     def manipulability(self, arm, q: np.ndarray, frame=None) -> float:
         """Yoshikawa 可操作度 ``w = sqrt(det(J Jᵀ))``（椭球体积度量）。"""

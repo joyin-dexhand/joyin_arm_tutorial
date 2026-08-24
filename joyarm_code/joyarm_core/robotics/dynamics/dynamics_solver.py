@@ -1,8 +1,9 @@
 """DynamicsSolver —— 动力学策略 ABC（模板方法）。
 
 ``JoyArm._dynamics_solver`` 的契约：实现经 config ``solvers.dynamics`` 选型。
-正/逆动力学与 M/C/G 五项为求解内核（抽象）；笛卡尔惯量 ``Λ = J⁻ᵀMJ⁻¹`` 是
-M ⊕ J 的通用衍生量，由基类模板给出（J 经 ``arm.jac`` 门面，自动跟随雅可比替换）。Ch8。
+逆动力学与 M/C/G 四项为求解内核（抽象）；笛卡尔惯量 ``Λ = J⁻ᵀMJ⁻¹`` 是
+M ⊕ J 的通用衍生量，由基类模板给出（J 经 ``arm.jac`` 门面，自动跟随雅可比替换）。
+本库不做物理仿真，不设正动力学（fdyn）。Ch8。
 """
 from __future__ import annotations
 
@@ -15,12 +16,7 @@ __all__ = ["DynamicsSolver"]
 
 
 class DynamicsSolver(ABC):
-    """动力学策略接口：``M(q)q̈ + C(q,q̇)q̇ + G(q) = τ`` 的两类求解。"""
-
-    @abstractmethod
-    def fdyn(self, arm, q: np.ndarray, dq: np.ndarray, tau: np.ndarray,
-             f_ext: Optional[np.ndarray] = None) -> np.ndarray:
-        """正动力学（ABA）：状态 + 力矩 → ``q̈``，返回 ``(n,)`` rad/s²。"""
+    """动力学策略接口：``M(q)q̈ + C(q,q̇)q̇ + G(q) = τ`` 的求解（无正动力学）。"""
 
     @abstractmethod
     def idyn(self, arm, q: np.ndarray, dq: np.ndarray, ddq: np.ndarray,
