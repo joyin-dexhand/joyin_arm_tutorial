@@ -12,9 +12,9 @@ backends.backend_dm.BackendDM`。契约方法扁平挂在单类上，以 ``_arm`
       arm: {channel, protocol, baud_rate, control_rate, joints}   # 本体子段
       end: {channel, protocol, baud_rate, control_rate, joints}   # 末端子段
 
-DM 等模式电机的硬约束：**接收指令前必须先切换到对应控制模式**
-（:meth:`Backend.set_mode_arm` / :meth:`Backend.set_mode_end`）；电机按 config
-注册，无总线扫描；无力矩指令通道，纯力矩经 MIT（``kp=kd=0``）实现。
+接口按功能分类：生命周期（connect/disconnect）、使能失能（enable/disable/
+set_zero）、状态读取（read_state）、模式切换（set_mode）、指令下发（send_*）、
+电机参数读写（read_param/write_param）。收录多厂商关节电机的通用功能。
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ __all__ = ["Backend"]
 class Backend(ABC):
     """整机硬件通信后端抽象基类（本体 + 末端一体）。
 
-    ``_arm`` 族方法的 ``joint`` 形参：关节索引，``None`` 表示全部关节。
+    ``joint`` 形参：电机索引，``None`` 表示全部电机。
 
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 两个子段，各含 ``channel`` / ``protocol`` /
@@ -79,7 +79,7 @@ class Backend(ABC):
 
     @abstractmethod
     def read_state_arm(self) -> ArmState:
-        """读取本体状态快照（关节角/速度/力矩/温度等）。"""
+        """读取本体状态快照（关节角/速度/力矩/使能与错误状态等）。"""
 
     @abstractmethod
     def send_position_arm(self, q: np.ndarray, joint: Optional[int] = None) -> None:
@@ -114,24 +114,44 @@ class Backend(ABC):
         :param kd: 速度阻尼 ``(n,)``；``None`` 回退 config ``MIT.kd``。
         """
 
-    # ----------------------------------------------------------
-    # 末端（执行器电机）：_end 后缀
-    # ----------------------------------------------------------
     @abstractmethod
-    def enable_end(self) -> None:
-        """使能末端执行器电机。"""
+    def read_param_arm(self, joint: int, key: str):
+        """读本体关节电机参数。
+
+        :param joint: 关节索引。
+        :param key: 参数名（字符串，语义由子类映射到厂商寄存器，
+            如 DM 的 ``"pos_kp"`` → 寄存器 27）。
+        :return: 参数值（float 或 int）。
+        """
 
     @abstractmethod
-    def disable_end(self) -> None:
-        """失能末端执行器电机。"""
+    def write_param_arm(self, joint: int, key: str, value, persist: bool = False) -> None:
+        """写本体关节电机参数。
+
+        :param joint: 关节索引。
+        :param key: 参数名（语义由子类定义）。
+        :param value: 参数值。
+        :param persist: ``True`` 时写入并持久化到非易失存储（如 DM 需先失能再存闪存）。
+        """
+
+    # ----------------------------------------------------------
+    # 末端（执行器电机组）：_end 后缀（可多电机，如灵巧手）
+    # ----------------------------------------------------------
+    @abstractmethod
+    def enable_end(self, joint: Optional[int] = None) -> None:
+        """使能末端执行器电机（``joint=None`` 全部）。"""
 
     @abstractmethod
-    def set_zero_end(self) -> None:
-        """末端零位标定（先失能，反馈无故障后再标零）。"""
+    def disable_end(self, joint: Optional[int] = None) -> None:
+        """失能末端执行器电机（``joint=None`` 全部）。"""
+
+    @abstractmethod
+    def set_zero_end(self, joint: Optional[int] = None) -> None:
+        """末端零位标定（先失能，反馈无故障后再标零；``joint=None`` 全部）。"""
 
     @abstractmethod
     def set_mode_end(self, mode: ControlMode) -> None:
-        """切换末端控制模式（语义同 :meth:`set_mode_arm`，作用于末端电机）。
+        """切换末端控制模式（语义同 :meth:`set_mode_arm`，作用于末端电机组）。
 
         :param mode: 目标控制模式（``ControlMode`` 三态）。
         """
@@ -140,27 +160,45 @@ class Backend(ABC):
     def read_state_end(self) -> dict:
         """读取末端状态快照。
 
-        :return: 状态字典，字段由子类定义。
-            例如夹爪：``{"width_mm": float, "force_N": float, "is_grasping": bool}``。
+        :return: 状态字典，字段由子类定义；值为逐电机序列（单电机末端为
+            单元素序列）。例如 DM 夹爪：``{"q": [...], "dq": [...], "tau": [...],
+            "enabled": [...], "error": [...], "comm_ok": [...]}``。
         """
 
     @abstractmethod
-    def send_position_end(self, position: float) -> None:
+    def send_position_end(self, position, joint: Optional[int] = None) -> None:
         """末端位置控制（连续量）。
 
-        :param position: 位置目标，语义由子类约定（如夹爪两指间距 mm）。
+        :param position: 位置目标，标量（作用于所选全部电机）或与所选电机数
+            一致的序列；单位语义由子类约定（如夹爪电机弧度）。
+        :param joint: 末端电机索引，``None`` 表示全部。
         """
 
     @abstractmethod
-    def send_force_end(self, force: float) -> None:
+    def send_force_end(self, force, joint: Optional[int] = None) -> None:
         """末端力度控制（连续量；DM 夹爪经 MIT 近似实现）。
 
-        :param force: 力度目标，语义由子类约定（如夹持力 N）。
+        :param force: 力度目标，标量（作用于所选全部电机）或与所选电机数一致
+            的序列；语义由子类约定（如夹持力 N）。
+        :param joint: 末端电机索引，``None`` 表示全部。
         """
 
     @abstractmethod
     def send_action_end(self, action: str) -> None:
-        """末端通用离散动作。
+        """末端整组离散动作（预设目标由子类按 config 定义）。
 
         :param action: 动作名，常见 ``"open"`` / ``"close"``；子类可扩展。
         """
+
+    @abstractmethod
+    def read_param_end(self, joint: int, key: str):
+        """读末端电机参数。
+
+        :param joint: 末端电机索引。
+        :param key: 参数名（语义由子类映射到厂商寄存器）。
+        :return: 参数值（float 或 int）。
+        """
+
+    @abstractmethod
+    def write_param_end(self, joint: int, key: str, value, persist: bool = False) -> None:
+        """写末端电机参数（``persist=True`` 持久化到非易失存储）。"""

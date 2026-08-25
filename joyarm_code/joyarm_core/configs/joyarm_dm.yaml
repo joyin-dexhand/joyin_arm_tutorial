@@ -18,6 +18,10 @@ arm_mdh_and_limits:
   - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
   - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
 
+# 关节软限位：在硬限位（URDF）基础上按量程比例内缩，作为 clamp_q/rand_q 等指令守卫；
+# 即上表第 9 列 soft_margin 的全局生效值（joyarm.py 读此键构建软限位）
+joint_limits_soft_margin: 0.05
+
 # 末link系 → end系的固定位姿：4×4 齐次矩阵
 T_linkn_end:
   - [3.6732051e-06, -9.2653590e-05, 1.0, 0.0]
@@ -164,6 +168,9 @@ backend:
         feedback_id: 0x17
         model: "4310"
         vendor: "damiao"
+        q_min: 0.0 # 末端行程下限（电机弧度，张开位；与顶层 end_limits 一致）
+        q_max: 0.8 # 末端行程上限（电机弧度，闭合位）
+        force_to_tau: 0.1 # 力度→前馈力矩近似换算系数（N→N·m，标定后修改）
         MIT:
           kp: 8.0
           kd: 1.0

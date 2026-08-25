@@ -18,6 +18,7 @@ from ..utils.types import (
     ArmState,
     ControlMode,
     JointLimits,
+    Pose,
     TcpLimits,
 )
 
@@ -276,8 +277,6 @@ class JoyArm:
             dq_max=dq_max,
             tau_max=tau_max,
             ddq_max=np.full(n, np.inf),
-            temp_motor_max=np.zeros(n),
-            temp_driver_max=np.zeros(n),
             voltage_min=np.zeros(n),
             voltage_max=np.zeros(n),
             current_max=np.zeros(n),
@@ -432,7 +431,9 @@ class JoyArm:
         :raises RuntimeError: 未连接真机（``connected=False``）时抛出。
         """
         self._require_connected()
-        return self._backend.read_state_arm()
+        state = self._backend.read_state_arm()
+        state.tcp.pose = Pose.from_T(self.fkine(state.joint.q))
+        return state
 
     def set_arm_command(self,
         mode: ControlMode = ControlMode.POSITION,
@@ -470,22 +471,56 @@ class JoyArm:
             raise ValueError(f"未知控制模式：{mode}")
 
     # ----------------------------------------------------------
+    # 电机参数读写（依赖 _backend；未连接 raise）
+    # ----------------------------------------------------------
+    def read_param_arm(self, joint: int, key: str):
+        """读本体关节电机参数（key 为参数名，语义由后端定义）。
+
+        :param joint: 关节索引。
+        :param key: 参数名（如 ``"pos_kp"``）。
+        :return: 参数值（float 或 int）。
+        """
+        self._require_connected()
+        return self._backend.read_param_arm(joint, key)
+
+    def write_param_arm(self, joint: int, key: str, value, persist: bool = False) -> None:
+        """写本体关节电机参数。
+
+        :param joint: 关节索引。
+        :param key: 参数名。
+        :param value: 参数值。
+        :param persist: ``True`` 时写入并持久化到非易失存储。
+        """
+        self._require_connected()
+        self._backend.write_param_arm(joint, key, value, persist=persist)
+
+    def read_param_end(self, joint: int, key: str):
+        """读末端电机参数（``joint`` 为末端电机索引，key 为参数名）。"""
+        self._require_connected()
+        return self._backend.read_param_end(joint, key)
+
+    def write_param_end(self, joint: int, key: str, value, persist: bool = False) -> None:
+        """写末端电机参数（``persist=True`` 持久化到非易失存储）。"""
+        self._require_connected()
+        self._backend.write_param_end(joint, key, value, persist=persist)
+
+    # ----------------------------------------------------------
     # 末端执行类方法（依赖 _backend；未连接 raise）
     # ----------------------------------------------------------
-    def enable_end(self) -> None:
-        """使能末端执行器电机。"""
+    def enable_end(self, joint: Optional[int] = None) -> None:
+        """使能末端执行器电机（``joint=None`` 全部）。"""
         self._require_connected()
-        self._backend.enable_end()
+        self._backend.enable_end(joint)
 
-    def disable_end(self) -> None:
+    def disable_end(self, joint: Optional[int] = None) -> None:
         """失能末端执行器电机。"""
         self._require_connected()
-        self._backend.disable_end()
+        self._backend.disable_end(joint)
 
-    def set_zero_end(self) -> None:
+    def set_zero_end(self, joint: Optional[int] = None) -> None:
         """末端零位标定（先失能，反馈无故障后再标零）。"""
         self._require_connected()
-        self._backend.set_zero_end()
+        self._backend.set_zero_end(joint)
 
     def set_mode_end(self, mode: ControlMode) -> None:
         """切换末端控制模式（收指令前必须先切到对应模式）。"""
@@ -502,18 +537,18 @@ class JoyArm:
         self._require_connected()
         self._backend.send_action_end("close")
 
-    def set_end_position(self, position: float) -> None:
-        """末端位置控制（如两指间距 mm）。"""
+    def set_end_position(self, position, joint: Optional[int] = None) -> None:
+        """末端位置控制（连续量，如夹爪电机弧度；``joint=None`` 全部末端电机）。"""
         self._require_connected()
-        self._backend.send_position_end(position)
+        self._backend.send_position_end(position, joint)
 
-    def set_end_force(self, force: float) -> None:
-        """末端力度控制（如夹持力 N）。"""
+    def set_end_force(self, force, joint: Optional[int] = None) -> None:
+        """末端力度控制（如夹持力 N；``joint=None`` 全部末端电机）。"""
         self._require_connected()
-        self._backend.send_force_end(force)
+        self._backend.send_force_end(force, joint)
 
     def get_end_state(self) -> dict:
-        """读取末端状态（如夹爪 ``{"width_mm","force_N","is_grasping"}``）。
+        """读取末端状态（字段由后端定义；值为逐电机序列，单电机末端为单元素序列）。
 
         :raises RuntimeError: 未连接真机时抛出。
         """

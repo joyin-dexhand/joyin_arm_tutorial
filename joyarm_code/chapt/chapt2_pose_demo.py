@@ -118,13 +118,28 @@ def rodrigues(k: np.ndarray, theta: float) -> np.ndarray:
 
 
 def axis_angle_from_matrix(R: np.ndarray):
-    """由旋转矩阵反算轴角 (k, theta)。θ≈0 时轴不确定，取默认 [1,0,0]。"""
+    """由旋转矩阵反算轴角 (k, theta)。θ≈0 时轴不确定，取默认 [1,0,0]；
+    θ≈π 时 2·sinθ→0，改用 (R+I)/2 的对称部分恢复轴（滑块可拉到 ±180°，必经）。"""
     # 迹公式：cosθ = (trace(R) - 1) / 2；clip 防止浮点误差超出 [-1,1]
     ct = np.clip((np.trace(R) - 1) / 2, -1.0, 1.0)
-    theta = np.arccos(ct)                 
-    s = 2 * np.sin(theta)           
-    if s < 1e-6:                    
+    theta = np.arccos(ct)
+    if theta < 1e-6:                    # θ≈0：轴不确定，取默认轴
         return np.array([1.0, 0.0, 0.0]), 0.0
+    if abs(theta - np.pi) < 1e-6:
+        # 接近 π：一般公式分母 s = 2·sinθ → 0 会数值爆炸；此时 R = 2·k·kᵀ − I，
+        # 即 A = (R+I)/2 = k·kᵀ：对角元给 |k_i|，符号由非对角项 k_i·k_j 定
+        A = (R + np.eye(3)) / 2
+        k_abs = np.sqrt(np.clip(np.diag(A), 0.0, None))
+        idx = int(np.argmax(k_abs))     # 取最大分量作符号参考（固定为正）
+        if k_abs[idx] < 1e-12:
+            return np.array([1.0, 0.0, 0.0]), theta
+        k = np.zeros(3)
+        k[idx] = k_abs[idx]
+        for j in range(3):
+            if j != idx:
+                k[j] = (1.0 if A[idx, j] >= 0.0 else -1.0) * k_abs[j]
+        return k / np.linalg.norm(k), theta
+    s = 2 * np.sin(theta)
     k = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) / s
     return k, theta
 
