@@ -420,10 +420,11 @@ class JoyArm:
         self._require_connected()
         self._backend.set_zero_arm(joint)
 
-    def set_mode_arm(self, mode: ControlMode) -> None:
-        """切换本体控制模式（收指令前必须先切到对应模式）。"""
+    def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION,
+                     joint: Optional[int] = None) -> None:
+        """切换本体控制模式（收指令前必须先切到对应模式；默认位置模式，``joint=None`` 全部）。"""
         self._require_connected()
-        self._backend.set_mode_arm(mode)
+        self._backend.set_mode_arm(mode, joint)
 
     def get_arm_state(self) -> ArmState:
         """读取本体状态快照（委托 ``_backend.read_state_arm()``；与 ``get_end_state`` 对应）。
@@ -473,36 +474,50 @@ class JoyArm:
     # ----------------------------------------------------------
     # 电机参数读写（依赖 _backend；未连接 raise）
     # ----------------------------------------------------------
-    def read_param_arm(self, joint: int, key: str):
+    def read_param_arm(self, key: str, joint: Optional[int] = None):
         """读本体关节电机参数（key 为参数名，语义由后端定义）。
 
-        :param joint: 关节索引。
         :param key: 参数名（如 ``"pos_kp"``）。
-        :return: 参数值（float 或 int）。
+        :param joint: 关节索引，``None`` 表示全部电机。
+        :return: 指定 ``joint`` 时返回该电机参数值（float 或 int）；
+            ``joint=None`` 时返回逐电机参数值列表。
         """
         self._require_connected()
-        return self._backend.read_param_arm(joint, key)
+        return self._backend.read_param_arm(key, joint)
 
-    def write_param_arm(self, joint: int, key: str, value, persist: bool = False) -> None:
+    def write_param_arm(self, key: str, value, joint: Optional[int] = None,
+                        persist: bool = False) -> None:
         """写本体关节电机参数。
 
-        :param joint: 关节索引。
         :param key: 参数名。
-        :param value: 参数值。
+        :param value: 参数值，标量（作用于所选全部电机）或与所选电机数一致的列表。
+        :param joint: 关节索引，``None`` 表示全部电机。
         :param persist: ``True`` 时写入并持久化到非易失存储。
         """
         self._require_connected()
-        self._backend.write_param_arm(joint, key, value, persist=persist)
+        self._backend.write_param_arm(key, value, joint, persist=persist)
 
-    def read_param_end(self, joint: int, key: str):
-        """读末端电机参数（``joint`` 为末端电机索引，key 为参数名）。"""
-        self._require_connected()
-        return self._backend.read_param_end(joint, key)
+    def read_param_end(self, key: str, joint: Optional[int] = None):
+        """读末端电机参数（key 为参数名，语义由后端定义）。
 
-    def write_param_end(self, joint: int, key: str, value, persist: bool = False) -> None:
-        """写末端电机参数（``persist=True`` 持久化到非易失存储）。"""
+        :param key: 参数名（如 ``"pos_kp"``）。
+        :param joint: 末端电机索引，``None`` 表示全部电机。
+        :return: 指定 ``joint`` 时返回该电机参数值；``joint=None`` 时返回逐电机列表。
+        """
         self._require_connected()
-        self._backend.write_param_end(joint, key, value, persist=persist)
+        return self._backend.read_param_end(key, joint)
+
+    def write_param_end(self, key: str, value, joint: Optional[int] = None,
+                        persist: bool = False) -> None:
+        """写末端电机参数。
+
+        :param key: 参数名。
+        :param value: 参数值，标量（作用于所选全部电机）或与所选电机数一致的列表。
+        :param joint: 末端电机索引，``None`` 表示全部电机。
+        :param persist: ``True`` 时写入并持久化到非易失存储。
+        """
+        self._require_connected()
+        self._backend.write_param_end(key, value, joint, persist=persist)
 
     # ----------------------------------------------------------
     # 末端执行类方法（依赖 _backend；未连接 raise）
@@ -522,20 +537,21 @@ class JoyArm:
         self._require_connected()
         self._backend.set_zero_end(joint)
 
-    def set_mode_end(self, mode: ControlMode) -> None:
-        """切换末端控制模式（收指令前必须先切到对应模式）。"""
+    def set_mode_end(self, mode: ControlMode = ControlMode.POSITION,
+                     joint: Optional[int] = None) -> None:
+        """切换末端控制模式（收指令前必须先切到对应模式；默认位置模式，``joint=None`` 全部）。"""
         self._require_connected()
-        self._backend.set_mode_end(mode)
+        self._backend.set_mode_end(mode, joint)
 
-    def end_open(self) -> None:
-        """张开末端到最大（默认行程/力度）。"""
+    def end_open(self, joint: Optional[int] = None) -> None:
+        """张开末端到最大（默认行程/力度；``joint=None`` 全部末端电机）。"""
         self._require_connected()
-        self._backend.send_action_end("open")
+        self._backend.send_action_end("open", joint)
 
-    def end_close(self) -> None:
-        """闭合末端（夹到默认力度即停）。"""
+    def end_close(self, joint: Optional[int] = None) -> None:
+        """闭合末端（夹到默认力度即停；``joint=None`` 全部末端电机）。"""
         self._require_connected()
-        self._backend.send_action_end("close")
+        self._backend.send_action_end("close", joint)
 
     def set_end_position(self, position, joint: Optional[int] = None) -> None:
         """末端位置控制（连续量，如夹爪电机弧度；``joint=None`` 全部末端电机）。"""
@@ -547,10 +563,11 @@ class JoyArm:
         self._require_connected()
         self._backend.send_force_end(force, joint)
 
-    def get_end_state(self) -> dict:
-        """读取末端状态（字段由后端定义；值为逐电机序列，单电机末端为单元素序列）。
+    def get_end_state(self, joint: Optional[int] = None) -> dict:
+        """读取末端状态（字段由后端定义；值为所选电机的逐电机序列）。
 
+        :param joint: 末端电机索引，``None`` 表示全部。
         :raises RuntimeError: 未连接真机时抛出。
         """
         self._require_connected()
-        return self._backend.read_state_end()
+        return self._backend.read_state_end(joint)

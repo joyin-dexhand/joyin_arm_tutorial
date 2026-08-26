@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import inspect
 import struct
 import sys
 from pathlib import Path
@@ -18,6 +19,7 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
+from joyarm_core.backends.backend import Backend  # noqa: E402
 from joyarm_core.backends.backend_dm import (  # noqa: E402
     _PARAM_RIDS,
     _MOTOR_LIMITS,
@@ -31,6 +33,7 @@ from joyarm_core.backends.backend_dm import (  # noqa: E402
     DmCanBus,
     DmMotor,
 )
+from joyarm_core.utils.types import ControlMode  # noqa: E402
 
 
 def _mk_rx_frame(can_id: int, payload: bytes) -> bytes:
@@ -271,10 +274,10 @@ def test_backenddm_multi_motor_end():
         pass
     # 标量广播 / 序列等长 / 维度不匹配
     motors = be._end_motors_for(None)
-    assert list(BackendDM._end_values(0.5, "position", motors)) == [0.5, 0.5]
-    assert list(BackendDM._end_values([0.1, 0.9], "position", motors)) == [0.1, 0.9]
+    assert list(BackendDM._values_for(0.5, "position", motors)) == [0.5, 0.5]
+    assert list(BackendDM._values_for([0.1, 0.9], "position", motors)) == [0.1, 0.9]
     try:
-        BackendDM._end_values([0.1, 0.2, 0.3], "position", motors)
+        BackendDM._values_for([0.1, 0.2, 0.3], "position", motors)
         raise AssertionError("维度不匹配应抛 ValueError")
     except ValueError:
         pass
@@ -286,16 +289,38 @@ def test_backenddm_multi_motor_end():
         pass
 
 
+def test_joint_addressing_contract():
+    """契约：9 个方法 joint 形参缺省 None=全部；set_mode 默认位置模式；参数读写 key 为首参。"""
+    methods = ("set_mode_arm", "set_mode_end", "read_state_arm", "read_state_end",
+               "send_action_end", "read_param_arm", "read_param_end",
+               "write_param_arm", "write_param_end")
+    for cls in (Backend, BackendDM):
+        for name in methods:
+            assert inspect.signature(getattr(cls, name)).parameters["joint"].default is None, (cls.__name__, name)
+        for name in ("set_mode_arm", "set_mode_end"):
+            sig = inspect.signature(getattr(cls, name))
+            assert sig.parameters["mode"].default is ControlMode.POSITION, (cls.__name__, name)
+        for name in ("read_param_arm", "write_param_arm", "read_param_end", "write_param_end"):
+            assert list(inspect.signature(getattr(cls, name)).parameters)[1] == "key", (cls.__name__, name)
+
+
 def test_backenddm_offline_guards():
     be = _mk_backend()
     guards = [
         lambda: be.enable_arm(),
         lambda: be.disable_arm(),
+        lambda: be.set_mode_arm(),          # 默认参形式（POSITION）同样受连接门槛
+        lambda: be.set_mode_end(),
         lambda: be.read_state_arm(),
-        lambda: be.read_param_arm(0, "pos_kp"),
+        lambda: be.read_state_arm(0),       # joint 子集读取同样须先连接
+        lambda: be.read_param_arm("pos_kp", 0),
+        lambda: be.write_param_arm("pos_kp", 1.0),
         lambda: be.enable_end(),
         lambda: be.read_state_end(),
-        lambda: be.read_param_end(0, "pos_kp"),
+        lambda: be.read_state_end(0),
+        lambda: be.read_param_end("pos_kp", 0),
+        lambda: be.write_param_end("pos_kp", 1.0),
+        lambda: be.send_action_end("open"),
     ]
     for call in guards:
         try:

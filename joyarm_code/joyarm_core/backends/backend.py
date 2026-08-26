@@ -68,18 +68,25 @@ class Backend(ABC):
         """本体零位标定（先失能，反馈无故障后再标零）。"""
 
     @abstractmethod
-    def set_mode_arm(self, mode: ControlMode) -> None:
-        """切换本体控制模式（收指令前必须先切到对应模式）。
+    def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION,
+                     joint: Optional[int] = None) -> None:
+        """切换本体控制模式（收指令前必须先切到对应模式；默认位置模式）。
 
         ``POSITION → 电机 POS_VEL``、``VELOCITY → 电机 VEL``、``MIT → 电机 MIT``；
         切换所需增益（POS_VEL 闭环参数 / MIT kp·kd）回退 config 对应段。
 
-        :param mode: 目标控制模式（``ControlMode`` 三态）。
+        :param mode: 目标控制模式，默认 ``ControlMode.POSITION``（电机 POS_VEL）。
+        :param joint: 关节索引，``None`` 表示全部；仅对未处于目标模式的电机补切。
         """
 
     @abstractmethod
-    def read_state_arm(self) -> ArmState:
-        """读取本体状态快照（关节角/速度/力矩/使能与错误状态等）。"""
+    def read_state_arm(self, joint: Optional[int] = None) -> ArmState:
+        """读取本体状态快照（关节角/速度/力矩/使能与错误状态等）。
+
+        :param joint: 关节索引，``None`` 表示全部（数组 ``(n,)``）；指定关节时
+            各数组仅含该关节（长度 1）。
+        :return: :class:`ArmState` 快照。
+        """
 
     @abstractmethod
     def send_position_arm(self, q: np.ndarray, joint: Optional[int] = None) -> None:
@@ -115,22 +122,25 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    def read_param_arm(self, joint: int, key: str):
+    def read_param_arm(self, key: str, joint: Optional[int] = None):
         """读本体关节电机参数。
 
-        :param joint: 关节索引。
         :param key: 参数名（字符串，语义由子类映射到厂商寄存器，
             如 DM 的 ``"pos_kp"`` → 寄存器 27）。
-        :return: 参数值（float 或 int）。
+        :param joint: 关节索引，``None`` 表示全部电机。
+        :return: 指定 ``joint`` 时返回该电机参数值（float 或 int）；
+            ``joint=None`` 时返回逐电机参数值列表。
         """
 
     @abstractmethod
-    def write_param_arm(self, joint: int, key: str, value, persist: bool = False) -> None:
+    def write_param_arm(self, key: str, value, joint: Optional[int] = None,
+                        persist: bool = False) -> None:
         """写本体关节电机参数。
 
-        :param joint: 关节索引。
         :param key: 参数名（语义由子类定义）。
-        :param value: 参数值。
+        :param value: 参数值，标量（作用于所选全部电机）或与所选电机数
+            一致的列表（逐电机）。
+        :param joint: 关节索引，``None`` 表示全部电机。
         :param persist: ``True`` 时写入并持久化到非易失存储（如 DM 需先失能再存闪存）。
         """
 
@@ -150,16 +160,19 @@ class Backend(ABC):
         """末端零位标定（先失能，反馈无故障后再标零；``joint=None`` 全部）。"""
 
     @abstractmethod
-    def set_mode_end(self, mode: ControlMode) -> None:
-        """切换末端控制模式（语义同 :meth:`set_mode_arm`，作用于末端电机组）。
+    def set_mode_end(self, mode: ControlMode = ControlMode.POSITION,
+                     joint: Optional[int] = None) -> None:
+        """切换末端控制模式（语义同 :meth:`set_mode_arm`，默认位置模式）。
 
-        :param mode: 目标控制模式（``ControlMode`` 三态）。
+        :param mode: 目标控制模式，默认 ``ControlMode.POSITION``（电机 POS_VEL）。
+        :param joint: 末端电机索引，``None`` 表示全部。
         """
 
     @abstractmethod
-    def read_state_end(self) -> dict:
-        """读取末端状态快照。
+    def read_state_end(self, joint: Optional[int] = None) -> dict:
+        """读取末端状态快照（值为所选电机的逐电机序列）。
 
+        :param joint: 末端电机索引，``None`` 表示全部。
         :return: 状态字典，字段由子类定义；值为逐电机序列（单电机末端为
             单元素序列）。例如 DM 夹爪：``{"q": [...], "dq": [...], "tau": [...],
             "enabled": [...], "error": [...], "comm_ok": [...]}``。
@@ -184,21 +197,31 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    def send_action_end(self, action: str) -> None:
-        """末端整组离散动作（预设目标由子类按 config 定义）。
+    def send_action_end(self, action: str, joint: Optional[int] = None) -> None:
+        """末端离散动作（预设目标由子类按 config 定义，作用于所选电机）。
 
         :param action: 动作名，常见 ``"open"`` / ``"close"``；子类可扩展。
+        :param joint: 末端电机索引，``None`` 表示全部。
         """
 
     @abstractmethod
-    def read_param_end(self, joint: int, key: str):
+    def read_param_end(self, key: str, joint: Optional[int] = None):
         """读末端电机参数。
 
-        :param joint: 末端电机索引。
         :param key: 参数名（语义由子类映射到厂商寄存器）。
-        :return: 参数值（float 或 int）。
+        :param joint: 末端电机索引，``None`` 表示全部电机。
+        :return: 指定 ``joint`` 时返回该电机参数值（float 或 int）；
+            ``joint=None`` 时返回逐电机参数值列表。
         """
 
     @abstractmethod
-    def write_param_end(self, joint: int, key: str, value, persist: bool = False) -> None:
-        """写末端电机参数（``persist=True`` 持久化到非易失存储）。"""
+    def write_param_end(self, key: str, value, joint: Optional[int] = None,
+                        persist: bool = False) -> None:
+        """写末端电机参数（``persist=True`` 持久化到非易失存储）。
+
+        :param key: 参数名（语义由子类定义）。
+        :param value: 参数值，标量（作用于所选全部电机）或与所选电机数
+            一致的列表（逐电机）。
+        :param joint: 末端电机索引，``None`` 表示全部电机。
+        :param persist: ``True`` 时写入并持久化到非易失存储。
+        """

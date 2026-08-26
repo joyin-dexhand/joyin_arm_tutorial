@@ -172,8 +172,10 @@ backend:
         q_max: 0.8 # 末端行程上限（电机弧度，闭合位）
         force_to_tau: 0.1 # 力度→前馈力矩近似换算系数（N→N·m，标定后修改）
         MIT:
-          kp: 8.0
-          kd: 1.0
+          # kp: 8.0
+          # kd: 1.0
+          kp: 0.0
+          kd: 0.0
         POS_VEL:
           vel_kp: 0.0008
           vel_ki: 0.002
