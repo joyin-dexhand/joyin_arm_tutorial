@@ -23,10 +23,10 @@ __all__ = [
     "Wrench",           # 六维力/力矩：force + torque
     "Twist",            # 空间速度：linear + angular
     "Pose",             # 统一位姿表示：position + orientation（单位四元数）
-    "JointState",       # 关节状态：control_mode + q/dq/ddq/tau + enabled/error/comm_ok/angle_ok + voltage/current
+    "JointState",       # 关节状态：control_mode + q/dq/ddq/tau + enabled/error/comm_ok/angle_ok + 温度
     "TcpState",         # 工具中心点状态：pose + twist + wrench
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
-    "JointLimits",      # 关节限位: q_min/q_max + dq_max + ddq_max + tau_max + voltage_min/voltage_max + current_max
+    "JointLimits",      # 关节限位: q_min/q_max + dq_max + ddq_max + tau_max
     "TcpLimits",        # 工具中心点限位: workspace_box + v_lin_max + v_ang_max + f_max + t_max
     "Violation",        # 安全违规: layer + joint_idx + metric + value + limit + severity
     "IKResult",         # 逆运动学结果： q + success + err + n_iter
@@ -186,8 +186,8 @@ class JointState(_ArrayEqMixin):
     :ivar error: ``(n,)`` bool 异常状态，``True``=电机异常（过温/过流等），``False``=正常。
     :ivar comm_ok: ``(n,)`` bool 通讯状态，``True``=正常，``False``=异常。
     :ivar angle_ok: ``(n,)`` bool 角度状态（编码器角度有效性），``True``=正常，``False``=异常。
-    :ivar voltage: 总线电压，单位 V（电机反馈帧不含总线电压/电流时恒 0）。
-    :ivar current: 总线电流，单位 A（同上）。
+    :ivar temp_mos: ``(n,)`` 驱动板（MOS）温度，℃（固件反馈帧不含时恒 0）。
+    :ivar temp_rotor: ``(n,)`` 转子（线圈）温度，℃（同上）。
     """
 
     control_mode: ControlMode = ControlMode.POSITION
@@ -199,8 +199,8 @@ class JointState(_ArrayEqMixin):
     error: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
     comm_ok: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
     angle_ok: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
-    voltage: float = 0.0
-    current: float = 0.0
+    temp_mos: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    temp_rotor: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
 
 @dataclass(eq=False)
@@ -252,9 +252,6 @@ class JointLimits(_ArrayEqMixin):
     :ivar dq_max: ``(n,)`` 关节速度上限，弧度/秒。
     :ivar ddq_max: ``(n,)`` 关节加速度上限，弧度/秒²。
     :ivar tau_max: ``(n,)`` 关节力矩上限，N·m。
-    :ivar voltage_min: ``(n,)`` 电压下限，V。
-    :ivar voltage_max: ``(n,)`` 电压上限，V。
-    :ivar current_max: ``(n,)`` 电流上限，A。
     """
 
     q_min: np.ndarray = field(default_factory=lambda: np.zeros(0))
@@ -262,9 +259,6 @@ class JointLimits(_ArrayEqMixin):
     dq_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
     ddq_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
     tau_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    voltage_min: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    voltage_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    current_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
 
 @dataclass(eq=False)

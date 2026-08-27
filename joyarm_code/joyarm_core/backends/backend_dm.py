@@ -22,9 +22,10 @@ USB-CAN 串口桥（如 ``/dev/ttyACM0``，921600）驱动整机 7 个 DM 电机
                             子码 0x33 读 / 0x55 写 / 0xAA 存闪存 / 0xCC 状态请求；
     一发一收                每个指令帧/请求帧触发一帧应答，状态仅在收发后刷新；
     状态帧载荷              D0 高 4 位=错误码、D0 低 4 位=ID，D1~2=位置(16bit)，
-                            D3~4=速度(12bit)，D4~5=力矩(12bit)，D6~7 未用；
-    错误码语义              0=使能正常，8=失能正常，其余（1 过压/2 欠压/3 过流/
-                            4 功率故障/5 超温/6 通信丢失/7 过载等）=故障。
+                            D3~4=速度(12bit)，D4~5=力矩(12bit)，D6~7=驱动板/转子
+                            温度（各 1 字节 ℃，旧固件未用恒 0）；
+    错误码语义              0=失能正常，1=使能正常，其余（8 超压/9 欠压/A 过流/
+                            B MOS超温/C 线圈超温/D 通信丢失/E 过载）=故障。
 
 **实现结构**（本文件内三层，``DmMotor``/``DmCanBus`` 为私有协议层、不导出）::
 
@@ -65,8 +66,15 @@ _MOTOR_LIMITS: dict[str, tuple[float, float, float]] = {
 # MIT 帧固定位宽：q 16bit / dq 12bit / tau 12bit（按型号极限缩放），kp/kd 12bit（固定量程）
 _KP_MAX, _KD_MAX = 500.0, 5.0
 
-# 错误码：0=使能正常、8=失能正常、其余=故障
-_ERR_ENABLED, _ERR_DISABLED = 0, 8
+# 错误码：0=失能正常、1=使能正常、8~E=故障（依达妙协议：8 超压/9 欠压/A 过流/
+# B MOS超温/C 线圈超温/D 通信丢失/E 过载）
+_ERR_DISABLED, _ERR_ENABLED = 0, 1
+
+# 故障码 → 名称（read_state 的 errors 列表可读化；仅 8~E）
+_ERR_FAULT_NAMES: dict[int, str] = {
+    8: "超压", 9: "欠压", 10: "过流", 11: "MOS超温",
+    12: "线圈超温", 13: "通信丢失", 14: "过载",
+}
 
 # 电机寄存器（RID）：10=控制模式（1 MIT / 2 POS_VEL / 3 VEL），25~28=POS_VEL 闭环增益
 _RID_CTRL_MODE = 10
@@ -132,13 +140,16 @@ def _pack_mit(q: float, dq: float, tau: float, kp: float, kd: float,
 
 
 def _unpack_status(data: bytes, limits: tuple[float, float, float]):
-    """解包状态帧载荷（8 字节）→ ``(q, dq, tau, err)``。"""
+    """解包状态帧载荷（8 字节）→ ``(q, dq, tau, err, t_mos, t_rotor)``。
+
+    D6~7 为驱动板 MOS / 转子温度（1 字节，℃）；旧固件该两字节未用（恒 0）。
+    """
     pmax, vmax, tmax = limits
     err = (data[0] >> 4) & 0x0F
     q = _uint_to_float((data[1] << 8) | data[2], -pmax, pmax, 16)
     dq = _uint_to_float((data[3] << 4) | (data[4] >> 4), -vmax, vmax, 12)
     tau = _uint_to_float(((data[4] & 0xF) << 8) | data[5], -tmax, tmax, 12)
-    return float(q), float(dq), float(tau), int(err)
+    return float(q), float(dq), float(tau), int(err), int(data[6]), int(data[7])
 
 
 def _pack_tx(can_id: int, data: bytes) -> bytes:
@@ -229,14 +240,17 @@ class DmMotor:
 
         # 状态槽 + 参数槽（RX 线程写、指令线程读，Event 通知应答到达）
         self.q, self.dq, self.tau, self.err = 0.0, 0.0, 0.0, _ERR_DISABLED
+        self.t_mos, self.t_rotor = 0, 0  # ℃，旧固件不反馈（恒 0）
         self._state_event = threading.Event()
         self.params: dict[int, float | int] = {}
         self._param_events: dict[int, threading.Event] = {}
         self.bus: Optional[DmCanBus] = None  # connect 注册时回填
 
     # ---- 状态槽 ----
-    def update_state(self, q: float, dq: float, tau: float, err: int) -> None:
+    def update_state(self, q: float, dq: float, tau: float, err: int,
+                     t_mos: int, t_rotor: int) -> None:
         self.q, self.dq, self.tau, self.err = q, dq, tau, err
+        self.t_mos, self.t_rotor = t_mos, t_rotor
         self._state_event.set()
 
     def clear_state(self) -> None:
@@ -253,11 +267,13 @@ class DmMotor:
 
     def clear_param(self, rid: int) -> None:
         self.params.pop(rid, None)
-        self._param_events.pop(rid, None)
+        # 事件常驻（同 _state_event 的 clear 而非移除）：否则发请求后事件不存在，
+        # wait_param 无法在应答到达前阻塞等待，参数读写必然超时
+        self._param_events.setdefault(rid, threading.Event()).clear()
 
     def wait_param(self, rid: int, timeout: float) -> bool:
-        ev = self._param_events.get(rid)
-        return ev is not None and ev.wait(timeout)
+        """等待参数应答到达（发请求帧前先 :meth:`clear_param`）。"""
+        return self._param_events.setdefault(rid, threading.Event()).wait(timeout)
 
 
 # ============================================================
@@ -513,10 +529,12 @@ class BackendDM(Backend):
             if not m.wait_state(0.5):
                 raise RuntimeError(f"电机 {m.name} 使能无应答")
             if m.err != _ERR_ENABLED:
-                raise RuntimeError(f"电机 {m.name} 使能失败（错误码 {m.err}）")
+                raise RuntimeError(
+                    f"电机 {m.name} 使能失败（{_ERR_FAULT_NAMES.get(m.err, '故障')}({m.err:#x})）"
+                )
 
     def _set_zero_motors(self, motors: list[DmMotor]) -> None:
-        """标零流程：失能 → 轮询反馈至无故障（错误码 0/8）→ 发标零帧。"""
+        """标零流程：失能 → 轮询反馈至无故障（错误码 0/1）→ 发标零帧。"""
         for m in motors:
             m.bus.disable(m)
             ok = False
@@ -527,7 +545,10 @@ class BackendDM(Backend):
                     ok = True
                     break
             if not ok:
-                raise RuntimeError(f"电机 {m.name} 标零前存在故障（错误码 {m.err}）")
+                raise RuntimeError(
+                    f"电机 {m.name} 标零前存在故障"
+                    f"（{_ERR_FAULT_NAMES.get(m.err, '故障')}({m.err:#x})）"
+                )
             m.clear_state()
             m.bus.set_zero(m)
             m.wait_state(0.5)
@@ -581,6 +602,11 @@ class BackendDM(Backend):
         self._mode_arm.clear()
         self._mode_end.clear()
 
+    @property
+    def connected(self) -> bool:
+        """通信链路是否已建立（有已打开的总线即 ``True``）。"""
+        return bool(self._buses)
+
     # ----------------------------------------------------------
     # 本体：_arm
     # ----------------------------------------------------------
@@ -606,19 +632,29 @@ class BackendDM(Backend):
             self._switch_group_mode(need, mode)
         self._mode_arm.update({m.name: mode for m in motors})
 
+    def read_mode_arm(self, joint: Optional[int] = None) -> Optional[ControlMode]:
+        """查询本体关节当前控制模式（本地缓存，不发总线帧，离线可查）。
+
+        指定 ``joint`` 返回该关节模式（未设置为 ``None``）；``joint=None`` 时
+        整臂各关节模式唯一才返回该模式，否则 ``None``。
+        """
+        motors = self._motors_for(joint)
+        modes = {self._mode_arm.get(m.name) for m in motors}
+        return modes.pop() if len(modes) == 1 else None
+
     def read_state_arm(self, joint: Optional[int] = None) -> ArmState:
         self._check_open()
         motors = self._motors_for(joint)
         arrived = self._read_group_state(motors)
         errs = [m.err for m in motors]
         errors = [
-            f"{m.name}: 错误码 {e}" for m, ok, e in zip(motors, arrived, errs)
+            f"{m.name}: {_ERR_FAULT_NAMES.get(e, '故障')}({e:#x})"
+            for m, ok, e in zip(motors, arrived, errs)
             if ok and e not in (_ERR_ENABLED, _ERR_DISABLED)
         ] + [f"{m.name}: 通讯无应答" for m, ok in zip(motors, arrived) if not ok]
         # 所选电机模式一致时取该值；未设置/混合时显示 POSITION（信息性字段，
         # 指令门槛以 _require_mode_* 按电机校验为准）
-        modes = {self._mode_arm.get(m.name) for m in motors}
-        mode = modes.pop() if len(modes) == 1 else None
+        mode = self.read_mode_arm(joint)
         return ArmState(
             joint=JointState(
                 control_mode=mode or ControlMode.POSITION,
@@ -631,8 +667,8 @@ class BackendDM(Backend):
                 comm_ok=np.array(arrived, dtype=bool),
                 # DM 反馈无独立编码器状态位，以通讯正常近似
                 angle_ok=np.array(arrived, dtype=bool),
-                voltage=0.0,
-                current=0.0,
+                temp_mos=np.array([m.t_mos for m in motors], dtype=float),
+                temp_rotor=np.array([m.t_rotor for m in motors], dtype=float),
             ),
             mode=mode or ControlMode.POSITION,
             timestamp=time.time(),
@@ -723,6 +759,12 @@ class BackendDM(Backend):
             self._switch_group_mode(need, mode)
         self._mode_end.update({m.name: mode for m in motors})
 
+    def read_mode_end(self, joint: Optional[int] = None) -> Optional[ControlMode]:
+        """查询末端电机当前控制模式（本地缓存，语义同 :meth:`read_mode_arm`）。"""
+        motors = self._end_motors_for(joint)
+        modes = {self._mode_end.get(m.name) for m in motors}
+        return modes.pop() if len(modes) == 1 else None
+
     def read_state_end(self, joint: Optional[int] = None) -> dict:
         self._check_open()
         motors = self._end_motors_for(joint)
@@ -734,6 +776,8 @@ class BackendDM(Backend):
             "enabled": [m.err == _ERR_ENABLED for m in motors],
             "error": [m.err not in (_ERR_ENABLED, _ERR_DISABLED) for m in motors],
             "comm_ok": arrived,
+            "temp_mos": [m.t_mos for m in motors],
+            "temp_rotor": [m.t_rotor for m in motors],
         }
 
     def send_position_end(self, position, joint: Optional[int] = None) -> None:

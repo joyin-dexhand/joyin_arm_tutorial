@@ -2,7 +2,9 @@
 
 覆盖：float↔uint 映射、MIT 位打包、状态帧解包、30B 桥发送帧封装、16B 应答帧
 提取（含跨读残余）、DmCanBus 帧分发（状态帧/参数应答/CANID==0 回退）与指令
-原语字节级正确性、BackendDM 离线实例化与约束检查。
+原语字节级正确性、BackendDM 离线实例化与约束检查、公共查询接口
+（connected / read_mode_* 三态语义）、错误码语义回归
+（0=失能正常/1=使能正常/8~E=故障）。
 
 运行：``python test/test_backend_dm.py``（或 ``pytest test/test_backend_dm.py``）。
 """
@@ -43,8 +45,9 @@ def _mk_rx_frame(can_id: int, payload: bytes) -> bytes:
 
 
 def _mk_status_payload(q: float, dq: float, tau: float, err: int,
-                       limits: tuple[float, float, float], fid_low: int = 1) -> bytes:
-    """按状态帧位布局构造 8 字节载荷（q16|dq12|tau12，D0=err<<4|id）。"""
+                       limits: tuple[float, float, float], fid_low: int = 1,
+                       t_mos: int = 0, t_rotor: int = 0) -> bytes:
+    """按状态帧位布局构造 8 字节载荷（q16|dq12|tau12，D0=err<<4|id，D6~7=温度）。"""
     pmax, vmax, tmax = limits
     q_u = _float_to_uint(q, -pmax, pmax, 16)
     dq_u = _float_to_uint(dq, -vmax, vmax, 12)
@@ -55,7 +58,7 @@ def _mk_status_payload(q: float, dq: float, tau: float, err: int,
         (dq_u >> 4) & 0xFF,
         ((dq_u & 0xF) << 4) | ((tau_u >> 8) & 0xF),
         tau_u & 0xFF,
-        0x00, 0x00,
+        t_mos & 0xFF, t_rotor & 0xFF,
     ])
 
 
@@ -94,11 +97,12 @@ def test_pack_mit_bit_layout():
 
 def test_unpack_status_roundtrip():
     for model, limits in _MOTOR_LIMITS.items():
-        q, dq, tau, err = -3.2, 5.5, -7.0, 8
-        payload = _mk_status_payload(q, dq, tau, err, limits)
-        rq, rdq, rtau, rerr = _unpack_status(payload, limits)
+        q, dq, tau, err, t_mos, t_rotor = -3.2, 5.5, -7.0, 8, 42, 57
+        payload = _mk_status_payload(q, dq, tau, err, limits, t_mos=t_mos, t_rotor=t_rotor)
+        rq, rdq, rtau, rerr, rtm, rtr = _unpack_status(payload, limits)
         pmax, vmax, tmax = limits
         assert rerr == err
+        assert (rtm, rtr) == (t_mos, t_rotor)
         assert abs(rq - q) <= 2 * pmax / 0xFFFF + 1e-9
         assert abs(rdq - dq) <= 2 * vmax / 0xFFF + 1e-9
         assert abs(rtau - tau) <= 2 * tmax / 0xFFF + 1e-9
@@ -147,10 +151,11 @@ def test_bus_dispatch_status_frame():
     limits = m.limits
     m.clear_state()
     assert not m.wait_state(0)
-    bus._feed(_mk_rx_frame(0x11, _mk_status_payload(1.0, 2.0, 3.0, 0, limits)))
+    bus._feed(_mk_rx_frame(0x11, _mk_status_payload(1.0, 2.0, 3.0, 0, limits, t_mos=35, t_rotor=48)))
     assert m.wait_state(0)
     assert abs(m.q - 1.0) < 1e-3 and abs(m.dq - 2.0) < 2e-2 and abs(m.tau - 3.0) < 1e-2
     assert m.err == 0
+    assert (m.t_mos, m.t_rotor) == (35, 48)
 
 
 def test_bus_dispatch_canid0_fallback():
@@ -172,6 +177,26 @@ def test_bus_dispatch_param_reply():
     payload = bytes([0x01, 0x00, 0x55, 10]) + struct.pack("<I", 2)
     bus._feed(_mk_rx_frame(0x11, payload))
     assert m.params[10] == 2
+
+
+def test_read_param_waits_for_delayed_reply():
+    """回归：参数应答在 wait_param 等待期间才到达（模拟真实链路延迟）也必须等到。
+
+    修复前 clear_param 会移除事件，wait_param 在应答未到时立即返回 False
+    而非阻塞等待，参数读写必然"无应答"超时（重试瞬间烧完）。
+    """
+    import threading as _th
+
+    bus, m = _mk_bus_with_motor()
+    reply = _mk_rx_frame(0x11, bytes([0x01, 0x00, 0x33, 25]) + struct.pack("<f", 1.5))
+
+    def send_and_reply_later(cid, data):
+        t = _th.Timer(0.03, lambda: bus._feed(reply))  # 应答延迟 30ms 投递
+        t.daemon = True
+        t.start()
+
+    bus.send = send_and_reply_later  # 截获发送：应答落在 wait 窗口内
+    assert abs(bus.read_param(m, 25) - 1.5) < 1e-6
 
 
 def test_bus_dispatch_status_lowbyte_hits_subcode():
@@ -250,7 +275,7 @@ def test_backenddm_offline_construction():
     assert len(be._end_motors) == 1
     em = be._end_motors[0]
     assert em.model == "4310"
-    assert (em.q_min, em.q_max, em.force_to_tau) == (0.0, 0.8, 0.1)
+    assert (em.q_min, em.q_max, em.force_to_tau) == (-1.8, 3.8, 1.0)
     assert _PARAM_RIDS == {"ctrl_mode": 10, "vel_kp": 25, "vel_ki": 26, "pos_kp": 27, "pos_ki": 28}
 
 
@@ -290,8 +315,9 @@ def test_backenddm_multi_motor_end():
 
 
 def test_joint_addressing_contract():
-    """契约：9 个方法 joint 形参缺省 None=全部；set_mode 默认位置模式；参数读写 key 为首参。"""
-    methods = ("set_mode_arm", "set_mode_end", "read_state_arm", "read_state_end",
+    """契约：joint 形参方法缺省 None=全部；set_mode 默认位置模式；参数读写 key 为首参。"""
+    methods = ("set_mode_arm", "set_mode_end", "read_mode_arm", "read_mode_end",
+               "read_state_arm", "read_state_end",
                "send_action_end", "read_param_arm", "read_param_end",
                "write_param_arm", "write_param_end")
     for cls in (Backend, BackendDM):
@@ -340,6 +366,86 @@ def test_backenddm_offline_guards():
         raise AssertionError("未知型号应抛 ValueError")
     except ValueError:
         pass
+
+
+def test_backenddm_query_api():
+    """公共查询接口：connected 三态 + read_mode_* 一致/未设置/混合三态（离线可用）。"""
+    be = _mk_backend()
+
+    # connected：未连接 False → 注入假总线 True → 清空后 False
+    assert be.connected is False
+    be._buses["dummy"] = DmCanBus("dummy")
+    assert be.connected is True
+    be._buses.clear()
+    assert be.connected is False
+
+    # read_mode_arm：未设置 None；全部一致返回该模式；混合 None；joint 子集独立判断
+    assert be.read_mode_arm() is None
+    be._mode_arm.update({f"joint{i}": ControlMode.MIT for i in range(1, 7)})
+    assert be.read_mode_arm() == ControlMode.MIT
+    assert be.read_mode_arm(0) == ControlMode.MIT
+    be._mode_arm["joint1"] = ControlMode.POSITION
+    assert be.read_mode_arm() is None                 # 混合
+    assert be.read_mode_arm(0) == ControlMode.POSITION  # 子集一致
+    try:
+        be.read_mode_arm(6)
+        raise AssertionError("越界索引应抛 ValueError")
+    except ValueError:
+        pass
+
+    # read_mode_end：同构三态
+    assert be.read_mode_end() is None
+    be._mode_end["gripper"] = ControlMode.VELOCITY
+    assert be.read_mode_end() == ControlMode.VELOCITY
+    assert be.read_mode_end(0) == ControlMode.VELOCITY
+
+    # 未配置末端：与其它 _end 方法同抛 RuntimeError
+    cfg = yaml.safe_load((_ROOT / "joyarm_core/configs/joyarm_dm.yaml").read_text(encoding="utf-8"))
+    bcfg = dict(cfg["backend"])
+    bcfg.pop("name")
+    bcfg.pop("end")
+    be_noend = BackendDM(bcfg)
+    assert be_noend.read_mode_arm() is None
+    try:
+        be_noend.read_mode_end()
+        raise AssertionError("未配置末端应抛 RuntimeError")
+    except RuntimeError:
+        pass
+
+
+def test_backenddm_err_semantics():
+    """回归：错误码语义 0=失能正常、1=使能正常、8~E=故障（曾误设 0=使能/8=失能，
+    致真机失能显示"使能"、使能成功被报"错误码 1"故障）。"""
+    be = _mk_backend()
+    bus = DmCanBus("dummy")
+    be._buses["dummy"] = bus  # 跳过 connect() 打开串口，仅注册总线
+    m = be._arm_motors[0]
+    bus.add_motor(m)
+
+    def _read_with_err(err: int):
+        p = _mk_status_payload(0.0, 0.0, 0.0, err, m.limits)
+        bus.refresh = lambda motor: bus._feed(_mk_rx_frame(m.feedback_id, p))
+        return be.read_state_arm(0)
+
+    s = _read_with_err(0)                       # 失能正常
+    assert not s.joint.enabled[0] and not s.joint.error[0] and not s.errors
+    s = _read_with_err(1)                       # 使能正常
+    assert s.joint.enabled[0] and not s.joint.error[0] and not s.errors
+    s = _read_with_err(9)                       # 欠压故障
+    assert not s.joint.enabled[0] and s.joint.error[0]
+    assert any("欠压(0x9)" in msg for msg in s.errors)
+
+    # 使能应答 err=1 视为成功；err=8（超压）应抛带故障名的 RuntimeError
+    p_ok = _mk_status_payload(0.0, 0.0, 0.0, 1, m.limits)
+    bus.enable = lambda motor: bus._feed(_mk_rx_frame(m.feedback_id, p_ok))
+    be.enable_arm(0)
+    p_ov = _mk_status_payload(0.0, 0.0, 0.0, 8, m.limits)
+    bus.enable = lambda motor: bus._feed(_mk_rx_frame(m.feedback_id, p_ov))
+    try:
+        be.enable_arm(0)
+        raise AssertionError("超压应答应抛 RuntimeError")
+    except RuntimeError as exc:
+        assert "超压(0x8)" in str(exc)
 
 
 if __name__ == "__main__":

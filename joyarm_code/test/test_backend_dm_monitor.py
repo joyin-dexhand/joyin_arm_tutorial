@@ -3,9 +3,14 @@
 【功能概要】
 按 ``joyarm_dm.yaml`` 连接 backend_dm —— 只打开串口并启动接收线程，全程不调用
 ``enable_*``，电机保持失能。每 0.5 s 读取一次 6 个本体关节 + 夹爪电机的全部
-状态量（q / dq / tau / 使能 / 故障 / 通讯）并在终端原地刷新；手动搬动机械臂
-即可观察反馈数据变化。注：DM 状态帧不含 ddq / 电压 / 电流（ArmState 中恒为
-0），故表格不显示。
+可得上报状态：q / dq / tau / 使能 / 故障 / 通讯 / 驱动板与转子温度，并在终端
+原地刷新；手动搬动机械臂即可观察反馈数据变化。
+
+数据可得性说明：
+- 温度（tMOS/tRot，℃）：来自状态帧 D6~7（新固件提供），旧固件该两字节恒 0，
+  显示为 ``—``；
+- 电压 / 电流：DM 状态帧与参数寄存器（0x33 通道）均不提供遥测，不予显示；
+- ddq / angle_ok 无反馈（恒 0 / 以通讯近似），不显示。
 
 【环境与运行】
 1. 新建环境并安装依赖：``cd joyarm_code && uv venv && uv sync``
@@ -42,21 +47,31 @@ def _load_backend() -> tuple[BackendDM, list[str], list[str], str]:
     return BackendDM(bcfg), arm_names, end_names, arm.get("channel", "?")
 
 
+def _fmt_t(t) -> str:
+    """温度格式化：0 视为无反馈（旧固件 D6~7 未用），显示 ``—``。"""
+    return "—" if t == 0 else f"{t:.0f}"
+
+
 def _print_frame(out, arm_names: list[str], end_names: list[str], s, e: dict) -> None:
     """打印一帧状态表；``out`` 为输出函数（终端模式带行尾清理）。"""
-    out(f"{'关节':<8}  {'q(rad)':>9} {'dq(rad/s)':>10} {'tau(N·m)':>9}    使能  故障  通讯")
-    out("-" * 64)
+    out(f"{'关节':<8}  {'q(rad)':>9} {'dq(rad/s)':>10} {'tau(N·m)':>9} {'tMOS':>5} "
+        f"{'tRot':>5}    使能  故障  通讯")
+    out("-" * 76)
     rows = list(zip(arm_names, s.joint.q, s.joint.dq, s.joint.tau,
+                    s.joint.temp_mos, s.joint.temp_rotor,
                     s.joint.enabled, s.joint.error, s.joint.comm_ok))
     rows += list(zip(end_names, e["q"], e["dq"], e["tau"],
+                     e["temp_mos"], e["temp_rotor"],
                      e["enabled"], e["error"], e["comm_ok"]))
-    for name, q, dq, tau, en, flt, ok in rows:
+    for name, q, dq, tau, tmos, trot, en, flt, ok in rows:
         out(f"{name:<10}{q:+9.4f}{dq:+10.4f}{tau:+9.4f}"
+            f" {_fmt_t(tmos):>5} {_fmt_t(trot):>5}"
             f"     {'是' if en else '否'}    {'是' if flt else '否'}    {'是' if ok else '否'}")
-    out("-" * 64)
+    out("-" * 76)
     stamp = time.strftime("%H:%M:%S", time.localtime(s.timestamp)) + f".{int(s.timestamp * 1000) % 1000:03d}"
     out(f"时间 {stamp} | 电机保持失能 | 周期 {REFRESH_PERIOD} s | Ctrl+C 退出")
     out(f"故障：{'；'.join(s.errors) if s.errors else '无'}")
+    out("tMOS/tRot=驱动板/转子温度(℃)，“—”=无反馈（旧固件 D6~7 恒 0）")
 
 
 def main() -> None:

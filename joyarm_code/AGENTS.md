@@ -143,7 +143,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 节点/launch → `joyarm_ros2_ws/src
 | `utils/types.py` | 枚举 `ControlMode`/`Severity`/`SafetyAction`/`TrajectorySpace`；数据类 `Pose`/`JointState`/`TcpState`/`ArmState`/`JointLimits`/`TcpLimits`/`Wrench`/`Twist`/`Violation`/`IKResult`/`ComplianceParams` | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数：`rot_x/y/z`、`rpy_to_R`/`R_to_rpy`、`rodrigues`/`axis_angle_to_R`/`R_to_axis_angle`、`quat_*`、`Rp_to_T`/`T_to_Rp`/`T_inv`/`T_mul`/`adT`、`slerp` | Ch2 | ✅ |
 | `utils/limits.py` | `clamp_to_limits`（指令路径限位守卫） | Ch11 | ✅ |
-| `backends/backend.py` | `Backend(ABC)` 整机契约：`connect`/`disconnect` + `*_arm`/`*_end` 方法族（enable/set_zero/set_mode/read_state/send_…/read·write_param_…） | Ch2 | ✅ |
+| `backends/backend.py` | `Backend(ABC)` 整机契约：`connect`/`disconnect` + `connected` 属性 / `read_mode_*` 查询 + `*_arm`/`*_end` 方法族（enable/set_zero/set_mode/read_state/send_…/read·write_param_…） | Ch2 | ✅ |
 | `backends/backend_dm.py` | `BackendDM(Backend)`（DM 7 电机：joint1~3=4340P、4~6=4310、夹爪=4310；协议参照 u2can 重写，私有 `DmMotor`/`DmCanBus` 协议层） | Ch6/13 | ✅ |
 | `robotics/fkine/` | `FkineSolver`(ABC) · `PinFkineSolver`（模板方法：rep/批量在 ABC，内核 `frame_T`）✅ · `MdhFkineSolver` 🟡 | Ch2 | ✅/🟡 |
 | `robotics/ikine/` | `IkineSolver` · `PinIkineSolver` · `AnalyticIkine6R`（均 🟡） | Ch3 | 🟡 |
@@ -161,7 +161,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 节点/launch → `joyarm_ros2_ws/src
 `chapt/` 与 `test/`：
 
 - `chapt/`：`chapt2_T_demo.py`、`chapt2_pose_demo.py`（PySide6 + matplotlib GUI，独立运行、不复用 SDK）；`chapt10_ros2_demo.py`（joyarm_node 最小 rclpy 客户端）随 §1.4 落地时创建。
-- `test/`：`test_backend_dm.py`（DM 协议离线单测：编解码纯函数往返、RX 帧分发、指令原语字节、BackendDM 离线约束；`python test/test_backend_dm.py` 直跑）；`test_backend_dm_monitor.py`（真机失能监视：不使能电机，每 0.5 s 原地刷新全部关节/夹爪 q/dq/tau 与使能/故障/通讯，可手动搬动观察反馈。
+- `test/`：`test_backend_dm.py`（DM 协议离线单测：编解码纯函数往返、RX 帧分发、指令原语字节、BackendDM 离线约束、错误码语义回归——0=失能正常/1=使能正常/8~E=故障；`python test/test_backend_dm.py` 直跑）；`test_backend_dm_monitor.py`（真机失能监视：不使能电机，每 0.5 s 原地刷新全部关节/夹爪 q/dq/tau、使能/故障/通讯与驱动板/转子温度——状态帧 D6~7，旧固件恒 0 显"—"；电压/电流 DM 协议不提供故不显示，可手动搬动观察反馈；`python test/test_backend_dm_monitor.py [N]`，N 为周期数、缺省无限）；`test_backend_dm_debug.py`（真机分步调试：交互菜单按危险度递增逐电机逐功能测试——连接→读状态→读参数→写参数→设零位→安全使能（MIT 零阻抗 kp=kd=tau=0，防使能瞬间跳动的）→失能→模式切换→发指令（位置指令默认目标=当前 q；末端预设 open=-1/close=3/zero=0 rad，7 号电机）；`python test/test_backend_dm_debug.py`）。
 
 ### 3.2 继承链与职责
 
@@ -220,7 +220,7 @@ joyarm_factory(model, **kwargs) → JoyArm · .create(model, **kwargs) · .list_
 #### Backend 整机 API
 
 ```python
-Backend(ABC) 整机后端 ✅：connect() / disconnect() + *_arm/*_end 方法族（统一 joint=None=全部）+ 参数读写
+Backend(ABC) 整机后端 ✅：connect() / disconnect() + connected 属性 + read_mode_arm/end(joint=None) 模式查询（本地缓存，一致才非 None）+ *_arm/*_end 方法族（统一 joint=None=全部）+ 参数读写
     _arm 族：enable_arm/disable_arm · set_zero_arm · set_mode_arm(mode=POSITION, joint=None) · read_state_arm(joint=None) → ArmState（指定 joint 时数组长度 1）
             · send_position_arm(q) / send_velocity_arm(dq) / send_mit_arm(q, dq, tau, kp=None, kd=None)
     _end 族（joint=None 全部，多电机末端通用）：enable_end/disable_end · set_zero_end · set_mode_end(mode=POSITION, joint=None) · read_state_end(joint=None) → dict（值为所选电机逐电机序列）

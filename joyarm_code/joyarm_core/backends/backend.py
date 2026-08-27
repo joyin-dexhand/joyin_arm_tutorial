@@ -52,6 +52,11 @@ class Backend(ABC):
     def disconnect(self) -> None:
         """断开通信链路（失能电机 → 停接收线程 → 关总线）。"""
 
+    @property
+    @abstractmethod
+    def connected(self) -> bool:
+        """通信链路是否已建立（``connect()`` 后 / ``disconnect()`` 前为 ``True``）。"""
+
     # ----------------------------------------------------------
     # 本体（关节电机）：_arm 后缀
     # ----------------------------------------------------------
@@ -77,6 +82,15 @@ class Backend(ABC):
 
         :param mode: 目标控制模式，默认 ``ControlMode.POSITION``（电机 POS_VEL）。
         :param joint: 关节索引，``None`` 表示全部；仅对未处于目标模式的电机补切。
+        """
+
+    @abstractmethod
+    def read_mode_arm(self, joint: Optional[int] = None) -> Optional[ControlMode]:
+        """查询本体关节当前控制模式（本地缓存，不发总线帧，离线可查）。
+
+        :param joint: 关节索引；``None`` 表示整臂。
+        :return: 指定 ``joint`` 时返回该关节控制模式（未设置为 ``None``）；
+            ``joint=None`` 时整臂各关节模式唯一才返回该模式，否则 ``None``。
         """
 
     @abstractmethod
@@ -169,13 +183,23 @@ class Backend(ABC):
         """
 
     @abstractmethod
+    def read_mode_end(self, joint: Optional[int] = None) -> Optional[ControlMode]:
+        """查询末端电机当前控制模式（语义同 :meth:`read_mode_arm`）。
+
+        :param joint: 末端电机索引；``None`` 表示整个末端。
+        :return: 指定 ``joint`` 时返回该电机控制模式（未设置为 ``None``）；
+            ``joint=None`` 时整个末端各电机模式唯一才返回该模式，否则 ``None``。
+        """
+
+    @abstractmethod
     def read_state_end(self, joint: Optional[int] = None) -> dict:
         """读取末端状态快照（值为所选电机的逐电机序列）。
 
         :param joint: 末端电机索引，``None`` 表示全部。
         :return: 状态字典，字段由子类定义；值为逐电机序列（单电机末端为
             单元素序列）。例如 DM 夹爪：``{"q": [...], "dq": [...], "tau": [...],
-            "enabled": [...], "error": [...], "comm_ok": [...]}``。
+            "enabled": [...], "error": [...], "comm_ok": [...], "temp_mos": [...],
+            "temp_rotor": [...]}``。
         """
 
     @abstractmethod

@@ -277,9 +277,6 @@ class JoyArm:
             dq_max=dq_max,
             tau_max=tau_max,
             ddq_max=np.full(n, np.inf),
-            voltage_min=np.zeros(n),
-            voltage_max=np.zeros(n),
-            current_max=np.zeros(n),
         )
 
     @staticmethod
