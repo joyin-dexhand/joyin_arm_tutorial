@@ -29,9 +29,6 @@ T_linkn_end:
   - [1.0, 0.0, -3.6732051e-06, 0.15539]
   - [0.0, 0.0, 0.0, 1.0]
 
-# end 执行器的电机限位 [q_min, q_max, dq_max, tau_max]
-end_limits: [0.0, 0.8, 1.0, 10.0]
-
 # 末端系空间限位
 tcp_limits:
   workspace_box: [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]] # [min, max] (m)
@@ -168,8 +165,10 @@ backend:
         feedback_id: 0x17
         model: "4310"
         vendor: "damiao"
-        q_min: -1.8 # 末端行程下限（电机弧度，张开位；与顶层 end_limits 一致）
-        q_max: 3.8 # 末端行程上限（电机弧度，闭合位）
+        q_min: -1.8 # 行程下限（rad，张开位）
+        q_max: 3.8 # 行程上限（rad，闭合位）
+        dq_max: 2.0 # 速度上限（rad/s）
+        tau_max: 1.0 # 力矩上限（N·m）
         force_to_tau: 1 # 力度→前馈力矩近似换算系数（N→N·m，标定后修改）
         MIT:
           # kp: 8.0

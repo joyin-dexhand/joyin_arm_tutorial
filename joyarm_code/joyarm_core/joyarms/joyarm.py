@@ -550,6 +550,11 @@ class JoyArm:
         self._require_connected()
         self._backend.send_action_end("close", joint)
 
+    def end_zero(self, joint: Optional[int] = None) -> None:
+        """末端归零（目标 = 电机弧度 0，裁剪到行程内；``joint=None`` 全部末端电机）。"""
+        self._require_connected()
+        self._backend.send_action_end("zero", joint)
+
     def set_end_position(self, position, joint: Optional[int] = None) -> None:
         """末端位置控制（连续量，如夹爪电机弧度；``joint=None`` 全部末端电机）。"""
         self._require_connected()

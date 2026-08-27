@@ -10,7 +10,8 @@
 - 安全使能：先切 MIT 模式，使能后立刻下发 kp=kd=tau=0 的零阻抗 MIT 指令，
   电机零力矩"松软"，防止使能瞬间机械臂突然运动；此时可手动搬动验证。
 - 位置指令默认目标 = 当前 q（发送即保持不动），修改数值才产生运动。
-- 末端预设：open=-1 / close=3 / zero=0（电机弧度，7 号电机 gripper）。
+- 末端预设动作 open/close/zero 经 send_action_end 下发：open/close 目标取 config
+  行程 q_min/q_max，zero=0（电机弧度，7 号电机 gripper）。
 - 写参数 / 设零位需二次确认；退出前自动失能并断开。
 
 【安全提示】
@@ -33,14 +34,19 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core.backends.backend_dm import BackendDM  # noqa: E402
+from joyarm_core.backends.backend_dm import (  # noqa: E402
+    _PARAM_RIDS,
+    _READONLY_KEYS,
+    BackendDM,
+)
 from joyarm_core.utils.types import ControlMode  # noqa: E402
 
-_PARAM_KEYS = ["ctrl_mode", "vel_kp", "vel_ki", "pos_kp", "pos_ki"]  # DM 可读参数名
+_PARAM_KEYS = sorted(_PARAM_RIDS)                          # 全部可读参数名
+_WRITABLE_KEYS = sorted(set(_PARAM_RIDS) - _READONLY_KEYS)  # 可写参数名（只读除外）
 
-# 末端预设位（电机弧度，作用于 7 号电机 gripper）：open 张开 / close 闭合 / zero 归零，
-# 位于 config 行程 q_min/q_max 内，经 send_position_end 下发
-_END_PRESETS = {"o": ("open", -1.0), "c": ("close", 3.0), "z": ("zero", 0.0)}
+# 末端离散动作（作用于 7 号电机 gripper）：open 张开 / close 闭合 / zero 归零，
+# 经 send_action_end 下发：open/close 目标 = config 行程 q_min/q_max，zero = 电机弧度 0
+_END_ACTIONS = {"o": "open", "c": "close", "z": "zero"}
 
 _MENU = """--------------------------------------------------
   [1] 连接            [2] 读状态         [3] 读参数
@@ -139,10 +145,10 @@ def _act_read_param(backend: BackendDM, group: str, joint, names: list[str]) -> 
 
 
 def _act_write_param(backend: BackendDM, group: str, joint, names: list[str]) -> None:
-    print(f"可写参数：{_PARAM_KEYS}")
+    print(f"可写参数：{_WRITABLE_KEYS}")
     key = _ask("参数名")
-    if key not in _PARAM_KEYS:
-        print("✗ 未知参数名")
+    if key not in _WRITABLE_KEYS:
+        print("✗ 未知参数名或只读参数")
         return
     value = _ask_float("新值", 0.0)
     persist = _ask("持久化到闪存？(y/N)").lower() == "y"
@@ -229,22 +235,22 @@ def _act_send(backend: BackendDM, group: str, joint, n: int,
             backend.send_velocity_arm(np.full(n, dq), joint)
             print("✓ 速度指令已下发")
         return
-    # 末端（位置语义：电机弧度，预设 open=-1 / close=3 / zero=0，7 号电机 gripper）
-    ans = _ask("末端指令 [p=位置 | f=力度 | o=open(-1) | c=close(3) | z=zero(0)]").lower()
+    # 末端（位置语义：电机弧度，预设动作走 send_action_end，7 号电机 gripper）
+    ans = _ask("末端指令 [p=位置 | f=力度 | o=open | c=close | z=zero]").lower()
     if ans == "p":
         cur = backend.read_state_end(joint)["q"]
         pos = _ask_float("位置(电机弧度)", cur[0] if len(cur) == 1 else 0.0)
         backend.send_position_end(pos, joint)
-        print("✓ 末端位置指令已下发（自动裁剪到 q_min/q_max）")
+        print("✓ 末端位置指令已下发（自动裁剪到 q_min/q_max，速度封顶 dq_max）")
     elif ans == "f":
-        print("⚠ 力度经 MIT 近似：以 config MIT 增益闭合至 q_max，前馈 = 力度×force_to_tau")
+        print("⚠ 力度经 MIT 近似：以 config MIT 增益闭合至 q_max，前馈 = 力度×force_to_tau（封顶 tau_max）")
         force = _ask_float("力度(N)", 0.0)
         backend.send_force_end(force, joint)
         print("✓ 末端力度指令已下发")
-    elif ans in _END_PRESETS:
-        label, target = _END_PRESETS[ans]
-        backend.send_position_end(target, joint)
-        print(f"✓ 末端{label}：gripper → {target:g} rad（限幅内，按 vlim 限速）")
+    elif ans in _END_ACTIONS:
+        action = _END_ACTIONS[ans]
+        backend.send_action_end(action, joint)
+        print(f"✓ 末端{action}指令已下发（open→q_min / close→q_max / zero→0，行程限幅、速度封顶 dq_max）")
     else:
         print("✗ 未知指令")
 

@@ -24,6 +24,7 @@ sys.path.insert(0, str(_ROOT))
 from joyarm_core.backends.backend import Backend  # noqa: E402
 from joyarm_core.backends.backend_dm import (  # noqa: E402
     _PARAM_RIDS,
+    _READONLY_KEYS,
     _MOTOR_LIMITS,
     _extract_frames,
     _float_to_uint,
@@ -275,8 +276,22 @@ def test_backenddm_offline_construction():
     assert len(be._end_motors) == 1
     em = be._end_motors[0]
     assert em.model == "4310"
-    assert (em.q_min, em.q_max, em.force_to_tau) == (-1.8, 3.8, 1.0)
-    assert _PARAM_RIDS == {"ctrl_mode": 10, "vel_kp": 25, "vel_ki": 26, "pos_kp": 27, "pos_ki": 28}
+    assert (em.q_min, em.q_max, em.dq_max, em.tau_max, em.force_to_tau) == (
+        -1.8, 3.8, 2.0, 1.0, 1.0)
+    assert _PARAM_RIDS == {
+        # 控制与闭环增益（可写）
+        "ctrl_mode": 10, "vel_kp": 25, "vel_ki": 26, "pos_kp": 27, "pos_ki": 28,
+        # 保护阈值（可写）
+        "uv": 0, "ot": 2, "oc": 3, "ov": 29, "timeout": 9,
+        # 运动参数（可写）
+        "acc": 4, "dec": 5, "max_spd": 6,
+        # 版本身份（只读）
+        "hw_ver": 13, "sw_ver": 14, "sn": 15, "sub_ver": 36,
+        # 物理特性（只读）
+        "kt": 1, "gr": 20, "pmax": 21, "vmax": 22, "tmax": 23,
+    }
+    assert _READONLY_KEYS == {"hw_ver", "sw_ver", "sn", "sub_ver", "kt", "gr",
+                              "pmax", "vmax", "tmax"}
 
 
 def test_backenddm_multi_motor_end():
@@ -366,6 +381,30 @@ def test_backenddm_offline_guards():
         raise AssertionError("未知型号应抛 ValueError")
     except ValueError:
         pass
+
+
+def test_write_param_readonly_rejected():
+    """只读参数（版本/序列号/物理特性）write_param_* 拒绝写入（守卫先于总线访问）。"""
+    be = _mk_backend()
+    be._buses["dummy"] = DmCanBus("dummy")  # 仅过 _check_open，不实际收发
+    for call in (lambda: be.write_param_arm("sw_ver", 1),
+                 lambda: be.write_param_end("pmax", 1.0)):
+        try:
+            call()
+            raise AssertionError("只读参数写入应抛 ValueError")
+        except ValueError:
+            pass
+    # 可写参数不受守卫影响（发送帧由总线截获验证字节，不接真机）
+    bus = be._arm_motors[0].bus = DmCanBus("dummy")
+    sent = []
+    bus.send = lambda cid, data: sent.append((cid, bytes(data)))
+    be._arm_motors[0].bus = bus
+    try:
+        be.write_param_arm("acc", 0.5, 0)
+        raise AssertionError("无应答应抛 RuntimeError 而非 ValueError")
+    except RuntimeError:
+        pass
+    assert sent[-1][0] == 0x7FF and sent[-1][1][3] == 4  # RID=4（acc）
 
 
 def test_backenddm_query_api():

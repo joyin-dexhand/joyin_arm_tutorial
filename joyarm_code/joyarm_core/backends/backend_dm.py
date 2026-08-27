@@ -76,17 +76,45 @@ _ERR_FAULT_NAMES: dict[int, str] = {
     12: "线圈超温", 13: "通信丢失", 14: "过载",
 }
 
-# 电机寄存器（RID）：10=控制模式（1 MIT / 2 POS_VEL / 3 VEL），25~28=POS_VEL 闭环增益
+# 电机寄存器（RID）：10=控制模式（1 MIT / 2 POS_VEL / 3 VEL），25~28=POS_VEL 闭环增益，
+# 另收录保护阈值/运动参数/版本身份/物理特性（全集见 u2can/DM_CAN.py 的 DM_variable）
 _RID_CTRL_MODE = 10
 
 # 参数名（基类/用户侧字符串 key）→ DM 寄存器 RID
 _PARAM_RIDS: dict[str, int] = {
-    "ctrl_mode": 10,
-    "vel_kp": 25,
-    "vel_ki": 26,
-    "pos_kp": 27,
-    "pos_ki": 28,
+    # 控制与闭环增益（可写）
+    "ctrl_mode": 10,   # 1=MIT / 2=POS_VEL / 3=VEL（uint32）
+    "vel_kp": 25,      # 速度环 Kp
+    "vel_ki": 26,      # 速度环 Ki
+    "pos_kp": 27,      # 位置环 Kp
+    "pos_ki": 28,      # 位置环 Ki
+    # 保护阈值（可写，慎改）
+    "uv": 0,           # 欠压阈值 V
+    "ot": 2,           # 过温阈值 ℃
+    "oc": 3,           # 过流阈值 A
+    "ov": 29,          # 过压阈值 V
+    "timeout": 9,      # CAN 掉线保护超时（uint32）
+    # 运动参数（可写）
+    "acc": 4,          # 加速时间
+    "dec": 5,          # 减速时间
+    "max_spd": 6,      # 最大速度 rad/s
+    # 版本身份（只读，uint32）
+    "hw_ver": 13,
+    "sw_ver": 14,
+    "sn": 15,
+    "sub_ver": 36,
+    # 物理特性（只读）
+    "kt": 1,           # 转矩常数
+    "gr": 20,          # 减速比
+    "pmax": 21,        # 位置量程极限 rad
+    "vmax": 22,        # 速度极限 rad/s
+    "tmax": 23,        # 力矩极限 N·m
 }
+
+# 只读参数名（版本/序列号/出厂物理特性事实量）：write_param_* 拒绝写入
+_READONLY_KEYS = frozenset(
+    {"hw_ver", "sw_ver", "sn", "sub_ver", "kt", "gr", "pmax", "vmax", "tmax"}
+)
 
 # uint32 型寄存器 RID 集合（其余按 float32 收发）
 _UINT_RIDS = frozenset(range(7, 11)) | frozenset(range(13, 17)) | {35, 36}
@@ -204,9 +232,9 @@ class DmMotor:
     """单个 DM 电机：config 一个 joint 条目 → 一个实例。
 
     持有通讯参数（``motor_id``/``feedback_id``/型号限值）、控制增益（config
-    ``MIT`` / ``POS_VEL`` 段回退源）、末端行程语义（``q_min``/``q_max``/
-    ``force_to_tau``，仅 end 关节配置），以及 RX 线程回填的状态槽与参数槽
-    （配到达 Event，供"发请求 → 等应答"同步）。
+    ``MIT`` / ``POS_VEL`` 段回退源）、末端限位语义（``q_min``/``q_max``/
+    ``dq_max``/``tau_max``/``force_to_tau``，仅 end 关节配置），以及 RX 线程
+    回填的状态槽与参数槽（配到达 Event，供"发请求 → 等应答"同步）。
     """
 
     def __init__(self, jcfg: dict) -> None:
@@ -233,9 +261,11 @@ class DmMotor:
         }
         self.vlim = float(pv.get("vlim", 0.0))
 
-        # 末端行程语义（可选；arm 关节不配置）
+        # 末端限位语义（可选；arm 关节不配置）
         self.q_min = None if jcfg.get("q_min") is None else float(jcfg["q_min"])
         self.q_max = None if jcfg.get("q_max") is None else float(jcfg["q_max"])
+        self.dq_max = None if jcfg.get("dq_max") is None else float(jcfg["dq_max"])
+        self.tau_max = None if jcfg.get("tau_max") is None else float(jcfg["tau_max"])
         self.force_to_tau = float(jcfg.get("force_to_tau", 0.1))
 
         # 状态槽 + 参数槽（RX 线程写、指令线程读，Event 通知应答到达）
@@ -456,7 +486,8 @@ class BackendDM(Backend):
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 子段（``channel`` / ``baud_rate`` / ``joints``，
         joints 各含 ``motor_id`` / ``feedback_id`` / ``model`` / ``MIT`` /
-        ``POS_VEL``，end 关节另含 ``q_min`` / ``q_max`` / ``force_to_tau``）。
+        ``POS_VEL``，end 关节另含 ``q_min`` / ``q_max`` / ``dq_max`` /
+        ``tau_max`` / ``force_to_tau``）。
     """
 
     def __init__(self, cfg: dict) -> None:
@@ -511,6 +542,11 @@ class BackendDM(Backend):
         bad = [m.name for m in motors if self._mode_end.get(m.name) != mode]
         if bad:
             raise RuntimeError(f"末端电机 {bad} 未处于 {mode.value} 模式；请先 set_mode_end({mode.value})")
+
+    @staticmethod
+    def _end_speed(m: DmMotor) -> float:
+        """末端 POS_VEL 指令速度：config ``vlim``，不超过电机 ``dq_max``。"""
+        return min(m.vlim, m.dq_max) if m.dq_max is not None else m.vlim
 
     @staticmethod
     def _values_for(cmd, name: str, motors: list[DmMotor]) -> np.ndarray:
@@ -728,6 +764,8 @@ class BackendDM(Backend):
         rid = _PARAM_RIDS.get(key)
         if rid is None:
             raise ValueError(f"未知参数名 {key!r}；可用：{sorted(_PARAM_RIDS)}")
+        if key in _READONLY_KEYS:
+            raise ValueError(f"参数 {key!r} 只读；只读参数：{sorted(_READONLY_KEYS)}")
         motors = self._motors_for(joint)
         for m, v in zip(motors, self._values_for(value, "value", motors)):
             m.bus.write_param(m, rid, v)
@@ -786,10 +824,10 @@ class BackendDM(Backend):
         for m, p in zip(motors, self._values_for(position, "position", motors)):
             if m.q_min is None or m.q_max is None:
                 raise ValueError(f"末端关节 {m.name} 缺少 q_min/q_max 行程配置（config backend.end.joints）")
-            m.bus.send_pos_vel(m, _clamp(float(p), m.q_min, m.q_max), m.vlim)
+            m.bus.send_pos_vel(m, _clamp(float(p), m.q_min, m.q_max), self._end_speed(m))
 
     def send_force_end(self, force, joint: Optional[int] = None) -> None:
-        """末端力度控制（近似）：MIT 闭合至各电机 ``q_max``，前馈 ``force×force_to_tau``。
+        """末端力度控制（近似）：MIT 闭合至各电机 ``q_max``，前馈 ``force×force_to_tau``（封顶 ``tau_max``）。
 
         DM 夹爪无力控通道与力反馈，``force_to_tau`` 为 N→N·m 近似换算系数
         （config 逐电机标定）；本方法须先 ``set_mode_end(MIT)``。
@@ -799,19 +837,26 @@ class BackendDM(Backend):
         for m, f in zip(motors, self._values_for(force, "force", motors)):
             if m.q_max is None:
                 raise ValueError(f"末端关节 {m.name} 缺少 q_max 行程配置（config backend.end.joints）")
-            m.bus.send_mit(m, m.q_max, 0.0, float(f) * m.force_to_tau, m.mit_kp, m.mit_kd)
+            tau = float(f) * m.force_to_tau
+            if m.tau_max is not None:
+                tau = _clamp(tau, -m.tau_max, m.tau_max)
+            m.bus.send_mit(m, m.q_max, 0.0, tau, m.mit_kp, m.mit_kd)
 
     def send_action_end(self, action: str, joint: Optional[int] = None) -> None:
-        """末端离散动作：``open``→所选电机 ``q_min``、``close``→所选电机 ``q_max``。"""
+        """末端离散动作：``open``→``q_min``、``close``→``q_max``、``zero``→电机弧度 0。"""
         motors = self._end_motors_for(joint)
         self._require_mode_end(ControlMode.POSITION, motors)
-        if action not in ("open", "close"):
-            raise ValueError(f"未知末端动作 {action!r}；可用：['open', 'close']")
+        if action not in ("open", "close", "zero"):
+            raise ValueError(f"未知末端动作 {action!r}；可用：['open', 'close', 'zero']")
         for m in motors:
             if m.q_min is None or m.q_max is None:
                 raise ValueError(f"末端关节 {m.name} 缺少 q_min/q_max 行程配置（config backend.end.joints）")
-            target = m.q_min if action == "open" else m.q_max
-            m.bus.send_pos_vel(m, target, m.vlim)
+            if action == "zero":
+                # 行程不含 0 的末端（如 q_min>0）直接发 0 会越限，裁剪保安全
+                target = _clamp(0.0, m.q_min, m.q_max)
+            else:
+                target = m.q_min if action == "open" else m.q_max
+            m.bus.send_pos_vel(m, target, self._end_speed(m))
 
     def read_param_end(self, key: str, joint: Optional[int] = None):
         self._check_open()
@@ -828,6 +873,8 @@ class BackendDM(Backend):
         rid = _PARAM_RIDS.get(key)
         if rid is None:
             raise ValueError(f"未知参数名 {key!r}；可用：{sorted(_PARAM_RIDS)}")
+        if key in _READONLY_KEYS:
+            raise ValueError(f"参数 {key!r} 只读；只读参数：{sorted(_READONLY_KEYS)}")
         motors = self._end_motors_for(joint)
         for m, v in zip(motors, self._values_for(value, "value", motors)):
             m.bus.write_param(m, rid, v)

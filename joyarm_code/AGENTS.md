@@ -108,7 +108,7 @@ ros2 launch joyarm_node arm.launch.py
 - **设备模型**（`joyarms/`）：`JoyArm` = 完整机械臂基类（多轴本体 + 末端执行器），私有整机后端 `_backend`（config `backend.name` 选型构建，能力全部经公有门面暴露）；具体型号 `JoyArmDM(JoyArm)` 不绑后端类；`joyarms/__init__.py` 的 `joyarm_factory(model)` 按型号名创建（`REGISTRY` 选型 + 命名链校验），**外部推荐入口**。文件 `joyarms/joyarm.py`、`joyarms/joyarm_dm.py`、`joyarms/__init__.py`。
 - **Backend 整机两层**（`Backend` 前缀，`backends/`）：根 `Backend`（整机后端 ABC，本体+末端一体，方法以 `*_arm`/`*_end` 后缀区分）→ 型号层 `BackendDM`（与机械臂型号 **1:1** 派生：`backend(_joyarm)_dm` ↔ `joyarm_dm`，结构同参数异）。文件 `backend.py` / `backend_dm.py`；`REGISTRY` + `get_backend(name)` 供 config 选型。
 - **属性 / 形参**：整机后端 = `_backend`（私有，yaml `backend.name` 选型，不直接外露）；策略成员 = `_fkine_solver`/`_ikine_solver`/`_jacobian_solver`/`_dynamics_solver`/`_traj_planner`/`_controller`（私有，config 选型）；求解器形参用 `arm`（鸭子类型，经公开门面互调）。
-- **执行类方法命名**：本体方法带 `arm`、末端方法带 `end`，两者对应——本体 `enable_arm`/`disable_arm`/`set_zero_arm`/`set_mode_arm(mode=POSITION, joint=None)`/`get_arm_state`/`set_arm_command`；末端 `enable_end`/`disable_end`/`set_zero_end`/`set_mode_end(mode=POSITION, joint=None)`/`end_open(joint=None)`/`end_close(joint=None)`/`set_end_position`/`set_end_force`/`get_end_state(joint=None)`；参数读写 `read/write_param_arm(key[, value,] joint=None,…)`/`read/write_param_end(同构)`（key 由子类映射厂商寄存器，基类不泄漏 RID）。执行类方法统一带 `joint` 形参（None=全部，逐关节/多电机末端如灵巧手通用）；`set_mode_*` 默认位置模式（电机 POS_VEL）；参数读写 `joint=None` 时读返逐电机列表、写 `value` 可标量广播或等长列表。
+- **执行类方法命名**：本体方法带 `arm`、末端方法带 `end`，两者对应——本体 `enable_arm`/`disable_arm`/`set_zero_arm`/`set_mode_arm(mode=POSITION, joint=None)`/`get_arm_state`/`set_arm_command`；末端 `enable_end`/`disable_end`/`set_zero_end`/`set_mode_end(mode=POSITION, joint=None)`/`end_open(joint=None)`/`end_close(joint=None)`/`end_zero(joint=None)`/`set_end_position`/`set_end_force`/`get_end_state(joint=None)`；参数读写 `read/write_param_arm(key[, value,] joint=None,…)`/`read/write_param_end(同构)`（key 由子类映射厂商寄存器，基类不泄漏 RID）。执行类方法统一带 `joint` 形参（None=全部，逐关节/多电机末端如灵巧手通用）；`set_mode_*` 默认位置模式（电机 POS_VEL）；参数读写 `joint=None` 时读返逐电机列表、写 `value` 可标量广播或等长列表。
 - **yaml**：`configs/<model>.yaml` 单 `backend:` 段——`name` 选型键 + `arm:`/`end:` 子段（channel/protocol/baud_rate/control_rate/joints）；JoyArm 按 `name` 经 `REGISTRY` 构建整机后端。
 - **算法可换（成员即策略）**：每域 = ABC + 实现们 + `REGISTRY`（一节点一文件）；config `solvers:` 按注册名选型，未知名报错列出可选项；黑盒默认 pin 系，白盒（`Mdh*`/`Geometric*`/`Lagrangian*`）是同 ABC 教学子类；运行期可 `arm._xxx = ...` 或 `arm.set_controller(name)` 换。
 - 约定针对**系统组件**（joyarm/backend）；项目品牌名 `JoyArm`/`joyarm_code` 不改，核心 Python 包目录/导入名固定为 `joyarm_core`。
@@ -206,7 +206,7 @@ JoyArm.set_arm_command(mode=ControlMode.POSITION, q=None, dq=None, tau=None, kp=
 JoyArm.read_param_arm(key, joint=None) / write_param_arm(key, value, joint=None, persist=False) · read/write_param_end 同构   # 电机参数读写门面（需 connect；joint=None 读返列表、写 value 标量广播/列表）✅
 # 末端方法（需 connect）
 JoyArm.enable_end(joint) / disable_end · set_zero_end · set_mode_end(mode=POSITION, joint=None)   # 上电准备门面 ✅
-JoyArm.end_open(joint=None) / end_close(joint=None)        # 夹爪开/合（作用于所选末端电机）✅
+JoyArm.end_open(joint=None) / end_close(joint=None) / end_zero(joint=None)   # 夹爪开/合/归零（作用于所选末端电机）✅
 JoyArm.set_end_position(position, joint=None) / set_end_force(force, joint=None) / get_end_state(joint=None)   # 末端位置/力/状态 ✅
 # 关键属性：model / data / n / nv / ee_frame_name / ee_frame_id / joint_limits(_soft) / qlow / qhigh / q_zero / q_home / q_neutral / tcp_limits / T_base / _backend / connected
 

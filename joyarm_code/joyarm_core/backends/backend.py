@@ -224,7 +224,7 @@ class Backend(ABC):
     def send_action_end(self, action: str, joint: Optional[int] = None) -> None:
         """末端离散动作（预设目标由子类按 config 定义，作用于所选电机）。
 
-        :param action: 动作名，常见 ``"open"`` / ``"close"``；子类可扩展。
+        :param action: 动作名，常见 ``"open"`` / ``"close"`` / ``"zero"``；子类可扩展。
         :param joint: 末端电机索引，``None`` 表示全部。
         """
 

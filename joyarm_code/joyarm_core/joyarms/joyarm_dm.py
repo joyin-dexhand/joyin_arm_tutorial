@@ -3,7 +3,7 @@
 固化 joyarm_dm 硬件平台默认值：随包 URDF（``robot`` 键）、末端帧、MDH 参考表；
 整机后端不绑类——由基类按 ``configs/joyarm_dm.yaml`` 的 ``backend:`` 段
 ``name`` 选型构建（``backend_dm`` 与本型号 1:1 对应）。可调参数（末端帧/MDH/
-末端限位）config 优先、缺失回退类常量（无 YAML 也能实例化）；``MDH_TABLE``/
+TCP 空间限位）config 优先、缺失回退类常量（无 YAML 也能实例化）；``MDH_TABLE``/
 ``MDH_LIMITS`` 仅供 MDH 白盒/手写运动学链路（可选数据源，不覆盖 URDF/pin 限位），
 FK 默认走 pinocchio（URDF 链路），数值以第七章 URDF 导出为准。
 """
@@ -91,7 +91,7 @@ class JoyArmDM(JoyArm):
         if cfg.get("T_linkn_end") is not None:
             self.T_LINKN_END = np.asarray(cfg["T_linkn_end"], dtype=float).reshape(4, 4)
 
-        # ---- 末端限位：config 提供则覆盖 JoyArm 的占位 TcpLimits ----
+        # ---- TCP 空间限位：config 提供则覆盖 JoyArm 的占位 TcpLimits ----
         if cfg.get("tcp_limits"):
             self._apply_tcp_limits(cfg["tcp_limits"])
 
