@@ -1,6 +1,6 @@
 """TrajPlanner —— 轨迹规划器策略 ABC。
 
-``JoyArm._traj_planner`` 的契约：实现经 config ``solvers.traj`` 选型。四个入口按
+``JoyArm._traj_planner`` 的契约：实现经 config ``robotics.traj`` 选型。四个入口按
 空间（joint/cart）×粒度（p2p/waypoints）划分；``method`` 选**同族内方式**，config
 选**整个规划器**——两层选择不混淆。平滑契约：位置与姿态均 C2（位置/速度/加速度
 无突变）。Ch5。

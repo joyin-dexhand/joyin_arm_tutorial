@@ -1,6 +1,6 @@
 """``JoyArmDM`` —— JoyArm 6 自由度机械臂型号预设（完整臂 = 本体 + 夹爪，Ch2 即用）。
 
-固化 joyarm_dm 硬件平台默认值：随包 URDF（``robot`` 键）、末端帧、MDH 参考表；
+固化 joyarm_dm 硬件平台默认值：随包 URDF（``basic.robot`` 键）、末端帧、MDH 参考表；
 整机后端不绑类——由基类按 ``configs/joyarm_dm.yaml`` 的 ``backend:`` 段
 ``name`` 选型构建（``backend_dm`` 与本型号 1:1 对应）。可调参数（末端帧/MDH/
 TCP 空间限位）config 优先、缺失回退类常量（无 YAML 也能实例化）；``MDH_TABLE``/
@@ -34,7 +34,7 @@ class JoyArmDM(JoyArm):
         与对应 config。
 
     :param name: 名称。
-    :param urdf_path: URDF 文件路径；缺省解析随包资源（config ``robot`` 键 > 类常量）。
+    :param urdf_path: URDF 文件路径；缺省解析随包资源（config ``basic.robot`` 键 > 类常量）。
     :param ee_frame_name: 末端帧名；缺省用 config / 类常量 ``EE_FRAME``。
     :param mesh_dirs / load_geometry: 同 :class:`JoyArm`。
     :param config: 已加载的型号 YAML 字典（工厂注入）；缺省自动加载（容错回退类常量）。
@@ -67,11 +67,13 @@ class JoyArmDM(JoyArm):
             config if config is not None else load_config(self.CONFIG_NAME)
         )
         cfg = self.config or {}
+        basic = cfg.get("basic") or {}
+        jcfg = cfg.get("joyarm") or {}
 
-        # ---- urdf / ee_frame：参数 > config > 类常量 ----
+        # ---- urdf / ee_frame：参数 > config basic 段 > 类常量 ----
         if urdf_path is None:
-            urdf_path = self._resolve_default_urdf(cfg.get("robot"))
-        ee = ee_frame_name or cfg.get("ee_frame") or self.EE_FRAME
+            urdf_path = self._resolve_default_urdf(basic.get("robot"))
+        ee = ee_frame_name or basic.get("ee_frame") or self.EE_FRAME
         # 传 config 给 JoyArm：由基类按 backend 段 name 选型构建整机后端
         super().__init__(
             name=name,
@@ -82,18 +84,18 @@ class JoyArmDM(JoyArm):
             config=cfg,
         )
 
-        # ---- config 驱动的属性（回退到类常量）----
+        # ---- config 驱动的属性（joyarm 段；回退到类常量）----
         # MDH 链路（可选）：arm_mdh_and_limits 6×9 → 前 4 列 MDH + 后 5 列限位
-        if cfg.get("arm_mdh_and_limits") is not None:
-            arr = np.asarray(cfg["arm_mdh_and_limits"], dtype=float).reshape(6, -1)
+        if jcfg.get("arm_mdh_and_limits") is not None:
+            arr = np.asarray(jcfg["arm_mdh_and_limits"], dtype=float).reshape(6, -1)
             self.MDH_TABLE = arr[:, :4]
             self.MDH_LIMITS = arr[:, 4:]
-        if cfg.get("T_linkn_end") is not None:
-            self.T_LINKN_END = np.asarray(cfg["T_linkn_end"], dtype=float).reshape(4, 4)
+        if jcfg.get("T_linkn_end") is not None:
+            self.T_LINKN_END = np.asarray(jcfg["T_linkn_end"], dtype=float).reshape(4, 4)
 
-        # ---- TCP 空间限位：config 提供则覆盖 JoyArm 的占位 TcpLimits ----
-        if cfg.get("tcp_limits"):
-            self._apply_tcp_limits(cfg["tcp_limits"])
+        # ---- TCP 空间限位：joyarm 段提供则覆盖 JoyArm 的占位 TcpLimits ----
+        if jcfg.get("tcp_limits"):
+            self._apply_tcp_limits(jcfg["tcp_limits"])
 
     # ----------------------------------------------------------
     # 教学参考

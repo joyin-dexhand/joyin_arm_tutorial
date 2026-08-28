@@ -35,8 +35,8 @@ joyarm_code/
 三个核心概念：
 
 - **组合根 `JoyArm`**：完整机械臂 = arm 本体 + end 执行器。持有一个**整机通信后端** `_backend`（私有，本体+末端一体，yaml `backend.name` 选型构建，能力全部经公有门面暴露）与六个**策略成员**（`_fkine_solver` / `_ikine_solver` / `_jacobian_solver` / `_dynamics_solver` / `_traj_planner` / `_controller`）；公开门面（`arm.fkine()` / `arm.plan_joint_p2p()` / `arm.play_joint()` / `arm.end_open()`…）全部委托私有成员，`connect()` 后才可执行硬件操作。
-- **成员即策略（config 可换）**：`configs/<model>.yaml` 的 `solvers:` 段按注册名选型（`fkine: pin|mdh`、`traj: default|toppra`…）。
-- **型号工厂 `joyarm_factory`**：按型号名（唯一参数）创建机械臂——自动加载 `configs/<型号>.yaml` 并校验命名链（入参 = 文件名 = yaml `name` 字段 = joyarms 注册名，如 `joyarm_dm`），不一致报『XX』型号在XX中未找到。
+- **成员即策略（config 可换）**：`configs/<model>.yaml` 的 `robotics:` 段按注册名选型（`fkine: pin|mdh`、`traj: default|toppra`…）。
+- **型号工厂 `joyarm_factory`**：按型号名（唯一参数）创建机械臂——自动加载 `configs/<型号>.yaml` 并校验命名链（入参 = 文件名 = yaml `basic.name` 字段 = joyarms 注册名，如 `joyarm_dm`），不一致报『XX』型号在XX中未找到。
 - **Backend 整机两层**：`Backend`（整机根，方法以 `*_arm` / `*_end` 后缀区分本体与末端）→ `BackendDM`（与机械臂型号 **1:1** 派生：`backend_dm` ↔ `joyarm_dm`）；yaml `backend:` 段 `name` 选型，arm/end 同 channel 共享总线、异 channel 独立。
 
 ## 3. 环境安装
@@ -60,7 +60,7 @@ uv pip install -e .            # 核心 joyarm_core（含 numpy/pin/pyyaml）
 from joyarm_core import joyarm_factory
 
 arm = joyarm_factory("joyarm_dm")  # 推荐：型号名唯一参数（命名链校验）；默认未连接（离线），
-                                   # 自动加载 configs/joyarm_dm.yaml + URDF，按 solvers: 组装成员
+                                   # 自动加载 configs/joyarm_dm.yaml + URDF，按 robotics: 组装成员
 Q   = arm.rand_q(size=100_000)     # 软限位内采样 (N,6)
 T   = arm.fkine(Q)                 # 门面 → _fkine_solver.solve → (N,4,4)（rep: quat/T/se3）
 traj = arm.plan_joint_p2p(arm.q_neutral, arm.q_home)   # 轨迹规划门面（Ch5 实现）

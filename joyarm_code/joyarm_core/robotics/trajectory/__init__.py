@@ -3,7 +3,7 @@
 TrajPlanner(ABC) · DefaultTrajPlanner(``"default"``，默认) · ToppraTrajPlanner
 (``"toppra"``，Ch5 进阶占位)；:mod:`segments` 为纯函数族（``Trajectory`` 载体 +
 joint_*/cart_* 多方式函数 + 工具），是 planner 的内部零件兼教学函数式 API。
-``REGISTRY`` 供 config ``solvers.traj`` 选型；``method`` 选同族方式，两层不混淆。
+``REGISTRY`` 供 config ``robotics.traj`` 选型；``method`` 选同族方式，两层不混淆。
 """
 from .traj_planner import TrajPlanner
 from .default_traj_planner import DefaultTrajPlanner

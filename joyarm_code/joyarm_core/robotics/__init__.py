@@ -2,7 +2,7 @@
 
 仅依赖 utils 与 numpy（鸭子类型消费 ``arm``，不 import joyarms）。每域 = 策略 ABC +
 实现们（一节点一文件）+ ``REGISTRY`` 注册表 + 函数式教学入口；JoyArm 构造时按
-config ``solvers:`` 段查表组装私有成员（``_fkine_solver`` 等），算法互调走公开门面：
+config ``robotics:`` 段查表组装私有成员（``_fkine_solver`` 等），算法互调走公开门面：
 
 - fkine：正运动学（Ch2，pin ✅ / mdh 🟡）
 - ikine：逆运动学（Ch3，pin / analytic6r 🟡）

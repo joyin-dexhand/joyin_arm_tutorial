@@ -1,7 +1,7 @@
 """正运动学域（策略族，一节点一文件）。
 
 FkineSolver(ABC) · PinFkineSolver(``"pin"``，默认) · MdhFkineSolver(``"mdh"``，Ch2 占位)。
-``REGISTRY`` 供 config ``solvers.fkine`` 选型；``fkine(arm, q)`` 委托门面 ``arm.fkine``（教学用）。
+``REGISTRY`` 供 config ``robotics.fkine`` 选型；``fkine(arm, q)`` 委托门面 ``arm.fkine``（教学用）。
 """
 from .fkine_solver import FkineSolver
 from .pin_fkine_solver import PinFkineSolver

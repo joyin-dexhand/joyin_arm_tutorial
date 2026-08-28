@@ -2,7 +2,7 @@
 
 DynamicsSolver(ABC，Λ 模板) · PinDynamicsSolver(``"pin"``，默认，Ch8 占位) ·
 LagrangianDynamicsSolver(``"lagrangian"``，白盒占位)。``REGISTRY`` 供 config
-``solvers.dynamics`` 选型；``idyn`` / ``mass_matrix`` / ``coriolis`` /
+``robotics.dynamics`` 选型；``idyn`` / ``mass_matrix`` / ``coriolis`` /
 ``gravity`` / ``cartesian_inertia`` 委托门面（教学用）。
 """
 from .dynamics_solver import DynamicsSolver

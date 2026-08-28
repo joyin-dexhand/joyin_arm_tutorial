@@ -2,7 +2,7 @@
 
 持有 pinocchio ``model``/``data`` + 限位；一个整机通信后端（``backend``，按 yaml ``backend:`` 段的 ``name`` 经 backends REGISTRY 选型构建）
 与六个策略成员（``_fkine_solver``/``_ikine_solver``/``_jacobian_solver``/``_dynamics_solver``/``_traj_planner``/``_controller``，
-按 yaml ``solvers:`` 段经各域 REGISTRY 选型组装）；公开门面（``fkine``/``plan_joint_p2p``/``play_joint`` 等）全部委托私有成员，换配置即换算法。
+按 yaml ``robotics:`` 段经各域 REGISTRY 选型组装）；公开门面（``fkine``/``plan_joint_p2p``/``play_joint`` 等）全部委托私有成员，换配置即换算法。
 离线（``connected=False`` 默认）：计算类（``fkine``/``jac``/…）随时可用；执行类（``get_arm_state``/``set_arm_command``/``end_open``/…）``connect()`` 前抛 RuntimeError。
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ _CONFIGS_DIR = os.path.join(
 def load_config(model: str, strict: bool = False) -> Optional[dict]:
     """加载 ``configs/<model>.yaml`` 型号配置。
 
-    :param model: 型号名（与 yaml 文件名、yaml ``name`` 字段、joyarms 注册名一致）。
+    :param model: 型号名（与 yaml 文件名、yaml ``basic.name`` 字段、joyarms 注册名一致）。
     :param strict: 严格模式（``JoyArmFactory`` 路径）：文件缺失/解析失败抛
         ``ValueError``（列出可用型号）；缺省容错返回 ``None``（调用方回退类常量）。
     """
@@ -69,7 +69,7 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
         raise ValueError(f"『{model}』型号在 configs 中未找到；可用：{avail}") from e
 
 
-# config solvers 段 "default" 别名对应的各域默认注册名
+# config robotics 段 "default" 别名对应的各域默认注册名
 _DOMAIN_DEFAULTS = {
     "fkine": "pin",
     "ikine": "pin",
@@ -88,11 +88,11 @@ def _build_component(registry: dict, spec, domain: str):
         params = dict(spec)
         name = params.pop("name", None)
         if name is None:
-            raise ValueError(f"solvers.{domain} 需为名字字符串或含 name 键的映射")
+            raise ValueError(f"robotics.{domain} 需为名字字符串或含 name 键的映射")
     if name == "default":
         name = _DOMAIN_DEFAULTS.get(domain, name)
     if name not in registry:
-        raise ValueError(f"『{name}』型号在 solvers.{domain} 中未找到；可用：{sorted(registry)}")
+        raise ValueError(f"『{name}』型号在 robotics.{domain} 中未找到；可用：{sorted(registry)}")
     return registry[name](**params)
 
 
@@ -101,7 +101,7 @@ class JoyArm:
 
     :param name: 名称；``urdf_path``: URDF 路径；``ee_frame_name``: 末端帧名（默认 ``"ee"``）。
     :param mesh_dirs: mesh 搜索目录；``load_geometry``: 是否加载 visual/collision 几何。
-    :param config: 型号 YAML 字典（``solvers``/``backend`` 等段）；缺省无后端（离线）。
+    :param config: 型号 YAML 字典（``basic``/``joyarm``/``robotics``/``backend`` 段）；缺省无后端（离线）。
     """
 
     def __init__(self,
@@ -167,25 +167,27 @@ class JoyArm:
             )
 
         # ---- 关节限位（硬 + 软）----
-        # margin 具体值由 yaml 的 joint_limits_soft_margin 提供；未配置时取 0（软=硬）
+        # margin 具体值由 yaml basic.utils.joint_limits_soft_margin 提供；未配置时取 0（软=硬）
         self.joint_limits: JointLimits = self._build_joint_limits(self.model)
+        utils_cfg = (cfg.get("basic") or {}).get("utils") or {}
         self.joint_limits_soft: JointLimits = self._build_soft_limits(
-            self.joint_limits, margin=float(cfg.get("joint_limits_soft_margin", 0.0))
+            self.joint_limits, margin=float(utils_cfg.get("joint_limits_soft_margin", 0.0))
         )
         self.qlow: np.ndarray = self.joint_limits_soft.q_min
         self.qhigh: np.ndarray = self.joint_limits_soft.q_max
 
-        # ---- 特征位形（config 优先，缺失回退 q_zero）----
+        # ---- 特征位形（config joyarm 段优先，缺失回退 q_zero）----
+        jcfg = cfg.get("joyarm") or {}
         self._q_zero: np.ndarray = np.clip(
-            np.asarray(cfg.get("q_zero", np.zeros(self.n)), dtype=float).reshape(-1),
+            np.asarray(jcfg.get("q_zero", np.zeros(self.n)), dtype=float).reshape(-1),
             self.joint_limits.q_min,
             self.joint_limits.q_max,
         )
         self._q_home: np.ndarray = np.asarray(
-            cfg.get("q_home", self._q_zero), dtype=float
+            jcfg.get("q_home", self._q_zero), dtype=float
         ).reshape(-1)
         self._q_neutral: np.ndarray = np.asarray(
-            cfg.get("q_neutral", self._q_zero), dtype=float
+            jcfg.get("q_neutral", self._q_zero), dtype=float
         ).reshape(-1)
 
         self.tcp_limits: TcpLimits = TcpLimits()  # 末端限位（占位）
@@ -201,14 +203,14 @@ class JoyArm:
                 raise ValueError("config backend 段缺少选型键 name")
             self._backend = get_backend(backend_name)(backend_cfg)
 
-        # ---- 策略成员：按 config solvers 段 + 各域注册表组装（算法可换）----
-        solvers_cfg = cfg.get("solvers", {})
-        self._fkine_solver = _build_component(_FKINE_REGISTRY, solvers_cfg.get("fkine", "default"), "fkine")
-        self._ikine_solver = _build_component(_IKINE_REGISTRY, solvers_cfg.get("ikine", "default"), "ikine")
-        self._jacobian_solver = _build_component(_JACOBIAN_REGISTRY, solvers_cfg.get("jacobian", "default"), "jacobian")
-        self._dynamics_solver = _build_component(_DYNAMICS_REGISTRY, solvers_cfg.get("dynamics", "default"), "dynamics")
-        self._traj_planner = _build_component(_TRAJ_REGISTRY, solvers_cfg.get("traj", "default"), "traj")
-        self._controller = _build_component(_CONTROL_REGISTRY, solvers_cfg.get("control", "default"), "control")
+        # ---- 策略成员：按 config robotics 段 + 各域注册表组装（算法可换）----
+        robotics_cfg = cfg.get("robotics", {})
+        self._fkine_solver = _build_component(_FKINE_REGISTRY, robotics_cfg.get("fkine", "default"), "fkine")
+        self._ikine_solver = _build_component(_IKINE_REGISTRY, robotics_cfg.get("ikine", "default"), "ikine")
+        self._jacobian_solver = _build_component(_JACOBIAN_REGISTRY, robotics_cfg.get("jacobian", "default"), "jacobian")
+        self._dynamics_solver = _build_component(_DYNAMICS_REGISTRY, robotics_cfg.get("dynamics", "default"), "dynamics")
+        self._traj_planner = _build_component(_TRAJ_REGISTRY, robotics_cfg.get("traj", "default"), "traj")
+        self._controller = _build_component(_CONTROL_REGISTRY, robotics_cfg.get("control", "default"), "control")
 
     # ----------------------------------------------------------
     # 特征位形（只读，返回拷贝）
@@ -320,7 +322,7 @@ class JoyArm:
         return bool(np.all(q >= self.qlow - 1e-9) and np.all(q <= self.qhigh + 1e-9))
 
     # ----------------------------------------------------------
-    # robotics 求解算法（门面 → 私有策略成员，config solvers 段可换实现）
+    # robotics 求解算法（门面 → 私有策略成员，config robotics 段可换实现）
     # ----------------------------------------------------------
     def fkine(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, rep: str = "T"):
         """正运动学（``rep`` 取 ``quat``/``T``/``se3``：Pose / 4×4 矩阵 / pin.SE3）。"""

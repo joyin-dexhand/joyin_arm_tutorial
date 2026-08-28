@@ -1,6 +1,6 @@
 """IkineSolver —— 逆运动学策略 ABC。
 
-``JoyArm._ikine_solver`` 的契约：实现经 config ``solvers.ikine`` 选型。约定：迭代
+``JoyArm._ikine_solver`` 的契约：实现经 config ``robotics.ikine`` 选型。约定：迭代
 内部经 ``arm.fkine`` 门面求位姿/残差（不直接摸 model/data），从而与 FK 求解器任意
 替换组合。Ch3。
 """

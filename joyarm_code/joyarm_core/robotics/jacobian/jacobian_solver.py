@@ -1,6 +1,6 @@
 """JacobianSolver —— 雅可比策略 ABC（模板方法）。
 
-``JoyArm._jacobian_solver`` 的契约：实现经 config ``solvers.jacobian`` 选型。
+``JoyArm._jacobian_solver`` 的契约：实现经 config ``robotics.jacobian`` 选型。
 :meth:`jac` 为求解内核（抽象）；可操作度 / 条件数 / 静力学是 **J 的通用衍生量**，
 由基类模板直接给出。Ch4。
 """

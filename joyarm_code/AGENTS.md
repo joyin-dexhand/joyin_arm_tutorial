@@ -39,7 +39,7 @@ joyarm_code/
 │   │   ├── joyarm_dm.py             #     JoyArmDM(JoyArm)
 │   │   └── __init__.py              #     REGISTRY + JoyArmFactory/joyarm_factory（型号名选型）
 │   ├── robots/                      #   URDF + meshes 资产（运行期加载）
-│   └── configs/joyarm_dm.yaml       #   per-model YAML（solvers/backend 段，name 选型）
+│   └── configs/joyarm_dm.yaml       #   per-model YAML（basic/joyarm/robotics/backend 等段）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性，不复用 SDK）
 ├── test/                            # 测试套件
@@ -53,18 +53,18 @@ joyarm_code/
 
 - `utils` → 仅 numpy；
 - `robotics` / `backends` → 仅依赖 `utils`；求解器鸭子类型消费 `arm`（经公开门面/属性），**不 import `joyarms`**（组合根单向向下，架构约定）；
-- `joyarms` → **组合根**：门面委托策略成员（`robotics`）与整机后端（`backends`），构造时按 config `solvers:` 段查各域 `REGISTRY` 组装成员、按 `backend:` 段 `name` 经 `get_backend` 构建后端，运行期加载 `robots/`、`configs/`；
+- `joyarms` → **组合根**：门面委托策略成员（`robotics`）与整机后端（`backends`），构造时按 config `robotics:` 段查各域 `REGISTRY` 组装成员、按 `backend:` 段 `name` 经 `get_backend` 构建后端，运行期加载 `robots/`、`configs/`；
 - `joyarm_ros2_ws/src/*`（规划）→ 依赖 `joyarm_core`（pip 提供）+ `rclpy`（ROS 环境提供）；核心包保持 ROS2-free。
 
 ### 1.3 配置（yaml 分段）
 
-`configs/<model>.yaml` 按 solvers / backend 分段（另含 name / robot / ee_frame / arm_mdh_and_limits / T_linkn_end / 特征位形 q_zero/q_home/q_neutral / tcp_limits；直用时缺文件回退类常量）。**命名链**：工厂入参 = 文件名 = `name` 字段 = joyarms 注册名（如 `joyarm_dm`），任一不符报『XX』型号在XX中未找到；backend 与机械臂型号 1:1（`backend_dm`）：
+`configs/<model>.yaml` 按 joyarm_core 目录结构分四段：`basic`（基本信息 + robots URDF 索引 + utils 守卫）/ `joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层）；直用时缺文件回退类常量。**命名链**：工厂入参 = 文件名 = `basic.name` 字段 = joyarms 注册名（如 `joyarm_dm`），任一不符报『XX』型号在XX中未找到；backend 与机械臂型号 1:1（`backend_dm`）：
 
 ```yaml
-solvers: {fkine: default, ikine: default, jacobian: default, dynamics: default, traj: default, control: default}  # 也可写注册名（pin/mdh/toppra/…），default=各域默认注册名别名
-backend: {name: backend_dm,                 # name 选型键（REGISTRY 解析）
-          arm: {channel, protocol, baud_rate, control_rate, joints},   # 本体子段
-          end: {同构字段, joints}}           # 末端子段；channel 同 arm → 共享总线
+basic: {name, robot, ee_frame, utils: {joint_limits_soft_margin}}   # 基本信息段（name=命名链校验键）
+joyarm: {arm_mdh_and_limits, T_linkn_end, tcp_limits, q_zero, q_home, q_neutral}   # 设备模型段
+robotics: {fkine, ikine, jacobian, dynamics, traj, control}   # 六域选型：注册名或 {name: 注册名, **参数}；
+backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {同构字段, joints}}   # 若channel 同 arm → 共享总线，不同arm → 两条线
 ```
 
 ### 1.4 ROS2 工作空间（`joyarm_ros2_ws/`，**规划——Ch10 落地时创建，当前未建**）
@@ -110,7 +110,7 @@ ros2 launch joyarm_node arm.launch.py
 - **属性 / 形参**：整机后端 = `_backend`（私有，yaml `backend.name` 选型，不直接外露）；策略成员 = `_fkine_solver`/`_ikine_solver`/`_jacobian_solver`/`_dynamics_solver`/`_traj_planner`/`_controller`（私有，config 选型）；求解器形参用 `arm`（鸭子类型，经公开门面互调）。
 - **执行类方法命名**：本体方法带 `arm`、末端方法带 `end`，两者对应——本体 `enable_arm`/`disable_arm`/`set_zero_arm`/`set_mode_arm(mode=POSITION, joint=None)`/`get_arm_state`/`set_arm_command`；末端 `enable_end`/`disable_end`/`set_zero_end`/`set_mode_end(mode=POSITION, joint=None)`/`end_open(joint=None)`/`end_close(joint=None)`/`end_zero(joint=None)`/`set_end_position`/`set_end_force`/`get_end_state(joint=None)`；参数读写 `read/write_param_arm(key[, value,] joint=None,…)`/`read/write_param_end(同构)`（key 由子类映射厂商寄存器，基类不泄漏 RID）。执行类方法统一带 `joint` 形参（None=全部，逐关节/多电机末端如灵巧手通用）；`set_mode_*` 默认位置模式（电机 POS_VEL）；参数读写 `joint=None` 时读返逐电机列表、写 `value` 可标量广播或等长列表。
 - **yaml**：`configs/<model>.yaml` 单 `backend:` 段——`name` 选型键 + `arm:`/`end:` 子段（channel/protocol/baud_rate/control_rate/joints）；JoyArm 按 `name` 经 `REGISTRY` 构建整机后端。
-- **算法可换（成员即策略）**：每域 = ABC + 实现们 + `REGISTRY`（一节点一文件）；config `solvers:` 按注册名选型，未知名报错列出可选项；黑盒默认 pin 系，白盒（`Mdh*`/`Geometric*`/`Lagrangian*`）是同 ABC 教学子类；运行期可 `arm._xxx = ...` 或 `arm.set_controller(name)` 换。
+- **算法可换（成员即策略）**：每域 = ABC + 各具体实现 + `REGISTRY`（一节点一文件）；config `robotics:` 按注册名选型
 - 约定针对**系统组件**（joyarm/backend）；项目品牌名 `JoyArm`/`joyarm_code` 不改，核心 Python 包目录/导入名固定为 `joyarm_core`。
 
 ### 2.2 设计原则与编码约定
@@ -121,7 +121,7 @@ ros2 launch joyarm_node arm.launch.py
 | **组合根** | `JoyArm`（本体+末端）持有一个私有整机后端 `_backend` + 六个策略成员；公开门面（`fkine`/`plan_joint_p2p`/`play_joint`…）全部委托私有成员，换 config 即换算法 |
 | **Backend 整机两层** | `Backend`（`*_arm`/`*_end` 方法族）→ 型号子类（结构同参数异）；yaml `name` 选型；arm/end 同 channel 共享总线、异 channel 独立开 |
 | **单向导入、无环** | `joyarms` import `robotics`/`backends`；后者不 import `joyarms`（鸭子类型消费 arm，架构约定） |
-| **组件由 yaml 驱动** | backend 按 `backend:` 段 `name` 经 REGISTRY 选型；求解器/规划器/控制律按 `solvers:` 段注册名选型（`_build_component` 统一组装） |
+| **组件由 yaml 驱动** | backend 按 `backend:` 段 `name` 经 REGISTRY 选型；求解器/规划器/控制律按 `robotics:` 段注册名选型（`_build_component` 统一组装） |
 | **离线模式** | 默认 `connected=False`（计算类可用）；`connect()` 后才可执行类操作（语义详见 README「快速开始」）；ROS2 节点同语义（`offline:=true` 时指令等效执行） |
 | **共享类型单定义** | 跨层数据类型只在 `utils/types.py` 定义一次；ROS2 消息仅在 ws 的 `adapters.py` 做互转（含四元数 wxyz↔xyzw 换序） |
 | **核心轻依赖** | 核心仅 `numpy`/`pin`/`pyyaml`；`rclpy` 仅 `joyarm_ros2_ws` |
@@ -154,7 +154,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 节点/launch → `joyarm_ros2_ws/src
 | `joyarms/joyarm.py` | `JoyArm`（本体+末端基类） | Ch2 | ✅ |
 | `joyarms/joyarm_dm.py` | `JoyArmDM(JoyArm)` | Ch2 | ✅ |
 | `joyarms/__init__.py` | `JoyArmFactory`/`joyarm_factory` + `REGISTRY`（型号名→型号类，命名链校验） | Ch2 | ✅ |
-| `configs/joyarm_dm.yaml` | 型号 YAML（限位 / 特征位形 q_zero·q_home·q_neutral / backend 分段） | Ch2/7 | ✅ |
+| `configs/joyarm_dm.yaml` | 型号 YAML（basic/joyarm/robotics/backend 等段） | Ch2/7 | ✅ |
 
 `joyarm_core/apps/`（规划，见 §1.4/§2.3）。
 
@@ -167,7 +167,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 节点/launch → `joyarm_ros2_ws/src
 
 ```
 JoyArmDM ──▶ JoyArm（组合根：_backend + 6 个策略成员）
-        │  按 config backend.name 选型后端、solvers: 组装成员；arm.fkine()/plan_joint_p2p()/play_joint()/end_open()
+        │  按 config backend.name 选型后端、robotics: 组装成员；arm.fkine()/plan_joint_p2p()/play_joint()/end_open()
         │
 FkineSolver ─▶ PinFkineSolver ✅ / MdhFkineSolver 🟡        （各域同构：ABC → 黑盒/白盒）
 IkineSolver ─▶ PinIkineSolver / AnalyticIkine6R 🟡 · JacobianSolver ─▶ … · TrajPlanner ─▶ … ·
@@ -230,7 +230,7 @@ BackendDM(Backend) ✅  # DM 7 电机（4340P×3+4310×4）；协议参照 u2can
 get_backend(name) → type · REGISTRY     # config backend.name 选型入口 ✅
 ```
 
-#### Robotics 算法 API（函数式入口形参 `arm`，委托门面；策略族经 config `solvers:` 选型）
+#### Robotics 算法 API（函数式入口形参 `arm`，委托门面；策略族经 config `robotics:` 选型）
 
 ```python
 fkine(arm, q, frame=None, rep="T")                     # 正运动学（rep: quat/T/se3，形状重载）✅

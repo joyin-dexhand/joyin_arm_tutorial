@@ -1,60 +1,63 @@
-# JoyArmDM (joyarm_dm) 型号配置
-# 命名链（由 JoyArmFactory 校验）：工厂入参 = 文件名 = name 字段 = joyarms 注册名 = joyarm_dm；
-# backend_dm 为本型号专属整机后端（1:1），robot 指向 robots/ 下的 URDF 目录名
-
-# ===================================================
-# 基本信息
-# ===================================================
-name: joyarm_dm
-robot: joyarm_dm_fixend # robots下的urdf+mesh
-ee_frame: end_link
-
-# arm 的 MDH 参数及各关节限位：6 行 × [α_{i-1}, a_{i-1}, d_i, θ_i, q_min_i, q_max_i, dq_max_i, tau_max_i, soft_margin]，单位：rad, m, m, rad, rad, rad, rad/s, N·m, None
-arm_mdh_and_limits:
-  - [0.0, 0.0, 0.0, 0.0, -2.80, 2.80, 50.0, 27.0, 0.05]
-  - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
-  - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
-  - [0.0, 0.0, 0.0, 0.0, -1.87, 1.57, 200.0, 7.0, 0.05]
-  - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
-  - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
-
-# 关节软限位：在硬限位（URDF）基础上按量程比例内缩，作为 clamp_q/rand_q 等指令守卫；
-# 即上表第 9 列 soft_margin 的全局生效值（joyarm.py 读此键构建软限位）
-joint_limits_soft_margin: 0.05
-
-# 末link系 → end系的固定位姿：4×4 齐次矩阵
-T_linkn_end:
-  - [3.6732051e-06, -9.2653590e-05, 1.0, 0.0]
-  - [-3.4033564e-10, -1.0, -9.2653590e-05, 0.0]
-  - [1.0, 0.0, -3.6732051e-06, 0.15539]
-  - [0.0, 0.0, 0.0, 1.0]
-
-# 末端系空间限位
-tcp_limits:
-  workspace_box: [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]] # [min, max] (m)
-  v_lin_max: 1.0 # m/s
-  v_ang_max: 3.14 # rad/s
-  f_max: 20.0 # N
-  t_max: 5.0 # N·m
-
-# 特征位形（rad）
-q_zero: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 硬件零位（编码器标零基准）
-q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 上电初始位形
-q_neutral: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 数值求解默认初值（如 IK 迭代起点）
+# ===================================================================
+# 基本信息（basic）：型号标识 / robots URDF 索引 / utils 限位守卫
+# ===================================================================
+basic:
+  name: joyarm_dm # 型号名（命名链校验）
+  robot: joyarm_dm_fixend # robots下的urdf+mesh
+  ee_frame: end_link # 末端坐标系名（pin 模型帧）
+  utils: # utils/limits.py 指令守卫参数
+    joint_limits_soft_margin: 0.05
 
 # ===================================================================
-# 求解器 / 规划器 / 控制律（JoyArm 成员，省略即用默认）
+# 设备模型（joyarm）
 # ===================================================================
-solvers:
-  fkine: default
-  ikine: default
-  jacobian: default
-  dynamics: default
-  traj: default
-  control: default
+joyarm:
+  # arm 的 MDH 参数及各关节限位：6 行 × [α_{i-1}, a_{i-1}, d_i, θ_i, q_min_i, q_max_i, dq_max_i, tau_max_i, soft_margin]，单位：rad, m, m, rad, rad, rad, rad/s, N·m, None
+  arm_mdh_and_limits:
+    - [0.0, 0.0, 0.0, 0.0, -2.80, 2.80, 50.0, 27.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -1.87, 1.57, 200.0, 7.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
+
+  # 末link系 → end系的固定位姿：4×4 齐次矩阵
+  T_linkn_end:
+    - [3.6732051e-06, -9.2653590e-05, 1.0, 0.0]
+    - [-3.4033564e-10, -1.0, -9.2653590e-05, 0.0]
+    - [1.0, 0.0, -3.6732051e-06, 0.15539]
+    - [0.0, 0.0, 0.0, 1.0]
+
+  # 末端系空间限位
+  tcp_limits:
+    workspace_box: [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]] # [min, max] (m)
+    v_lin_max: 1.0 # m/s
+    v_ang_max: 3.14 # rad/s
+    f_max: 20.0 # N
+    t_max: 5.0 # N·m
+
+  # 特征位形（rad）
+  q_zero: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 硬件零位（编码器标零基准）
+  q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 上电初始位形
+  q_neutral: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 数值求解默认初值（如 IK 迭代起点）
 
 # ===================================================================
-# ---- arm与end的硬件通讯：达妙 DM 电机，USB-CAN ----
+# 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按各域 REGISTRY 注册名选型；省略即 default）
+# ===================================================================
+robotics:
+  fkine: default    # {pin, mdh}
+  ikine: default    # {pin, analytic6r}
+  jacobian: default # {pin, geometric}
+  dynamics: default # {pin, lagrangian}
+  traj: default     # {default, toppra}
+  control: default  # {position}
+  # 预留（各域实现落地后生效；写法如 ikine: {name: pin, tol: 1e-6, iters: 500}，name 之外参数透传构造器）：
+  #   ikine:   tol（收敛容差，默认 1e-4）/ iters（迭代上限，默认 200）
+  #   traj:    hz（轨迹采样频率，默认 200）
+  #   control: hz（控制周期频率，默认 200，与 backend 段 control_rate 语义对应）
+
+# ===================================================================
+# 通信层（backend）：arm与end的硬件通讯，达妙 DM 电机，USB-CAN
 # ===================================================================
 backend:
   name: backend_dm
@@ -68,7 +71,6 @@ backend:
         motor_id: 0x01
         feedback_id: 0x11
         model: "4340P"
-        vendor: "damiao"
         MIT:
           kp: 120.0
           kd: 8.0
@@ -83,7 +85,6 @@ backend:
         motor_id: 0x02
         feedback_id: 0x12
         model: "4340P"
-        vendor: "damiao"
         MIT:
           kp: 120.0
           kd: 8.0
@@ -98,7 +99,6 @@ backend:
         motor_id: 0x03
         feedback_id: 0x13
         model: "4340P"
-        vendor: "damiao"
         MIT:
           kp: 120.0
           kd: 8.0
@@ -113,7 +113,6 @@ backend:
         motor_id: 0x04
         feedback_id: 0x14
         model: "4310"
-        vendor: "damiao"
         MIT:
           kp: 18.0
           kd: 2.0
@@ -128,7 +127,6 @@ backend:
         motor_id: 0x05
         feedback_id: 0x15
         model: "4310"
-        vendor: "damiao"
         MIT:
           kp: 18.0
           kd: 2.0
@@ -143,7 +141,6 @@ backend:
         motor_id: 0x06
         feedback_id: 0x16
         model: "4310"
-        vendor: "damiao"
         MIT:
           kp: 18.0
           kd: 2.0
@@ -164,7 +161,6 @@ backend:
         motor_id: 0x07
         feedback_id: 0x17
         model: "4310"
-        vendor: "damiao"
         q_min: -1.8 # 行程下限（rad，张开位）
         q_max: 3.8 # 行程上限（rad，闭合位）
         dq_max: 2.0 # 速度上限（rad/s）

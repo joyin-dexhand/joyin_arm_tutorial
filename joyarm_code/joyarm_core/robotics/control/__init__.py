@@ -3,7 +3,7 @@
 Controller(ABC) · PositionController(``"position"``，默认，Ch6 占位)；
 ControlLoop 为控制**执行器**（tick 循环驱动控制律）——不是策略；三类控制函数：
 kinematic(Part1，Ch6) / dynamics_based(Part2，Ch8) / force(Part3，Ch9)。
-``REGISTRY`` 供 config ``solvers.control`` 选型；运行期经 ``arm.set_controller`` 切换。
+``REGISTRY`` 供 config ``robotics.control`` 选型；运行期经 ``arm.set_controller`` 切换。
 """
 from ...utils.types import ControlMode
 from .controller import Controller

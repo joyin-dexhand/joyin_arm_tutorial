@@ -2,7 +2,7 @@
 
 JacobianSolver(ABC，衍生量模板) · PinJacobianSolver(``"pin"``，默认，Ch4 占位) ·
 GeometricJacobianSolver(``"geometric"``，白盒占位)。``REGISTRY`` 供 config
-``solvers.jacobian`` 选型；``jac`` / ``manipulability`` / ``cond_number`` /
+``robotics.jacobian`` 选型；``jac`` / ``manipulability`` / ``cond_number`` /
 ``statics`` 委托门面（教学用）。
 """
 from .jacobian_solver import JacobianSolver

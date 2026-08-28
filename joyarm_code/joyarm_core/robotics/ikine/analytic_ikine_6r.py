@@ -1,7 +1,7 @@
 """AnalyticIkine6R —— 6R 解析 IK（型号专属实现，Ch3 进阶占位）。
 
 球腕类标准构型闭式解：前 3 关节定腕心位置、后 3 关节定姿态，多解按限位/最短路径
-筛选；config ``solvers.ikine: analytic6r`` 切换。
+筛选；config ``robotics.ikine: analytic6r`` 切换。
 """
 from __future__ import annotations
 

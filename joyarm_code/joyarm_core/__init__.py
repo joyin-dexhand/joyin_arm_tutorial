@@ -1,4 +1,4 @@
-"""``joyarm_core`` —— JoyArm 机械臂教程核心 SDK 库（ROS2-free）。
+"""``joyarm_core`` —— JoyArm 机械臂教核心 SDK 库）。
 
 组合根架构（仅向下依赖；robotics 一域一子包，REGISTRY 选型）::
 
@@ -9,15 +9,15 @@
     backends/    通信层：Backend(整机) → BackendDM（name 选型：REGISTRY + get_backend）
     ─────────────────────────────────────────────
     utils/       transforms(数学) · types(共享类型) · limits(限位守卫)
-    robots/ configs/   URDF+meshes 资产 / per-model YAML（solvers+backend 段）
+    robots/ configs/   URDF+meshes 资产 / per-model YAML（basic/joyarm/robotics/backend 等段）
 
-ROS2 封装（节点/launch/rviz2）在 ``joyarm_ros2_ws/src/joyarm_node``（详见 AGENTS.md）；
+ROS2 封装（节点/launch/rviz2等）在 ``joyarm_ros2_ws/src/joyarm_node``（详见 AGENTS.md）；
 监测已裁撤：指令守卫在 utils/limits.py，状态监测归 ROS2 节点（Ch11）。
 命名约定：类名驼峰，文件名小写 snake_case。用法::
 
     from joyarm_core import joyarm_factory   # 推荐：型号名唯一参数
 
-    arm = joyarm_factory("joyarm_dm")  # 离线组合根：加载 configs+URDF，按 solvers: 组装成员
+    arm = joyarm_factory("joyarm_dm")  # 离线组合根：加载 configs+URDF，按 robotics: 组装成员
     Q = arm.rand_q(size=100_000)       # 限位内采样 (N,6)
     T = arm.fkine(Q)                   # 门面 → _fkine_solver.solve → (N,4,4)
     # 等价直用：from joyarm_core import JoyArmDM; arm = JoyArmDM()
@@ -91,7 +91,7 @@ from .robotics.trajectory import (
     validate,
 )
 from .robotics.dynamics import idyn, mass_matrix, coriolis, gravity, cartesian_inertia
-# 求解器策略族（JoyArm._xxx 成员的可选实现；config solvers 段按注册名选型）
+# 求解器策略族（JoyArm._xxx 成员的可选实现；config robotics 段按注册名选型）
 from .robotics.fkine import FkineSolver, PinFkineSolver, MdhFkineSolver
 from .robotics.ikine import IkineSolver, PinIkineSolver, AnalyticIkine6R
 from .robotics.jacobian import JacobianSolver, PinJacobianSolver, GeometricJacobianSolver

@@ -9,8 +9,8 @@ JoyArmFactory/joyarm_factory：按型号名创建（命名链校验 + REGISTRY �
     arm = joyarm_factory("joyarm_dm")   # configs/joyarm_dm.yaml → JoyArmDM
 
 命名链（任一环节不符即报『XX』型号在XX中未找到）：
-工厂入参 ↔ configs/<型号>.yaml 文件名 ↔ yaml ``name`` 字段 ↔ ``REGISTRY``
-注册名 ↔ ``joyarms/<型号>.py``；backend/robot/solvers 由 yaml 字段继续
+工厂入参 ↔ configs/<型号>.yaml 文件名 ↔ yaml ``basic.name`` 字段 ↔ ``REGISTRY``
+注册名 ↔ ``joyarms/<型号>.py``；backend/robot/robotics 由 yaml 各段字段继续
 驱动各层 REGISTRY（型号与整机后端 1:1，如 joyarm_dm ↔ backend_dm）。
 """
 from .joyarm import JoyArm, load_config
@@ -35,14 +35,15 @@ class JoyArmFactory:
         """创建指定型号的 JoyArm 实例（离线，未连接真机）。
 
         :param model: 型号名（如 ``"joyarm_dm"``）——须与 configs 文件名、
-            yaml ``name`` 字段、joyarms 注册名一致。
+            yaml ``basic.name`` 字段、joyarms 注册名一致。
         :raises ValueError: 命名链任一环节未找到该型号时抛出（列出可用项）。
         """
         cfg = load_config(model, strict=True)
-        if cfg.get("name") != model:
+        cname = (cfg.get("basic") or {}).get("name")
+        if cname != model:
             raise ValueError(
-                f"『{model}』型号在 configs/{model}.yaml 的 name 字段中未找到"
-                f"（实际为 {cfg.get('name')!r}）"
+                f"『{model}』型号在 configs/{model}.yaml 的 basic.name 字段中未找到"
+                f"（实际为 {cname!r}）"
             )
         if model not in REGISTRY:
             raise ValueError(f"『{model}』型号在 joyarms 中未找到；可用：{sorted(REGISTRY)}")

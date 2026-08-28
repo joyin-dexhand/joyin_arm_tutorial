@@ -1,7 +1,7 @@
 """MdhFkineSolver —— MDH 白盒 FK（教学实现，Ch2 占位）。
 
 手推 MDH 递归（连乘 ``T_i = Rot_x(α)·Trans_x(a)·Rot_z(θ+θ₀)·Trans_z(d)``）的归宿，
-与 PinFkineSolver 黑盒互为对照；config ``solvers.fkine: mdh`` 切换。
+与 PinFkineSolver 黑盒互为对照；config ``robotics.fkine: mdh`` 切换。
 """
 from __future__ import annotations
 
