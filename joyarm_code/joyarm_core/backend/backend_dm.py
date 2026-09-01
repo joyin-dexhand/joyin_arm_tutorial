@@ -696,7 +696,6 @@ class BackendDM(Backend):
                 control_mode=mode or ControlMode.POSITION,
                 q=np.array([m.q for m in motors]),
                 dq=np.array([m.dq for m in motors]),
-                ddq=np.zeros(len(motors)),
                 tau=np.array([m.tau for m in motors]),
                 enabled=np.array([e == _ERR_ENABLED for e in errs]),
                 error=np.array([e not in (_ERR_ENABLED, _ERR_DISABLED) for e in errs]),

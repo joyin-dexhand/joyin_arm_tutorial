@@ -23,7 +23,7 @@ __all__ = [
     "Wrench",           # 六维力/力矩：force + torque
     "Twist",            # 空间速度：linear + angular
     "Pose",             # 统一位姿表示：position + orientation（单位四元数）
-    "JointState",       # 关节状态：control_mode + q/dq/ddq/tau + enabled/error/comm_ok/angle_ok + 温度
+    "JointState",       # 关节状态：control_mode + q/dq/tau + enabled/error/comm_ok/angle_ok + 温度
     "TcpState",         # 工具中心点状态：pose + twist + wrench
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
     "JointLimits",      # 关节限位: q_min/q_max + dq_max + tau_max
@@ -180,7 +180,6 @@ class JointState(_ArrayEqMixin):
     :ivar control_mode: 关节当前控制模式（见 :class:`ControlMode`）。
     :ivar q: ``(n,)`` 关节位置，弧度。
     :ivar dq: ``(n,)`` 关节速度，弧度/秒。
-    :ivar ddq: ``(n,)`` 关节加速度，弧度/秒²。
     :ivar tau: ``(n,)`` 关节力矩，N·m。
     :ivar enabled: ``(n,)`` bool 使能状态，``True``=使能，``False``=失能。
     :ivar error: ``(n,)`` bool 异常状态，``True``=电机异常（过温/过流等），``False``=正常。
@@ -193,7 +192,6 @@ class JointState(_ArrayEqMixin):
     control_mode: ControlMode = ControlMode.POSITION
     q: np.ndarray = field(default_factory=lambda: np.zeros(0))
     dq: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    ddq: np.ndarray = field(default_factory=lambda: np.zeros(0))
     tau: np.ndarray = field(default_factory=lambda: np.zeros(0))
     enabled: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
     error: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
