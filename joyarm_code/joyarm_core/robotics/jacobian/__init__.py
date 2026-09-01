@@ -1,27 +1,19 @@
-"""速度运动学与静力学域（策略族，一节点一文件）。
+"""速度运动学与静力学域（策略接口）。
 
-JacobianSolver(ABC，衍生量模板) · PinJacobianSolver(``"pin"``，默认，Ch4 占位) ·
-GeometricJacobianSolver(``"geometric"``，白盒占位)。``REGISTRY`` 供 config
-``robotics.jacobian`` 选型；``jac`` / ``manipulability`` / ``cond_number`` /
+JacobianSolver(ABC，衍生量模板) 为通用接口；具体求解算法为教程 Ch4 教学内容，
+实现后经 ``REGISTRY`` 注册接入。``jac`` / ``manipulability`` / ``cond_number`` /
 ``statics`` 委托门面（教学用）。
 """
 from .jacobian_solver import JacobianSolver
-from .pin_jacobian_solver import PinJacobianSolver
-from .geometric_jacobian_solver import GeometricJacobianSolver
 
-REGISTRY = {
-    "pin": PinJacobianSolver,
-    "geometric": GeometricJacobianSolver,
-}
+REGISTRY: dict = {}
 
-__all__ = [
-    "JacobianSolver", "PinJacobianSolver", "GeometricJacobianSolver", "REGISTRY",
-    "jac", "manipulability", "cond_number", "statics",
-]
+__all__ = ["JacobianSolver", "REGISTRY",
+           "jac", "manipulability", "cond_number", "statics"]
 
 
 def jac(arm, q, frame=None, ref="local"):
-    """函数式入口（教学用）：委托 ``arm.jac``，即 ``arm._jacobian_solver.jac``。"""
+    """函数式入口（教学用）：委托 ``arm.jac``，即 ``arm._jacobian_solvers`` 活动成员。"""
     return arm.jac(q, frame=frame, ref=ref)
 
 

@@ -20,11 +20,10 @@ joyarm_code/
    joyarm_ros2_ws/src/joyarm_node 
               ↓ 依赖
    ┌──────────────────────────────────────────────────────────────┐
-   │  joyarms/   组合根：JoyArm · joyarm_dm · JoyArmFactory(按型号选型) │
+   │  joyarms/   组合根：JoyArm（单类） · JoyArmFactory(按型号选型)    │
    ├──────────────────────────────────────────────────────────────┤
-   │  robotics/  算法（一域一子包：ABC + 实现 + REGISTRY）              │
-   │             · fkine / ikine / jacobian / trajectory            │
-   │             · dynamics / control       ← 仅依赖 utils（鸭子类型）│
+   │  robotics/  算法接口（一域一子包：ABC + 空 REGISTRY，            │
+   │             实现为教程各章教学内容）← 仅依赖 utils（鸭子类型）     │
    │  backends/  通信（整机 Backend + name 选型）                     │
    ├──────────────────────────────────────────────────────────────┤
    │  utils/  types（共享类型） · transforms（数学） · limits（限位守卫）│
@@ -32,11 +31,11 @@ joyarm_code/
       robots/（URDF + meshes）  configs/（per-model YAML）   ← 资产，由 joyarms 运行期加载
 ```
 
-三个核心概念：
+核心概念：
 
-- **组合根 `JoyArm`**：完整机械臂 = arm 本体 + end 执行器。持有一个**整机通信后端** `_backend`（私有，本体+末端一体，yaml `backend.name` 选型构建，能力全部经公有门面暴露）与六个**策略成员**（`_fkine_solver` / `_ikine_solver` / `_jacobian_solver` / `_dynamics_solver` / `_traj_planner` / `_controller`）；公开门面（`arm.fkine()` / `arm.plan_joint_p2p()` / `arm.play_joint()` / `arm.end_open()`…）全部委托私有成员，`connect()` 后才可执行硬件操作。
-- **成员即策略（config 可换）**：`configs/<model>.yaml` 的 `robotics:` 段按注册名选型（`fkine: pin|mdh`、`traj: default|toppra`…）。
-- **型号工厂 `joyarm_factory`**：按型号名（唯一参数）创建机械臂——自动加载 `configs/<型号>.yaml` 并校验命名链（入参 = 文件名 = yaml `basic.name` 字段 = joyarms 注册名，如 `joyarm_dm`），不一致报『XX』型号在XX中未找到。
+- **组合根 `JoyArm`（单类，无型号子类）**：完整机械臂 = arm 本体 + end 执行器。**型号差异全部由配置表达**——新型号 = `configs/<型号>.yaml` + `robots/` URDF 资产 + `backends/backend_*.py`（型号与整机后端 1:1）。持有一个**整机通信后端** `_backend`（私有，yaml `backend.name` 选型构建）与**六域策略成员字典**（`_fkine_solvers` / `_ikine_solvers` / …，config 可指定加载多个、首个为活动）；公开门面（`arm.fkine()` / `arm.end_open()`…）全部委托活动成员，`connect()` 后才可执行硬件操作。config 在构造时一次性加载存为类内成员，教学数据（如 MDH 参数）经 `arm.get_config()` 读取、不重读 yaml。
+- **成员即策略（config 可换、字典化加载）**：`configs/<model>.yaml` 的 `robotics:` 段按各域注册名选型（值可为单个规格或列表，全部加载）；运行期 `arm.set_solver(域, 名)` 切换。各域 `REGISTRY` 默认仅有 ABC 接口（空表）——具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 / control Ch6 / dynamics Ch8），章节实现注册后经 config 选型接入。
+- **型号工厂 `joyarm_factory`**：按型号名（唯一参数）创建机械臂——自动加载 `configs/<型号>.yaml` 并校验命名链（入参 = 文件名 = `basic.name`）；**型号不存在或初始化失败时返回 `None` 并输出失败信息**（不抛异常）。
 - **Backend 整机两层**：`Backend`（整机根，方法以 `*_arm` / `*_end` 后缀区分本体与末端）→ `BackendDM`（与机械臂型号 **1:1** 派生：`backend_dm` ↔ `joyarm_dm`）；yaml `backend:` 段 `name` 选型，arm/end 同 channel 共享总线、异 channel 独立。
 
 ## 3. 环境安装
@@ -59,16 +58,18 @@ uv pip install -e .            # 核心 joyarm_core（含 numpy/pin/pyyaml）
 ```python
 from joyarm_core import joyarm_factory
 
-arm = joyarm_factory("joyarm_dm")  # 推荐：型号名唯一参数（命名链校验）；默认未连接（离线），
+arm = joyarm_factory("joyarm_dm")  # 推荐：型号名唯一参数；默认未连接（离线），
                                    # 自动加载 configs/joyarm_dm.yaml + URDF，按 robotics: 组装成员
-Q   = arm.rand_q(size=100_000)     # 软限位内采样 (N,6)
-T   = arm.fkine(Q)                 # 门面 → _fkine_solver.solve → (N,4,4)（rep: quat/T/se3）
-traj = arm.plan_joint_p2p(arm.q_neutral, arm.q_home)   # 轨迹规划门面（Ch5 实现）
-# arm.connect(); arm.end_open()    # 真机：先 connect() 再操作末端
-# 等价直用：from joyarm_core import JoyArmDM; arm = JoyArmDM()
+                                   # 型号不存在时返回 None 并输出失败信息
+Q = arm.rand_q(size=100_000)       # 软限位内采样 (N,6)
+arm.check_config()                 # 配置自检 → list[Violation]（空 = 通过）
+mdh = arm.get_config()["joyarm"]["arm_mdh_and_limits"]   # 教学数据从类内 config 读取
+# arm.fkine(Q) / arm.ikine(...)    # 求解器门面：各章实现算法并注册后即可用（当前注册表为空）
+# arm.connect(); arm.check_hardware(); arm.enable_arm()
+# 等价直用：from joyarm_core import JoyArm; arm = JoyArm("joyarm_dm")
 ```
 
-> **离线语义**：`connected=False`（默认）时计算类（`fkine`/`rand_q`/…）可用；执行类（`get_arm_state`/`set_arm_command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用。
+> **离线语义**：`connected=False`（默认）时已注册域的计算类（`rand_q`/`clamp_q`/…）可用；执行类（`get_arm_state`/`set_arm_command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用。
 
 ## 5. 运行章节示例
 

@@ -1,6 +1,6 @@
 """FkineSolver —— 正运动学策略 ABC（模板方法）。
 
-``JoyArm._fkine_solver`` 的契约：实现经 config ``robotics.fkine`` 按注册名选型。
+``JoyArm._fkine_solvers`` 等六域成员字典的契约：实现经 config ``robotics.fkine`` 按注册名选型。
 :meth:`solve` 为通用模板（形状重载 + rep 转换 + 批量循环），实现只需给出
 ``(4,4)`` 内核 :meth:`frame_T`——仅消费 arm 公开属性，不 import joyarms。Ch2。
 """

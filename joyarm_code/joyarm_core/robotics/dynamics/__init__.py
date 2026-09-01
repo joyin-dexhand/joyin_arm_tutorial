@@ -1,23 +1,15 @@
-"""动力学域（策略族，一节点一文件）。
+"""动力学域（策略接口）。
 
-DynamicsSolver(ABC，Λ 模板) · PinDynamicsSolver(``"pin"``，默认，Ch8 占位) ·
-LagrangianDynamicsSolver(``"lagrangian"``，白盒占位)。``REGISTRY`` 供 config
-``robotics.dynamics`` 选型；``idyn`` / ``mass_matrix`` / ``coriolis`` /
+DynamicsSolver(ABC，Λ 模板) 为通用接口；具体求解算法为教程 Ch8 教学内容，
+实现后经 ``REGISTRY`` 注册接入。``idyn`` / ``mass_matrix`` / ``coriolis`` /
 ``gravity`` / ``cartesian_inertia`` 委托门面（教学用）。
 """
 from .dynamics_solver import DynamicsSolver
-from .pin_dynamics_solver import PinDynamicsSolver
-from .lagrangian_dynamics_solver import LagrangianDynamicsSolver
 
-REGISTRY = {
-    "pin": PinDynamicsSolver,
-    "lagrangian": LagrangianDynamicsSolver,
-}
+REGISTRY: dict = {}
 
-__all__ = [
-    "DynamicsSolver", "PinDynamicsSolver", "LagrangianDynamicsSolver", "REGISTRY",
-    "idyn", "mass_matrix", "coriolis", "gravity", "cartesian_inertia",
-]
+__all__ = ["DynamicsSolver", "REGISTRY",
+           "idyn", "mass_matrix", "coriolis", "gravity", "cartesian_inertia"]
 
 
 def idyn(arm, q, dq, ddq, f_ext=None):

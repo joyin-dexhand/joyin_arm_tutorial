@@ -1,20 +1,16 @@
-"""正运动学域（策略族，一节点一文件）。
+"""正运动学域（策略接口）。
 
-FkineSolver(ABC) · PinFkineSolver(``"pin"``，默认) · MdhFkineSolver(``"mdh"``，Ch2 占位)。
-``REGISTRY`` 供 config ``robotics.fkine`` 选型；``fkine(arm, q)`` 委托门面 ``arm.fkine``（教学用）。
+FkineSolver(ABC) 为通用接口；具体求解算法为教程 Ch2 教学内容（如 MDH 白盒
+递推），实现后经 ``REGISTRY`` 注册接入。``fkine(arm, q)`` 委托门面
+``arm.fkine``（教学用）。
 """
 from .fkine_solver import FkineSolver
-from .pin_fkine_solver import PinFkineSolver
-from .mdh_fkine_solver import MdhFkineSolver
 
-REGISTRY = {
-    "pin": PinFkineSolver,
-    "mdh": MdhFkineSolver,
-}
+REGISTRY: dict = {}
 
-__all__ = ["FkineSolver", "PinFkineSolver", "MdhFkineSolver", "REGISTRY", "fkine"]
+__all__ = ["FkineSolver", "REGISTRY", "fkine"]
 
 
 def fkine(arm, q, frame=None, rep="T"):
-    """函数式入口（教学用）：委托 ``arm.fkine``，即 ``arm._fkine_solver.solve``。"""
+    """函数式入口（教学用）：委托 ``arm.fkine``（活动 FK 求解器）。"""
     return arm.fkine(q, frame=frame, rep=rep)

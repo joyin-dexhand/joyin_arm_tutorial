@@ -1,6 +1,6 @@
 """DynamicsSolver —— 动力学策略 ABC（模板方法）。
 
-``JoyArm._dynamics_solver`` 的契约：实现经 config ``robotics.dynamics`` 选型。
+``JoyArm._dynamics_solvers`` 成员字典的契约：实现经 config ``robotics.dynamics`` 选型。
 逆动力学与 M/C/G 四项为求解内核（抽象）；笛卡尔惯量 ``Λ = J⁻ᵀMJ⁻¹`` 是
 M ⊕ J 的通用衍生量，由基类模板给出（J 经 ``arm.jac`` 门面，自动跟随雅可比替换）。
 本库不做物理仿真，不设正动力学（fdyn）。Ch8。

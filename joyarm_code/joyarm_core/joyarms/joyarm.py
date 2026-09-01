@@ -1,25 +1,42 @@
-"""``JoyArm`` —— 完整机械臂基类（arm本体 + end执行器），**组合根**。
+"""``JoyArm`` —— 完整机械臂类（arm本体 + end执行器），**组合根**，单类。
 
-持有 pinocchio ``model``/``data`` + 限位；一个整机通信后端（``backend``，按 yaml ``backend:`` 段的 ``name`` 经 backends REGISTRY 选型构建）
-与六个策略成员（``_fkine_solver``/``_ikine_solver``/``_jacobian_solver``/``_dynamics_solver``/``_traj_planner``/``_controller``，
-按 yaml ``robotics:`` 段经各域 REGISTRY 选型组装）；公开门面（``fkine``/``plan_joint_p2p``/``play_joint`` 等）全部委托私有成员，换配置即换算法。
-离线（``connected=False`` 默认）：计算类（``fkine``/``jac``/…）随时可用；执行类（``get_arm_state``/``set_arm_command``/``end_open``/…）``connect()`` 前抛 RuntimeError。
+型号差异全部由配置表达：``configs/<model>.yaml`` 经 ``basic.robot`` 选 URDF 资产、
+``basic.ee_frame`` 选末端帧、``backend:`` 段 ``name`` 经 backends REGISTRY 选整机
+后端（型号与整机后端 1:1）、``joyarm:`` 段配特征位形与 TCP 限位、``robotics:`` 段
+选各域求解器——**无型号子类**：新型号 = ``configs/<型号>.yaml`` + ``robots/`` 资产
++ ``backends/backend_*.py``（backends ``REGISTRY`` 一行）。
+
+六域策略成员机制：``robotics:`` 段按注册名选型组装私有成员字典（``_fkine_solvers``
+等，config 可指定单个或列表，首个为活动成员），公开门面（``fkine`` 等）委托活动
+成员，运行期 ``set_solver`` 切换。各域 ``REGISTRY`` 默认仅有 ABC 接口（空表）——
+具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 /
+control Ch6 / dynamics Ch8），章节实现后注册即接入。
+
+config 在构造时一次性加载存入 ``self._config``；教学数据（如 MDH 参数
+``joyarm.arm_mdh_and_limits``）由教学算法经 ``arm.get_config()`` 从类内数据读取，
+**不重新加载 yaml 文件**。
+
+pinocchio ``pin_model``/``pin_data`` + 限位为构型加载产物（URDF 驱动）；离线
+（``connected=False`` 默认）：计算类随时可用（已注册域）；执行类 ``connect()``
+前抛 ``RuntimeError``。
 """
 from __future__ import annotations
 
+import copy
+import logging
 import os
-from dataclasses import replace
 from typing import List, Optional, Union
 
 import numpy as np
 
-from ..utils.limits import clamp_to_limits
+from ..utils.limits import clamp_to_limits, joint_limits_from_model, soft_limits
 from ..utils.types import (
     ArmState,
     ControlMode,
-    JointLimits,
     Pose,
+    Severity,
     TcpLimits,
+    Violation,
 )
 
 try:
@@ -33,23 +50,29 @@ from ..robotics.ikine import REGISTRY as _IKINE_REGISTRY
 from ..robotics.jacobian import REGISTRY as _JACOBIAN_REGISTRY
 from ..robotics.dynamics import REGISTRY as _DYNAMICS_REGISTRY
 from ..robotics.trajectory import REGISTRY as _TRAJ_REGISTRY
-from ..robotics.control import REGISTRY as _CONTROL_REGISTRY, play_joint_trajectory, play_cart_trajectory
+from ..robotics.control import REGISTRY as _CONTROL_REGISTRY
 
 __all__ = ["JoyArm", "load_config"]
 
+logger = logging.getLogger("joyarm_core.joyarms")
 
 # configs/ 目录（joyarm.py 位于 joyarm_core/joyarms/，上溯一级即包根）
 _CONFIGS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs"
 )
 
+# robots/ 资产目录（URDF + meshes，运行期加载）
+_ROBOTS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "robots"
+)
+
 
 def load_config(model: str, strict: bool = False) -> Optional[dict]:
     """加载 ``configs/<model>.yaml`` 型号配置。
 
-    :param model: 型号名（与 yaml 文件名、yaml ``basic.name`` 字段、joyarms 注册名一致）。
+    :param model: 型号名（与 yaml 文件名、yaml ``basic.name`` 字段一致）。
     :param strict: 严格模式（``JoyArmFactory`` 路径）：文件缺失/解析失败抛
-        ``ValueError``（列出可用型号）；缺省容错返回 ``None``（调用方回退类常量）。
+        ``ValueError``（列出可用型号）；缺省容错返回 ``None``。
     """
     try:
         import yaml
@@ -69,7 +92,7 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
         raise ValueError(f"『{model}』型号在 configs 中未找到；可用：{avail}") from e
 
 
-# config robotics 段 "default" 别名对应的各域默认注册名
+# config robotics 段 "default" 别名对应的各域默认注册名（教程各章实现注册后生效）
 _DOMAIN_DEFAULTS = {
     "fkine": "pin",
     "ikine": "pin",
@@ -79,35 +102,75 @@ _DOMAIN_DEFAULTS = {
     "control": "position",
 }
 
+# 域 → 注册表（六域统一字典化；config 规格可为单值或列表，全部加载、首个活动）
+_DOMAIN_REGISTRIES = {
+    "fkine": _FKINE_REGISTRY,
+    "ikine": _IKINE_REGISTRY,
+    "jacobian": _JACOBIAN_REGISTRY,
+    "dynamics": _DYNAMICS_REGISTRY,
+    "traj": _TRAJ_REGISTRY,
+    "control": _CONTROL_REGISTRY,
+}
 
-def _build_component(registry: dict, spec, domain: str):
-    """按 config 规格实例化策略成员：值为注册名字符串（``"default"`` 转各域默认），或 ``{name: ..., **参数}``。"""
-    if isinstance(spec, str):
-        name, params = spec, {}
-    else:
-        params = dict(spec)
-        name = params.pop("name", None)
-        if name is None:
-            raise ValueError(f"robotics.{domain} 需为名字字符串或含 name 键的映射")
-    if name == "default":
-        name = _DOMAIN_DEFAULTS.get(domain, name)
-    if name not in registry:
-        raise ValueError(f"『{name}』型号在 robotics.{domain} 中未找到；可用：{sorted(registry)}")
-    return registry[name](**params)
+# 运行期可设参数白名单（set_config 点路径 → 应用函数；config 文件不回写）
+_SETTABLE = {
+    "basic.utils.joint_limits_soft_margin": "_set_soft_margin",
+}
+
+
+def _build_domain(domain: str, registry: dict, spec) -> dict:
+    """按 config 规格实例化一域策略成员（软失败语义，架构约束）。
+
+    :param spec: 注册名字符串 / ``{name:..., **参数}`` / 上述的**列表**（全部加载）。
+    :return: 成员字典 ``{注册名: 实例}``——域未配置返回空；注册名不存在/实例化
+        失败时输出警告并跳过该成员（置空，不中断创建）。
+    """
+    if not spec:
+        return {}
+    specs = list(spec) if isinstance(spec, (list, tuple)) else [spec]
+    members: dict = {}
+    for s in specs:
+        if isinstance(s, str):
+            name, params = s, {}
+        elif isinstance(s, dict):
+            params = dict(s)
+            name = params.pop("name", None)
+            if name is None:
+                logger.warning("robotics.%s 规格缺 name 键，跳过该成员：%r", domain, s)
+                continue
+        else:
+            logger.warning("robotics.%s 规格类型非法（%s），跳过", domain, type(s).__name__)
+            continue
+        if name == "default":
+            name = _DOMAIN_DEFAULTS.get(domain, name)
+        if name not in registry:
+            logger.warning("『%s』注册名在 robotics.%s 中未找到；可用：%s（该成员置空）",
+                           name, domain, sorted(registry))
+            continue
+        try:
+            members[name] = registry[name](**params)
+        except Exception as e:
+            logger.warning("robotics.%s『%s』实例化失败：%s（该成员置空）", domain, name, e)
+    return members
 
 
 class JoyArm:
-    """完整机械臂基类。
+    """完整机械臂类（组合根，兼容带末端执行器的 6R/7R 臂，单类）。
 
-    :param name: 名称；``urdf_path``: URDF 路径；``ee_frame_name``: 末端帧名（默认 ``"ee"``）。
+    :param model: 型号名（与 ``configs/<model>.yaml`` 文件名、yaml ``basic.name``
+        字段一致）。
+    :param urdf_path: URDF 路径；缺省由 config ``basic.robot`` 解析随包资产
+        （``robots/<robot>/urdf/<robot>.urdf``）。
+    :param ee_frame_name: 末端帧名；缺省取 config ``basic.ee_frame``，再回退 ``"ee"``。
     :param mesh_dirs: mesh 搜索目录；``load_geometry``: 是否加载 visual/collision 几何。
-    :param config: 型号 YAML 字典（``basic``/``joyarm``/``robotics``/``backend`` 段）；缺省无后端（离线）。
+    :param config: 型号 YAML 字典（``basic``/``joyarm``/``robotics``/``backend`` 段）；
+        缺省自动加载 ``configs/<model>.yaml``，一次性存入 ``self._config``。
     """
 
     def __init__(self,
-        name: str,
-        urdf_path: str,
-        ee_frame_name: str = "ee",
+        model: str,
+        urdf_path: Optional[str] = None,
+        ee_frame_name: Optional[str] = None,
         mesh_dirs: Optional[List[str]] = None,
         load_geometry: bool = False,
         config: Optional[dict] = None,
@@ -119,19 +182,39 @@ class JoyArm:
                 "  # 或：pip install pin"
             )
 
+        # ---- 型号 config（工厂注入；直用时自动加载 configs/<model>.yaml）----
+        if config is None:
+            config = load_config(model)
+            if config is None:
+                logger.warning("configs/%s.yaml 未找到；以空 config 构造（离线纯 URDF 模式）",
+                               model)
+        cfg = config or {}
+        self._config: dict = cfg
+
+        # ---- urdf / ee_frame：参数 > config basic 段 > 内置默认 ----
+        basic = cfg.get("basic") or {}
+        if urdf_path is None:
+            robot = basic.get("robot")
+            if robot is None:
+                raise ValueError(
+                    "未指定 urdf_path，且 config basic.robot 缺失，无法解析 URDF。\n"
+                    "请传入 urdf_path，或在 configs yaml 配置 basic.robot"
+                    "（如 joyarm_dm_fixend）。"
+                )
+            urdf_path = self._resolve_robot_urdf(robot)
         if not os.path.isfile(urdf_path):
             raise FileNotFoundError(
                 f"未找到 URDF 文件：{urdf_path}\n"
                 f"请将正式 URDF 放入 joyarm_core/robots/。"
             )
+        self._urdf_path: str = urdf_path
+        ee_frame_name = ee_frame_name or basic.get("ee_frame") or "ee"
 
-        cfg = config or {}
-
-        # ---- 构建 pinocchio 模型 ----
+        # ---- 构建 pinocchio 模型（构型加载，URDF 驱动）----
         if mesh_dirs:
-            self.model = pin.buildModelFromUrdf(urdf_path, package_dirs=mesh_dirs)
+            self.pin_model = pin.buildModelFromUrdf(urdf_path, package_dirs=mesh_dirs)
         else:
-            self.model = pin.buildModelFromUrdf(urdf_path)
+            self.pin_model = pin.buildModelFromUrdf(urdf_path)
 
         self.collision_model: Optional[object] = None
         self.visual_model: Optional[object] = None
@@ -139,38 +222,38 @@ class JoyArm:
             try:
                 geo_dirs = mesh_dirs or [os.path.dirname(urdf_path)]
                 self.collision_model = pin.buildGeomFromUrdf(
-                    self.model, urdf_path, pin.GeometryType.COLLISION, package_dirs=geo_dirs
+                    self.pin_model, urdf_path, pin.GeometryType.COLLISION, package_dirs=geo_dirs
                 )
                 self.visual_model = pin.buildGeomFromUrdf(
-                    self.model, urdf_path, pin.GeometryType.VISUAL, package_dirs=geo_dirs
+                    self.pin_model, urdf_path, pin.GeometryType.VISUAL, package_dirs=geo_dirs
                 )
             except Exception as e:
                 import warnings
 
                 warnings.warn(f"几何模型加载失败：{e}")
-        self.data = self.model.createData()
+        self.pin_data = self.pin_model.createData()
 
         # ---- 基本属性 ----
-        self.n: int = self.model.nq
-        self.nv: int = self.model.nv
-        self.name: str = name
+        self.n: int = self.pin_model.nq
+        self.nv: int = self.pin_model.nv
+        self.model: str = model
         self.connected: bool = False
 
         # ---- 末端帧 ----
         self.ee_frame_name: str = ee_frame_name
         # pinocchio getFrameId 对未知名不抛异常而是返回 nframes，据此判缺
-        self.ee_frame_id: int = self.model.getFrameId(ee_frame_name)
-        if self.ee_frame_id >= len(self.model.frames):
+        self.ee_frame_id: int = self.pin_model.getFrameId(ee_frame_name)
+        if self.ee_frame_id >= len(self.pin_model.frames):
             raise ValueError(
                 f"URDF 中找不到末端帧 '{ee_frame_name}'；"
-                f"可用帧：{[f.name for f in self.model.frames]}"
+                f"可用帧：{[f.name for f in self.pin_model.frames]}"
             )
 
         # ---- 关节限位（硬 + 软）----
         # margin 具体值由 yaml basic.utils.joint_limits_soft_margin 提供；未配置时取 0（软=硬）
-        self.joint_limits: JointLimits = self._build_joint_limits(self.model)
+        self.joint_limits = joint_limits_from_model(self.pin_model)
         utils_cfg = (cfg.get("basic") or {}).get("utils") or {}
-        self.joint_limits_soft: JointLimits = self._build_soft_limits(
+        self.joint_limits_soft = soft_limits(
             self.joint_limits, margin=float(utils_cfg.get("joint_limits_soft_margin", 0.0))
         )
         self.qlow: np.ndarray = self.joint_limits_soft.q_min
@@ -190,27 +273,96 @@ class JoyArm:
             jcfg.get("q_neutral", self._q_zero), dtype=float
         ).reshape(-1)
 
-        self.tcp_limits: TcpLimits = TcpLimits()  # 末端限位（占位）
+        # ---- TCP 空间限位：joyarm 段提供则覆盖默认占位 ----
+        self.tcp_limits: TcpLimits = TcpLimits()
+        if jcfg.get("tcp_limits"):
+            self._apply_tcp_limits(jcfg["tcp_limits"])
         self.T_base: np.ndarray = np.eye(4)  # 基坐标系偏移
 
-        # ---- 整机通信后端：config backend 段 name 选型（本体+末端一体，私有）----
+        # ---- 整机通信后端：config backend 段 name 选型（软失败：无效置空+警告）----
         self._backend = None
         backend_cfg = cfg.get("backend")
         if backend_cfg:
             backend_cfg = dict(backend_cfg)
             backend_name = backend_cfg.pop("name", None)
             if backend_name is None:
-                raise ValueError("config backend 段缺少选型键 name")
-            self._backend = get_backend(backend_name)(backend_cfg)
+                logger.warning("config backend 段缺少选型键 name；后端置空（离线计算仍可用）")
+            else:
+                try:
+                    self._backend = get_backend(backend_name)(backend_cfg)
+                except Exception as e:
+                    logger.error("后端『%s』构建失败：%s（后端置空，离线计算仍可用）",
+                                 backend_name, e)
+                    self._backend = None
 
-        # ---- 策略成员：按 config robotics 段 + 各域注册表组装（算法可换）----
-        robotics_cfg = cfg.get("robotics", {})
-        self._fkine_solver = _build_component(_FKINE_REGISTRY, robotics_cfg.get("fkine", "default"), "fkine")
-        self._ikine_solver = _build_component(_IKINE_REGISTRY, robotics_cfg.get("ikine", "default"), "ikine")
-        self._jacobian_solver = _build_component(_JACOBIAN_REGISTRY, robotics_cfg.get("jacobian", "default"), "jacobian")
-        self._dynamics_solver = _build_component(_DYNAMICS_REGISTRY, robotics_cfg.get("dynamics", "default"), "dynamics")
-        self._traj_planner = _build_component(_TRAJ_REGISTRY, robotics_cfg.get("traj", "default"), "traj")
-        self._controller = _build_component(_CONTROL_REGISTRY, robotics_cfg.get("control", "default"), "control")
+        # ---- 六域策略成员字典（config 选型，全部加载、首个为活动；软失败）----
+        # 各域 REGISTRY 默认空表（仅 ABC 接口）——域未配置即跳过，教学各章实现
+        # 注册后经 config 选型接入
+        self._fkine_solvers: dict = {}
+        self._ikine_solvers: dict = {}
+        self._jacobian_solvers: dict = {}
+        self._dynamics_solvers: dict = {}
+        self._traj_planners: dict = {}
+        self._controllers: dict = {}
+        self._active_name: dict = {}
+        robotics_cfg = cfg.get("robotics") or {}
+        for domain, registry in _DOMAIN_REGISTRIES.items():
+            members = _build_domain(domain, registry, robotics_cfg.get(domain))
+            self._members(domain).update(members)
+            self._active_name[domain] = next(iter(members), None)
+
+    # ----------------------------------------------------------
+    # 成员字典访问 / 切换（六域统一）
+    # ----------------------------------------------------------
+    def _members(self, domain: str) -> dict:
+        """域 → 成员字典。"""
+        return {
+            "fkine": self._fkine_solvers,
+            "ikine": self._ikine_solvers,
+            "jacobian": self._jacobian_solvers,
+            "dynamics": self._dynamics_solvers,
+            "traj": self._traj_planners,
+            "control": self._controllers,
+        }[domain]
+
+    def _active(self, domain: str):
+        """活动成员；域未加载时抛 ``RuntimeError``（软失败在门面调用处显性化）。"""
+        d = self._members(domain)
+        name = self._active_name.get(domain)
+        if name is None or name not in d:
+            raise RuntimeError(
+                f"robotics.{domain} 成员未加载（config 未配置或注册名未实现）；"
+                f"已加载：{sorted(d) or '无'}。教程各章实现算法并注册后，"
+                f"经 configs yaml 的 robotics.{domain} 段选型接入"
+            )
+        return d[name]
+
+    def _pick(self, domain: str, name: Optional[str]):
+        """按注册名取已加载成员（``None`` = 活动成员）。"""
+        if name is None:
+            return self._active(domain)
+        d = self._members(domain)
+        if name not in d:
+            raise ValueError(
+                f"『{name}』未在 robotics.{domain} 已加载成员中；已加载：{sorted(d)}"
+            )
+        return d[name]
+
+    def set_solver(self, domain: str, name: str):
+        """运行期切换活动成员（按注册名；域 ∈ fkine/ikine/jacobian/dynamics/traj/control）。"""
+        if domain not in _DOMAIN_REGISTRIES:
+            raise ValueError(f"未知域 {domain!r}；可用：{sorted(_DOMAIN_REGISTRIES)}")
+        inst = self._pick(domain, name)   # 校验已加载
+        self._active_name[domain] = name
+        return inst
+
+    def set_controller(self, name: str):
+        """运行期切换控制律（``set_solver("control", name)`` 的惯用别名）。"""
+        return self.set_solver("control", name)
+
+    def list_solvers(self, domain: str) -> list:
+        """列出某域已加载成员注册名（首个为活动成员）。"""
+        return sorted(self._members(domain))
 
     # ----------------------------------------------------------
     # 特征位形（只读，返回拷贝）
@@ -230,13 +382,20 @@ class JoyArm:
         """数值求解默认初值 ``(n,)``（如 IK 迭代起点）。"""
         return self._q_neutral.copy()
 
+    @property
+    def state(self) -> Optional[ArmState]:
+        """最新状态快照：已连接现读一次 ``get_arm_state()``，离线 ``None``。"""
+        if self.connected:
+            return self.get_arm_state()
+        return None
+
     # ----------------------------------------------------------
     # 真机连接（connect 后才可执行 arm_*/end_*）
     # ----------------------------------------------------------
     def connect(self) -> None:
         """连接真机（整机后端：本体 + 末端）。"""
-        if self._backend is not None:
-            self._backend.connect()
+        self._require_backend()
+        self._backend.connect()
         self.connected = True
 
     def disconnect(self) -> None:
@@ -248,52 +407,175 @@ class JoyArm:
     def _require_connected(self) -> None:
         """执行类方法前置：未连接真机（离线）时抛 ``RuntimeError``。"""
         if not self.connected:
-            raise RuntimeError(f"[{self.name}] 未连接真机（离线）；请先 connect()。")
+            raise RuntimeError(f"[{self.model}] 未连接真机（离线）；请先 connect()。")
+
+    def _require_backend(self) -> None:
+        """后端前置：无后端（未配置/选型无效）时抛 ``RuntimeError``。"""
+        if self._backend is None:
+            raise RuntimeError(
+                f"[{self.model}] 无整机后端（config backend 段缺失或选型无效），"
+                f"无法执行硬件操作。"
+            )
 
     # ----------------------------------------------------------
-    # 内部：限位构建
+    # 配置：读取 / 运行期设置 / 自检（架构约束：配置功能全集）
+    # ----------------------------------------------------------
+    def get_config(self) -> dict:
+        """当前配置深拷贝快照（四段 ``basic``/``joyarm``/``robotics``/``backend``）。
+
+        教学算法读取型号教学数据（如 MDH 参数 ``joyarm.arm_mdh_and_limits``）统一
+        经此接口从**类内已加载的 config**获取，不重新加载 yaml 文件。
+        """
+        return copy.deepcopy(self._config)
+
+    def set_config(self, path: str, value) -> None:
+        """运行期设置参数（白名单内即时生效；config 文件不回写，重启以 yaml 为准）。
+
+        :param path: 点路径，如 ``"basic.utils.joint_limits_soft_margin"``。
+        :raises ValueError: 路径不在白名单内（其余项请手改 configs yaml，保留注释）。
+        """
+        handler = _SETTABLE.get(path)
+        if handler is None:
+            raise ValueError(
+                f"path={path!r} 不在运行期可设白名单内：{sorted(_SETTABLE)}"
+                f"（其余配置请直接编辑 configs yaml）"
+            )
+        getattr(self, handler)(value)
+        # 写回内存 config 快照（尽力而为：路径中遇列表段（如多载规格）则跳过，
+        # 运行时值已由 handler 生效，快照以 yaml 结构为准）
+        node = self._config
+        keys = path.split(".")
+        for k in keys[:-1]:
+            node = node.get(k) if isinstance(node, dict) else None
+            if not isinstance(node, dict):
+                node = None
+                break
+        if isinstance(node, dict):
+            node[keys[-1]] = value
+
+    def _set_soft_margin(self, v) -> None:
+        self.joint_limits_soft = soft_limits(self.joint_limits, float(v))
+        self.qlow = self.joint_limits_soft.q_min
+        self.qhigh = self.joint_limits_soft.q_max
+
+    def check_config(self) -> List[Violation]:
+        """配置自检（离线可跑）：四段齐全 / 命名链 / URDF 存在 / 特征位形长度与
+        限位 / robotics 已配置域的成员已加载 / backend 选型与关节数一致。
+
+        :return: 违规列表 ``list[Violation]``（空列表 = 通过）。
+        """
+        issues: List[Violation] = []
+        cfg = self._config
+        for sec, sev in (("basic", Severity.ERROR), ("robotics", Severity.WARNING),
+                         ("joyarm", Severity.WARNING), ("backend", Severity.WARNING)):
+            if sec not in cfg:
+                issues.append(Violation("config", -1, f"missing:{sec}", 0.0, 0.0, sev))
+        basic = cfg.get("basic") or {}
+        if basic.get("name") not in (None, self.model):
+            issues.append(Violation(
+                "config", -1, "basic.name≠model", 0.0, 0.0, Severity.ERROR))
+        if not os.path.isfile(self._urdf_path):
+            issues.append(Violation("config", -1, "urdf_missing", 0.0, 0.0, Severity.ERROR))
+        jcfg = cfg.get("joyarm") or {}
+        for key in ("q_zero", "q_home", "q_neutral"):
+            v = jcfg.get(key)
+            if v is None:
+                continue
+            arr = np.asarray(v, dtype=float)
+            if arr.size != self.n:
+                issues.append(Violation(
+                    "config", -1, f"{key}:len", float(arr.size), float(self.n), Severity.ERROR))
+            elif ((arr < self.joint_limits.q_min - 1e-9).any()
+                    or (arr > self.joint_limits.q_max + 1e-9).any()):
+                issues.append(Violation(
+                    "config", -1, f"{key}:out_of_limits", 0.0, 0.0, Severity.ERROR))
+        # robotics：域未配置为教学过渡正常态（各章实现前注册表为空）不告警；
+        # 已配置却未加载成功（注册名未实现/实例化失败）才提示
+        robotics_cfg = cfg.get("robotics") or {}
+        for domain in _DOMAIN_REGISTRIES:
+            if robotics_cfg.get(domain) and self._active_name.get(domain) is None:
+                issues.append(Violation(
+                    "config", -1, f"robotics.{domain}:not_loaded", 0.0, 0.0, Severity.WARNING))
+        bcfg = cfg.get("backend") or {}
+        if bcfg:
+            if self._backend is None:
+                issues.append(Violation(
+                    "config", -1, "backend:not_loaded", 0.0, 0.0, Severity.ERROR))
+            else:
+                nb = len((bcfg.get("arm") or {}).get("joints") or [])
+                if nb and nb != self.n:
+                    issues.append(Violation(
+                        "config", -1, "backend.arm.joints:len", float(nb),
+                        float(self.n), Severity.ERROR))
+        return issues
+
+    def check_hardware(self) -> List[Violation]:
+        """硬件自检（需 ``connect()``）：逐关节通讯/使能/故障/编码器/温度/越限，
+        末端电机同构检查。
+
+        :return: 违规列表（空 = 全部正常）。
+        :raises RuntimeError: 未连接真机或无后端。
+        """
+        self._require_connected()
+        issues: List[Violation] = []
+        st = self.get_arm_state()
+        js = st.joint
+        for i in range(self.n):
+            if not bool(np.asarray(js.comm_ok)[i]):
+                issues.append(Violation("arm", i, "comm_ok", 0.0, 1.0, Severity.ERROR))
+            if bool(np.asarray(js.error)[i]):
+                issues.append(Violation("arm", i, "error", 1.0, 0.0, Severity.ERROR))
+            if not bool(np.asarray(js.angle_ok)[i]):
+                issues.append(Violation("arm", i, "angle_ok", 0.0, 1.0, Severity.ERROR))
+            if not bool(np.asarray(js.enabled)[i]):
+                issues.append(Violation("arm", i, "enabled", 0.0, 1.0, Severity.WARNING))
+            for metric, temp, lim in (("temp_mos", js.temp_mos[i], 70.0),
+                                      ("temp_rotor", js.temp_rotor[i], 80.0)):
+                if temp > lim:
+                    issues.append(Violation("arm", i, metric, float(temp), lim, Severity.WARNING))
+            q_i = float(js.q[i])
+            if q_i < self.joint_limits.q_min[i] or q_i > self.joint_limits.q_max[i]:
+                issues.append(Violation("arm", i, "q:out_of_limits", q_i, 0.0, Severity.ERROR))
+        try:
+            es = self._backend.read_state_end()
+        except Exception:
+            es = {}
+        for i, ok in enumerate(es.get("comm_ok", [])):
+            if not ok:
+                issues.append(Violation("end", i, "comm_ok", 0.0, 1.0, Severity.ERROR))
+        for i, err in enumerate(es.get("error", [])):
+            if err:
+                issues.append(Violation("end", i, "error", 1.0, 0.0, Severity.ERROR))
+        return issues
+
+    # ----------------------------------------------------------
+    # 内部：随包 URDF 解析（robot 资产加载逻辑）
     # ----------------------------------------------------------
     @staticmethod
-    def _build_joint_limits(model) -> JointLimits:
-        """从 pinocchio model 解析硬限位（位置/速度/力矩来自 URDF；其余手动赋值）。"""
-        n = model.nq
-        q_min = np.asarray(model.lowerPositionLimit, dtype=float).reshape(n)
-        q_max = np.asarray(model.upperPositionLimit, dtype=float).reshape(n)
-        nv = model.nv
-        dq_max = (
-            np.asarray(model.velocityLimit, dtype=float).reshape(nv)
-            if hasattr(model, "velocityLimit")
-            else np.full(nv, np.inf)
-        )
-        tau_max = (
-            np.asarray(model.effortLimit, dtype=float).reshape(nv)
-            if hasattr(model, "effortLimit")
-            else np.full(nv, np.inf)
-        )
-        if nv != n:
-            dq_max = np.full(n, np.inf)
-            tau_max = np.full(n, np.inf)
-        return JointLimits(
-            q_min=q_min,
-            q_max=q_max,
-            dq_max=dq_max,
-            tau_max=tau_max,
-            ddq_max=np.full(n, np.inf),
-        )
+    def _resolve_robot_urdf(robot: str) -> str:
+        """解析随包 URDF：``robots/<robot>/urdf/<robot>.urdf``。
 
-    @staticmethod
-    def _build_soft_limits(hard: JointLimits, margin: float) -> JointLimits:
-        """由硬限位内缩 ``margin`` 比例生成软限位（``margin=0`` 时软=硬）。"""
-        span = hard.q_max - hard.q_min
-        return replace(hard, q_min=hard.q_min + margin * span, q_max=hard.q_max - margin * span)
+        :raises ValueError: 型号目录/URDF 不存在（列出可用型号）。
+        """
+        path = os.path.join(_ROBOTS_DIR, robot, "urdf", f"{robot}.urdf")
+        if os.path.isfile(path):
+            return path
+        try:
+            avail = sorted(d for d in os.listdir(_ROBOTS_DIR)
+                           if os.path.isdir(os.path.join(_ROBOTS_DIR, d)))
+        except OSError:
+            avail = []
+        raise ValueError(f"『{robot}』型号在 robots 中未找到；可用：{avail}")
 
     # ----------------------------------------------------------
     # 打印表示
     # ----------------------------------------------------------
     def __repr__(self) -> str:
+        domains = {d: (self._active_name.get(d) or "-") for d in _DOMAIN_REGISTRIES}
         return (
-            f"{type(self).__name__}(name={self.name!r}, n={self.n}, "
+            f"{type(self).__name__}(model={self.model!r}, n={self.n}, "
             f"ee_frame={self.ee_frame_name!r}, "
+            f"solvers={domains}, "
             f"backend={'yes' if self._backend else 'no'}, "
             f"{'connected' if self.connected else 'offline'})"
         )
@@ -322,84 +604,109 @@ class JoyArm:
         return bool(np.all(q >= self.qlow - 1e-9) and np.all(q <= self.qhigh + 1e-9))
 
     # ----------------------------------------------------------
-    # robotics 求解算法（门面 → 私有策略成员，config robotics 段可换实现）
+    # robotics 求解算法（门面 → 活动策略成员；参数排序：通用在前、特有 keyword-only 在后）
     # ----------------------------------------------------------
     def fkine(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, rep: str = "T"):
         """正运动学（``rep`` 取 ``quat``/``T``/``se3``：Pose / 4×4 矩阵 / pin.SE3）。"""
-        return self._fkine_solver.solve(self, q, frame=frame, rep=rep)
+        return self._active("fkine").solve(self, q, frame=frame, rep=rep)
 
-    def ikine(self, T_target, q0=None, frame=None, **kw):
-        """逆运动学（委托 ``_ikine_solver``；数值/解析可换）。"""
-        return self._ikine_solver.solve(self, T_target, q0=q0, frame=frame, **kw)
+    def ikine(self, T_target, frame=None, *, q0=None, **kw):
+        """逆运动学（``T_target`` 通用；``q0``/``tol``/``iters`` 等为求解器特有参数）。"""
+        return self._active("ikine").solve(self, T_target, frame=frame, q0=q0, **kw)
 
-    def ikine_constrained(self, T_target, q0=None, frame=None, **kw):
-        """带关节限位约束的逆运动学。"""
-        return self._ikine_solver.solve_constrained(self, T_target, q0=q0, frame=frame, **kw)
+    def ikine_constrained(self, T_target, frame=None, *, q0=None, **kw):
+        """带关节软限位约束的逆运动学（失败随机重启）。"""
+        return self._active("ikine").solve_constrained(self, T_target, frame=frame, q0=q0, **kw)
 
     def jac(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, ref: str = "local"):
         """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端帧系 / 基座系）。"""
-        return self._jacobian_solver.jac(self, q, frame=frame, ref=ref)
+        return self._active("jacobian").jac(self, q, frame=frame, ref=ref)
 
     def manipulability(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
         """Yoshikawa 可操作度（雅可比衍生量）。"""
-        return self._jacobian_solver.manipulability(self, q, frame=frame)
+        return self._active("jacobian").manipulability(self, q, frame=frame)
 
     def cond_number(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
         """雅可比条件数（雅可比衍生量）。"""
-        return self._jacobian_solver.cond_number(self, q, frame=frame)
+        return self._active("jacobian").cond_number(self, q, frame=frame)
 
     def statics(self, q: np.ndarray, F: np.ndarray, frame: Optional[Union[str, int]] = None):
         """静力学 τ = JᵀF（雅可比衍生量）。"""
-        return self._jacobian_solver.statics(self, q, F, frame=frame)
+        return self._active("jacobian").statics(self, q, F, frame=frame)
 
     def idyn(self, q, dq, ddq, f_ext=None):
-        """逆动力学（委托 ``_dynamics_solver``）。"""
-        return self._dynamics_solver.idyn(self, q, dq, ddq, f_ext=f_ext)
+        """逆动力学（委托活动动力学成员）。"""
+        return self._active("dynamics").idyn(self, q, dq, ddq, f_ext=f_ext)
 
     def mass_matrix(self, q):
-        """关节空间惯量矩阵 M(q)（委托 ``_dynamics_solver``）。"""
-        return self._dynamics_solver.mass_matrix(self, q)
+        """关节空间惯量矩阵 M(q)。"""
+        return self._active("dynamics").mass_matrix(self, q)
 
     def coriolis(self, q, dq):
-        """科氏+向心项 C(q,q̇)（委托 ``_dynamics_solver``）。"""
-        return self._dynamics_solver.coriolis(self, q, dq)
+        """科氏+向心项 C(q,q̇)q̇。"""
+        return self._active("dynamics").coriolis(self, q, dq)
 
     def gravity(self, q):
-        """重力项 G(q)（委托 ``_dynamics_solver``）。"""
-        return self._dynamics_solver.gravity(self, q)
+        """重力项 G(q)。"""
+        return self._active("dynamics").gravity(self, q)
 
     def cartesian_inertia(self, q, frame=None):
         """笛卡尔惯量 Λ=J⁻ᵀMJ⁻¹（M ⊕ ``arm.jac`` 模板）。"""
-        return self._dynamics_solver.cartesian_inertia(self, q, frame=frame)
+        return self._active("dynamics").cartesian_inertia(self, q, frame=frame)
 
-    def plan_joint_p2p(self, q0, qf, *, method="quintic", **kw):
-        """关节空间点到点轨迹（``method`` 选 cubic/quintic/lspb）。"""
-        return self._traj_planner.plan_joint_p2p(self, q0, qf, method=method, **kw)
+    # ----------------------------------------------------------
+    # 紧急阻尼（纯后端安全操作，任意状态可用）
+    # ----------------------------------------------------------
+    def damping_mode(self, kd: float = 10.0) -> None:
+        """紧急阻尼模式：**任何状态**下将全部电机（本体 + 末端）切为 MIT 纯阻尼
+        （``kp=q=dq=tau=0, kd``）——电机仅产生 ∝ 速度的黏滞阻力，防发疯/防坠落。
 
-    def plan_joint_waypoints(self, qs, Ts, **kw):
-        """关节空间多点途经轨迹（段间平滑拼接）。"""
-        return self._traj_planner.plan_joint_waypoints(self, qs, Ts, **kw)
+        依次执行：本体/末端切 MIT → 下发阻尼帧 → 尽力使能（故障电机不阻断其余）
+        → 再发一帧（使能即生效）。各阶段 **best-effort**：单阶段失败仅记警告不
+        抛出，保证尽量多的电机收到指令。
 
-    def plan_cart_p2p(self, *, method="line", **kw):
-        """笛卡尔点到点（``method`` 选 line/arc；line 需 T0/Tf，arc 需 center/radius/T_start/angle）。"""
-        return self._traj_planner.plan_cart_p2p(self, method=method, **kw)
+        :param kd: 阻尼系数（N·m·s/rad），默认 10.0。
+        :raises RuntimeError: 未连接真机 / 无后端（无法触达电机）。
+        """
+        self._require_connected()
+        self._require_backend()
+        self._damping_frames(kd)
 
-    def plan_cart_waypoints(self, poses, Ts, **kw):
-        """笛卡尔多点途经轨迹（段间平滑拼接）。"""
-        return self._traj_planner.plan_cart_waypoints(self, poses, Ts, **kw)
+    def _damping_frames(self, kd: float = 10.0) -> None:
+        """阻尼帧序列（无线程操作）：切 MIT → 阻尼帧 → 尽力使能 → 再发一帧。"""
+        z = np.zeros(self.n)
 
-    def set_controller(self, name):
-        """运行期切换控制律（按注册名，如 ``"position"``）。"""
-        self._controller = _build_component(_CONTROL_REGISTRY, name, "control")
-        return self._controller
+        def _send_arm(tag: str) -> None:
+            try:
+                self._backend.send_mit_arm(z, z, z, kp=z, kd=np.full(self.n, kd))
+            except Exception as e:
+                logger.warning("damping_mode：%s阻尼指令失败：%s", tag, e)
 
-    def play_joint(self, traj, mode=ControlMode.POSITION, hz: int = 200):
-        """按时间序列回放关节轨迹（ControlLoop 驱动 ``_controller``）。"""
-        return play_joint_trajectory(self, traj, mode=mode, hz=hz)
+        def _send_end(tag: str) -> None:
+            try:
+                n_end = len(self._backend.read_state_end().get("q", []))
+                if n_end:
+                    ez = np.zeros(n_end)
+                    self._backend.send_mit_end(ez, ez, ez, kp=ez,
+                                               kd=np.full(n_end, kd))
+            except Exception as e:
+                logger.warning("damping_mode：%s阻尼指令失败：%s", tag, e)
 
-    def play_cart(self, traj, hz: int = 200, **kw):
-        """回放笛卡尔轨迹（OSC：任务空间 PD → JᵀF + 重力补偿 → MIT 下发）。"""
-        return play_cart_trajectory(self, traj, hz=hz, **kw)
+        for setter, tag in ((self._backend.set_mode_arm, "本体切 MIT"),
+                            (self._backend.set_mode_end, "末端切 MIT")):
+            try:
+                setter(ControlMode.MIT)
+            except Exception as e:
+                logger.warning("damping_mode：%s失败：%s", tag, e)
+        _send_arm("本体")
+        _send_end("末端")
+        try:
+            self._backend.enable_arm()
+            self._backend.enable_end()
+        except Exception as e:
+            logger.warning("damping_mode：使能失败（可能部分电机故障，已失能者将自由）：%s", e)
+        _send_arm("本体（使能后）")
+        _send_end("末端（使能后）")
 
     # ----------------------------------------------------------
     # 本体执行类方法（依赖 _backend；未连接 raise；arm_* 与 end_* 对应）
@@ -425,14 +732,24 @@ class JoyArm:
         self._require_connected()
         self._backend.set_mode_arm(mode, joint)
 
+    def read_mode_arm(self, joint: Optional[int] = None) -> Optional[ControlMode]:
+        """查询本体关节当前控制模式（本地缓存，离线可查；``joint=None`` 时整臂
+        各关节模式唯一才返回该模式，否则 ``None``）。"""
+        self._require_backend()
+        return self._backend.read_mode_arm(joint)
+
     def get_arm_state(self) -> ArmState:
         """读取本体状态快照（委托 ``_backend.read_state_arm()``；与 ``get_end_state`` 对应）。
+
+        fkine 求解器已注册时同步填充 ``tcp.pose``（末端位姿）；未注册（教学
+        过渡态）时跳过填充，仅返回关节原始状态。
 
         :raises RuntimeError: 未连接真机（``connected=False``）时抛出。
         """
         self._require_connected()
         state = self._backend.read_state_arm()
-        state.tcp.pose = Pose.from_T(self.fkine(state.joint.q))
+        if self._active_name.get("fkine") is not None:
+            state.tcp.pose = Pose.from_T(self.fkine(state.joint.q))
         return state
 
     def set_arm_command(self,
@@ -442,31 +759,42 @@ class JoyArm:
         tau: Optional[np.ndarray] = None,
         kp: Optional[np.ndarray] = None,
         kd: Optional[np.ndarray] = None,
+        joint: Optional[int] = None,
     ) -> None:
         """按控制模式下发运动指令（委托 ``_backend``；三态 POSITION/VELOCITY/MIT）。
 
+        ``joint`` 指定时为**单关节控制**（标量参数自动升维）；``joint=None`` 全部。
         MIT 模式 ``kp/kd`` 可缺省（``None`` 透传后端回退 config 增益）；
         纯力矩不设独立模式，经 MIT（``kp=kd=0``）实现。
 
         :raises RuntimeError: 未连接真机时抛出。
         :raises ValueError: 对应模式所需参数缺失时抛出。
         """
+
+        def _vec(x):
+            if x is None:
+                return None
+            return np.atleast_1d(np.asarray(x, dtype=float))
+
         self._require_connected()
         if mode == ControlMode.POSITION:
             if q is None:
                 raise ValueError("POSITION 模式需要 q")
-            self._backend.send_position_arm(q)
+            self._backend.send_position_arm(_vec(q), joint)
         elif mode == ControlMode.VELOCITY:
             if dq is None:
                 raise ValueError("VELOCITY 模式需要 dq")
-            self._backend.send_velocity_arm(dq)
+            self._backend.send_velocity_arm(_vec(dq), joint)
         elif mode == ControlMode.MIT:
             missing = [
                 name for name, val in (("q", q), ("dq", dq), ("tau", tau)) if val is None
             ]
             if missing:
                 raise ValueError(f"MIT 模式缺少参数：{missing}")
-            self._backend.send_mit_arm(q, dq, tau, kp, kd)
+            self._backend.send_mit_arm(_vec(q), _vec(dq), _vec(tau),
+                                       kp=_vec(kp) if kp is not None else None,
+                                       kd=_vec(kd) if kd is not None else None,
+                                       joint=joint)
         else:
             raise ValueError(f"未知控制模式：{mode}")
 
@@ -494,29 +822,18 @@ class JoyArm:
         :param persist: ``True`` 时写入并持久化到非易失存储。
         """
         self._require_connected()
-        self._backend.write_param_arm(key, value, joint, persist=persist)
+        return self._backend.write_param_arm(key, value, joint, persist=persist)
 
     def read_param_end(self, key: str, joint: Optional[int] = None):
-        """读末端电机参数（key 为参数名，语义由后端定义）。
-
-        :param key: 参数名（如 ``"pos_kp"``）。
-        :param joint: 末端电机索引，``None`` 表示全部电机。
-        :return: 指定 ``joint`` 时返回该电机参数值；``joint=None`` 时返回逐电机列表。
-        """
+        """读末端电机参数（key 为参数名，语义由后端定义）。"""
         self._require_connected()
         return self._backend.read_param_end(key, joint)
 
     def write_param_end(self, key: str, value, joint: Optional[int] = None,
                         persist: bool = False) -> None:
-        """写末端电机参数。
-
-        :param key: 参数名。
-        :param value: 参数值，标量（作用于所选全部电机）或与所选电机数一致的列表。
-        :param joint: 末端电机索引，``None`` 表示全部电机。
-        :param persist: ``True`` 时写入并持久化到非易失存储。
-        """
+        """写末端电机参数。"""
         self._require_connected()
-        self._backend.write_param_end(key, value, joint, persist=persist)
+        return self._backend.write_param_end(key, value, joint, persist=persist)
 
     # ----------------------------------------------------------
     # 末端执行类方法（依赖 _backend；未连接 raise）
@@ -541,6 +858,12 @@ class JoyArm:
         """切换末端控制模式（收指令前必须先切到对应模式；默认位置模式，``joint=None`` 全部）。"""
         self._require_connected()
         self._backend.set_mode_end(mode, joint)
+
+    def read_mode_end(self, joint: Optional[int] = None) -> Optional[ControlMode]:
+        """查询末端电机当前控制模式（本地缓存，离线可查；``joint=None`` 时整个末端
+        各电机模式唯一才返回该模式，否则 ``None``）。"""
+        self._require_backend()
+        return self._backend.read_mode_end(joint)
 
     def end_open(self, joint: Optional[int] = None) -> None:
         """张开末端到最大（默认行程/力度；``joint=None`` 全部末端电机）。"""
@@ -575,3 +898,25 @@ class JoyArm:
         """
         self._require_connected()
         return self._backend.read_state_end(joint)
+
+    # ----------------------------------------------------------
+    # 内部：TCP 空间限位应用（config joyarm 段）
+    # ----------------------------------------------------------
+    def _apply_tcp_limits(self, tl: dict) -> None:
+        """由 config 的 tcp_limits 段覆盖默认末端限位。
+
+        ``workspace_box`` 兼容两种写法：``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
+        （yaml 常用，min/max 两行）或每轴一行 ``[min,max]`` 的 ``(3,2)``；内部
+        统一为 :class:`TcpLimits` 约定的 ``(3,2)``。
+        """
+        box = np.asarray(tl.get("workspace_box",
+                                [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]), dtype=float)
+        if box.shape == (2, 3):          # [min 行, max 行] → 每轴 [min, max]
+            box = box.T
+        self.tcp_limits = TcpLimits(
+            workspace_box=box,
+            v_lin_max=float(tl.get("v_lin_max", 0.0)),
+            v_ang_max=float(tl.get("v_ang_max", 0.0)),
+            f_max=float(tl.get("f_max", 0.0)),
+            t_max=float(tl.get("t_max", 0.0)),
+        )

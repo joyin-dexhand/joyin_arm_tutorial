@@ -2,299 +2,218 @@
 
 > **定位**：`joyarm_code/` 代码库的维护者 / Agent 内部文档，不进教程站点。
 > **依赖链**：根 [`AGENTS.md`](../AGENTS.md)（教程站点）→ 本文件（代码库）→ [`README.md`](README.md)（用户向基础）。
-> [`README.md`](README.md)（给使用者）已覆盖：**定位、目录概览、基本架构（分层图与核心概念）、安装、快速开始、离线语义、测试运行、章节落地状态**——本文不重复，只在其上补充维护者向内容：**架构细化、命名与设计约定、模块与 API 速查、文档维护规则**。
-> ✅ 本文件正常纳入版本管理（根 `.gitignore` 的 `AGENTS.md` 忽略规则已移除，直接 `git add` 即可）。
+> [`README.md`](README.md)（给使用者）已覆盖：**定位、目录概览、基本架构（分层图与核心概念）、安装、快速开始、离线语义、测试运行**——本文不重复，只在其上补充维护者向内容：**架构约束（§0，持久化）、架构细化、命名与设计约定、模块与 API 速查、文档维护规则**。
+> ✅ 本文件正常纳入版本管理（直接 `git add` 即可）。
 >
 > **文档原则**：md 只写精简概述（结构速览 / API 速查），不复述代码已有内容；详细规则写进代码注释，查细节看源码 docstring 或 `help(符号)`。
 
+## 0. 架构约束（持久化，joyarm_core 全体贡献者必须遵循）
+
+> 以下为 joyarm_core 架构的**持久化约束**：代码演进不得违背；如需变更须先更新本节并经人工确认。
+
+1. **组合根·单类**：`joyarms/` 的 `JoyArm` 是组合根，基于 config 型号配置对其他层功能（backend、robot 资产、robotics 各求解器）做**可更换式组合**——能力全部委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**无型号子类**：型号差异全部由配置表达（config yaml + URDF 资产 + backend 后端类），型号标识为 `model` 属性（= 工厂入参 = yaml 文件名 = `basic.name`）。**新型号 = `configs/<型号>.yaml` + `robots/` 资产 + `backends/backend_*.py`**（backends `REGISTRY` 一行；型号与整机后端 1:1，如 `joyarm_dm` ↔ `backend_dm`）。
+2. **接口先行·章节实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）**仅保留 ABC 接口 + 空 `REGISTRY`**——具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 / control Ch6/8/9 / dynamics Ch8），章节实现后经对应域 `REGISTRY` 注册即接入（换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置**静默跳过**（教学过渡正常态），注册名无效/实例化失败**置空 + 警告**。
+3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 6R/7R 臂；末端功能兼容多种执行器（契约见 `backends/backend.py` 的 `*_end` 方法族，多电机末端如灵巧手通用）。
+4. **软失败**：工厂创建时 config 缺失、命名链不符（`basic.name` ≠ 型号名）或初始化异常则**返回 `None` 并输出创建失败信息**（不抛异常）；各子成员加载同构：注册名不存在/实例化失败则**置空 + 警告**（对应门面调用时报清晰 `RuntimeError`），不中断创建。
+5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `T_target`/`frame`），**特有参数 keyword-only 在后**（仅特定算法需要，如数值法的 `q0`/`tol`/`iters`，解析法可忽略）——各章实现求解器时遵守。
+6. **功能全面性 + 字典化**：常见功能（读/设配置、配置自检、连接、硬件自检、使能/失能、单关节控制、末端控制、紧急阻尼……）在 `JoyArm` 完成定义。六域策略成员**统一字典化**：config 可指定单个或列表规格（全部加载进 `dict[注册名→实例]`，首个为活动），运行期 `set_solver` 切换。
+7. **robotics 独立运行**：robotics 子模块不得 import `joyarms`（鸭子类型消费 `arm`）；各章算法实现须可脱离 JoyArm 独立运行与测试（直接实例化，构造参数自足）。
+8. **教学数据读取路径**：config 在 `JoyArm.__init__` **一次性加载**存入 `self._config`；教学数据（如 MDH 参数 `joyarm.arm_mdh_and_limits`）由教学算法经 `arm.get_config()` 从**类内已加载数据**读取，**不重新加载 yaml 文件**；MDH 校验（yaml 可不含该字段）在算法层使用时做，不在 `check_config`。
+9. **开闭原则**：常见变更（新型号、换电机、结构更新、升级算法）以最小改动完成（新型号三件套 / 换算法 = 改 config 注册名 + 注册表一行），对扩展开放、对修改关闭；新增实现不得改动 `JoyArm` 接口签名。
+
 ## 1. 架构细化
 
-> 补充 README「基本架构」：分层图与核心概念（`JoyArm` / 求解器策略族 / Backend 整机两层）见 README，本节给文件级细节。
+> 补充 README「基本架构」：分层图与核心概念见 README，本节给文件级细节。
 
 ### 1.1 目录树（文件级）
 
 ```
 joyarm_code/
-├── joyarm_core/                          # ★ 核心 SDK（ROS2-free）
+├── joyarm_core/                     # ★ 核心 SDK（ROS2-free）
 │   ├── __init__.py                  #   公开 API 扁平导出（__all__）
 │   ├── utils/                       #   基础层
 │   │   ├── types.py                 #     数据类 / 枚举
 │   │   ├── transforms.py            #     SO(3)/SE(3) 纯 numpy 数学
-│   │   └── limits.py                #     clamp_to_limits（指令路径限位守卫）
-│   ├── robotics/                    #   算法层：一域一子包（策略 ABC + 实现 + REGISTRY + 函数式入口）
-│   │   ├── fkine/                   #     FkineSolver · PinFkineSolver(✅) · MdhFkineSolver(🟡)
-│   │   ├── ikine/                   #     IkineSolver · PinIkineSolver · AnalyticIkine6R（均 🟡）
-│   │   ├── jacobian/                #     JacobianSolver · PinJacobianSolver · GeometricJacobianSolver（均 🟡）
-│   │   ├── trajectory/              #     TrajPlanner · DefaultTrajPlanner · ToppraTrajPlanner(🟡) + segments.py 纯函数族
-│   │   ├── dynamics/                #     DynamicsSolver · PinDynamicsSolver · LagrangianDynamicsSolver（均 🟡）
-│   │   └── control/                 #     Controller · PositionController + kinematic/dynamics_based/force 三部
-│   │      （监测已裁撤：指令守卫在 utils/limits.py；状态监测/日志归 ROS2 节点，Ch11）
+│   │   └── limits.py                #     clamp_to_limits + 限位构建辅助（joint_limits_from_model/soft_limits）
+│   ├── robotics/                    #   算法层：一域一子包（ABC + 空 REGISTRY + 函数式委托入口）
+│   │   ├── fkine/                   #     FkineSolver(ABC)——MDH 白盒 FK 为 Ch2 教学内容
+│   │   ├── ikine/                   #     IkineSolver(ABC)——数值/解析 IK 为 Ch3 教学内容
+│   │   ├── jacobian/                #     JacobianSolver(ABC，衍生量模板)——Ch4
+│   │   ├── trajectory/              #     TrajPlanner(ABC) + Trajectory 载体（含 npz 持久化）——Ch5
+│   │   ├── dynamics/                #     DynamicsSolver(ABC，Λ 模板)——Ch8
+│   │   └── control/                 #     Controller(ABC)——Ch6/8/9
 │   ├── backends/                    #   通信层（整机 Backend + name 选型）
 │   │   ├── backend.py               #     Backend（整机 ABC：*_arm/*_end + 参数读写方法族）
 │   │   ├── backend_dm.py            #     BackendDM（DM 整机 7 电机；内含私有协议层 DmMotor/DmCanBus）✅
 │   │   ├── u2can/                   #     厂商 DM 参考库（协议参照用，不依赖不导入）
 │   │   └── __init__.py              #     REGISTRY + get_backend(name)
 │   ├── joyarms/                     #   设备模型层（组合根 + 型号工厂）
-│   │   ├── joyarm.py                #     JoyArm：策略成员组装 + 公开门面 + load_config
-│   │   ├── joyarm_dm.py             #     JoyArmDM(JoyArm)
-│   │   └── __init__.py              #     REGISTRY + JoyArmFactory/joyarm_factory（型号名选型）
-│   ├── robots/                      #   URDF + meshes 资产（运行期加载）
-│   └── configs/joyarm_dm.yaml       #   per-model YAML（basic/joyarm/robotics/backend 等段）
+│   │   ├── joyarm.py                #     JoyArm（单类）：config 驱动构造 + 六域字典组装 + 公开门面
+│   │   │                            #       + 自检 + tcp_limits 解析 + load_config/_build_domain
+│   │   └── __init__.py              #     JoyArmFactory/joyarm_factory（软失败：失败→None+信息）
+│   ├── robots/                      #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
+│   └── configs/joyarm_dm.yaml       #   per-model YAML（basic/joyarm/robotics/backend 四段）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性，不复用 SDK）
-├── test/                            # 测试套件
-├── quickstart/                      # 快速上手（CLI/GUI/任务编排，占位）
-├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core；ws 不在此打包）
-├── README.md                        # 用户向入口（定位/架构/安装/用法）
-└── AGENTS.md                        # 本文件（维护者/Agent 项目记忆）
+├── test/                            # 测试套件（离线为主 + 真机分层测试）
+│   ├── test_backend_dm*.py          #   DM 协议离线单测 + 真机监视/调试/全覆盖（4 个）
+│   ├── test_joyarm_full.py          #   JoyArm 真机分层测试（29 项九层风险递增；回放/求解器类随各章实现补回）
+│   ├── test_joyarm_recovery.py      #   事故后复测（backend 级 4 步；每步预案卡人工审阅 + 速度守护）
+│   ├── test_joyarm_factory.py       #   工厂软失败/六域字典机制/自检/配置 API
+│   └── test_lock.py                 #   GIL 竞态教学实验
+├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
+├── README.md                        # 用户向入口
+└── AGENTS.md                        # 本文件
 ```
 
 ### 1.2 依赖规则（无环明细）
 
 - `utils` → 仅 numpy；
-- `robotics` / `backends` → 仅依赖 `utils`；求解器鸭子类型消费 `arm`（经公开门面/属性），**不 import `joyarms`**（组合根单向向下，架构约定）；
-- `joyarms` → **组合根**：门面委托策略成员（`robotics`）与整机后端（`backends`），构造时按 config `robotics:` 段查各域 `REGISTRY` 组装成员、按 `backend:` 段 `name` 经 `get_backend` 构建后端，运行期加载 `robots/`、`configs/`；
-- `joyarm_ros2_ws/src/*`（规划）→ 依赖 `joyarm_core`（pip 提供）+ `rclpy`（ROS 环境提供）；核心包保持 ROS2-free。
+- `robotics` / `backends` → 仅依赖 `utils`；求解器鸭子类型消费 `arm`（经公开门面/属性），**不 import `joyarms`**（约束7）；
+- `joyarms` → **组合根**：门面委托六域策略字典（`robotics`）与整机后端（`backends`），构造时按 config `robotics:` 段查各域 `REGISTRY` 组装成员、按 `backend:` 段 `name` 经 `get_backend` 构建后端，运行期加载 `robots/``configs/`；
+- `joyarm_ros2_ws/src/*`（规划）→ 依赖 `joyarm_core` + `rclpy`；核心包保持 ROS2-free。
 
 ### 1.3 配置（yaml 分段）
 
-`configs/<model>.yaml` 按 joyarm_core 目录结构分四段：`basic`（基本信息 + robots URDF 索引 + utils 守卫）/ `joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层）；直用时缺文件回退类常量。**命名链**：工厂入参 = 文件名 = `basic.name` 字段 = joyarms 注册名（如 `joyarm_dm`），任一不符报『XX』型号在XX中未找到；backend 与机械臂型号 1:1（`backend_dm`）：
+`configs/<model>.yaml` 四段：`basic`（基本信息 + robots URDF 索引 + utils 守卫）/ `joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层）。**命名链**：工厂入参 = 文件名 = `basic.name` 字段，任一环节不符即软失败返回 `None`（约束4）；backend 与机械臂型号 1:1（`backend_dm`）：
 
 ```yaml
-basic: {name, robot, ee_frame, utils: {joint_limits_soft_margin}}   # 基本信息段（name=命名链校验键）
-joyarm: {arm_mdh_and_limits, T_linkn_end, tcp_limits, q_zero, q_home, q_neutral}   # 设备模型段
-robotics: {fkine, ikine, jacobian, dynamics, traj, control}   # 六域选型：注册名或 {name: 注册名, **参数}；
-backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {同构字段, joints}}   # 若channel 同 arm → 共享总线，不同arm → 两条线
+basic: {name, robot, ee_frame, utils: {joint_limits_soft_margin}}
+joyarm: {arm_mdh_and_limits, T_linkn_end, tcp_limits, q_zero, q_home, q_neutral}   # MDH/T_linkn_end 为教学数据（算法层按需读取，约束8）；workspace_box 兼容 (2,3)/(3,2)
+robotics: {}   # 六域选型（注册名 / {name, **参数} / 规格列表）——教学过渡态留空，
+    # 各章实现注册后按注释示例取消注释（fkine/ikine/jacobian/dynamics/traj/control）
+backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {同构, joints}}
 ```
+
+运行期可设参数走 `arm.set_config(path, value)` 白名单（`basic.utils.joint_limits_soft_margin`），**不回写 yaml**（文件为单一事实来源，重启以 yaml 为准）。
 
 ### 1.4 ROS2 工作空间（`joyarm_ros2_ws/`，**规划——Ch10 落地时创建，当前未建**）
 
-标准 colcon 工作空间，承载所有 ROS2 功能包（第十章起）；`build/ install/ log/` 为构建产物（.gitignore 已含忽略规则）。规划目录结构：
+标准 colcon 工作空间，承载所有 ROS2 功能包（第十章起）；`build/ install/ log/` 为构建产物。规划目录：`src/joyarm_node/`（ament_python：`arm_node.py` 每机械臂一节点 + `adapters.py` 内部类型 ↔ ROS2 消息互转，四元数 wxyz↔xyzw 换序）、`config/joyarm_dm.yaml`（model/rate/offline）、`launch/arm.launch.py`（+robot_state_publisher/rviz2，namespace 即多臂）。接口约定：状态广播走话题（`joint_states`、`~/tcp_pose`）；连接/夹爪走服务（std_srvs）；轨迹执行规划为 action（自定义 `joyarm_interfaces`）。规划中的应用包：`joyarm_teleop`(Ch12)、`joyarm_vision`(Ch14)、`joyarm_agent`(Ch15)；纯算法管线规划放 `joyarm_core/apps/`（ROS2-free）。
 
-```
-joyarm_ros2_ws/
-└── src/
-    └── joyarm_node/            # Ch10：机械臂节点功能包（ament_python）
-        ├── package.xml / setup.py / setup.cfg / resource/   # setup.py 须含 tests_require=["pytest"]
-        ├── joyarm_node/
-        │   ├── arm_node.py     #   ArmNode：每机械臂实例一个节点（话题/服务，离线可跑）
-        │   └── adapters.py     #   内部类型 ↔ ROS2 标准消息互转（四元数 wxyz↔xyzw 换序）
-        ├── config/joyarm_dm.yaml   # ROS 参数（model/rate/offline；型号细节在核心库 YAML 单一来源）
-        ├── launch/arm.launch.py          # ArmNode + robot_state_publisher(+rviz2)，namespace 即多臂
-        └── test/test_adapters.py
-```
+**环境与构建**：`python3 -m pip install --user -e joyarm_code` → `source /opt/ros/humble/setup.bash` → `colcon build` → `source install/setup.bash`。
 
-**接口约定**（标准消息起步）：状态广播走话题（`joint_states` 相对名对齐 robot_state_publisher、`~/tcp_pose`）；连接/夹爪走服务（`~/connect`、`~/disconnect`、`~/set_end`，std_srvs）；单点位置指令走 `~/command` 订阅；**轨迹执行规划为 action**，待自定义接口包 `joyarm_interfaces`（ament_cmake，含 ControlMode/轨迹 action 等）随需要建立。规划中的应用包：`joyarm_teleop`(Ch12)、`joyarm_vision`(Ch14)、`joyarm_agent`(Ch15，语音/NFC/UWB/智能体)；纯算法（teleop/vision 管线）规划放 `joyarm_core/apps/`（ROS2-free），落地时再建。
-
-**环境与构建**（教程第十章环境节同此；与 ROS2 生态习惯一致）：
-
-```bash
-python3 -m pip install --user -e joyarm_code     # 一次性：joyarm_core 装入 ~/.local（勿 sudo pip）
-source /opt/ros/humble/setup.bash
-cd joyarm_code/joyarm_ros2_ws && colcon build    # 系统 colcon：构建/运行解释器全链路一致
-source install/setup.bash
-ros2 launch joyarm_node arm.launch.py
-```
-
-> ⚠️ 边界：`joyarm_node` 定位"教 ROS2 概念 + 支撑应用篇"，**不做** ros2_control hardware_interface、不追求直接兼容 MoveIt2（那是 ros2_control 路线，教程如需再议）。
-> ⚠️ 已知陷阱①：package.xml 的 XML **注释中禁止出现双连字符 `--`**（如 `--user`）——否则整份文件非法，catkin_pkg 解析失败后 colcon 会**静默回退**到普通 python task（仍"构建成功"，但缺 ament 索引 hook，`ros2 run/launch` 找不到包）。
-> ⚠️ 已知陷阱②：ament_python 包的 `setup.py` 必须声明 `tests_require=["pytest"]`（或 `extras_require={"test": [...]}`），否则 `colcon test` 回退 unittest 发现 **0 个用例**。
+> ⚠️ 边界：`joyarm_node` 不做 ros2_control hardware_interface、不追求直接兼容 MoveIt2。
+> ⚠️ 陷阱①：package.xml 的 XML 注释中禁止双连字符 `--`，否则 catkin_pkg 静默回退，`ros2 run/launch` 找不到包。
+> ⚠️ 陷阱②：ament_python 包 `setup.py` 须声明 `tests_require=["pytest"]`，否则 `colcon test` 发现 0 用例。
 
 ## 2. 命名与设计约定
 
-### 2.1 命名约定（全仓库强制，含 `chapt/` 章节脚本）
+### 2.1 命名约定（全仓库强制，含 `chapt/`）
 
 - **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
-- **设备模型**（`joyarms/`）：`JoyArm` = 完整机械臂基类（多轴本体 + 末端执行器），私有整机后端 `_backend`（config `backend.name` 选型构建，能力全部经公有门面暴露）；具体型号 `JoyArmDM(JoyArm)` 不绑后端类；`joyarms/__init__.py` 的 `joyarm_factory(model)` 按型号名创建（`REGISTRY` 选型 + 命名链校验），**外部推荐入口**。文件 `joyarms/joyarm.py`、`joyarms/joyarm_dm.py`、`joyarms/__init__.py`。
-- **Backend 整机两层**（`Backend` 前缀，`backends/`）：根 `Backend`（整机后端 ABC，本体+末端一体，方法以 `*_arm`/`*_end` 后缀区分）→ 型号层 `BackendDM`（与机械臂型号 **1:1** 派生：`backend(_joyarm)_dm` ↔ `joyarm_dm`，结构同参数异）。文件 `backend.py` / `backend_dm.py`；`REGISTRY` + `get_backend(name)` 供 config 选型。
-- **属性 / 形参**：整机后端 = `_backend`（私有，yaml `backend.name` 选型，不直接外露）；策略成员 = `_fkine_solver`/`_ikine_solver`/`_jacobian_solver`/`_dynamics_solver`/`_traj_planner`/`_controller`（私有，config 选型）；求解器形参用 `arm`（鸭子类型，经公开门面互调）。
-- **执行类方法命名**：本体方法带 `arm`、末端方法带 `end`，两者对应——本体 `enable_arm`/`disable_arm`/`set_zero_arm`/`set_mode_arm(mode=POSITION, joint=None)`/`get_arm_state`/`set_arm_command`；末端 `enable_end`/`disable_end`/`set_zero_end`/`set_mode_end(mode=POSITION, joint=None)`/`end_open(joint=None)`/`end_close(joint=None)`/`end_zero(joint=None)`/`set_end_position`/`set_end_force`/`get_end_state(joint=None)`；参数读写 `read/write_param_arm(key[, value,] joint=None,…)`/`read/write_param_end(同构)`（key 由子类映射厂商寄存器，基类不泄漏 RID）。执行类方法统一带 `joint` 形参（None=全部，逐关节/多电机末端如灵巧手通用）；`set_mode_*` 默认位置模式（电机 POS_VEL）；参数读写 `joint=None` 时读返逐电机列表、写 `value` 可标量广播或等长列表。
-- **yaml**：`configs/<model>.yaml` 单 `backend:` 段——`name` 选型键 + `arm:`/`end:` 子段（channel/protocol/baud_rate/control_rate/joints）；JoyArm 按 `name` 经 `REGISTRY` 构建整机后端。
-- **算法可换（成员即策略）**：每域 = ABC + 各具体实现 + `REGISTRY`（一节点一文件）；config `robotics:` 按注册名选型
-- 约定针对**系统组件**（joyarm/backend）；项目品牌名 `JoyArm`/`joyarm_code` 不改，核心 Python 包目录/导入名固定为 `joyarm_core`。
+- **设备模型**（`joyarms/`）：`JoyArm` = 组合根单类（无型号子类）；`joyarm_factory(model)` 外部推荐入口（失败 → `None` + 失败信息）。文件 `joyarm.py` / `__init__.py`。
+- **Backend 整机两层**（`backends/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendDM`（1:1：`backend_dm` ↔ `joyarm_dm`）。`REGISTRY` + `get_backend(name)` 供 config 选型。
+- **属性约定**：型号名 = `model`（str）；pinocchio 构型产物 = `pin_model`/`pin_data`（**勿与型号名混淆**）；整机后端 = `_backend`（私有）；**六域策略成员字典** = `_fkine_solvers`/`_ikine_solvers`/`_jacobian_solvers`/`_dynamics_solvers`/`_traj_planners`/`_controllers`（`dict[注册名→实例]`）+ `_active_name`（域→活动注册名）；config = `self._config`（`get_config()` 深拷贝读取）。求解器形参用 `arm`（鸭子类型）。
+- **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…）；执行类统一 `joint` 形参（None=全部）；`set_mode_*` 默认 POSITION；参数读写 `read/write_param_{arm,end}`（joint=None 读返列表、写标量广播或等长列表）；求解切换 `set_solver(domain, name)`（`set_controller` 为 control 域别名）、查询 `list_solvers(domain)`。
+- **算法可换（成员即策略）**：每域 = ABC + `REGISTRY`（实现一节点一文件，各章新增）。
 
 ### 2.2 设计原则与编码约定
 
 | 原则 | 落地 |
 |:--|:--|
-| **核心/ROS2 分层** | 核心 `joyarm_core/`（ROS2-free）+ colcon 工作空间 `joyarm_ros2_ws/src/`（rclpy，规划见 §1.4）；纯算法支撑层与 ws 薄封装分层同前述规划 |
-| **组合根** | `JoyArm`（本体+末端）持有一个私有整机后端 `_backend` + 六个策略成员；公开门面（`fkine`/`plan_joint_p2p`/`play_joint`…）全部委托私有成员，换 config 即换算法 |
-| **Backend 整机两层** | `Backend`（`*_arm`/`*_end` 方法族）→ 型号子类（结构同参数异）；yaml `name` 选型；arm/end 同 channel 共享总线、异 channel 独立开 |
-| **单向导入、无环** | `joyarms` import `robotics`/`backends`；后者不 import `joyarms`（鸭子类型消费 arm，架构约定） |
-| **组件由 yaml 驱动** | backend 按 `backend:` 段 `name` 经 REGISTRY 选型；求解器/规划器/控制律按 `robotics:` 段注册名选型（`_build_component` 统一组装） |
-| **离线模式** | 默认 `connected=False`（计算类可用）；`connect()` 后才可执行类操作（语义详见 README「快速开始」）；ROS2 节点同语义（`offline:=true` 时指令等效执行） |
-| **共享类型单定义** | 跨层数据类型只在 `utils/types.py` 定义一次；ROS2 消息仅在 ws 的 `adapters.py` 做互转（含四元数 wxyz↔xyzw 换序） |
-| **核心轻依赖** | 核心仅 `numpy`/`pin`/`pyyaml`；`rclpy` 仅 `joyarm_ros2_ws` |
+| **组合根·单类** | `JoyArm` 持 `_backend` + 六域成员字典；公开门面全部委托活动成员，换 config 即换算法；型号差异全在 config（约束1/6） |
+| **接口先行·章节实现** | robotics 六域仅 ABC + 空 REGISTRY；域未配置静默跳过、无效注册名置空+警告；各章实现注册后 config 选型接入（约束2） |
+| **软失败** | 工厂 config 缺失/命名链不符/初始化异常→`None`+信息；成员注册名无效→置空+警告，门面调用报 `RuntimeError`；backend 无效→置空（离线计算仍可用）（约束4） |
+| **教学数据读取** | config 一次性加载存 `self._config`；教学算法经 `arm.get_config()` 读类内数据，不重读 yaml（约束8） |
+| **单向导入、无环** | `joyarms` → `robotics`/`backends` → `utils`；robotics/backends 不 import joyarms（约束7） |
+| **离线模式** | 默认 `connected=False`（已注册域计算可用）；`connect()` 后执行类可用；`state` property 已连接现读、离线 None |
+| **共享类型单定义** | 跨层类型只在 `utils/types.py`；ROS2 消息仅在 ws 的 `adapters.py` 互转 |
+| **核心轻依赖** | 核心仅 `numpy`/`pin`/`pyyaml`；`rclpy` 仅 ws |
+| **开闭原则** | 新型号 = config yaml + robots 资产 + backend 文件（REGISTRY 一行）；换算法 = 改 config 注册名（约束9） |
 
-编码约定：`q=(n,)` 或 `(N,n)`（形状重载）、`T=(4,4)`；角度一律弧度；FK 返回 `rep` 三态（`quat`=Pose / `T`=4×4 / `se3`）、雅可比 `ref` 两态（`local`/`base`）；软/硬限位分级；`ControlMode` 三态（POSITION/VELOCITY/MIT，纯力矩经 MIT `kp=kd=0` 实现）；可视化不在核心包（rviz2 在 `joyarm_ros2_ws` 的 launch 中启动）。
+编码约定：`q=(n,)` 或 `(N,n)`、`T=(4,4)`、角度弧度；FK `rep` 三态、雅可比 `ref` 两态（local/base）；软/硬限位分级（`clamp_to_limits`）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数**通用在前、特有 keyword-only 在后**（约束5）；可视化不在核心包。
 
 ### 2.3 库边界
 
-SDK（`arm.xx`）→ `joyarm_core/`；ROS2 节点/launch → `joyarm_ros2_ws/src/`（规划）；CLI/GUI/任务编排 → `joyarm_code/quickstart/`；教学脚本 → `joyarm_code/chapt/`。
+SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）；CLI/GUI → `quickstart/`（占位）；教学脚本 → `chapt/`。
 
 ## 3. 模块与 API 速查
 
-### 3.1 模块导览
-
-`joyarm_core/`（核心 SDK）——✅ 已实现 / 🟡 占位：
+### 3.1 模块导览（✅ 已实现 / 🟡 教学章节待实现）
 
 | 文件 | 类 / 关键定义 | 章节 | 状态 |
 |:---|:---|:---:|:---:|
-| `utils/types.py` | 枚举 `ControlMode`/`Severity`/`SafetyAction`/`TrajectorySpace`；数据类 `Pose`/`JointState`/`TcpState`/`ArmState`/`JointLimits`/`TcpLimits`/`Wrench`/`Twist`/`Violation`/`IKResult`/`ComplianceParams` | Ch2 | ✅ |
-| `utils/transforms.py` | 23 个纯 numpy 函数：`rot_x/y/z`、`rpy_to_R`/`R_to_rpy`、`rodrigues`/`axis_angle_to_R`/`R_to_axis_angle`、`quat_*`、`Rp_to_T`/`T_to_Rp`/`T_inv`/`T_mul`/`adT`、`slerp` | Ch2 | ✅ |
-| `utils/limits.py` | `clamp_to_limits`（指令路径限位守卫） | Ch11 | ✅ |
-| `backends/backend.py` | `Backend(ABC)` 整机契约：`connect`/`disconnect` + `connected` 属性 / `read_mode_*` 查询 + `*_arm`/`*_end` 方法族（enable/set_zero/set_mode/read_state/send_…/read·write_param_…） | Ch2 | ✅ |
-| `backends/backend_dm.py` | `BackendDM(Backend)`（DM 7 电机：joint1~3=4340P、4~6=4310、夹爪=4310；协议参照 u2can 重写，私有 `DmMotor`/`DmCanBus` 协议层） | Ch6/13 | ✅ |
-| `robotics/fkine/` | `FkineSolver`(ABC) · `PinFkineSolver`（模板方法：rep/批量在 ABC，内核 `frame_T`）✅ · `MdhFkineSolver` 🟡 | Ch2 | ✅/🟡 |
-| `robotics/ikine/` | `IkineSolver` · `PinIkineSolver` · `AnalyticIkine6R`（均 🟡） | Ch3 | 🟡 |
-| `robotics/jacobian/` | `JacobianSolver`（衍生量模板）· `PinJacobianSolver` · `GeometricJacobianSolver`（均 🟡） | Ch4 | 🟡 |
-| `robotics/trajectory/` | `TrajPlanner` · `DefaultTrajPlanner`（segments 纯函数族分派）🟡 · `ToppraTrajPlanner` 🟡 | Ch5 | 🟡 |
-| `robotics/dynamics/` | `DynamicsSolver`（Λ 模板）· `PinDynamicsSolver` · `LagrangianDynamicsSolver`（均 🟡） | Ch8 | 🟡 |
-| `robotics/control/` | `Controller` · `PositionController`（均 🟡）+ `kinematic`/`dynamics_based`/`force` 三部函数（🟡） | Ch6/8/9 | 🟡 |
-| `joyarms/joyarm.py` | `JoyArm`（本体+末端基类） | Ch2 | ✅ |
-| `joyarms/joyarm_dm.py` | `JoyArmDM(JoyArm)` | Ch2 | ✅ |
-| `joyarms/__init__.py` | `JoyArmFactory`/`joyarm_factory` + `REGISTRY`（型号名→型号类，命名链校验） | Ch2 | ✅ |
-| `configs/joyarm_dm.yaml` | 型号 YAML（basic/joyarm/robotics/backend 等段） | Ch2/7 | ✅ |
+| `utils/types.py` | 枚举 + 数据类（Pose/JointState/ArmState/JointLimits/TcpLimits/IKResult/Violation…） | Ch2 | ✅ |
+| `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
+| `utils/limits.py` | `clamp_to_limits` + `joint_limits_from_model`/`soft_limits` | Ch11 | ✅ |
+| `backends/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写） | Ch2 | ✅ |
+| `backends/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus） | Ch6/13 | ✅ |
+| `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）；MDH 白盒 FK 待 Ch2 实现 | Ch2 | 🟡 |
+| `robotics/ikine/` | `IkineSolver(ABC)`（`q0/tol/iters` keyword-only 契约）；数值/解析实现待 Ch3 | Ch3 | 🟡 |
+| `robotics/jacobian/` | `JacobianSolver(ABC)`（`manipulability`/`cond_number`/`statics` 衍生量模板在 ABC） | Ch4 | 🟡 |
+| `robotics/trajectory/` | `TrajPlanner(ABC)` + `Trajectory` 载体（npz 持久化）；规划算法待 Ch5 | Ch5 | 🟡 |
+| `robotics/dynamics/` | `DynamicsSolver(ABC)`（Λ=J⁻ᵀMJ⁻¹ 模板在 ABC）；实现待 Ch8 | Ch8 | 🟡 |
+| `robotics/control/` | `Controller(ABC)`（`compute(arm, target, state)` 契约）；控制律与执行循环待 Ch6/8/9 | Ch6/8/9 | 🟡 |
+| `joyarms/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检）+ `load_config` + `_build_domain` | — | ✅ |
+| `joyarms/__init__.py` | `JoyArmFactory`（软失败；`list_models` 扫描 configs） | — | ✅ |
+| `configs/joyarm_dm.yaml` | 型号 YAML 四段（robotics 段留档注释，各章实现后启用） | — | ✅ |
 
-`joyarm_core/apps/`（规划，见 §1.4/§2.3）。
-
-`chapt/` 与 `test/`：
-
-- `chapt/`：`chapt2_T_demo.py`、`chapt2_pose_demo.py`（PySide6 + matplotlib GUI，独立运行、不复用 SDK）；`chapt10_ros2_demo.py`（joyarm_node 最小 rclpy 客户端）随 §1.4 落地时创建。
-- `test/`：`test_backend_dm.py`（DM 协议离线单测：编解码纯函数往返、RX 帧分发、指令原语字节、BackendDM 离线约束、错误码语义回归——0=失能正常/1=使能正常/8~E=故障；`python test/test_backend_dm.py` 直跑）；`test_backend_dm_monitor.py`（真机失能监视：不使能电机，每 0.5 s 原地刷新全部关节/夹爪 q/dq/tau、使能/故障/通讯与驱动板/转子温度——状态帧 D6~7，旧固件恒 0 显"—"；电压/电流 DM 协议不提供故不显示，可手动搬动观察反馈；`python test/test_backend_dm_monitor.py [N]`，N 为周期数、缺省无限）；`test_backend_dm_debug.py`（真机分步调试：交互菜单按危险度递增逐电机逐功能测试——连接→读状态→读参数→写参数→设零位→安全使能（MIT 零阻抗 kp=kd=tau=0，防使能瞬间跳动的）→失能→模式切换→发指令（位置指令默认目标=当前 q；末端预设 open=-1/close=3/zero=0 rad，7 号电机）；`python test/test_backend_dm_debug.py`）。
-
-### 3.2 继承链与职责
+### 3.2 组装与数据流
 
 ```
-JoyArmDM ──▶ JoyArm（组合根：_backend + 6 个策略成员）
-        │  按 config backend.name 选型后端、robotics: 组装成员；arm.fkine()/plan_joint_p2p()/play_joint()/end_open()
-        │
-FkineSolver ─▶ PinFkineSolver ✅ / MdhFkineSolver 🟡        （各域同构：ABC → 黑盒/白盒）
-IkineSolver ─▶ PinIkineSolver / AnalyticIkine6R 🟡 · JacobianSolver ─▶ … · TrajPlanner ─▶ … ·
-DynamicsSolver ─▶ … · Controller ─▶ PositionController 🟡
-Backend(ABC，整机：*_arm/*_end 方法族) ──▶ BackendDM（达妙 DM 整机 7 电机 ✅）
+JoyArm（单类组合根：_backend + 六域成员字典 + config/_config）
+   │  config 驱动：basic.robot→URDF（pin_model/pin_data）；backend.name→后端；
+   │  robotics:→各域 REGISTRY 字典化组装（首个活动；域未配置=空，教学过渡态）
+   │  教学数据（MDH 等）：算法层经 arm.get_config() 读类内 config（不重读 yaml）
+Backend(ABC) ──▶ BackendDM ✅
+六域 ABC + 空 REGISTRY ──▶ 各章实现注册接入（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
+   traj Ch5 / control Ch6/8/9 / dynamics Ch8）
 ```
-
-- **`JoyArm`**：组合根。持有 pinocchio `model`/`data` + 软硬限位 + 特征位形（q_zero/q_home/q_neutral，config 驱动）+ 私有整机后端 `_backend` + 六个策略成员（`_fkine_solver` 等，config 选型）；公开门面（`fkine`/`ikine`/`jac`/动力学族/`plan_*`/`play_*`）全部委托成员；执行类方法（上电准备 `enable_*` 族 + `get_arm_state`/`set_arm_command` + 末端 `end_*` 族）；`connect()` 连接整机后端（本体 + 末端）。
-- **`JoyArmDM(JoyArm)`**：具体型号预设。无参即用（自动解析随包 URDF + `configs/joyarm_dm.yaml`）；推荐经 `joyarm_factory("joyarm_dm")` 创建（config 注入 + 命名链校验）。
-- **robotics 各域**：策略 ABC + 实现们 + `REGISTRY`；求解器鸭子类型消费 `arm`（互调走公开门面，如 ikine 迭代经 `arm.fkine`），不 import `joyarms`；函数式入口（`fkine(arm, q)` 等）保留作教学 API。
 
 ### 3.3 API 速查
 
-> **精简签名**：`name(关键参数) → 返回 — 一句话`。完整参数 / 返回 / 异常说明见**源码 docstring** 或 `help(符号)`。
+> **精简签名**：`name(关键参数) → 返回 — 一句话`。完整说明见源码 docstring 或 `help(符号)`。
 
-#### 设备模型 API
+#### 设备模型 API（`joyarm_factory("joyarm_dm")` 创建；失败 → `None`+信息）
 
 ```python
-JoyArm(name, urdf_path, ee_frame_name="ee", mesh_dirs=None, load_geometry=False, config=None)
-    # 完整臂基类：建 pin model + 软硬限位 + 特征位形 + _backend（私有，config backend.name 选型）✅
-# 本体方法
-JoyArm.connect() / disconnect()                          # 连接 / 断开（本体 + 末端）✅
-JoyArm.enable_arm(joint) / disable_arm · set_zero_arm · set_mode_arm(mode=POSITION, joint=None)   # 上电准备门面（需 connect）✅
-JoyArm.rand_q(size=None, rng=None) → ndarray             # 软限位内采样 (n,) 或 (N,n) ✅
-JoyArm.clamp_q(q) → ndarray                              # 裁剪到软限位 ✅
-JoyArm.is_q_valid(q) → bool                              # 是否在软限位内 ✅
-JoyArm.fkine(q, frame=None, rep="T")                     # 正运动学门面 → _fkine_solver（rep: quat/T/se3）✅
-JoyArm.ikine(T_target, q0=None, ...) / JoyArm.ikine_constrained(...)    # IK 门面 🟡
-JoyArm.jac(q, ref="local") · manipulability / cond_number / statics    # 雅可比及衍生量门面（ref: local/base）🟡
-JoyArm.idyn / mass_matrix / coriolis / gravity / cartesian_inertia   # 动力学门面（无正动力学）🟡
-JoyArm.plan_joint_p2p(q0, qf, method) · plan_joint_waypoints(qs, Ts)   # 关节轨迹门面（p2p/多点，C2）🟡
-JoyArm.plan_cart_p2p(method="line") · plan_cart_waypoints(poses, Ts)   # 笛卡尔轨迹门面（line/arc，C2）🟡
-JoyArm.play_joint(traj, mode, hz) · play_cart(traj, hz)（OSC）· set_controller(name)   # 回放 / 控制律切换 🟡
-JoyArm.get_arm_state() → ArmState                        # 读本体状态（需 connect；tcp.pose 本层 fkine 填充）✅
-JoyArm.set_arm_command(mode=ControlMode.POSITION, q=None, dq=None, tau=None, kp=None, kd=None)  # 下发指令（需 connect）✅
-JoyArm.read_param_arm(key, joint=None) / write_param_arm(key, value, joint=None, persist=False) · read/write_param_end 同构   # 电机参数读写门面（需 connect；joint=None 读返列表、写 value 标量广播/列表）✅
-# 末端方法（需 connect）
-JoyArm.enable_end(joint) / disable_end · set_zero_end · set_mode_end(mode=POSITION, joint=None)   # 上电准备门面 ✅
-JoyArm.end_open(joint=None) / end_close(joint=None) / end_zero(joint=None)   # 夹爪开/合/归零（作用于所选末端电机）✅
-JoyArm.set_end_position(position, joint=None) / set_end_force(force, joint=None) / get_end_state(joint=None)   # 末端位置/力/状态 ✅
-# 关键属性：model / data / n / nv / ee_frame_name / ee_frame_id / joint_limits(_soft) / qlow / qhigh / q_zero / q_home / q_neutral / tcp_limits / T_base / _backend / connected
-
-JoyArmDM(name="JoyArmDM", urdf_path=None, ee_frame_name=None, mesh_dirs=None, load_geometry=False, config=None)
-    # 无参即用 ✅（config 由工厂注入或自动加载）；属性 mdh_table / mdh_limits / T_linkn_end
-
-joyarm_factory(model, **kwargs) → JoyArm · .create(model, **kwargs) · .list_models() → list
-    # 型号名唯一参数创建（如 "joyarm_dm"；命名链：入参=configs 文件名=yaml name=joyarms 注册名）✅
+# 配置
+JoyArm.get_config() → dict                                    # 深拷贝快照（教学数据读取口）✅
+JoyArm.set_config(path, value)                                # 运行期白名单（soft_margin）✅
+JoyArm.check_config() → list[Violation]                       # 配置自检（四段/命名链/urdf/位形/已配置域成员/关节数）✅
+JoyArm.check_hardware() → list[Violation]                     # 硬件自检（需 connect：通讯/使能/故障/温度/越限）✅
+# 成员字典
+JoyArm.set_solver(domain, name) / set_controller(name) · list_solvers(domain)   # 运行期切换/查询 ✅
+# 计算门面（已注册域可用；参数排序：通用前/特有 keyword-only 后，约束5）
+JoyArm.fkine(q, frame=None, rep="T") · ikine(T_target, frame=None, *, q0=None, **kw) → IKResult · ikine_constrained(...)
+JoyArm.jac(q, frame=None, ref="local") · manipulability / cond_number / statics
+JoyArm.idyn / mass_matrix / coriolis / gravity / cartesian_inertia
+# 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
+JoyArm.connect() / disconnect() · enable/disable_{arm,end} · set_zero_{arm,end} · set_mode_{arm,end}(mode=POSITION, joint=None) · read_mode_{arm,end}
+JoyArm.get_arm_state() → ArmState（fkine 已注册时填 tcp.pose）· set_arm_command(mode, q/dq/tau/kp/kd, joint=None) · read/write_param_{arm,end}
+JoyArm.end_open/end_close/end_zero(joint=None) · set_end_position / set_end_force / get_end_state
+JoyArm.damping_mode(kd=10.0)                    # 紧急阻尼：任何状态全电机（含末端）MIT 纯阻尼 ✅
+JoyArm.state → ArmState|None · rand_q / clamp_q / is_q_valid
+# 关键属性：model / pin_model / pin_data / n / nv / ee_frame_* / joint_limits(_soft) / qlow / qhigh / q_zero / q_home / q_neutral / tcp_limits / T_base / _backend / connected
+#   六域字典：_fkine_solvers/_ikine_solvers/_jacobian_solvers/_dynamics_solvers/_traj_planners/_controllers + _active_name
 ```
 
-#### Backend 整机 API
+#### Robotics 独立 API（各域 ABC + 委托入口；实现为教学章节内容）
 
 ```python
-Backend(ABC) 整机后端 ✅：connect() / disconnect() + connected 属性 + read_mode_arm/end(joint=None) 模式查询（本地缓存，一致才非 None）+ *_arm/*_end 方法族（统一 joint=None=全部）+ 参数读写
-    _arm 族：enable_arm/disable_arm · set_zero_arm · set_mode_arm(mode=POSITION, joint=None) · read_state_arm(joint=None) → ArmState（指定 joint 时数组长度 1）
-            · send_position_arm(q) / send_velocity_arm(dq) / send_mit_arm(q, dq, tau, kp=None, kd=None)
-    _end 族（joint=None 全部，多电机末端通用）：enable_end/disable_end · set_zero_end · set_mode_end(mode=POSITION, joint=None) · read_state_end(joint=None) → dict（值为所选电机逐电机序列）
-            · send_position_end(pos) / send_force_end(force) / send_action_end(action, joint=None)
-    参数族：read/write_param_arm(key[, value,] joint=None, persist=False) · read/write_param_end 同构（joint=None 读返列表、写 value 标量广播/等长列表）
-BackendDM(Backend) ✅  # DM 7 电机（4340P×3+4310×4）；协议参照 u2can/ 重写；pyserial 延迟导入；一发一收
-get_backend(name) → type · REGISTRY     # config backend.name 选型入口 ✅
+FkineSolver / IkineSolver / JacobianSolver / DynamicsSolver / TrajPlanner / Controller   # ABC 契约 🟡
+fkine(arm, q) · ikine(arm, T) · jac/manipulability/cond_number/statics(arm, ...) · idyn/M/C/G/Λ(arm, ...)   # 委托 arm 门面 ✅
+Trajectory(space, t, q, poses, ...)   # 轨迹载体：sample/duration/save/load(npz) ✅
 ```
 
-#### Robotics 算法 API（函数式入口形参 `arm`，委托门面；策略族经 config `robotics:` 选型）
+#### Backend / 限位 / 数学 / 类型 API
 
 ```python
-fkine(arm, q, frame=None, rep="T")                     # 正运动学（rep: quat/T/se3，形状重载）✅
-# 策略族（JoyArm 成员的实现类，均可程序化注入）：
-#   FkineSolver→PinFkineSolver ✅/MdhFkineSolver 🟡 · IkineSolver→PinIkineSolver/AnalyticIkine6R 🟡
-#   JacobianSolver→… · DynamicsSolver→… · TrajPlanner→DefaultTrajPlanner/ToppraTrajPlanner 🟡 · Controller→PositionController 🟡
-ikine(arm, T_target, q0=None, ...) → IKResult · ikine_constrained(...)    # 逆运动学 🟡
-jac(arm, q, frame=None, ref="local") · manipulability / cond_number / statics   # 雅可比 / 性能指标（ref: local/base）🟡
-# 轨迹 🟡：Trajectory · joint_cubic/quintic/lspb/waypoints · cart_line/arc/waypoints · cart_to_joint · constant_velocity_retime · validate
-# 动力学 🟡：idyn / mass_matrix / coriolis / gravity / cartesian_inertia
-# 控制 🟡：ControlLoop · play_joint / play_cart · joint_position/velocity_control · arm_position/velocity_control
-#        · torque_control · computed_torque_control · inverse_dynamics_control · pure_force_control
-#        · HybridForcePosition · ImpedanceControl / AdmittanceControl · ForceTorqueSensor / JointTorqueSensor
-```
-
-#### 限位守卫 API（`utils/limits.py`；状态监测/日志归 ROS2 节点）
-
-```python
-clamp_to_limits(targets, limits: JointLimits) → ndarray   # 指令路径逐元素裁剪 ✅
-# JoyArm.clamp_q(q) 即软限位裁剪门面；控制律下发前统一消费
-```
-
-#### Utils 数学 API（`transforms.py`，纯 numpy，全部 ✅）
-
-```python
-rot_x / rot_y / rot_z(angle) → (3,3)                  # 基本旋转
-rpy_to_R(rpy) ↔ R_to_rpy(R)                           # RPY（R = Rz·Ry·Rx）
-rodrigues(k, θ) / axis_angle_to_R ↔ R_to_axis_angle   # 轴角 ↔ R
-quat_to_R ↔ R_to_quat · rpy_to_quat / quat_to_rpy · axis_angle_to_quat / quat_to_axis_angle   # 四元数 (w,x,y,z)
-quat_mul / quat_conj / quat_norm                       # 四元数运算
-Rp_to_T ↔ T_to_Rp · T_inv · T_mul · adT(T) → (6,6)     # 齐次变换 (4,4)
-slerp(R0, R1, s) → (3,3)                               # 球面插值
-```
-
-#### 类型 API（`types.py`，全部 ✅）
-
-```python
-# 枚举：ControlMode（POSITION/VELOCITY/MIT）· Severity · SafetyAction · TrajectorySpace
-# 数据类（@dataclass，ndarray 安全相等）：Pose（from_T(T) / .T 属性）· JointState / TcpState / ArmState（状态快照）
-#   · JointLimits / TcpLimits（限位声明，硬/软两实例）· Wrench · Twist · Violation · IKResult · ComplianceParams
-# 算法层消费约定（鸭子类型，无协议类）：求解器只访问 arm 公开属性与门面（清单见 §1.2），
-#   「不 import joyarms」为架构约定
+Backend(ABC) 整机契约 ✅：connect/disconnect + connected + read_mode_* + *_arm/*_end 方法族（joint=None=全部）+ 参数读写；末端含 send_mit_end（MIT 阻尼通道，damping_mode 消费）
+get_backend(name) · REGISTRY     # config backend.name 选型 ✅
+clamp_to_limits(targets, limits) · joint_limits_from_model(model) · soft_limits(hard, margin)   # ✅
+transforms.py 23 函数（rpy/rodrigues/quat/T/adT/slerp，纯 numpy）✅ · types.py 枚举+数据类 ✅
 ```
 
 ## 4. 文档同步维护
 
-本文件与 [`README.md`](README.md) 是子库两大入口文档，**受众不同、须随代码同步维护**：README 给**使用者**（定位 / 架构 / 用法），本文件给 **agent / 开发者**（约定 / 速查 / 规则）；新内容按受众分流，不互相重复。
+本文件与 [`README.md`](README.md) 是子库两大入口文档，**受众不同、须随代码同步维护**：README 给**使用者**，本文件给 **agent / 开发者**；新内容按受众分流，不互相重复。
 
-### 文档定位：精简概述、代码即详则
-
-- 两份 md 只写**精简概述**（结构 / 用法 / API 速查），**不复述**代码已有内容；查细节看源码 docstring 或 `help(符号)`。
-- **详细规则写进代码注释**：各包 `__init__.py` 写模块职责一句话；类与函数写精简 docstring（`:param:`/`:return:`/`:raises:`/ 章节标记）。
-
-### 同步维护强制原则（每次变更必查）
-
-> ⚠️ **每次 `joyarm_code/` 发生任何变化后（新增 / 修改 / 删除 `.py`、`.yaml`、目录结构、ws 功能包、章节脚本），必须同步更新本文件**，使其与代码保持一致；README 按受众需要同步：
->
-> - 公开 API（`joyarm_core/__init__.py` 的 `__all__` 导出）变化 → 更新本文件「3.3 API 速查」与「3.1 模块导览」；
-> - 目录 / 文件结构变化 → 更新本文件「1.1 目录树」（ws 部分含「1.4」）与 README「目录结构」；
-> - 安装 / 用法 / 示例 / 章节落地状态变化 → 更新 README 对应小节；
-> - 架构 / 约定变化 → 更新本文件 §1-2 与 README「基本架构」中的相应概念。
->
-> 提交前自检：新增的公开符号已收录、且已补精简 docstring；删除的符号已从文档移除；文件清单与目录树一致。
+- 两份 md 只写**精简概述**；详细规则写进代码 docstring（各包 `__init__.py` 一句话职责 + `:param:`/`:return:`/`:raises:`/章节标记）。
+- **每次 `joyarm_code/` 任何变化后必须同步更新本文件**：公开 API 变 → §3；目录变 → §1.1；安装/用法/章节状态变 → README；架构/约定变 → §0-2。**架构约束（§0）变更须人工确认后先改本节再动代码。**
+- 提交前自检：新增公开符号已收录、已补 docstring；删除符号已移除；目录树一致；`wc -l` ≤ 500。
 
 ### 行数上限：≤ 300 行
 
-> 本文件硬性上限 **300 行**（`wc -l` 实测）。超出时**先精简再提交**：优先压缩 §3 速查——只留索引级签名，细节让位于源码 docstring；其次合并 §1-2 中的重复表述。禁止以"另开新节 / 另存新文件"绕过上限；新增内容与精简**同步进行**，只增不减必然超限。
+> 本文件硬性上限 **300 行**。超出时先精简再提交：优先压缩 §3 速查（只留索引级签名）；其次合并 §1-2 重复表述。禁止以"另存新文件"绕过上限；新增内容与精简同步进行。

@@ -1,59 +1,78 @@
 """``joyarm_core.joyarms`` —— 设备模型层（组合根）+ 型号工厂。
 
-JoyArm：策略成员组装 + 公开门面（:mod:`joyarm_core.joyarms.joyarm`）；
-JoyArmDM：具体型号预设（:mod:`joyarm_core.joyarms.joyarm_dm`）；
-JoyArmFactory/joyarm_factory：按型号名创建（命名链校验 + REGISTRY 选型，
-与 backends 层的 ``REGISTRY`` + ``get_backend`` 同构）——外部推荐入口::
+JoyArm：单类组合根（策略成员组装 + 公开门面，:mod:`joyarm_core.joyarms.joyarm`）；
+JoyArmFactory/joyarm_factory：按型号名创建（命名链校验）——外部推荐入口::
 
     from joyarm_core import joyarm_factory
-    arm = joyarm_factory("joyarm_dm")   # configs/joyarm_dm.yaml → JoyArmDM
+    arm = joyarm_factory("joyarm_dm")   # configs/joyarm_dm.yaml → JoyArm
 
-命名链（任一环节不符即报『XX』型号在XX中未找到）：
-工厂入参 ↔ configs/<型号>.yaml 文件名 ↔ yaml ``basic.name`` 字段 ↔ ``REGISTRY``
-注册名 ↔ ``joyarms/<型号>.py``；backend/robot/robotics 由 yaml 各段字段继续
-驱动各层 REGISTRY（型号与整机后端 1:1，如 joyarm_dm ↔ backend_dm）。
+命名链：工厂入参 ↔ configs/<型号>.yaml 文件名 ↔ yaml ``basic.name`` 字段；
+urdf（``basic.robot``）、backend（``backend.name``）、求解器（``robotics:`` 段）
+由 yaml 各字段继续驱动各层 REGISTRY。**新型号 = configs/<型号>.yaml + robots/
+资产 + backends/backend_*.py**（型号与整机后端 1:1，如 joyarm_dm ↔ backend_dm）。
+
+**软失败语义（架构约束）**：创建时任一环节（config 文件 / 命名链 / 初始化异常）
+缺失或失败，**返回 ``None`` 并输出创建失败信息**（不抛异常）；各子功能成员的
+加载同构：不存在则置空 + 警告（见
+:func:`joyarm_core.joyarms.joyarm._build_domain`）。
 """
+from __future__ import annotations
+
+import logging
+
 from .joyarm import JoyArm, load_config
-from .joyarm_dm import JoyArmDM
 
-__all__ = ["JoyArm", "JoyArmDM", "JoyArmFactory", "joyarm_factory", "load_config", "REGISTRY"]
+__all__ = ["JoyArm", "JoyArmFactory", "joyarm_factory", "load_config"]
 
-# 型号注册表（新增型号：joyarms/<型号>.py + configs/<型号>.yaml + 此处一行）
-REGISTRY = {
-    "joyarm_dm": JoyArmDM,
-}
+logger = logging.getLogger("joyarm_core.joyarms")
 
 
 class JoyArmFactory:
-    """按型号名创建机械臂：加载 ``configs/<型号>.yaml`` → 校验命名链 → REGISTRY 实例化。
+    """按型号名创建机械臂：加载 ``configs/<型号>.yaml`` → 校验命名链 → 实例化 JoyArm。
 
     每次调用返回新实例（机械臂对象有状态、可连真机，不做缓存）；
-    ``create(model, **kwargs)`` 的额外参数透传型号类（如 ``load_geometry``）。
+    ``create(model, **kwargs)`` 的额外参数透传 :class:`JoyArm`（如 ``load_geometry``）。
+    创建失败（config 缺失 / 命名链不符 / 初始化异常）返回 ``None`` 并输出失败信息。
     """
 
-    def create(self, model: str, **kwargs) -> JoyArm:
+    def create(self, model: str, **kwargs) -> JoyArm | None:
         """创建指定型号的 JoyArm 实例（离线，未连接真机）。
 
         :param model: 型号名（如 ``"joyarm_dm"``）——须与 configs 文件名、
-            yaml ``basic.name`` 字段、joyarms 注册名一致。
-        :raises ValueError: 命名链任一环节未找到该型号时抛出（列出可用项）。
+            yaml ``basic.name`` 字段一致。
+        :return: 实例；**任一环节未找到 / 初始化失败时返回 ``None``**（失败信息
+            经日志输出，可用型号见信息中列表）。
         """
-        cfg = load_config(model, strict=True)
+        # 1) 型号 config
+        cfg = load_config(model, strict=False)
+        if cfg is None:
+            logger.error("创建失败：configs/%s.yaml 未找到或解析失败", model)
+            return None
+        # 2) 命名链
         cname = (cfg.get("basic") or {}).get("name")
         if cname != model:
-            raise ValueError(
-                f"『{model}』型号在 configs/{model}.yaml 的 basic.name 字段中未找到"
-                f"（实际为 {cname!r}）"
-            )
-        if model not in REGISTRY:
-            raise ValueError(f"『{model}』型号在 joyarms 中未找到；可用：{sorted(REGISTRY)}")
-        return REGISTRY[model](name=model, config=cfg, **kwargs)
+            logger.error("创建失败：configs/%s.yaml 的 basic.name 字段为 %r（应为 %r）",
+                         model, cname, model)
+            return None
+        # 3) 创建 + 初始化（异常软化：输出信息并返回 None）
+        try:
+            return JoyArm(model=model, config=cfg, **kwargs)
+        except Exception as e:
+            logger.exception("创建失败：『%s』初始化异常：%s", model, e)
+            return None
 
     __call__ = create
 
     def list_models(self) -> list:
-        """列出已注册型号名。"""
-        return sorted(REGISTRY)
+        """列出可用型号名（扫描 ``configs/*.yaml``）。"""
+        from .joyarm import _CONFIGS_DIR
+
+        try:
+            import os
+
+            return sorted(f[:-5] for f in os.listdir(_CONFIGS_DIR) if f.endswith(".yaml"))
+        except OSError:
+            return []
 
 
 joyarm_factory = JoyArmFactory()
