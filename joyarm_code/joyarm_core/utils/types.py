@@ -26,7 +26,7 @@ __all__ = [
     "JointState",       # 关节状态：control_mode + q/dq/ddq/tau + enabled/error/comm_ok/angle_ok + 温度
     "TcpState",         # 工具中心点状态：pose + twist + wrench
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
-    "JointLimits",      # 关节限位: q_min/q_max + dq_max + ddq_max + tau_max
+    "JointLimits",      # 关节限位: q_min/q_max + dq_max + tau_max
     "TcpLimits",        # 工具中心点限位: workspace_box + v_lin_max + v_ang_max + f_max + t_max
     "Violation",        # 安全违规: layer + joint_idx + metric + value + limit + severity
     "IKResult",         # 逆运动学结果： q + success + err + n_iter
@@ -240,24 +240,17 @@ class JointLimits(_ArrayEqMixin):
     所有数组维度均为 ``(n,)``，``n`` 为机械臂自由度数。
 
     - **硬限位**实例（``JoyArm.joint_limits``）：URDF/电机物理极限；
-      ``q_min/q_max`` 为位置硬限位，供 :func:`joyarm_core.utils.limits.clamp_to_limits`
-      指令裁剪守卫（硬限位违规 → :attr:`Severity.ERROR` / :attr:`Severity.CRITICAL`）。
-    - **软限位**实例（``JoyArm.joint_limits_soft``）：略窄于硬限位、留余量；
-      其 ``q_min/q_max`` 即 ``JoyArm.qlow/qhigh``，供
-      :meth:`JoyArm.rand_q` / :meth:`JoyArm.clamp_q` / :meth:`JoyArm.is_q_valid`
-      运行时裁剪（软限位违规 → :attr:`SafetyAction.CLAMP`）。
+    - **软限位**实例（``JoyArm.joint_limits_soft``）：略窄于硬限位、留余量。
 
     :ivar q_min: ``(n,)`` 关节角下限，弧度。
     :ivar q_max: ``(n,)`` 关节角上限，弧度。
     :ivar dq_max: ``(n,)`` 关节速度上限，弧度/秒。
-    :ivar ddq_max: ``(n,)`` 关节加速度上限，弧度/秒²。
     :ivar tau_max: ``(n,)`` 关节力矩上限，N·m。
     """
 
     q_min: np.ndarray = field(default_factory=lambda: np.zeros(0))
     q_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
     dq_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    ddq_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
     tau_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
 

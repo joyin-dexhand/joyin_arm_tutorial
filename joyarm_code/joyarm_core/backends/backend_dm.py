@@ -842,6 +842,36 @@ class BackendDM(Backend):
                 tau = _clamp(tau, -m.tau_max, m.tau_max)
             m.bus.send_mit(m, m.q_max, 0.0, tau, m.mit_kp, m.mit_kd)
 
+    def send_mit_end(
+        self,
+        q: np.ndarray,
+        dq: np.ndarray,
+        tau_ff: np.ndarray,
+        kp: Optional[np.ndarray] = None,
+        kd: Optional[np.ndarray] = None,
+        joint: Optional[int] = None,
+    ) -> None:
+        """末端 MIT 指令（紧急阻尼通道）：``q/dq/tau_ff`` 与所选电机数一致，
+        ``kp/kd`` 缺省回退 config 末端 ``MIT`` 增益。"""
+        motors = self._end_motors_for(joint)
+        self._require_mode_end(ControlMode.MIT, motors)
+
+        def _vec(v, name, default_per_motor=None):
+            if v is None:
+                return np.array(default_per_motor, dtype=float)
+            a = np.asarray(v, dtype=float).reshape(-1)
+            if a.size != len(motors):
+                raise ValueError(f"{name} 维度 {a.size} ≠ 末端电机数 {len(motors)}")
+            return a
+
+        q_v = _vec(q, "q")
+        dq_v = _vec(dq, "dq")
+        tau_v = _vec(tau_ff, "tau_ff")
+        kp_v = _vec(kp, "kp", [m.mit_kp for m in motors])
+        kd_v = _vec(kd, "kd", [m.mit_kd for m in motors])
+        for m, qi, dqi, ti, kpi, kdi in zip(motors, q_v, dq_v, tau_v, kp_v, kd_v):
+            m.bus.send_mit(m, qi, dqi, ti, kpi, kdi)
+
     def send_action_end(self, action: str, joint: Optional[int] = None) -> None:
         """末端离散动作：``open``→``q_min``、``close``→``q_max``、``zero``→电机弧度 0。"""
         motors = self._end_motors_for(joint)

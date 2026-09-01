@@ -2,7 +2,7 @@
 # 基本信息（basic）：型号标识 / robots URDF 索引 / utils 限位守卫
 # ===================================================================
 basic:
-  name: joyarm_dm # 型号名（命名链校验）
+  name: joyarm_dm # 型号名（命名校验）
   robot: joyarm_dm_fixend # robots下的urdf+mesh
   ee_frame: end_link # 末端坐标系名（pin 模型帧）
   utils: # utils/limits.py 指令守卫参数
@@ -42,19 +42,21 @@ joyarm:
   q_neutral: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 数值求解默认初值（如 IK 迭代起点）
 
 # ===================================================================
-# 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按各域 REGISTRY 注册名选型；省略即 default）
+# 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按各域 REGISTRY 注册名选型）
+# 六域统一字典化：值为单个规格或规格列表（全部加载到成员字典，首个为活动成员）；
+# 规格 = 注册名字符串 或 {name: 注册名, **构造参数}；运行期 arm.set_solver(域, 名) 切换。
 # ===================================================================
-robotics:
-  fkine: default    # {pin, mdh}
-  ikine: default    # {pin, analytic6r}
-  jacobian: default # {pin, geometric}
-  dynamics: default # {pin, lagrangian}
-  traj: default     # {default, toppra}
-  control: default  # {position}
-  # 预留（各域实现落地后生效；写法如 ikine: {name: pin, tol: 1e-6, iters: 500}，name 之外参数透传构造器）：
-  #   ikine:   tol（收敛容差，默认 1e-4）/ iters（迭代上限，默认 200）
-  #   traj:    hz（轨迹采样频率，默认 200）
-  #   control: hz（控制周期频率，默认 200，与 backend 段 control_rate 语义对应）
+robotics: {} # 各域配置留空（教学过渡态；章节实现注册后按下方示例取消注释）
+#   fkine: mdh       # Ch2 实现 MDH 白盒 FK 后注册 "mdh"
+#   ikine: analytic6r  # Ch3 实现 6R 解析 IK 后注册 "analytic6r"
+#   jacobian: geometric  # Ch4 实现几何雅可比后注册 "geometric"
+#   dynamics: lagrangian  # Ch8 实现拉格朗日动力学后注册 "lagrangian"
+#   traj: {name: default, hz: 200}   # Ch5 实现默认规划器后注册 "default"
+#   control:                          # Ch6 实现控制律后注册（多载示例：首个活动）
+#     - {name: position, kp: [20.0, 20.0, 20.0, 8.0, 8.0, 8.0],
+#        kd: [3.0, 3.0, 3.0, 1.0, 1.0, 1.0], gravity_comp: true}
+#     - {name: osc, kp: 100.0, kd: 10.0}
+#   其他预留参数：ikine {tol(1e-4), iters(200)}（name 外参数透传构造器）
 
 # ===================================================================
 # 通信层（backend）：arm与end的硬件通讯，达妙 DM 电机，USB-CAN
@@ -119,8 +121,8 @@ backend:
         POS_VEL:
           vel_kp: 0.0008
           vel_ki: 0.002
-          pos_kp: 50.0
-          pos_ki: 1.0
+          pos_kp: 100.0
+          pos_ki: 0.2
           vlim: 3.0
 
       - name: joint5
@@ -133,8 +135,8 @@ backend:
         POS_VEL:
           vel_kp: 0.0008
           vel_ki: 0.002
-          pos_kp: 50.0
-          pos_ki: 1.0
+          pos_kp: 100.0
+          pos_ki: 0.2
           vlim: 3.0
 
       - name: joint6
@@ -147,8 +149,8 @@ backend:
         POS_VEL:
           vel_kp: 0.0008
           vel_ki: 0.002
-          pos_kp: 50.0
-          pos_ki: 1.0
+          pos_kp: 100.0
+          pos_ki: 0.2
           vlim: 3.0
 
   end: # 末端后端

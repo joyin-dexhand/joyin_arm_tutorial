@@ -219,6 +219,28 @@ class Backend(ABC):
             的序列；语义由子类约定（如夹持力 N）。
         :param joint: 末端电机索引，``None`` 表示全部。
         """
+    @abstractmethod
+    def send_mit_end(
+        self,
+        q: np.ndarray,
+        dq: np.ndarray,
+        tau_ff: np.ndarray,
+        kp: Optional[np.ndarray] = None,
+        kd: Optional[np.ndarray] = None,
+        joint: Optional[int] = None,
+    ) -> None:
+        """末端 MIT 阻抗/前馈指令：``τ = kp·(q_des−q) + kd·(dq_des−dq) + tau_ff``。
+
+        紧急阻尼（``JoyArm.damping_mode``）的末端通道：``q=dq=tau=kp=0, kd>0``
+        即纯黏滞阻尼。``kp/kd`` 为 ``None`` 时回退 config 末端 ``MIT`` 增益。
+
+        :param q: 位置目标（与所选电机数一致；``kp=0`` 时固件忽略）。
+        :param dq: 速度目标。
+        :param tau_ff: 前馈力矩。
+        :param kp: 位置增益；``None`` 回退 config。
+        :param kd: 速度阻尼；``None`` 回退 config。
+        :param joint: 末端电机索引，``None`` 表示全部。
+        """
 
     @abstractmethod
     def send_action_end(self, action: str, joint: Optional[int] = None) -> None:
