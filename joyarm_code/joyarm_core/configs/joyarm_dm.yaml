@@ -1,9 +1,9 @@
 # ===================================================================
-# 基本信息（basic）：型号标识 / robots URDF 索引 / utils 限位守卫
+# 基本信息（basic）：型号标识 / robot_model URDF 索引 / utils 限位守卫
 # ===================================================================
 basic:
   name: joyarm_dm # 型号名（命名校验）
-  robot: joyarm_dm_fixend # robots下的urdf+mesh
+  robot: joyarm_dm_fixend # robot_model下的urdf+mesh
   ee_frame: end_link # 末端坐标系名（pin 模型帧）
   utils: # utils/limits.py 指令守卫参数
     joint_limits_soft_margin: 0.05

@@ -22,7 +22,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意（安全相关尤需醒目）。
   · 阈值未知用 *待补充*；跨章引用用相对链接（如 [第四章](chapt4_jacobian.md) 雅可比、[第九章](chapt9_force.md) 力觉）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt11_safety_demo.py（待建）、utils/limits.py、joyarm_ros2_ws/monitor 节点（规划）、joyarms/joyarm.py、robotics/jacobian/、robotics/control/。
+【本章可引用的脚本/库】chapt11_safety_demo.py（待建）、utils/limits.py、joyarm_ros2_ws/monitor 节点（规划）、joyarm/joyarm.py、robotics/jacobian/、robotics/control/。
 -->
 
 ## 1 关节层状态量及防护

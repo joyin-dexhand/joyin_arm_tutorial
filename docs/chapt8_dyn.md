@@ -23,7 +23,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 惯量等参数未知用 *待补充*；跨章引用用相对链接（如 [第六章](chapt6_control.md)、[第九章](chapt9_force.md)）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt8_dyn_demo.py、robotics/dynamics/、robotics/control/、robotics/fkine/、joyarms/joyarm.py。
+【本章可引用的脚本/库】chapt8_dyn_demo.py、robotics/dynamics/、robotics/control/、robotics/fkine/、joyarm/joyarm.py。
 -->
 
 ## 1 牛顿欧拉递推动力学算法

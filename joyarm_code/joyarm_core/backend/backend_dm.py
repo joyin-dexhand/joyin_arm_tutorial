@@ -32,7 +32,7 @@ USB-CAN 串口桥（如 ``/dev/ttyACM0``，921600）驱动整机 7 个 DM 电机
     协议常量 + 编解码纯函数   帧封装/提取、MIT 位打包、状态解包、float↔uint；
     DmMotor                   单电机配置（config joint 条目）+ 状态/参数槽 + 事件；
     DmCanBus                  串口桥总线：TX 锁 + RX 守护线程 + 帧分发 + 电机原语；
-    BackendDM                 :class:`~joyarm_core.backends.backend.Backend` 适配层。
+    BackendDM                 :class:`~joyarm_core.backend.backend.Backend` 适配层。
 
 时序约束（依 u2can 标定）：控制帧间隔建议 ≥1ms；使能应答 ~100ms 内；参数读写
 带重试确认（写回读比对）；标零前须失能且反馈无故障；存闪存（0xAA）前必须失能。

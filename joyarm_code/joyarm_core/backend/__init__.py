@@ -1,4 +1,4 @@
-"""``joyarm_core.backends`` —— 整机硬件通信后端子包（两层继承 + 注册表）。
+"""``joyarm_core.backend`` —— 整机硬件通信后端子包（两层继承 + 注册表）。
 
 继承层次（类名驼峰、文件名小写）::
 
@@ -30,5 +30,5 @@ def get_backend(name: str) -> type:
     :raises ValueError: 注册名未知时抛出，并列出全部可选项。
     """
     if name not in REGISTRY:
-        raise ValueError(f"『{name}』型号在 backends 中未找到；可用：{sorted(REGISTRY)}")
+        raise ValueError(f"『{name}』型号在 backend 中未找到；可用：{sorted(REGISTRY)}")
     return REGISTRY[name]

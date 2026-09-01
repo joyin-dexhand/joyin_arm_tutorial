@@ -1,6 +1,6 @@
-"""``joyarm_core.joyarms`` —— 设备模型层（组合根）+ 型号工厂。
+"""``joyarm_core.joyarm`` —— 设备模型层（组合根）+ 型号工厂。
 
-JoyArm：单类组合根（策略成员组装 + 公开门面，:mod:`joyarm_core.joyarms.joyarm`）；
+JoyArm：单类组合根（策略成员组装 + 公开门面，:mod:`joyarm_core.joyarm.joyarm`）；
 JoyArmFactory/joyarm_factory：按型号名创建（命名链校验）——外部推荐入口::
 
     from joyarm_core import joyarm_factory
@@ -8,13 +8,13 @@ JoyArmFactory/joyarm_factory：按型号名创建（命名链校验）——外�
 
 命名链：工厂入参 ↔ configs/<型号>.yaml 文件名 ↔ yaml ``basic.name`` 字段；
 urdf（``basic.robot``）、backend（``backend.name``）、求解器（``robotics:`` 段）
-由 yaml 各字段继续驱动各层 REGISTRY。**新型号 = configs/<型号>.yaml + robots/
-资产 + backends/backend_*.py**（型号与整机后端 1:1，如 joyarm_dm ↔ backend_dm）。
+由 yaml 各字段继续驱动各层 REGISTRY。**新型号 = configs/<型号>.yaml + robot_model/
+资产 + backend/backend_*.py**（型号与整机后端 1:1，如 joyarm_dm ↔ backend_dm）。
 
 **软失败语义（架构约束）**：创建时任一环节（config 文件 / 命名链 / 初始化异常）
 缺失或失败，**返回 ``None`` 并输出创建失败信息**（不抛异常）；各子功能成员的
 加载同构：不存在则置空 + 警告（见
-:func:`joyarm_core.joyarms.joyarm._build_domain`）。
+:func:`joyarm_core.joyarm.joyarm._build_domain`）。
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from .joyarm import JoyArm, load_config
 
 __all__ = ["JoyArm", "JoyArmFactory", "joyarm_factory", "load_config"]
 
-logger = logging.getLogger("joyarm_core.joyarms")
+logger = logging.getLogger("joyarm_core.joyarm")
 
 
 class JoyArmFactory:

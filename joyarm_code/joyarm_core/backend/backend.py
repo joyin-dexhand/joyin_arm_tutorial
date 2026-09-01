@@ -2,7 +2,7 @@
 
 一个后端 = 一台完整设备（多轴本体 + 末端执行器，共用或各用通信总线）；
 子类按**电机厂商/型号**派生（结构相同、参数不同），如 :class:`joyarm_core.
-backends.backend_dm.BackendDM`。契约方法扁平挂在单类上，以 ``_arm`` / ``_end``
+backend.backend_dm.BackendDM`。契约方法扁平挂在单类上，以 ``_arm`` / ``_end``
 后缀区分本体与末端两组。
 
 配置结构即代码结构（yaml ``backend:`` 段，``name`` 选型键经 ``REGISTRY`` 解析）::

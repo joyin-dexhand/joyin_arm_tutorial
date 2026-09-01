@@ -30,7 +30,7 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core.backends.backend_dm import BackendDM  # noqa: E402
+from joyarm_core.backend.backend_dm import BackendDM  # noqa: E402
 
 REFRESH_PERIOD = 0.5  # 刷新周期（秒）
 

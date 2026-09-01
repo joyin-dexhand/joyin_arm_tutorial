@@ -11,13 +11,13 @@
 
 > 以下为 joyarm_core 架构的**持久化约束**：代码演进不得违背；如需变更须先更新本节并经人工确认。
 
-1. **组合根·单类**：`joyarms/` 的 `JoyArm` 是组合根，基于 config 型号配置对其他层功能（backend、robot 资产、robotics 各求解器）做**可更换式组合**——能力全部委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**无型号子类**：型号差异全部由配置表达（config yaml + URDF 资产 + backend 后端类），型号标识为 `model` 属性（= 工厂入参 = yaml 文件名 = `basic.name`）。**新型号 = `configs/<型号>.yaml` + `robots/` 资产 + `backends/backend_*.py`**（backends `REGISTRY` 一行；型号与整机后端 1:1，如 `joyarm_dm` ↔ `backend_dm`）。
+1. **组合根·单类**：`joyarm/` 的 `JoyArm` 是组合根，基于 config 型号配置对其他层功能（backend、robot 资产、robotics 各求解器）做**可更换式组合**——能力全部委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**无型号子类**：型号差异全部由配置表达（config yaml + URDF 资产 + backend 后端类），型号标识为 `model` 属性（= 工厂入参 = yaml 文件名 = `basic.name`）。**新型号 = `configs/<型号>.yaml` + `robot_model/` 资产 + `backend/backend_*.py`**（backend `REGISTRY` 一行；型号与整机后端 1:1，如 `joyarm_dm` ↔ `backend_dm`）。
 2. **接口先行·章节实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）**仅保留 ABC 接口 + 空 `REGISTRY`**——具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 / control Ch6/8/9 / dynamics Ch8），章节实现后经对应域 `REGISTRY` 注册即接入（换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置**静默跳过**（教学过渡正常态），注册名无效/实例化失败**置空 + 警告**。
-3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 6R/7R 臂；末端功能兼容多种执行器（契约见 `backends/backend.py` 的 `*_end` 方法族，多电机末端如灵巧手通用）。
+3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族，多电机末端如灵巧手通用）。
 4. **软失败**：工厂创建时 config 缺失、命名链不符（`basic.name` ≠ 型号名）或初始化异常则**返回 `None` 并输出创建失败信息**（不抛异常）；各子成员加载同构：注册名不存在/实例化失败则**置空 + 警告**（对应门面调用时报清晰 `RuntimeError`），不中断创建。
 5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `T_target`/`frame`），**特有参数 keyword-only 在后**（仅特定算法需要，如数值法的 `q0`/`tol`/`iters`，解析法可忽略）——各章实现求解器时遵守。
 6. **功能全面性 + 字典化**：常见功能（读/设配置、配置自检、连接、硬件自检、使能/失能、单关节控制、末端控制、紧急阻尼……）在 `JoyArm` 完成定义。六域策略成员**统一字典化**：config 可指定单个或列表规格（全部加载进 `dict[注册名→实例]`，首个为活动），运行期 `set_solver` 切换。
-7. **robotics 独立运行**：robotics 子模块不得 import `joyarms`（鸭子类型消费 `arm`）；各章算法实现须可脱离 JoyArm 独立运行与测试（直接实例化，构造参数自足）。
+7. **robotics 独立运行**：robotics 子模块不得 import `joyarm`（鸭子类型消费 `arm`）；各章算法实现须可脱离 JoyArm 独立运行与测试（直接实例化，构造参数自足）。
 8. **教学数据读取路径**：config 在 `JoyArm.__init__` **一次性加载**存入 `self._config`；教学数据（如 MDH 参数 `joyarm.arm_mdh_and_limits`）由教学算法经 `arm.get_config()` 从**类内已加载数据**读取，**不重新加载 yaml 文件**；MDH 校验（yaml 可不含该字段）在算法层使用时做，不在 `check_config`。
 9. **开闭原则**：常见变更（新型号、换电机、结构更新、升级算法）以最小改动完成（新型号三件套 / 换算法 = 改 config 注册名 + 注册表一行），对扩展开放、对修改关闭；新增实现不得改动 `JoyArm` 接口签名。
 
@@ -42,16 +42,16 @@ joyarm_code/
 │   │   ├── trajectory/              #     TrajPlanner(ABC) + Trajectory 载体（含 npz 持久化）——Ch5
 │   │   ├── dynamics/                #     DynamicsSolver(ABC，Λ 模板)——Ch8
 │   │   └── control/                 #     Controller(ABC)——Ch6/8/9
-│   ├── backends/                    #   通信层（整机 Backend + name 选型）
+│   ├── backend/                    #   通信层（整机 Backend + name 选型）
 │   │   ├── backend.py               #     Backend（整机 ABC：*_arm/*_end + 参数读写方法族）
 │   │   ├── backend_dm.py            #     BackendDM（DM 整机 7 电机；内含私有协议层 DmMotor/DmCanBus）✅
 │   │   ├── u2can/                   #     厂商 DM 参考库（协议参照用，不依赖不导入）
 │   │   └── __init__.py              #     REGISTRY + get_backend(name)
-│   ├── joyarms/                     #   设备模型层（组合根 + 型号工厂）
+│   ├── joyarm/                     #   设备模型层（组合根 + 型号工厂）
 │   │   ├── joyarm.py                #     JoyArm（单类）：config 驱动构造 + 六域字典组装 + 公开门面
 │   │   │                            #       + 自检 + tcp_limits 解析 + load_config/_build_domain
 │   │   └── __init__.py              #     JoyArmFactory/joyarm_factory（软失败：失败→None+信息）
-│   ├── robots/                      #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
+│   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
 │   └── configs/joyarm_dm.yaml       #   per-model YAML（basic/joyarm/robotics/backend 四段）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性，不复用 SDK）
@@ -69,13 +69,13 @@ joyarm_code/
 ### 1.2 依赖规则（无环明细）
 
 - `utils` → 仅 numpy；
-- `robotics` / `backends` → 仅依赖 `utils`；求解器鸭子类型消费 `arm`（经公开门面/属性），**不 import `joyarms`**（约束7）；
-- `joyarms` → **组合根**：门面委托六域策略字典（`robotics`）与整机后端（`backends`），构造时按 config `robotics:` 段查各域 `REGISTRY` 组装成员、按 `backend:` 段 `name` 经 `get_backend` 构建后端，运行期加载 `robots/``configs/`；
+- `robotics` / `backend` → 仅依赖 `utils`；求解器鸭子类型消费 `arm`（经公开门面/属性），**不 import `joyarm`**（约束7）；
+- `joyarm` → **组合根**：门面委托六域策略字典（`robotics`）与整机后端（`backend`），构造时按 config `robotics:` 段查各域 `REGISTRY` 组装成员、按 `backend:` 段 `name` 经 `get_backend` 构建后端，运行期加载 `robot_model/`、`configs/`；
 - `joyarm_ros2_ws/src/*`（规划）→ 依赖 `joyarm_core` + `rclpy`；核心包保持 ROS2-free。
 
 ### 1.3 配置（yaml 分段）
 
-`configs/<model>.yaml` 四段：`basic`（基本信息 + robots URDF 索引 + utils 守卫）/ `joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层）。**命名链**：工厂入参 = 文件名 = `basic.name` 字段，任一环节不符即软失败返回 `None`（约束4）；backend 与机械臂型号 1:1（`backend_dm`）：
+`configs/<model>.yaml` 四段：`basic`（基本信息 + robot_model URDF 索引 + utils 守卫）/ `joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层）。**命名链**：工厂入参 = 文件名 = `basic.name` 字段，任一环节不符即软失败返回 `None`（约束4）；backend 与机械臂型号 1:1（`backend_dm`）：
 
 ```yaml
 basic: {name, robot, ee_frame, utils: {joint_limits_soft_margin}}
@@ -102,8 +102,8 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 ### 2.1 命名约定（全仓库强制，含 `chapt/`）
 
 - **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
-- **设备模型**（`joyarms/`）：`JoyArm` = 组合根单类（无型号子类）；`joyarm_factory(model)` 外部推荐入口（失败 → `None` + 失败信息）。文件 `joyarm.py` / `__init__.py`。
-- **Backend 整机两层**（`backends/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendDM`（1:1：`backend_dm` ↔ `joyarm_dm`）。`REGISTRY` + `get_backend(name)` 供 config 选型。
+- **设备模型**（`joyarm/`）：`JoyArm` = 组合根单类（无型号子类）；`joyarm_factory(model)` 外部推荐入口（失败 → `None` + 失败信息）。文件 `joyarm.py` / `__init__.py`。
+- **Backend 整机两层**（`backend/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendDM`（1:1：`backend_dm` ↔ `joyarm_dm`）。`REGISTRY` + `get_backend(name)` 供 config 选型。
 - **属性约定**：型号名 = `model`（str）；pinocchio 构型产物 = `pin_model`/`pin_data`（**勿与型号名混淆**）；整机后端 = `_backend`（私有）；**六域策略成员字典** = `_fkine_solvers`/`_ikine_solvers`/`_jacobian_solvers`/`_dynamics_solvers`/`_traj_planners`/`_controllers`（`dict[注册名→实例]`）+ `_active_name`（域→活动注册名）；config = `self._config`（`get_config()` 深拷贝读取）。求解器形参用 `arm`（鸭子类型）。
 - **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…）；执行类统一 `joint` 形参（None=全部）；`set_mode_*` 默认 POSITION；参数读写 `read/write_param_{arm,end}`（joint=None 读返列表、写标量广播或等长列表）；求解切换 `set_solver(domain, name)`（`set_controller` 为 control 域别名）、查询 `list_solvers(domain)`。
 - **算法可换（成员即策略）**：每域 = ABC + `REGISTRY`（实现一节点一文件，各章新增）。
@@ -116,11 +116,11 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 | **接口先行·章节实现** | robotics 六域仅 ABC + 空 REGISTRY；域未配置静默跳过、无效注册名置空+警告；各章实现注册后 config 选型接入（约束2） |
 | **软失败** | 工厂 config 缺失/命名链不符/初始化异常→`None`+信息；成员注册名无效→置空+警告，门面调用报 `RuntimeError`；backend 无效→置空（离线计算仍可用）（约束4） |
 | **教学数据读取** | config 一次性加载存 `self._config`；教学算法经 `arm.get_config()` 读类内数据，不重读 yaml（约束8） |
-| **单向导入、无环** | `joyarms` → `robotics`/`backends` → `utils`；robotics/backends 不 import joyarms（约束7） |
+| **单向导入、无环** | `joyarm` → `robotics`/`backend` → `utils`；robotics/backend 不 import joyarm（约束7） |
 | **离线模式** | 默认 `connected=False`（已注册域计算可用）；`connect()` 后执行类可用；`state` property 已连接现读、离线 None |
 | **共享类型单定义** | 跨层类型只在 `utils/types.py`；ROS2 消息仅在 ws 的 `adapters.py` 互转 |
 | **核心轻依赖** | 核心仅 `numpy`/`pin`/`pyyaml`；`rclpy` 仅 ws |
-| **开闭原则** | 新型号 = config yaml + robots 资产 + backend 文件（REGISTRY 一行）；换算法 = 改 config 注册名（约束9） |
+| **开闭原则** | 新型号 = config yaml + robot_model 资产 + backend 文件（REGISTRY 一行）；换算法 = 改 config 注册名（约束9） |
 
 编码约定：`q=(n,)` 或 `(N,n)`、`T=(4,4)`、角度弧度；FK `rep` 三态、雅可比 `ref` 两态（local/base）；软/硬限位分级（`clamp_to_limits`）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数**通用在前、特有 keyword-only 在后**（约束5）；可视化不在核心包。
 
@@ -137,16 +137,16 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举 + 数据类（Pose/JointState/ArmState/JointLimits/TcpLimits/IKResult/Violation…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | `clamp_to_limits` + `joint_limits_from_model`/`soft_limits` | Ch11 | ✅ |
-| `backends/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写） | Ch2 | ✅ |
-| `backends/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus） | Ch6/13 | ✅ |
+| `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写） | Ch2 | ✅ |
+| `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus） | Ch6/13 | ✅ |
 | `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）；MDH 白盒 FK 待 Ch2 实现 | Ch2 | 🟡 |
 | `robotics/ikine/` | `IkineSolver(ABC)`（`q0/tol/iters` keyword-only 契约）；数值/解析实现待 Ch3 | Ch3 | 🟡 |
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（`manipulability`/`cond_number`/`statics` 衍生量模板在 ABC） | Ch4 | 🟡 |
 | `robotics/trajectory/` | `TrajPlanner(ABC)` + `Trajectory` 载体（npz 持久化）；规划算法待 Ch5 | Ch5 | 🟡 |
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（Λ=J⁻ᵀMJ⁻¹ 模板在 ABC）；实现待 Ch8 | Ch8 | 🟡 |
 | `robotics/control/` | `Controller(ABC)`（`compute(arm, target, state)` 契约）；控制律与执行循环待 Ch6/8/9 | Ch6/8/9 | 🟡 |
-| `joyarms/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检）+ `load_config` + `_build_domain` | — | ✅ |
-| `joyarms/__init__.py` | `JoyArmFactory`（软失败；`list_models` 扫描 configs） | — | ✅ |
+| `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检）+ `load_config` + `_build_domain` | — | ✅ |
+| `joyarm/__init__.py` | `JoyArmFactory`（软失败；`list_models` 扫描 configs） | — | ✅ |
 | `configs/joyarm_dm.yaml` | 型号 YAML 四段（robotics 段留档注释，各章实现后启用） | — | ✅ |
 
 ### 3.2 组装与数据流

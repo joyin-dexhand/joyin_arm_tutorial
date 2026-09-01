@@ -1,10 +1,10 @@
 """``JoyArm`` —— 完整机械臂类（arm本体 + end执行器），**组合根**，单类。
 
 型号差异全部由配置表达：``configs/<model>.yaml`` 经 ``basic.robot`` 选 URDF 资产、
-``basic.ee_frame`` 选末端帧、``backend:`` 段 ``name`` 经 backends REGISTRY 选整机
+``basic.ee_frame`` 选末端帧、``backend:`` 段 ``name`` 经 backend REGISTRY 选整机
 后端（型号与整机后端 1:1）、``joyarm:`` 段配特征位形与 TCP 限位、``robotics:`` 段
-选各域求解器——**无型号子类**：新型号 = ``configs/<型号>.yaml`` + ``robots/`` 资产
-+ ``backends/backend_*.py``（backends ``REGISTRY`` 一行）。
+选各域求解器——**无型号子类**：新型号 = ``configs/<型号>.yaml`` + ``robot_model/`` 资产
++ ``backend/backend_*.py``（backend ``REGISTRY`` 一行）。
 
 六域策略成员机制：``robotics:`` 段按注册名选型组装私有成员字典（``_fkine_solvers``
 等，config 可指定单个或列表，首个为活动成员），公开门面（``fkine`` 等）委托活动
@@ -44,7 +44,7 @@ try:
 except ImportError:
     pin = None
 
-from ..backends import get_backend
+from ..backend import get_backend
 from ..robotics.fkine import REGISTRY as _FKINE_REGISTRY
 from ..robotics.ikine import REGISTRY as _IKINE_REGISTRY
 from ..robotics.jacobian import REGISTRY as _JACOBIAN_REGISTRY
@@ -54,16 +54,16 @@ from ..robotics.control import REGISTRY as _CONTROL_REGISTRY
 
 __all__ = ["JoyArm", "load_config"]
 
-logger = logging.getLogger("joyarm_core.joyarms")
+logger = logging.getLogger("joyarm_core.joyarm")
 
-# configs/ 目录（joyarm.py 位于 joyarm_core/joyarms/，上溯一级即包根）
+# configs/ 目录（joyarm.py 位于 joyarm_core/joyarm/，上溯一级即包根）
 _CONFIGS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs"
 )
 
-# robots/ 资产目录（URDF + meshes，运行期加载）
-_ROBOTS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "robots"
+# robot_model/ 资产目录（URDF + meshes，运行期加载）
+_ROBOT_MODEL_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "robot_model"
 )
 
 
@@ -160,7 +160,7 @@ class JoyArm:
     :param model: 型号名（与 ``configs/<model>.yaml`` 文件名、yaml ``basic.name``
         字段一致）。
     :param urdf_path: URDF 路径；缺省由 config ``basic.robot`` 解析随包资产
-        （``robots/<robot>/urdf/<robot>.urdf``）。
+        （``robot_model/<robot>/urdf/<robot>.urdf``）。
     :param ee_frame_name: 末端帧名；缺省取 config ``basic.ee_frame``，再回退 ``"ee"``。
     :param mesh_dirs: mesh 搜索目录；``load_geometry``: 是否加载 visual/collision 几何。
     :param config: 型号 YAML 字典（``basic``/``joyarm``/``robotics``/``backend`` 段）；
@@ -205,7 +205,7 @@ class JoyArm:
         if not os.path.isfile(urdf_path):
             raise FileNotFoundError(
                 f"未找到 URDF 文件：{urdf_path}\n"
-                f"请将正式 URDF 放入 joyarm_core/robots/。"
+                f"请将正式 URDF 放入 joyarm_core/robot_model/。"
             )
         self._urdf_path: str = urdf_path
         ee_frame_name = ee_frame_name or basic.get("ee_frame") or "ee"
@@ -553,19 +553,19 @@ class JoyArm:
     # ----------------------------------------------------------
     @staticmethod
     def _resolve_robot_urdf(robot: str) -> str:
-        """解析随包 URDF：``robots/<robot>/urdf/<robot>.urdf``。
+        """解析随包 URDF：``robot_model/<robot>/urdf/<robot>.urdf``。
 
         :raises ValueError: 型号目录/URDF 不存在（列出可用型号）。
         """
-        path = os.path.join(_ROBOTS_DIR, robot, "urdf", f"{robot}.urdf")
+        path = os.path.join(_ROBOT_MODEL_DIR, robot, "urdf", f"{robot}.urdf")
         if os.path.isfile(path):
             return path
         try:
-            avail = sorted(d for d in os.listdir(_ROBOTS_DIR)
-                           if os.path.isdir(os.path.join(_ROBOTS_DIR, d)))
+            avail = sorted(d for d in os.listdir(_ROBOT_MODEL_DIR)
+                           if os.path.isdir(os.path.join(_ROBOT_MODEL_DIR, d)))
         except OSError:
             avail = []
-        raise ValueError(f"『{robot}』型号在 robots 中未找到；可用：{avail}")
+        raise ValueError(f"『{robot}』型号在 robot_model 中未找到；可用：{avail}")
 
     # ----------------------------------------------------------
     # 打印表示

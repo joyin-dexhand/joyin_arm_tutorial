@@ -2,17 +2,17 @@
 
 组合根架构（仅向下依赖；robotics 一域一子包，REGISTRY 选型）::
 
-    joyarms/     组合根：JoyArm(单类，门面+成员组装) · JoyArmFactory(型号名选型)
+    joyarm/     组合根：JoyArm(单类，门面+成员组装) · JoyArmFactory(型号名选型)
     ─────────────────────────────────────────────
     robotics/    算法层（一域一子包：ABC+REGISTRY，具体算法为教程各章教学内容）：
                  fkine · ikine · jacobian · trajectory · dynamics · control
                                                               ← 鸭子类型消费 arm
-    backends/    通信层：Backend(整机) → BackendDM（name 选型：REGISTRY + get_backend）
+    backend/    通信层：Backend(整机) → BackendDM（name 选型：REGISTRY + get_backend）
     ─────────────────────────────────────────────
     utils/       transforms(数学) · types(共享类型) · limits(限位守卫)
-    robots/ configs/   URDF+meshes 资产 / per-model YAML（basic/joyarm/robotics/backend 等段）
+    robot_model/ configs/   URDF+meshes 资产 / per-model YAML（basic/joyarm/robotics/backend 等段）
 
-新型号 = ``configs/<型号>.yaml`` + ``robots/`` 资产 + ``backends/backend_*.py``
+新型号 = ``configs/<型号>.yaml`` + ``robot_model/`` 资产 + ``backend/backend_*.py``
 （型号与整机后端 1:1）；无型号子类。
 ROS2 封装（节点/launch/rviz2等）在 ``joyarm_ros2_ws/src/joyarm_node``（详见 AGENTS.md）；
 监测已裁撤：指令守卫在 utils/limits.py，状态监测归 ROS2 节点（Ch11）。
@@ -70,10 +70,10 @@ from .utils.transforms import (
 )
 
 # ---- 设备模型层（JoyArm 单类 + 型号工厂）----
-from .joyarms.joyarm import JoyArm
-from .joyarms import JoyArmFactory, joyarm_factory
+from .joyarm.joyarm import JoyArm
+from .joyarm import JoyArmFactory, joyarm_factory
 
-# ---- 算法层（robotics；鸭子类型消费 arm，不 import joyarms）----
+# ---- 算法层（robotics；鸭子类型消费 arm，不 import joyarm）----
 from .robotics.fkine import fkine
 from .robotics.ikine import ikine, ikine_constrained
 from .robotics.jacobian import jac, manipulability, cond_number, statics
@@ -91,8 +91,8 @@ from .robotics.control import Controller
 from .utils.limits import clamp_to_limits
 
 # ---- 通信层（整机后端，两层继承 + name 选型注册表）----
-from . import backends
-from .backends import (
+from . import backend
+from .backend import (
     Backend,
     BackendDM,
     get_backend,
@@ -169,7 +169,7 @@ __all__ = [
     # 指令路径守卫（监测/日志归 ROS2 节点）
     "clamp_to_limits",
     # 通信层（整机后端）
-    "backends",
+    "backend",
     "Backend",
     "BackendDM",
     "get_backend",

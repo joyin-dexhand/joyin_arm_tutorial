@@ -19,8 +19,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
 from joyarm_core import joyarm_factory, JoyArmFactory, JoyArm  # noqa: E402
-from joyarm_core.joyarms import load_config  # noqa: E402
-from joyarm_core.joyarms.joyarm import _build_domain  # noqa: E402
+from joyarm_core.joyarm import load_config  # noqa: E402
+from joyarm_core.joyarm.joyarm import _build_domain  # noqa: E402
 from joyarm_core.utils.types import Severity  # noqa: E402
 
 _ARM = None

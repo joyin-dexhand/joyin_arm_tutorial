@@ -22,7 +22,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第三章](chapt3_ikine.md) IK 用于异构臂、[第十一章](chapt11_safety.md) 遥操作安全）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、joyarm_core/apps/teleop.py、joyarms/joyarm.py、joyarms/joyarm_dm.py、robotics/ikine/、robotics/fkine/。
+【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、joyarm_core/apps/teleop.py、joyarm/joyarm.py、joyarm/joyarm_dm.py、robotics/ikine/、robotics/fkine/。
 -->
 
 ## 1 同臂示教数据记录与回放
