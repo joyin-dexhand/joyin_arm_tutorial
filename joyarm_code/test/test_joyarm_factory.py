@@ -63,7 +63,7 @@ def test_domain_dicts_default_empty():
         assert arm._active_name[d] is None
         assert arm.list_solvers(d) == []
     try:
-        arm.fkine(arm.rand_q(rng=np.random.default_rng(0)))
+        arm.fkine(arm.rand_q(rng=np.random.default_rng(0)), "ee")
         raise AssertionError("未加载 fkine 应抛 RuntimeError")
     except RuntimeError:
         pass

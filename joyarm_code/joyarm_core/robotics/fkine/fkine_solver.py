@@ -9,7 +9,7 @@ config的``robotics.fkine``段写注册名，即按名实例化装入 ``_fkine_s
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -27,16 +27,16 @@ class FkineSolver(ABC):
     """正运动学策略接口：关节角 → 末端（或任意帧）位姿。"""
 
     @abstractmethod
-    def frame_pose(self, arm, q: np.ndarray, frame=None) -> Pose:
+    def frame_pose(self, arm, q: np.ndarray, frame: Union[str, int]) -> Pose:
         """内核：指定帧在基坐标系下的位姿（含 ``T_base`` 偏移）。"""
 
     def solve(self,
         arm,
         q: np.ndarray,
-        frame: Optional[Union[str, int]] = None,
+        frame: Union[str, int],
         rep: str = "pose",
     ):
-        """模板：``q`` 为 ``(n,)`` 单点 / ``(N,n)`` 批量；``rep`` 取 ``"pose"``（默认，xyz+四元数）/``"T"``(4×4)/``"se3"``。"""
+        """模板：``frame`` 为目标帧；``q`` 为 ``(n,)`` 单点 / ``(N,n)`` 批量；``rep`` 取 ``"pose"``（默认，xyz+四元数）/``"T"``(4×4)/``"se3"``。"""
         if rep not in ("pose", "T", "se3"):
             raise ValueError(f"未知 rep={rep!r}（仅支持 'pose'/'T'/'se3'）")
 
@@ -59,8 +59,8 @@ class FkineSolver(ABC):
             T = pose.T
             return pin.SE3(T[:3, :3], T[:3, 3])
 
-    def _solve_batch(self, arm, Q: np.ndarray, frame, rep: str):
-        """批量 FK：逐组调内核（``rep="T"`` 返回 ``(N,4,4)`` 数组，其余返回列表）。"""
+    def _solve_batch(self, arm, Q: np.ndarray, frame: Union[str, int], rep: str = "pose"):
+        """批量 FK：逐组调内核。"""
         N = Q.shape[0]
         if rep == "T":
             out = np.empty((N, 4, 4))

@@ -306,7 +306,7 @@ class JoyArmFullTest:
         for d in ("fkine", "ikine", "jacobian", "dynamics", "traj", "control"):
             assert arm.list_solvers(d) == [], f"{d} 应为空（教学过渡态）"
         self._expect(RuntimeError,
-                     lambda: arm.fkine(arm.q_zero), "调用未加载域 fkine 门面")
+                     lambda: arm.fkine(arm.q_zero, "ee"), "调用未加载域 fkine 门面")
         print("✓ 六域默认空表；未加载域门面显性 RuntimeError（各章实现注册后接入）")
 
     def step_sampling(self) -> None:
