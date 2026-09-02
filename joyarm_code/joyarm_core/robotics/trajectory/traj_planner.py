@@ -1,13 +1,11 @@
-"""TrajPlanner —— 轨迹规划器接口（ABC）+ Trajectory 轨迹载体。
+"""TrajPlanner —— 轨迹规划器接口（ABC）+ Trajectory 轨迹载体
 
-轨迹规划回答"**怎么从 A 平滑走到 B**"：给定起止（或途经）位形，生成位置、
-速度、加速度均连续（C2）的运动序列，供执行层按时间回放。
+规划器子类需实现四个入口（空间 joint/cart × 粒度 p2p/waypoints）
+- :meth:`plan_joint_p2p` / :meth:`plan_joint_waypoints` /
+  :meth:`plan_cart_p2p` / :meth:`plan_cart_waypoints`。
 
-四个入口按 空间（joint 关节角 / cart 笛卡尔位姿）× 粒度（p2p 两点 /
-waypoints 多点途经）划分；两层选型不混淆：``method`` 选**同族内方式**
-（如直线/圆弧），config ``robotics.traj`` 选**整个规划器**。
-
-具体规划算法为教程 Ch5 教学内容，实现后经 ``REGISTRY`` 注册接入。
+``method`` 选同族内方式（如直线/圆弧），config 选整个规划器——两层选型不混淆。
+config ``robotics.traj`` 段写注册名，即按名实例化装入 ``_traj_planners`` 成员字典。
 """
 from __future__ import annotations
 
@@ -26,9 +24,6 @@ JOINT_METHODS = ("cubic", "quintic", "lspb")
 CART_METHODS = ("line", "arc")
 
 
-# ============================================================
-# 轨迹载体
-# ============================================================
 class Trajectory:
     """轨迹主体：时间戳 + 采样点序列 + 元数据。
 
@@ -41,8 +36,7 @@ class Trajectory:
     :ivar metadata: 元数据字典（如生成参数、源记录等）。
     """
 
-    def __init__(
-        self,
+    def __init__(self,
         space: TrajectorySpace = TrajectorySpace.JOINT,
         t: Optional[np.ndarray] = None,
         q: Optional[np.ndarray] = None,
@@ -59,9 +53,6 @@ class Trajectory:
         self.poses: Optional[List[Pose]] = poses
         self.metadata: dict = metadata or {}
 
-    # ----------------------------------------------------------
-    # 查询
-    # ----------------------------------------------------------
     @property
     def duration(self) -> float:
         """轨迹总时长（末时间戳），秒。"""
@@ -86,9 +77,6 @@ class Trajectory:
             out["pose"] = self.poses[k]
         return out
 
-    # ----------------------------------------------------------
-    # 持久化（示教记录 / 回放复用）
-    # ----------------------------------------------------------
     def save(self, path: str) -> None:
         """轨迹持久化（npz）：时间戳、采样点与元数据一并存盘。
 
@@ -136,28 +124,47 @@ class TrajPlanner(ABC):
     """轨迹规划策略接口：关节 / 笛卡尔空间的平滑轨迹序列。"""
 
     @abstractmethod
-    def plan_joint_p2p(
-        self, arm, q0: np.ndarray, qf: np.ndarray,
-        *, method: str = "quintic", T: float = 2.0, hz: int = 200, **kw,
+    def plan_joint_p2p(self,
+        arm,
+        q0: np.ndarray,
+        qf: np.ndarray,
+        *,
+        method: str = "quintic",
+        T: float = 2.0,
+        hz: int = 200,
+        **kw,
     ) -> Trajectory:
         """关节空间点到点：``method`` ∈ cubic/quintic/lspb；``T`` 总时长 s；``hz`` 采样 Hz。"""
 
     @abstractmethod
-    def plan_joint_waypoints(
-        self, arm, qs: List[np.ndarray], Ts: List[float],
-        *, smooth: bool = True,
+    def plan_joint_waypoints(self,
+        arm,
+        qs: List[np.ndarray],
+        Ts: List[float],
+        *,
+        smooth: bool = True,
     ) -> Trajectory:
         """关节空间多点途经（段间五次拼接，接缝位置/速度/加速度连续）。"""
 
     @abstractmethod
-    def plan_cart_p2p(
-        self, arm, *, method: str = "line", T: float = 2.0, hz: int = 200, **kw,
+    def plan_cart_p2p(self,
+        arm,
+        *,
+        method: str = "line",
+        T: float = 2.0,
+        hz: int = 200,
+        **kw,
     ) -> Trajectory:
-        """笛卡尔点到点：``line``（需 ``pose0``/``posef``，:class:`Pose`）/ ``arc``（需 ``pose_start``/``center``/``radius``/``angle``/``plane``）；位置沿几何路径、姿态 slerp，均配五次时间律（C2）。"""
+        """笛卡尔点到点：``line``（需 ``pose0``/``posef``，:class:`Pose`）/ ``arc``
+        （需 ``pose_start``/``center``/``radius``/``angle``/``plane``）；位置沿几何
+        路径、姿态 slerp，均配五次时间律（C2）。"""
 
     @abstractmethod
-    def plan_cart_waypoints(
-        self, arm, poses: List[Pose], Ts: List[float],
-        *, smooth: bool = True,
+    def plan_cart_waypoints(self,
+        arm,
+        poses: List[Pose],
+        Ts: List[float],
+        *,
+        smooth: bool = True,
     ) -> Trajectory:
         """笛卡尔多点途经：``poses`` 为 :class:`Pose` 列表（含起止）；段间平滑拼接（C2）。"""

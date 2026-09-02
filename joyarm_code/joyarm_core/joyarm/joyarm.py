@@ -605,7 +605,7 @@ class JoyArm:
         数值法实现不支持）。"""
         return self._active("ikine").solve_all(self, target, frame, **kw)
 
-    def jac(self, q: np.ndarray, frame: Union[str, int], ref: str = "local"):
+    def jac(self, q: np.ndarray, frame: Union[str, int], ref: str = "base"):
         """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端帧系 / 基座系）。"""
         return self._active("jacobian").jac(self, q, frame=frame, ref=ref)
 

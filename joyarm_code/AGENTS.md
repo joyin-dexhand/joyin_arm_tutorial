@@ -177,7 +177,7 @@ JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件最�
 JoyArm.set_solver(domain, name) / set_controller(name) · list_solvers(domain)   # 运行期切换/查询 ✅
 # 计算门面（已注册域可用；参数排序：通用前/特有 keyword-only 后，约束5）
 JoyArm.fkine(q, frame, rep="pose") · ikine(target, frame, q0, **kw) → IKResult 单解（限位剔除+q0 最近） · ikine_all(target, frame) → 全解 (K,n)（±2π 归位）
-JoyArm.jac(q, frame, ref="local") · manipulability / cond_number / statics(q, F, frame)
+JoyArm.jac(q, frame, ref="base") · manipulability / cond_number / statics(q, F, frame)
 JoyArm.idyn / mass_matrix / coriolis / gravity · cartesian_inertia(q, frame)
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
 JoyArm.connect() / disconnect() · enable/disable_{arm,end} · set_zero_{arm,end} · set_mode_{arm,end}(mode=POSITION, joint=None) · read_mode_{arm,end}

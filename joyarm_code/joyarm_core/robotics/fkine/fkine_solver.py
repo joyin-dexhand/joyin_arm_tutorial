@@ -1,8 +1,7 @@
-"""FkineSolver —— 正运动学求解器接口（ABC）。
+"""FkineSolver —— 正运动学求解器接口（ABC）
 
-本文件为通用骨架，求解器子类只需实现
-
-    frame_pose(arm, q, frame)     # 算出该帧的位姿（Pose：xyz + 四元数）
+求解器子类只需实现
+- :meth:`frame_pose(arm, q, frame)`     # 算出该帧的位姿（Pose：xyz + 四元数）
 
 config的``robotics.fkine``段写注册名，即按名实例化装入 ``_fkine_solvers`` 成员字典。
 """
