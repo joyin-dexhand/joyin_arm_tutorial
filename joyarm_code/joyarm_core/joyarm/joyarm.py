@@ -33,7 +33,6 @@ from ..utils.limits import clamp_to_limits, joint_limits_from_model, soft_limits
 from ..utils.types import (
     ArmState,
     ControlMode,
-    Pose,
     TcpLimits,
 )
 
@@ -591,8 +590,8 @@ class JoyArm:
     # ----------------------------------------------------------
     # robotics 求解算法（门面 → 活动策略成员；参数排序：通用在前、特有 keyword-only 在后）
     # ----------------------------------------------------------
-    def fkine(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, rep: str = "T"):
-        """正运动学（``rep`` 取 ``quat``/``T``/``se3``：Pose / 4×4 矩阵 / pin.SE3）。"""
+    def fkine(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, rep: str = "pose"):
+        """正运动学（``rep`` 取 ``pose``（默认，xyz+四元数）/``T``（4×4 矩阵）/``se3``（pin.SE3））。"""
         return self._active("fkine").solve(self, q, frame=frame, rep=rep)
 
     def ikine(self, T_target, frame=None, *, q0=None, **kw):
@@ -734,7 +733,7 @@ class JoyArm:
         self._require_connected()
         state = self._backend.read_state_arm()
         if self._active_name.get("fkine") is not None:
-            state.tcp.pose = Pose.from_T(self.fkine(state.joint.q))
+            state.tcp.pose = self.fkine(state.joint.q)   # 默认 rep="pose" → Pose
         return state
 
     def set_arm_command(self,

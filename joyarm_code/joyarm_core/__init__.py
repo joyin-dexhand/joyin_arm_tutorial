@@ -71,11 +71,7 @@ from .joyarm.joyarm import JoyArm
 from .joyarm import JoyArmFactory, joyarm_factory
 
 # ---- 算法层（robotics；鸭子类型消费 arm，不 import joyarm）----
-from .robotics.fkine import fkine
-from .robotics.ikine import ikine, ikine_constrained
-from .robotics.jacobian import jac, manipulability, cond_number, statics
 from .robotics.trajectory import Trajectory
-from .robotics.dynamics import idyn, mass_matrix, coriolis, gravity, cartesian_inertia
 # 求解器策略接口（JoyArm 六域成员字典的契约；具体实现为教程各章教学内容）
 from .robotics.fkine import FkineSolver
 from .robotics.ikine import IkineSolver
@@ -140,19 +136,7 @@ __all__ = [
     "JoyArmFactory",
     "joyarm_factory",
     # 算法层
-    "fkine",
-    "ikine",
-    "ikine_constrained",
-    "jac",
-    "manipulability",
-    "cond_number",
-    "statics",
     "Trajectory",
-    "idyn",
-    "mass_matrix",
-    "coriolis",
-    "gravity",
-    "cartesian_inertia",
     # 求解器策略接口（各章实现注册后接入）
     "FkineSolver",
     "IkineSolver",

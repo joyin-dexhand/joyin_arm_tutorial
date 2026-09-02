@@ -35,7 +35,7 @@ joyarm_code/
 │   │   ├── types.py                 #     数据类 / 枚举
 │   │   ├── transforms.py            #     SO(3)/SE(3) 纯 numpy 数学
 │   │   └── limits.py                #     clamp_to_limits + 限位构建辅助（joint_limits_from_model/soft_limits）
-│   ├── robotics/                    #   算法层：一域一子包（ABC + 空 REGISTRY + 函数式委托入口）
+│   ├── robotics/                    #   算法层：一域一子包（ABC + 空 REGISTRY）
 │   │   ├── fkine/                   #     FkineSolver(ABC)——MDH 白盒 FK 为 Ch2 教学内容
 │   │   ├── ikine/                   #     IkineSolver(ABC)——数值/解析 IK 为 Ch3 教学内容
 │   │   ├── jacobian/                #     JacobianSolver(ABC，衍生量模板)——Ch4
@@ -176,7 +176,7 @@ JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件最�
 # 成员字典
 JoyArm.set_solver(domain, name) / set_controller(name) · list_solvers(domain)   # 运行期切换/查询 ✅
 # 计算门面（已注册域可用；参数排序：通用前/特有 keyword-only 后，约束5）
-JoyArm.fkine(q, frame=None, rep="T") · ikine(T_target, frame=None, *, q0=None, **kw) → IKResult · ikine_constrained(...)
+JoyArm.fkine(q, frame=None, rep="pose") · ikine(T_target, frame=None, *, q0=None, **kw) → IKResult · ikine_constrained(...)
 JoyArm.jac(q, frame=None, ref="local") · manipulability / cond_number / statics
 JoyArm.idyn / mass_matrix / coriolis / gravity / cartesian_inertia
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
@@ -189,12 +189,12 @@ JoyArm.state → ArmState|None · rand_q / clamp_q / is_q_valid
 #   六域字典：_fkine_solvers/_ikine_solvers/_jacobian_solvers/_dynamics_solvers/_traj_planners/_controllers + _active_name
 ```
 
-#### Robotics 独立 API（各域 ABC + 委托入口；实现为教学章节内容）
+#### Robotics 独立 API（各域 ABC；实现为教学章节内容）
 
 ```python
 FkineSolver / IkineSolver / JacobianSolver / DynamicsSolver / TrajPlanner / Controller   # ABC 契约 🟡
-fkine(arm, q) · ikine(arm, T) · jac/manipulability/cond_number/statics(arm, ...) · idyn/M/C/G/Λ(arm, ...)   # 委托 arm 门面 ✅
 Trajectory(space, t, q, poses, ...)   # 轨迹载体：sample/duration/save/load(npz) ✅
+# 求解器用法二选一：子类实例.solve(arm, q)（arm 鸭子类型，课堂/单测）或 arm.* 门面（活动成员，应用）
 ```
 
 #### Backend / 限位 / 数学 / 类型 API
