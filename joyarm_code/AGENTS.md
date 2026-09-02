@@ -15,7 +15,7 @@
 2. **接口先行·章节实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）**仅保留 ABC 接口 + 空 `REGISTRY`**——具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 / control Ch6/8/9 / dynamics Ch8），章节实现后经对应域 `REGISTRY` 注册即接入（换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置**静默跳过**（教学过渡正常态），注册名无效/实例化失败**置空 + 警告**。
 3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族，多电机末端如灵巧手通用）。
 4. **软失败**：工厂创建时 config 缺失、命名链不符（`basic.name` ≠ 型号名）或初始化异常则**返回 `None` 并输出创建失败信息**（不抛异常）；各子成员加载同构：注册名不存在/实例化失败则**置空 + 警告**（对应门面调用时报清晰 `RuntimeError`），不中断创建。
-5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `T_target`/`frame`），**特有参数 keyword-only 在后**（仅特定算法需要，如数值法的 `q0`/`tol`/`iters`，解析法可忽略）——各章实现求解器时遵守。
+5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `target`/`frame`/`q0`），**特有参数 keyword-only 在后**（仅特定算法需要，如数值法的 `tol`/`iters`，解析法可忽略）——各章实现求解器时遵守。
 6. **功能全面性 + 字典化**：常见功能（读/设配置、配置自检、连接、硬件自检、使能/失能、单关节控制、末端控制、紧急阻尼……）在 `JoyArm` 完成定义。六域策略成员**统一字典化**：config 可指定单个或列表规格（全部加载进 `dict[注册名→实例]`，首个为活动），运行期 `set_solver` 切换。
 7. **robotics 独立运行**：robotics 子模块不得 import `joyarm`（鸭子类型消费 `arm`）；各章算法实现须可脱离 JoyArm 独立运行与测试（直接实例化，构造参数自足）。
 8. **教学数据读取路径**：config 在 `JoyArm.__init__` **一次性加载**存入 `self._config`；教学数据（如 MDH 参数 `joyarm.arm_mdh_and_limits`）由教学算法经 `arm.get_config()` 从**类内已加载数据**读取，**不重新加载 yaml 文件**；MDH 校验（yaml 可不含该字段）在算法层使用时做，不在 `check_config`。
@@ -140,7 +140,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写） | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus） | Ch6/13 | ✅ |
 | `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）；MDH 白盒 FK 待 Ch2 实现 | Ch2 | 🟡 |
-| `robotics/ikine/` | `IkineSolver(ABC)`（`q0/tol/iters` keyword-only 契约）；数值/解析实现待 Ch3 | Ch3 | 🟡 |
+| `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 + solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）；数值/解析实现待 Ch3 | Ch3 | 🟡 |
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（`manipulability`/`cond_number`/`statics` 衍生量模板在 ABC） | Ch4 | 🟡 |
 | `robotics/trajectory/` | `TrajPlanner(ABC)` + `Trajectory` 载体（npz 持久化）；规划算法待 Ch5 | Ch5 | 🟡 |
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（Λ=J⁻ᵀMJ⁻¹ 模板在 ABC）；实现待 Ch8 | Ch8 | 🟡 |
@@ -176,7 +176,7 @@ JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件最�
 # 成员字典
 JoyArm.set_solver(domain, name) / set_controller(name) · list_solvers(domain)   # 运行期切换/查询 ✅
 # 计算门面（已注册域可用；参数排序：通用前/特有 keyword-only 后，约束5）
-JoyArm.fkine(q, frame, rep="pose") · ikine(target: Pose, frame, *, q0=None, **kw) → IKResult · ikine_constrained(...)
+JoyArm.fkine(q, frame, rep="pose") · ikine(target, frame, q0, **kw) → IKResult 单解（限位剔除+q0 最近） · ikine_all(target, frame) → 全解 (K,n)（±2π 归位）
 JoyArm.jac(q, frame, ref="local") · manipulability / cond_number / statics(q, F, frame)
 JoyArm.idyn / mass_matrix / coriolis / gravity · cartesian_inertia(q, frame)
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）

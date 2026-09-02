@@ -250,10 +250,10 @@ class TcpLimits(_ArrayEqMixin):
 class IKResult(_ArrayEqMixin):
     """逆运动学求解结果
 
-    :ivar q: ``(n,)`` 解算得到的关节角，弧度。
-    :ivar success: 是否收敛到满足精度的解。
+    :ivar q: 解算得到的关节角，弧度。单解为 ``(n,)``；``solve_all`` 全解为``(K,n)``（每行一组）。
+    :ivar success: 是否收敛到满足精度的解（全解时为"存在可行解"）。
     :ivar err: 末端位姿误差（残差范数）。
-    :ivar n_iter: 迭代次数。
+    :ivar n_iter: 迭代次数（解析法恒 0）。
     """
 
     q: np.ndarray = field(default_factory=lambda: np.zeros(0))

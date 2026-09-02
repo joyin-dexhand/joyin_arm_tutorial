@@ -12,13 +12,16 @@ from __future__ import annotations
 import copy
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core import joyarm_factory, JoyArmFactory, JoyArm, Pose  # noqa: E402
+from joyarm_core import (  # noqa: E402
+    joyarm_factory, JoyArmFactory, JoyArm, Pose, IKResult, IkineSolver,
+)
 from joyarm_core.joyarm import load_config  # noqa: E402
 from joyarm_core.joyarm.joyarm import _build_domain  # noqa: E402
 
@@ -158,7 +161,7 @@ def test_check_config_detects_problems():
         assert "q_home" in str(e) and "backend.arm.joints" in str(e)
     # 未加载域的门面调用显性报错
     try:
-        arm.ikine(Pose(), "ee")
+        arm.ikine(Pose(), "ee", np.zeros(6))
         raise AssertionError("未加载 ikine 应抛 RuntimeError")
     except RuntimeError:
         pass
@@ -175,6 +178,47 @@ def test_offline_execution_raises():
             raise AssertionError(f"{fn.__name__} 离线应抛 RuntimeError")
         except RuntimeError:
             pass
+
+
+def test_ikine_contracts():
+    """ikine 选解契约：±2π 归位 / 限位剔除+最近解 / dummy 解析求解器端到端。"""
+    q_lo = np.array([-np.pi] * 3 + [-2.0] * 3)
+    q_hi = np.array([np.pi] * 3 + [2.0] * 3)
+    # _shift_2pi：宽区间逐关节平移入界（等价角）
+    s = IkineSolver._shift_2pi(np.array([7.5, -8.0, 0.3, 5.0, 0.0, 0.0]), q_lo, q_hi)
+    assert np.isclose(s[0], 7.5 - 2 * np.pi) and np.isclose(s[1], -8.0 + 2 * np.pi)
+    assert np.isclose(s[2], 0.3) and np.isclose(s[3], 5.0 - 2 * np.pi)
+    # 窄区间（< 2π）：平移后更近则平移；无等价角可入界则留在原值
+    assert np.isclose(IkineSolver._shift_2pi(np.array([5.9]), [0.0], [1.0])[0], 5.9 - 2 * np.pi)
+    assert np.isclose(IkineSolver._shift_2pi(np.array([3.0]), [0.0], [0.1])[0], 3.0)
+    # _select_nearest：剔除越限行 + 取与 q0 偏差平方和最小者；全越限 → 失败
+    sols = np.array([[0.1, 0, 0, 0, 0, 0],
+                     [0.2, 0, 0, 0, 0, 0],
+                     [9.9, 0, 0, 0, 0, 0]])
+    r = IkineSolver._select_nearest(sols, np.full(6, 0.18), q_lo, q_hi)
+    assert r.success and np.allclose(r.q, sols[1])
+    r2 = IkineSolver._select_nearest(sols[2:], np.zeros(6), q_lo, q_hi)
+    assert (not r2.success) and r2.q.size == 0
+
+    # dummy 解析求解器：solve_all 全解（含 ±2π 归位）；solve 限位内选 q0 最近
+    class DummyIk(IkineSolver):
+        def solve(self, arm, target, frame, q0, *, tol=1e-4, iters=200, **kw):
+            return self._select_nearest(
+                self.solve_all(arm, target, frame).q, q0, arm.qlow, arm.qhigh)
+
+        def solve_all(self, arm, target, frame, **kw):
+            raw = np.array([[0.1, 0, 0, 0, 0, 0],
+                            [7.5, 0, 0, 0, 0, 0]])          # 第二行需 -2π 归位
+            shifted = np.array([IkineSolver._shift_2pi(row, arm.qlow, arm.qhigh)
+                                for row in raw])
+            return IKResult(q=shifted, success=True, err=0.0, n_iter=0)
+
+    arm = SimpleNamespace(qlow=q_lo, qhigh=q_hi)             # 鸭子类型 arm
+    d = DummyIk()
+    ra = d.solve_all(arm, Pose(), "ee")
+    assert ra.q.shape == (2, 6) and q_lo[0] <= ra.q[1, 0] <= q_hi[0]
+    rs = d.solve(arm, Pose(), "ee", np.zeros(6))
+    assert rs.success and np.allclose(rs.q, np.array([0.1, 0, 0, 0, 0, 0]))
 
 
 def test_repr_contains_state():

@@ -2,8 +2,9 @@
 
 逆运动学与正运动学互为逆问题：**给定目标位姿（Pose：xyz + 四元数），求各关节角。**
 
-本文件为通用骨架，求解器子类只需实现 :meth:`solve`（带软限位约束版
-:meth:`solve_constrained` 可选，基类默认未实现）。
+两个公开函数，覆盖两种用法：
+- :meth:`solve`——返回**单组解**（数值法从 ``q0`` 迭代；解析法经限位剔除后取``q0`` 最近解）；
+- :meth:`solve_all`——返回**全部解析解**（6R 通常 8 组），供分析/比较。
 
 两条实现约定：
 - 迭代内部经 ``arm.fkine`` / ``arm.jac`` 门面求位姿与雅可比（不直接摸
@@ -16,7 +17,7 @@ config ``robotics.ikine`` 段写注册名，即按名实例化装入 ``_ikine_so
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -29,40 +30,81 @@ class IkineSolver(ABC):
     """逆运动学策略接口：目标位姿 → 关节角。"""
 
     @abstractmethod
-    def solve(
-        self,
+    def solve(self,
         arm,
         target: Pose,
         frame: Union[str, int],
+        q0: np.ndarray,
         *,
-        q0: Optional[np.ndarray] = None,
         tol: float = 1e-4,
         iters: int = 200,
         **kwargs,
     ) -> IKResult:
-        """求 IK（通用 → 特有参数排序）。
+        """求单组解（通用参数 → 特有参数排序）。
 
         :param target: 目标位姿 ``Pose``（xyz + 四元数；与 ``arm.fkine`` 输出同约定）。
-        :param frame: 目标帧名/索引（必填）。
-        :param q0: 迭代初值（数值法特有；缺省 ``arm.q_neutral``，解析法忽略）。
+        :param frame: 目标帧名（``str``）或帧索引（``int``）。
+        :param q0: ``(n,)`` 关节角参考，弧度——数值法作**迭代起点**；
+            解析法作**选解参考**：全部闭式解先剔除超出关节软限位者，再取与``q0`` 各关节角
+            偏差平方和最小的一组（即构型上最接近 ``q0`` 的解，避免机械臂大幅换构型）。
         :param tol: 残差范数收敛容差（数值法特有，默认 ``1e-4``）。
         :param iters: 迭代次数上限（数值法特有，默认 ``200``）。
+        :return: :class:`IKResult`，``q`` 为 ``(n,)`` 单解；无可行解时``success=False``,``q`` 为空。
         """
 
-    def solve_constrained(
-        self,
+    def solve_all(self,
         arm,
         target: Pose,
         frame: Union[str, int],
-        *,
-        q0: Optional[np.ndarray] = None,
-        tol: float = 1e-4,
-        iters: int = 200,
-        restarts: int = 32,
         **kwargs,
     ) -> IKResult:
-        """带关节软限位约束版（解满足 ``arm.joint_limits_soft``；失败随机重启）。
+        """求全部解析解。
 
-        :param restarts: 首轮失败后的随机初值重启次数（默认 32）。
+        :param target: 目标位姿 ``Pose``。
+        :param frame: 目标帧名（``str``）或帧索引（``int``）。
+        :return: :class:`IKResult`，``q`` 为 ``(K,n)``（每行一组解；6R 通常``K=8``）。
+        **不做限位剔除**，但逐关节尝试 ``±2π`` 平移，使每组解尽量落入关节限位范围内（等价角中取离限位区间最近者）。
         """
-        raise NotImplementedError("ikine_constrained 待具体求解器实现")
+        raise NotImplementedError("solve_all 仅解析法实现提供")
+
+    # ----------------------------------------------------------
+    # 共享助手（把选解契约做成可执行逻辑，解析法实现直接复用）
+    # ----------------------------------------------------------
+    @staticmethod
+    def _shift_2pi(q: np.ndarray, q_min: np.ndarray, q_max: np.ndarray) -> np.ndarray:
+        """逐关节加 ``k·2π``（k 取最优整数），使 ``q`` 尽量落入 ``[q_min, q_max]``。
+
+        关节限位区间窄于 ``2π`` 时可能无整数 k 可入界，此时取离区间最近的等价角。
+        """
+        q = np.asarray(q, dtype=float).reshape(-1)
+        q_min = np.asarray(q_min, dtype=float).reshape(-1)
+        q_max = np.asarray(q_max, dtype=float).reshape(-1)
+        two_pi = 2.0 * np.pi
+        out = q.copy()
+        for j in range(q.size):
+            best, best_d = q[j], np.inf
+            # 以区间中心圆整出基准 k，最优解必在其 ±1 邻域内
+            k0 = int(round(((q_min[j] + q_max[j]) / 2.0 - q[j]) / two_pi))
+            for k in (k0 - 1, k0, k0 + 1):
+                s = q[j] + k * two_pi
+                d = max(0.0, q_min[j] - s, s - q_max[j])   # 与限位区间的距离
+                if d < best_d:
+                    best, best_d = s, d
+            out[j] = best
+        return out
+
+    @staticmethod
+    def _select_nearest(sols: np.ndarray, q0: np.ndarray,
+                        q_min: np.ndarray, q_max: np.ndarray) -> IKResult:
+        """限位剔除 + 选最近解（解析法 :meth:`solve` 的收尾逻辑）。
+
+        ``sols`` 为 ``(K,n)`` 候选解：剔除任一关节超出 ``[q_min, q_max]`` 的行，
+        剩余行中取与 ``q0`` 各关节角偏差平方和最小的一组；全部越限时返回``success=False``、``q`` 为空。
+        """
+        sols = np.atleast_2d(np.asarray(sols, dtype=float))
+        q0 = np.asarray(q0, dtype=float).reshape(-1)
+        feas = sols[((sols >= q_min) & (sols <= q_max)).all(axis=1)]
+        if feas.size == 0:
+            return IKResult(q=np.zeros(0), success=False, err=float("inf"), n_iter=0)
+        k = int(np.argmin(((feas - q0) ** 2).sum(axis=1)))
+        return IKResult(q=feas[k], success=True, err=0.0, n_iter=0)

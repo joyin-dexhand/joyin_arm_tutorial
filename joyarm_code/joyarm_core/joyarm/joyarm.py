@@ -595,13 +595,15 @@ class JoyArm:
         """正运动学（``frame`` 目标帧名/索引，必填；``rep`` 取 ``pose``（默认，xyz+四元数）/``T``（4×4 矩阵）/``se3``（pin.SE3））。"""
         return self._active("fkine").solve(self, q, frame=frame, rep=rep)
 
-    def ikine(self, target: Pose, frame: Union[str, int], *, q0=None, **kw):
-        """逆运动学（``target`` 目标位姿 Pose；``q0``/``tol``/``iters`` 等为求解器特有参数）。"""
-        return self._active("ikine").solve(self, target, frame=frame, q0=q0, **kw)
+    def ikine(self, target: Pose, frame: Union[str, int], q0: np.ndarray, **kw):
+        """逆运动学单解（``q0`` ``(n,)`` 必填：数值法迭代起点 / 解析法限位剔除后
+        选最近解的参考；``tol``/``iters`` 等为求解器特有参数）。"""
+        return self._active("ikine").solve(self, target, frame, q0, **kw)
 
-    def ikine_constrained(self, target: Pose, frame: Union[str, int], *, q0=None, **kw):
-        """带关节软限位约束的逆运动学（失败随机重启）。"""
-        return self._active("ikine").solve_constrained(self, target, frame=frame, q0=q0, **kw)
+    def ikine_all(self, target: Pose, frame: Union[str, int], **kw):
+        """逆运动学全部解析解（``q`` 为 ``(K,n)``，经 ±2π 平移尽量落入限位；
+        数值法实现不支持）。"""
+        return self._active("ikine").solve_all(self, target, frame, **kw)
 
     def jac(self, q: np.ndarray, frame: Union[str, int], ref: str = "local"):
         """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端帧系 / 基座系）。"""
