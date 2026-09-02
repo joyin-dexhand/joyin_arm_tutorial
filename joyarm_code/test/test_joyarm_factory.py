@@ -21,7 +21,6 @@ sys.path.insert(0, str(_ROOT))
 from joyarm_core import joyarm_factory, JoyArmFactory, JoyArm  # noqa: E402
 from joyarm_core.joyarm import load_config  # noqa: E402
 from joyarm_core.joyarm.joyarm import _build_domain  # noqa: E402
-from joyarm_core.utils.types import Severity  # noqa: E402
 
 _ARM = None
 
@@ -141,24 +140,22 @@ def test_set_config_whitelist():
 
 def test_check_config_clean_passes():
     arm = _arm()
-    issues = arm.check_config()
-    assert issues == [], f"干净配置不应有违规：{issues}"
+    arm.check_config()          # 正常 → 静默通过（异常则 ValueError）
 
 
 def test_check_config_detects_problems():
     cfg = load_config("joyarm_dm")
-    # q_home 长度错 + 无效注册名 + backend 关节数不符
+    # q_home 长度错 + backend 关节数不符（bogus 注册名走软失败架构，由门面调用报错）
     cfg = copy.deepcopy(cfg)
     cfg["joyarm"]["q_home"] = [0.0, 0.0]
     cfg["robotics"]["ikine"] = "bogus"
     cfg["backend"]["arm"]["joints"] = cfg["backend"]["arm"]["joints"][:4]
     arm = JoyArm(model="joyarm_dm", config=cfg)
-    issues = arm.check_config()
-    metrics = [v.metric for v in issues]
-    assert "q_home:len" in metrics
-    assert "robotics.ikine:not_loaded" in metrics
-    assert "backend.arm.joints:len" in metrics
-    assert any(v.severity is Severity.ERROR for v in issues)
+    try:
+        arm.check_config()
+        raise AssertionError("坏配置应抛 ValueError")
+    except ValueError as e:
+        assert "q_home" in str(e) and "backend.arm.joints" in str(e)
     # 未加载域的门面调用显性报错
     try:
         arm.ikine(np.eye(4))

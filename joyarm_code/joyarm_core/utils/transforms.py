@@ -45,7 +45,7 @@ __all__ = [
     "T_mul",                # T_mul(T1, T2) -> np.ndarray
     "adT",                  # adT(T) -> np.ndarray
     # 插值
-    "slerp",                # slerp(R0, R1, s: float) -> np.ndarray     
+    "slerp",                # slerp(q0, q1, s: float) -> np.ndarray
 ]
 
 
@@ -141,7 +141,7 @@ def rodrigues(k, theta=None) -> np.ndarray:
     k = np.asarray(k, dtype=float).reshape(3)
     if theta is None:
         # 没给角度：把 k 当"旋转向量"——方向是轴、长度是角
-        theta = np.linalg.norm(k)               # 角度 = 向量模长
+        theta = np.linalg.norm(k)                # 角度 = 向量模长
         if theta > 1e-12:                        # 避免除零
             k = k / theta                        # 单位化旋转轴
     else:
@@ -373,7 +373,7 @@ def T_mul(T1, T2) -> np.ndarray:
 
 
 def adT(T) -> np.ndarray:
-    """齐次变换 ``T`` 的 6×6 伴随矩阵 ``Ad_T``（Ch4/Ch9 用）。
+    """齐次变换 ``T`` 的 6×6 伴随矩阵 ``Ad_T``。
 
     用于旋量/六维力在不同坐标系间的变换：
 
@@ -401,17 +401,16 @@ def adT(T) -> np.ndarray:
 # ============================================================
 # 插值
 # ============================================================
-def slerp(R0, R1, s: float) -> np.ndarray:
-    """球面线性插值两个旋转矩阵（Ch5 轨迹、Ch12 遥操用）。
+def slerp(q0, q1, s: float) -> np.ndarray:
+    """球面线性插值两个四元数。
 
-    :param R0: ``(3,3)`` 起始旋转。
-    :param R1: ``(3,3)`` 终止旋转。
-    :param s: 插值参数，``[0,1]``；``0`` 返回 ``R0``，``1`` 返回 ``R1``。
-    :return: ``(3,3)`` 插值后的旋转矩阵。
+    :param q0: ``(4,)`` 起始四元数 ``(w,x,y,z)``，无需单位化，内部归一化。
+    :param q1: ``(4,)`` 终止四元数 ``(w,x,y,z)``，无需单位化，内部归一化。
+    :param s: 插值参数，``[0,1]``；``0`` 返回 ``q0``，``1`` 返回 ``q1``。
+    :return: ``(4,)`` 插值后的单位四元数。
     """
-    # 先把两个旋转矩阵转成四元数（四元数便于球面插值）
-    q0 = R_to_quat(R0)
-    q1 = R_to_quat(R1)
+    q0 = quat_norm(q0)
+    q1 = quat_norm(q1)
     # 若点积为负，翻转 q1 以走最短弧（q 和 -q 表示同一旋转，选更近的那个）
     if np.dot(q0, q1) < 0.0:
         q1 = -q1
@@ -419,7 +418,7 @@ def slerp(R0, R1, s: float) -> np.ndarray:
 
     if dot > 0.9995:
         # 两旋转极接近：slerp 分母→0 不稳定，改用线性插值 + 归一化（nlerp）
-        q = quat_norm(q0 + s * (q1 - q0))
+        q = q0 + s * (q1 - q0)
     else:
         # 球面线性插值：在四元数球面上沿大圆走
         theta_0 = np.arccos(dot)              # 两旋转间的总夹角
@@ -429,7 +428,7 @@ def slerp(R0, R1, s: float) -> np.ndarray:
         s0 = np.sin((1.0 - s) * theta_0) / sin_0
         s1 = np.sin(theta) / sin_0
         q = s0 * q0 + s1 * q1
-    return quat_to_R(q)                  # 四元数转回旋转矩阵
+    return quat_norm(q)                  # 收尾归一化，消除浮点漂移
 
 
 # ============================================================

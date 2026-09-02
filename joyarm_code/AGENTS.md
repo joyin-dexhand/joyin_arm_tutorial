@@ -134,7 +134,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 
 | 文件 | 类 / 关键定义 | 章节 | 状态 |
 |:---|:---|:---:|:---:|
-| `utils/types.py` | 枚举 + 数据类（Pose/JointState/ArmState/JointLimits/TcpLimits/IKResult/Violation…） | Ch2 | ✅ |
+| `utils/types.py` | 枚举 + 数据类（Pose/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | `clamp_to_limits` + `joint_limits_from_model`/`soft_limits` | Ch11 | ✅ |
 | `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写） | Ch2 | ✅ |
@@ -171,8 +171,8 @@ Backend(ABC) ──▶ BackendDM ✅
 # 配置
 JoyArm.get_config() → dict                                    # 深拷贝快照（教学数据读取口）✅
 JoyArm.set_config(path, value)                                # 运行期白名单（soft_margin）✅
-JoyArm.check_config() → list[Violation]                       # 配置自检（四段/命名链/urdf/位形/已配置域成员/关节数）✅
-JoyArm.check_hardware() → list[Violation]                     # 硬件自检（需 connect：通讯/使能/故障/温度/越限）✅
+JoyArm.check_config() → None（异常 ValueError）               # 配置最小自检（basic 段/命名链/urdf/位形/关节数；正常静默）✅
+JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件最小自检（需 connect：通讯/故障/编码器；温度等运行期监控归 ROS2）✅
 # 成员字典
 JoyArm.set_solver(domain, name) / set_controller(name) · list_solvers(domain)   # 运行期切换/查询 ✅
 # 计算门面（已注册域可用；参数排序：通用前/特有 keyword-only 后，约束5）

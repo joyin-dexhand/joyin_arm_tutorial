@@ -35,12 +35,9 @@ from .utils.types import (
     Pose,
     JointLimits,
     TcpLimits,
-    Violation,
     IKResult,
     ComplianceParams,
     ControlMode,
-    Severity,
-    SafetyAction,
     TrajectorySpace,
 )
 from .utils.transforms import (
@@ -110,12 +107,9 @@ __all__ = [
     "Pose",
     "JointLimits",
     "TcpLimits",
-    "Violation",
     "IKResult",
     "ComplianceParams",
     "ControlMode",
-    "Severity",
-    "SafetyAction",
     "TrajectorySpace",
     # 基础：数学 / 接口
     "rot_x",

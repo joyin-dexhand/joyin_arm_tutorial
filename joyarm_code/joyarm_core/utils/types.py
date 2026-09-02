@@ -16,8 +16,6 @@ from .transforms import T_to_Rp, R_to_quat, quat_to_R, Rp_to_T
 __all__ = [
     # 枚举
     "ControlMode",      # 关节控制模式：POSITION / VELOCITY / MIT
-    "Severity",         # 安全违规分级：INFO / WARNING / ERROR / CRITICAL
-    "SafetyAction",     # 安全响应策略：NONE / CLAMP / DAMPING_HOLD / FREEZE / ESTOP
     "TrajectorySpace",  # 轨迹空间标识：JOINT / CARTESIAN
     # 数据类
     "Wrench",           # 六维力/力矩：force + torque
@@ -28,7 +26,6 @@ __all__ = [
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
     "JointLimits",      # 关节限位: q_min/q_max + dq_max + tau_max
     "TcpLimits",        # 工具中心点限位: workspace_box + v_lin_max + v_ang_max + f_max + t_max
-    "Violation",        # 安全违规: layer + joint_idx + metric + value + limit + severity
     "IKResult",         # 逆运动学结果： q + success + err + n_iter
     "ComplianceParams", # Compliance 参数 : K/D/M
 ]
@@ -51,32 +48,6 @@ class ControlMode(Enum):
     POSITION = "position"
     VELOCITY = "velocity"
     MIT = "mit"
-
-
-class Severity(Enum):
-    """安全违规分级"""
-
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-    CRITICAL = "critical"
-
-
-class SafetyAction(Enum):
-    """安全响应策略
-
-    :cvar NONE: 不响应（仅记录）。
-    :cvar CLAMP: 裁剪到限位内（软限位违规的默认动作）。
-    :cvar DAMPING_HOLD: 阻尼力矩保持。
-    :cvar FREEZE: 构型维持。
-    :cvar ESTOP: 紧急停止。
-    """
-
-    NONE = "none"
-    CLAMP = "clamp"
-    DAMPING_HOLD = "damping_hold"
-    FREEZE = "freeze"
-    ESTOP = "estop"
 
 
 class TrajectorySpace(Enum):
@@ -270,26 +241,6 @@ class TcpLimits(_ArrayEqMixin):
     v_ang_max: float = 0.0
     f_max: float = 0.0
     t_max: float = 0.0
-
-
-@dataclass(eq=False)
-class Violation(_ArrayEqMixin):
-    """安全监控器输出的违规记录
-
-    :ivar layer: 监控层标识，``"joint"``/``"tcp"``/``"arm"`
-    :ivar joint_idx: 关节索引（末端/整机层违规可置 ``-1``）。
-    :ivar metric: 违规指标名（如 ``"q"``/``"dq"``/``"tau"``）。
-    :ivar value: 实测值。
-    :ivar limit: 限位阈值。
-    :ivar severity: 严重程度分级。
-    """
-
-    layer: str = ""
-    joint_idx: int = -1
-    metric: str = ""
-    value: float = 0.0
-    limit: float = 0.0
-    severity: Severity = Severity.WARNING
 
 
 # ============================================================

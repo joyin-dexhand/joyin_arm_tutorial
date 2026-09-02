@@ -34,9 +34,7 @@ from ..utils.types import (
     ArmState,
     ControlMode,
     Pose,
-    Severity,
     TcpLimits,
-    Violation,
 )
 
 try:
@@ -458,24 +456,25 @@ class JoyArm:
         self.qlow = self.joint_limits_soft.q_min
         self.qhigh = self.joint_limits_soft.q_max
 
-    def check_config(self) -> List[Violation]:
-        """配置自检（离线可跑）：四段齐全 / 命名链 / URDF 存在 / 特征位形长度与
-        限位 / robotics 已配置域的成员已加载 / backend 选型与关节数一致。
+    def check_config(self) -> None:
+        """配置最小自检（离线可跑）：basic 段齐全 / 命名链 / URDF 存在 /
+        特征位形长度与限位 / backend 选型与关节数一致。
 
-        :return: 违规列表 ``list[Violation]``（空列表 = 通过）。
+        最小检查语义：通过则静默返回；发现问题则 ``ValueError`` 携带全部
+        问题一次抛出。robotics 域成员加载为软失败架构（未加载时门面调用
+        显性报错），不在此检查。
+
+        :raises ValueError: 配置存在问题时抛出，消息列出全部问题。
         """
-        issues: List[Violation] = []
+        problems: List[str] = []
         cfg = self._config
-        for sec, sev in (("basic", Severity.ERROR), ("robotics", Severity.WARNING),
-                         ("joyarm", Severity.WARNING), ("backend", Severity.WARNING)):
-            if sec not in cfg:
-                issues.append(Violation("config", -1, f"missing:{sec}", 0.0, 0.0, sev))
+        if "basic" not in cfg:
+            problems.append("缺少配置段：basic")
         basic = cfg.get("basic") or {}
         if basic.get("name") not in (None, self.model):
-            issues.append(Violation(
-                "config", -1, "basic.name≠model", 0.0, 0.0, Severity.ERROR))
+            problems.append(f"basic.name={basic.get('name')!r} 与 model={self.model!r} 不一致")
         if not os.path.isfile(self._urdf_path):
-            issues.append(Violation("config", -1, "urdf_missing", 0.0, 0.0, Severity.ERROR))
+            problems.append(f"URDF 文件不存在：{self._urdf_path}")
         jcfg = cfg.get("joyarm") or {}
         for key in ("q_zero", "q_home", "q_neutral"):
             v = jcfg.get(key)
@@ -483,70 +482,56 @@ class JoyArm:
                 continue
             arr = np.asarray(v, dtype=float)
             if arr.size != self.n:
-                issues.append(Violation(
-                    "config", -1, f"{key}:len", float(arr.size), float(self.n), Severity.ERROR))
+                problems.append(f"joyarm.{key} 长度 {arr.size} ≠ 关节数 {self.n}")
             elif ((arr < self.joint_limits.q_min - 1e-9).any()
                     or (arr > self.joint_limits.q_max + 1e-9).any()):
-                issues.append(Violation(
-                    "config", -1, f"{key}:out_of_limits", 0.0, 0.0, Severity.ERROR))
-        # robotics：域未配置为教学过渡正常态（各章实现前注册表为空）不告警；
-        # 已配置却未加载成功（注册名未实现/实例化失败）才提示
-        robotics_cfg = cfg.get("robotics") or {}
-        for domain in _DOMAIN_REGISTRIES:
-            if robotics_cfg.get(domain) and self._active_name.get(domain) is None:
-                issues.append(Violation(
-                    "config", -1, f"robotics.{domain}:not_loaded", 0.0, 0.0, Severity.WARNING))
+                problems.append(f"joyarm.{key} 超出关节限位")
         bcfg = cfg.get("backend") or {}
         if bcfg:
             if self._backend is None:
-                issues.append(Violation(
-                    "config", -1, "backend:not_loaded", 0.0, 0.0, Severity.ERROR))
+                problems.append("backend 已配置但后端未加载")
             else:
                 nb = len((bcfg.get("arm") or {}).get("joints") or [])
                 if nb and nb != self.n:
-                    issues.append(Violation(
-                        "config", -1, "backend.arm.joints:len", float(nb),
-                        float(self.n), Severity.ERROR))
-        return issues
+                    problems.append(f"backend.arm.joints 数量 {nb} ≠ 关节数 {self.n}")
+        if problems:
+            raise ValueError(
+                "配置自检未通过：\n" + "\n".join(f"  - {p}" for p in problems))
 
-    def check_hardware(self) -> List[Violation]:
-        """硬件自检（需 ``connect()``）：逐关节通讯/使能/故障/编码器/温度/越限，
-        末端电机同构检查。
+    def check_hardware(self) -> None:
+        """硬件最小自检（需 ``connect()``）：逐关节通讯/电机故障/编码器有效性，
+        末端电机同构检查（通讯/故障）。
 
-        :return: 违规列表（空 = 全部正常）。
-        :raises RuntimeError: 未连接真机或无后端。
+        最小检查语义：通过则静默返回；发现硬故障则 ``RuntimeError`` 携带全部
+        问题一次抛出。运行期安全监控（关节过温、碰撞等）归 ROS2 节点，不在
+        核心库；指令越限由指令路径的限位裁剪（``clamp_to_limits``）兜底。
+
+        :raises RuntimeError: 未连接真机，或存在硬故障时抛出（消息列出全部问题）。
         """
         self._require_connected()
-        issues: List[Violation] = []
+        problems: List[str] = []
         st = self.get_arm_state()
         js = st.joint
         for i in range(self.n):
             if not bool(np.asarray(js.comm_ok)[i]):
-                issues.append(Violation("arm", i, "comm_ok", 0.0, 1.0, Severity.ERROR))
+                problems.append(f"本体关节[{i}] 通讯无应答")
             if bool(np.asarray(js.error)[i]):
-                issues.append(Violation("arm", i, "error", 1.0, 0.0, Severity.ERROR))
+                problems.append(f"本体关节[{i}] 电机故障（故障标志置位）")
             if not bool(np.asarray(js.angle_ok)[i]):
-                issues.append(Violation("arm", i, "angle_ok", 0.0, 1.0, Severity.ERROR))
-            if not bool(np.asarray(js.enabled)[i]):
-                issues.append(Violation("arm", i, "enabled", 0.0, 1.0, Severity.WARNING))
-            for metric, temp, lim in (("temp_mos", js.temp_mos[i], 70.0),
-                                      ("temp_rotor", js.temp_rotor[i], 80.0)):
-                if temp > lim:
-                    issues.append(Violation("arm", i, metric, float(temp), lim, Severity.WARNING))
-            q_i = float(js.q[i])
-            if q_i < self.joint_limits.q_min[i] or q_i > self.joint_limits.q_max[i]:
-                issues.append(Violation("arm", i, "q:out_of_limits", q_i, 0.0, Severity.ERROR))
+                problems.append(f"本体关节[{i}] 编码器角度无效")
         try:
             es = self._backend.read_state_end()
         except Exception:
             es = {}
         for i, ok in enumerate(es.get("comm_ok", [])):
             if not ok:
-                issues.append(Violation("end", i, "comm_ok", 0.0, 1.0, Severity.ERROR))
+                problems.append(f"末端电机[{i}] 通讯无应答")
         for i, err in enumerate(es.get("error", [])):
             if err:
-                issues.append(Violation("end", i, "error", 1.0, 0.0, Severity.ERROR))
-        return issues
+                problems.append(f"末端电机[{i}] 电机故障（故障标志置位）")
+        if problems:
+            raise RuntimeError(
+                "硬件自检未通过：\n" + "\n".join(f"  - {p}" for p in problems))
 
     # ----------------------------------------------------------
     # 内部：随包 URDF 解析（robot 资产加载逻辑）

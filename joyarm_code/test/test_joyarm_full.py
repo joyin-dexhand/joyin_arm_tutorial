@@ -235,12 +235,12 @@ class JoyArmFullTest:
             ("L0-配置 API", "低", "get_config 深拷贝 / set_config 白名单与越界拒绝", self.step_config_api),
             ("L0-六域空表与门面守卫", "低", "各域默认空表（教学过渡态）、未加载域门面 RuntimeError", self.step_domains),
             ("L0-采样与限位", "低", "rand_q/is_q_valid/clamp_q；margin=0 下软限位==URDF 硬限位", self.step_sampling),
-            ("L0-配置自检", "低", "check_config 应零违规", self.step_check_config),
+            ("L0-配置自检", "低", "check_config 正常静默通过（异常则 ValueError）", self.step_check_config),
             # ---- L1 连接只读层（不使能）----
             ("L1-connect", "低", "建立通信（共享总线，电机保持失能）；离线守卫抽查", self.step_connect),
             ("L1-读状态与模式", "低", "get_arm_state / state property / read_mode_arm·end（失能态）", self.step_read_state),
             ("L1-末端状态", "低", "get_end_state 字段族（joint=None/0）", self.step_end_state),
-            ("L1-硬件自检", "低", "check_hardware 报告（失能 WARNING 与零位偏差属预期，仅打印）", self.step_check_hw),
+            ("L1-硬件自检", "低", "check_hardware 最小自检（通讯/故障/编码器；正常静默通过，异常 RuntimeError）", self.step_check_hw),
             ("L1-安全基准位形", "低", "q_base = clamp_q(当前 q)（joint2/3 上限 0，越界部分将被夹回，后续小幅运动的基准）", self.step_qbase),
             # ---- L2 使能层 ----
             ("L2-模式轮切与混合语义", "中", "失能态轮切 MIT/POSITION/VELOCITY + read_mode 混合语义验证（无运动）", self.step_modes),
@@ -319,9 +319,8 @@ class JoyArmFullTest:
         print(f"✓ 采样/校验/裁剪：rand_q {q.round(2)}（软=硬限位内）")
 
     def step_check_config(self) -> None:
-        issues = self.arm.check_config()
-        assert issues == [], f"配置自检应零违规：{issues}"
-        print("✓ check_config：零违规")
+        self.arm.check_config()    # 正常 → 静默通过；异常 → ValueError 列出全部问题
+        print("✓ check_config：通过")
 
     # ================= L1 连接只读层 =================
     def step_connect(self) -> None:
@@ -344,12 +343,8 @@ class JoyArmFullTest:
         print("✓ get_end_state joint=None/0 一致")
 
     def step_check_hw(self) -> None:
-        issues = self.arm.check_hardware()
-        for v in issues:
-            print(f"  [{v.severity.value}] {v.layer}#{v.joint_idx} {v.metric}={v.value:.4g}（限 {v.limit:.4g}）")
-        if not issues:
-            print("  全部正常")
-        print("✓ check_hardware 完成（失能 WARNING 与 URDF 零位偏差 ERROR 属已知预期，仅报告）")
+        self.arm.check_hardware()  # 正常 → 静默通过；异常 → RuntimeError 列出全部问题
+        print("✓ check_hardware：通过（通讯/故障/编码器；温度等运行期监控归 ROS2 节点）")
 
     def step_qbase(self) -> None:
         q = self._q_now()

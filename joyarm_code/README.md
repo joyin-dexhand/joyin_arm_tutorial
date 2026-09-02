@@ -62,10 +62,10 @@ arm = joyarm_factory("joyarm_dm")  # 推荐：型号名唯一参数；默认未�
                                    # 自动加载 configs/joyarm_dm.yaml + URDF，按 robotics: 组装成员
                                    # 型号不存在时返回 None 并输出失败信息
 Q = arm.rand_q(size=100_000)       # 软限位内采样 (N,6)
-arm.check_config()                 # 配置自检 → list[Violation]（空 = 通过）
+arm.check_config()                 # 配置最小自检：正常静默通过，异常 ValueError 列出全部问题
 mdh = arm.get_config()["joyarm"]["arm_mdh_and_limits"]   # 教学数据从类内 config 读取
 # arm.fkine(Q) / arm.ikine(...)    # 求解器门面：各章实现算法并注册后即可用（当前注册表为空）
-# arm.connect(); arm.check_hardware(); arm.enable_arm()
+# arm.connect(); arm.check_hardware(); arm.enable_arm()  # 硬件最小自检同上（异常 RuntimeError）
 # 等价直用：from joyarm_core import JoyArm; arm = JoyArm("joyarm_dm")
 ```
 
