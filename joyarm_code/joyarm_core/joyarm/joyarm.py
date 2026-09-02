@@ -33,6 +33,7 @@ from ..utils.limits import clamp_to_limits, joint_limits_from_model, soft_limits
 from ..utils.types import (
     ArmState,
     ControlMode,
+    Pose,
     TcpLimits,
 )
 
@@ -594,27 +595,27 @@ class JoyArm:
         """正运动学（``frame`` 目标帧名/索引，必填；``rep`` 取 ``pose``（默认，xyz+四元数）/``T``（4×4 矩阵）/``se3``（pin.SE3））。"""
         return self._active("fkine").solve(self, q, frame=frame, rep=rep)
 
-    def ikine(self, T_target, frame=None, *, q0=None, **kw):
-        """逆运动学（``T_target`` 通用；``q0``/``tol``/``iters`` 等为求解器特有参数）。"""
-        return self._active("ikine").solve(self, T_target, frame=frame, q0=q0, **kw)
+    def ikine(self, target: Pose, frame: Union[str, int], *, q0=None, **kw):
+        """逆运动学（``target`` 目标位姿 Pose；``q0``/``tol``/``iters`` 等为求解器特有参数）。"""
+        return self._active("ikine").solve(self, target, frame=frame, q0=q0, **kw)
 
-    def ikine_constrained(self, T_target, frame=None, *, q0=None, **kw):
+    def ikine_constrained(self, target: Pose, frame: Union[str, int], *, q0=None, **kw):
         """带关节软限位约束的逆运动学（失败随机重启）。"""
-        return self._active("ikine").solve_constrained(self, T_target, frame=frame, q0=q0, **kw)
+        return self._active("ikine").solve_constrained(self, target, frame=frame, q0=q0, **kw)
 
-    def jac(self, q: np.ndarray, frame: Optional[Union[str, int]] = None, ref: str = "local"):
+    def jac(self, q: np.ndarray, frame: Union[str, int], ref: str = "local"):
         """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端帧系 / 基座系）。"""
         return self._active("jacobian").jac(self, q, frame=frame, ref=ref)
 
-    def manipulability(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
+    def manipulability(self, q: np.ndarray, frame: Union[str, int]) -> float:
         """Yoshikawa 可操作度（雅可比衍生量）。"""
         return self._active("jacobian").manipulability(self, q, frame=frame)
 
-    def cond_number(self, q: np.ndarray, frame: Optional[Union[str, int]] = None) -> float:
+    def cond_number(self, q: np.ndarray, frame: Union[str, int]) -> float:
         """雅可比条件数（雅可比衍生量）。"""
         return self._active("jacobian").cond_number(self, q, frame=frame)
 
-    def statics(self, q: np.ndarray, F: np.ndarray, frame: Optional[Union[str, int]] = None):
+    def statics(self, q: np.ndarray, F: np.ndarray, frame: Union[str, int]):
         """静力学 τ = JᵀF（雅可比衍生量）。"""
         return self._active("jacobian").statics(self, q, F, frame=frame)
 
@@ -634,7 +635,7 @@ class JoyArm:
         """重力项 G(q)。"""
         return self._active("dynamics").gravity(self, q)
 
-    def cartesian_inertia(self, q, frame=None):
+    def cartesian_inertia(self, q, frame: Union[str, int]):
         """笛卡尔惯量 Λ=J⁻ᵀMJ⁻¹（M ⊕ ``arm.jac`` 模板）。"""
         return self._active("dynamics").cartesian_inertia(self, q, frame=frame)
 

@@ -1,12 +1,13 @@
-"""TrajPlanner —— 轨迹规划器策略 ABC + Trajectory 轨迹载体。
+"""TrajPlanner —— 轨迹规划器接口（ABC）+ Trajectory 轨迹载体。
 
-``JoyArm._traj_planners`` 成员字典的契约：实现经 config ``robotics.traj`` 选型。
-四个入口按空间（joint/cart）×粒度（p2p/waypoints）划分；``method`` 选**同族内方式**，
-config 选**整个规划器**——两层选择不混淆。平滑契约：位置与姿态均 C2（位置/速度/
-加速度无突变）。
+轨迹规划回答"**怎么从 A 平滑走到 B**"：给定起止（或途经）位形，生成位置、
+速度、加速度均连续（C2）的运动序列，供执行层按时间回放。
 
-本模块仅定义通用接口与轨迹数据契约；具体规划算法为教程 Ch5 教学内容，实现后经
-各域 ``REGISTRY`` 注册接入。Ch5。
+四个入口按 空间（joint 关节角 / cart 笛卡尔位姿）× 粒度（p2p 两点 /
+waypoints 多点途经）划分；两层选型不混淆：``method`` 选**同族内方式**
+（如直线/圆弧），config ``robotics.traj`` 选**整个规划器**。
+
+具体规划算法为教程 Ch5 教学内容，实现后经 ``REGISTRY`` 注册接入。
 """
 from __future__ import annotations
 
@@ -70,7 +71,7 @@ class Trajectory:
         """按时间取**最近采样点**（越界取端点；供规划/控制线程按 wall-time 求参考）。
 
         :return: 关节空间 ``{"t", "q", "dq", "ddq"}``（dq/ddq 可能缺省 ``None``）；
-            笛卡尔空间 ``{"t", "T"}``（``T`` 为 ``(4,4)``）。
+            笛卡尔空间 ``{"t", "pose"}``（``pose`` 为 :class:`Pose`）。
         """
         t = float(t)
         if self.t.size == 0:
@@ -82,7 +83,7 @@ class Trajectory:
             out["dq"] = self.dq[k] if self.dq is not None else None
             out["ddq"] = self.ddq[k] if self.ddq is not None else None
         else:
-            out["T"] = self.poses[k].T
+            out["pose"] = self.poses[k]
         return out
 
     # ----------------------------------------------------------
@@ -152,11 +153,11 @@ class TrajPlanner(ABC):
     def plan_cart_p2p(
         self, arm, *, method: str = "line", T: float = 2.0, hz: int = 200, **kw,
     ) -> Trajectory:
-        """笛卡尔点到点：``line``（需 ``T0``/``Tf``）/ ``arc``（需 ``center``/``radius``/``T_start``/``angle``/``plane``）；位置沿几何路径、姿态 slerp，均配五次时间律（C2）。"""
+        """笛卡尔点到点：``line``（需 ``pose0``/``posef``，:class:`Pose`）/ ``arc``（需 ``pose_start``/``center``/``radius``/``angle``/``plane``）；位置沿几何路径、姿态 slerp，均配五次时间律（C2）。"""
 
     @abstractmethod
     def plan_cart_waypoints(
-        self, arm, poses: List[np.ndarray], Ts: List[float],
+        self, arm, poses: List[Pose], Ts: List[float],
         *, smooth: bool = True,
     ) -> Trajectory:
-        """笛卡尔多点途经：``poses`` 为 ``(4,4)`` 列表（含起止）；段间平滑拼接（C2）。"""
+        """笛卡尔多点途经：``poses`` 为 :class:`Pose` 列表（含起止）；段间平滑拼接（C2）。"""

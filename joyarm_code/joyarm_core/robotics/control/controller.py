@@ -1,11 +1,10 @@
-"""Controller —— 控制律策略 ABC。
+"""Controller —— 控制律接口（ABC：只定骨架，不含算法）。
 
-``JoyArm._controllers`` 成员字典的契约：实现经 config ``robotics.control`` 选型，运行期可经
-``arm.set_controller`` 切换。每拍控制把"期望 + 实测"映射为电机控制值——指令发送前过
-限位守卫（裁剪/否决）。
+控制律回答"**每个控制周期给电机发什么**"：把"期望 + 实测"映射为控制值，
+指令发送前过限位守卫（裁剪/否决）。``JoyArm._controllers`` 成员字典经 config
+``robotics.control`` 选型，运行期可经 ``arm.set_controller`` 切换。
 
-本模块仅定义通用接口；具体控制律与执行循环为教程 Ch6 教学内容，实现后经
-``REGISTRY`` 注册接入。Ch6。
+具体控制律与执行循环为教程 Ch6/8/9 教学内容，实现后经 ``REGISTRY`` 注册接入。
 """
 from __future__ import annotations
 

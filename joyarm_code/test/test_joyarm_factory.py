@@ -18,7 +18,7 @@ import numpy as np
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core import joyarm_factory, JoyArmFactory, JoyArm  # noqa: E402
+from joyarm_core import joyarm_factory, JoyArmFactory, JoyArm, Pose  # noqa: E402
 from joyarm_core.joyarm import load_config  # noqa: E402
 from joyarm_core.joyarm.joyarm import _build_domain  # noqa: E402
 
@@ -158,7 +158,7 @@ def test_check_config_detects_problems():
         assert "q_home" in str(e) and "backend.arm.joints" in str(e)
     # 未加载域的门面调用显性报错
     try:
-        arm.ikine(np.eye(4))
+        arm.ikine(Pose(), "ee")
         raise AssertionError("未加载 ikine 应抛 RuntimeError")
     except RuntimeError:
         pass
