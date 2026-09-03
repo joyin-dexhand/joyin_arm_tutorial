@@ -19,12 +19,12 @@ from .types import (
     Wrench,
     Twist,
     Pose,
+    TrajFrame,
     JointLimits,
     TcpLimits,
     IKResult,
     ComplianceParams,
     ControlMode,
-    TrajectorySpace,
 )
 from .transforms import (
     rot_x,
@@ -61,12 +61,12 @@ __all__ = [
     "Wrench",
     "Twist",
     "Pose",
+    "TrajFrame",
     "JointLimits",
     "TcpLimits",
     "IKResult",
     "ComplianceParams",
     "ControlMode",
-    "TrajectorySpace",
     # transforms
     "rot_x",
     "rot_y",

@@ -33,12 +33,12 @@ from .utils.types import (
     Wrench,
     Twist,
     Pose,
+    TrajFrame,
     JointLimits,
     TcpLimits,
     IKResult,
     ComplianceParams,
     ControlMode,
-    TrajectorySpace,
 )
 from .utils.transforms import (
     rot_x,
@@ -71,13 +71,12 @@ from .joyarm.joyarm import JoyArm
 from .joyarm import JoyArmFactory, joyarm_factory
 
 # ---- 算法层（robotics；鸭子类型消费 arm，不 import joyarm）----
-from .robotics.trajectory import Trajectory
 # 求解器策略接口（JoyArm 六域成员字典的契约；具体实现为教程各章教学内容）
 from .robotics.fkine import FkineSolver
 from .robotics.ikine import IkineSolver
 from .robotics.jacobian import JacobianSolver
 from .robotics.dynamics import DynamicsSolver
-from .robotics.trajectory import TrajPlanner
+from .robotics.trajectory import TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
 from .robotics.control import Controller
 
 # ---- 指令路径守卫（clamp_to_limits；状态监测/日志归 ROS2 节点，Ch11）----
@@ -101,12 +100,12 @@ __all__ = [
     "Wrench",
     "Twist",
     "Pose",
+    "TrajFrame",
     "JointLimits",
     "TcpLimits",
     "IKResult",
     "ComplianceParams",
     "ControlMode",
-    "TrajectorySpace",
     # 基础：数学 / 接口
     "rot_x",
     "rot_y",
@@ -135,14 +134,14 @@ __all__ = [
     "JoyArm",
     "JoyArmFactory",
     "joyarm_factory",
-    # 算法层
-    "Trajectory",
     # 求解器策略接口（各章实现注册后接入）
     "FkineSolver",
     "IkineSolver",
     "JacobianSolver",
     "DynamicsSolver",
     "TrajPlanner",
+    "AutoTrajPlanner",
+    "ForceTrajPlanner",
     "Controller",
     # 指令路径守卫（监测/日志归 ROS2 节点）
     "clamp_to_limits",

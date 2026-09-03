@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 from enum import Enum
+from typing import Optional
 
 import numpy as np
 from .transforms import T_to_Rp, R_to_quat, quat_to_R, Rp_to_T
@@ -16,11 +17,11 @@ from .transforms import T_to_Rp, R_to_quat, quat_to_R, Rp_to_T
 __all__ = [
     # 枚举
     "ControlMode",      # 关节控制模式：POSITION / VELOCITY / MIT
-    "TrajectorySpace",  # 轨迹空间标识：JOINT / CARTESIAN
     # 数据类
     "Wrench",           # 六维力/力矩：force + torque
     "Twist",            # 空间速度：linear + angular
     "Pose",             # 统一位姿表示：position + orientation（单位四元数）
+    "TrajFrame",        # 轨迹帧：time + pose/twist/wrench + q/dq/tau（纯数据）
     "JointState",       # 关节状态：control_mode + q/dq/tau + enabled/error/comm_ok/angle_ok + 温度
     "TcpState",         # 工具中心点状态：pose + twist + wrench
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
@@ -48,13 +49,6 @@ class ControlMode(Enum):
     POSITION = "position"
     VELOCITY = "velocity"
     MIT = "mit"
-
-
-class TrajectorySpace(Enum):
-    """轨迹空间标识"""
-
-    JOINT = "joint"
-    CARTESIAN = "cartesian"
 
 
 # ============================================================
@@ -139,6 +133,28 @@ class Pose(_ArrayEqMixin):
     def T(self) -> np.ndarray:
         """派生的 4×4 齐次变换矩阵（每次调用现算）。"""
         return Rp_to_T(quat_to_R(self.orientation), self.position)
+
+
+@dataclass(eq=False)
+class TrajFrame(_ArrayEqMixin):
+    """力-位、关节-笛卡尔，混合轨迹帧
+
+    :ivar time: 绝对时间戳，Unix 秒（纪元 1970-01-01 UTC）。
+    :ivar pose: 末端位姿参考（笛卡尔任务）。
+    :ivar twist: 末端速度参考。
+    :ivar wrench: 末端力/力矩参考（力控任务）。
+    :ivar q: ``(n,)`` 关节位置参考，弧度。
+    :ivar dq: ``(n,)`` 关节速度参考，弧度/秒。
+    :ivar tau: ``(n,)`` 前馈力矩，N·m。
+    """
+
+    time: float = 0.0
+    pose: Optional[Pose] = None
+    twist: Optional[Twist] = None
+    wrench: Optional[Wrench] = None
+    q: Optional[np.ndarray] = None
+    dq: Optional[np.ndarray] = None
+    tau: Optional[np.ndarray] = None
 
 
 # ============================================================

@@ -51,7 +51,7 @@ robotics: {} # 各域配置留空（教学过渡态；章节实现注册后按�
 #   ikine: analytic6r  # Ch3 实现 6R 解析 IK 后注册 "analytic6r"
 #   jacobian: geometric  # Ch4 实现几何雅可比后注册 "geometric"
 #   dynamics: lagrangian  # Ch8 实现拉格朗日动力学后注册 "lagrangian"
-#   traj: {name: default, hz: 200}   # Ch5 实现默认规划器后注册 "default"
+#   traj: {name: auto, plan_hz: 1.0, sample_hz: 200.0}   # Ch5 实现 AutoTrajPlanner 后注册（plan_hz 低频重规划 / sample_hz ≈控制频率采样）
 #   control:                          # Ch6 实现控制律后注册（多载示例：首个活动）
 #     - {name: position, kp: [20.0, 20.0, 20.0, 8.0, 8.0, 8.0],
 #        kd: [3.0, 3.0, 3.0, 1.0, 1.0, 1.0], gravity_comp: true}

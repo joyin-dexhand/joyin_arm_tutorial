@@ -15,8 +15,10 @@ jacobian Ch4 / trajectory Ch5 / control Ch6、Ch8-9 / dynamics Ch8），章节�
 - dynamics：逆动力学与 M/C/G（Ch8）
 - control：控制律（Ch6/8/9）
 """
-from .trajectory import Trajectory
+from .trajectory import TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
 
 __all__ = [
-    "Trajectory",
+    "TrajPlanner",
+    "AutoTrajPlanner",
+    "ForceTrajPlanner",
 ]

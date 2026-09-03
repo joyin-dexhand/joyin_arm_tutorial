@@ -39,7 +39,7 @@ joyarm_code/
 │   │   ├── fkine/                   #     FkineSolver(ABC)——MDH 白盒 FK 为 Ch2 教学内容
 │   │   ├── ikine/                   #     IkineSolver(ABC)——数值/解析 IK 为 Ch3 教学内容
 │   │   ├── jacobian/                #     JacobianSolver(ABC，衍生量模板)——Ch4
-│   │   ├── trajectory/              #     TrajPlanner(ABC) + Trajectory 载体（含 npz 持久化）——Ch5
+│   │   ├── trajectory/              #     TrajPlanner(ABC) + AutoTrajPlanner/ForceTrajPlanner
 │   │   ├── dynamics/                #     DynamicsSolver(ABC，Λ 模板)——Ch8
 │   │   └── control/                 #     Controller(ABC)——Ch6/8/9
 │   ├── backend/                    #   通信层（整机 Backend + name 选型）
@@ -134,7 +134,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 
 | 文件 | 类 / 关键定义 | 章节 | 状态 |
 |:---|:---|:---:|:---:|
-| `utils/types.py` | 枚举 + 数据类（Pose/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
+| `utils/types.py` | 枚举 + 数据类（Pose/TrajFrame/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | `clamp_to_limits` + `joint_limits_from_model`/`soft_limits` | Ch11 | ✅ |
 | `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写） | Ch2 | ✅ |
@@ -142,7 +142,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）；MDH 白盒 FK 待 Ch2 实现 | Ch2 | 🟡 |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 + solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）；数值/解析实现待 Ch3 | Ch3 | 🟡 |
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（`manipulability`/`cond_number`/`statics` 衍生量模板在 ABC） | Ch4 | 🟡 |
-| `robotics/trajectory/` | `TrajPlanner(ABC)` + `Trajectory` 载体（npz 持久化）；规划算法待 Ch5 | Ch5 | 🟡 |
+| `robotics/trajectory/` | `TrajPlanner(ABC)`（`plan` 模板 + `_plan`/`sample_frame` 内核 + `_check_targets`）+ AutoTrajPlanner/ForceTrajPlanner 桩 | Ch5/9 | 🟡 |
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（Λ=J⁻ᵀMJ⁻¹ 模板在 ABC）；实现待 Ch8 | Ch8 | 🟡 |
 | `robotics/control/` | `Controller(ABC)`（`compute(arm, target, state)` 契约）；控制律与执行循环待 Ch6/8/9 | Ch6/8/9 | 🟡 |
 | `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检）+ `load_config` + `_build_domain` | — | ✅ |
@@ -185,15 +185,18 @@ JoyArm.get_arm_state() → ArmState（fkine 已注册时填 tcp.pose）· set_ar
 JoyArm.end_open/end_close/end_zero(joint=None) · set_end_position / set_end_force / get_end_state
 JoyArm.damping_mode(kd=10.0)                    # 紧急阻尼：任何状态全电机（含末端）MIT 纯阻尼 ✅
 JoyArm.state → ArmState|None · rand_q / clamp_q / is_q_valid
+JoyArm.set/get_target_traj(targets) · set/get_current_frame(frame)   # 轨迹桥：应用→规划→控制（TrajFrame；发布即不可变+原子交换）✅
 # 关键属性：model / pin_model / pin_data / n / nv / ee_frame_* / joint_limits(_soft) / qlow / qhigh / q_zero / q_home / q_neutral / tcp_limits / T_base / _backend / connected
 #   六域字典：_fkine_solvers/_ikine_solvers/_jacobian_solvers/_dynamics_solvers/_traj_planners/_controllers + _active_name
+#   轨迹桥（私有）：_target_traj（List[TrajFrame]，写者=应用线程）/ _current_frame（TrajFrame，写者=规划线程）
 ```
 
 #### Robotics 独立 API（各域 ABC；实现为教学章节内容）
 
 ```python
 FkineSolver / IkineSolver / JacobianSolver / DynamicsSolver / TrajPlanner / Controller   # ABC 契约 🟡
-Trajectory(space, t, q, poses, ...)   # 轨迹载体：sample/duration/save/load(npz) ✅
+TrajPlanner(plan_hz, sample_hz)：plan(arm, targets)→_plan / sample_frame(t_abs)→TrajFrame   # 目标驱动规划 🟡
+AutoTrajPlanner（关节/位姿 × 单值/序列 四情形）/ ForceTrajPlanner（阻抗/导纳/力位混合）   # 注释桩 🟡
 # 求解器用法二选一：子类实例.solve(arm, q)（arm 鸭子类型，课堂/单测）或 arm.* 门面（活动成员，应用）
 ```
 

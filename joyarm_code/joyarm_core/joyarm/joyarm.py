@@ -35,6 +35,7 @@ from ..utils.types import (
     ControlMode,
     Pose,
     TcpLimits,
+    TrajFrame,
 )
 
 try:
@@ -90,13 +91,13 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
         raise ValueError(f"『{model}』型号在 configs 中未找到；可用：{avail}") from e
 
 
-# config robotics 段 "default" 别名对应的各域默认注册名（教程各章实现注册后生效）
+# config robotics 段 "default" 别名对应的各域默认注册名
 _DOMAIN_DEFAULTS = {
     "fkine": "pin",
     "ikine": "pin",
     "jacobian": "pin",
     "dynamics": "pin",
-    "traj": "default",
+    "traj": "auto",
     "control": "position",
 }
 
@@ -308,6 +309,10 @@ class JoyArm:
             members = _build_domain(domain, registry, robotics_cfg.get(domain))
             self._members(domain).update(members)
             self._active_name[domain] = next(iter(members), None)
+
+        # ---- 轨迹桥，发布即不可变 ----
+        self._target_traj: Optional[List[TrajFrame]] = None   # 应用任务写
+        self._current_frame: Optional[TrajFrame] = None       # 规划线程写
 
     # ----------------------------------------------------------
     # 成员字典访问 / 切换（六域统一）
@@ -640,6 +645,34 @@ class JoyArm:
     def cartesian_inertia(self, q, frame: Union[str, int]):
         """笛卡尔惯量 Λ=J⁻ᵀMJ⁻¹（M ⊕ ``arm.jac`` 模板）。"""
         return self._active("dynamics").cartesian_inertia(self, q, frame=frame)
+
+    # ----------------------------------------------------------
+    # 轨迹桥（规划线程 ⇄ 控制线程的数据管道；线程本体属 Ch5/Ch6 教学内容）
+    # ----------------------------------------------------------
+    def set_target_traj(self, targets) -> None:
+        """写入目标序列（写者：应用线程，低频）。
+
+        :param targets: :class:`TrajFrame` 单帧或列表（单帧自动归一为列表）。
+            目标有效性判别在规划求解时由 ``TrajPlanner._check_targets`` 执行。
+        """
+        self._target_traj = ([targets] if isinstance(targets, TrajFrame)
+                             else list(targets))
+
+    def get_target_traj(self) -> Optional[List[TrajFrame]]:
+        """读取目标序列（读者：规划线程；返回当前快照引用，规划期勿由他方改动）。"""
+        return self._target_traj
+
+    def set_current_frame(self, frame: TrajFrame) -> None:
+        """写入当前轨迹帧（写者：规划线程，≈控制频率）。
+
+        单步原子引用赋值——控制线程任意时刻读到的都是最新**完整**帧（最多
+        滞后一个换帧周期）；帧对象发布后视为不可变，勿再修改。
+        """
+        self._current_frame = frame
+
+    def get_current_frame(self) -> Optional[TrajFrame]:
+        """读取当前轨迹帧（读者：控制线程；首帧发布前为 ``None`` 初始态）。"""
+        return self._current_frame
 
     # ----------------------------------------------------------
     # 紧急阻尼（纯后端安全操作，任意状态可用）

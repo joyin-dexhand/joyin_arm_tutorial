@@ -20,7 +20,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
 from joyarm_core import (  # noqa: E402
-    joyarm_factory, JoyArmFactory, JoyArm, Pose, IKResult, IkineSolver,
+    joyarm_factory, JoyArmFactory, JoyArm, Pose, Wrench,
+    IKResult, IkineSolver, TrajFrame, TrajPlanner,
 )
 from joyarm_core.joyarm import load_config  # noqa: E402
 from joyarm_core.joyarm.joyarm import _build_domain  # noqa: E402
@@ -219,6 +220,70 @@ def test_ikine_contracts():
     assert ra.q.shape == (2, 6) and q_lo[0] <= ra.q[1, 0] <= q_hi[0]
     rs = d.solve(arm, Pose(), "ee", np.zeros(6))
     assert rs.success and np.allclose(rs.q, np.array([0.1, 0, 0, 0, 0, 0]))
+
+
+def test_traj_frame_and_planner():
+    """TrajFrame 纯数据 + TrajPlanner 目标判别模板 + JoyArm 轨迹桥访问器。"""
+    # TrajFrame：纯数据（公开名仅为七个字段，无任何方法）
+    public = [n for n in dir(TrajFrame) if not n.startswith("_")]
+    assert public == ["dq", "pose", "q", "tau", "time", "twist", "wrench"], public
+    assert TrajFrame(time=1.0, q=np.zeros(6)) == TrajFrame(time=1.0, q=np.zeros(6))
+    assert TrajFrame(time=1.0, q=np.zeros(6)) != TrajFrame(time=2.0, q=np.zeros(6))
+
+    # _check_targets：合法分支（关节型 / 位姿型含 wrench）
+    TrajPlanner._check_targets([TrajFrame(time=10.0, q=np.zeros(6))])
+    TrajPlanner._check_targets(
+        [TrajFrame(time=10.0, pose=Pose()),
+         TrajFrame(time=11.0, pose=Pose(), wrench=Wrench())])
+    # 非法分支：time 缺失 / pose、q 双空 / 双非空 / dq 非空
+    bad = [TrajFrame(q=np.zeros(6)),
+           TrajFrame(time=10.0),
+           TrajFrame(time=10.0, pose=Pose(), q=np.zeros(6)),
+           TrajFrame(time=10.0, q=np.zeros(6), dq=np.zeros(6))]
+    try:
+        TrajPlanner._check_targets(bad)
+        raise AssertionError("无效目标序列应抛 ValueError")
+    except ValueError as e:
+        assert "time" in str(e) and "dq" in str(e)
+
+    # plan 模板：单帧归一 + 判别 + 委托内核
+    calls = []
+
+    class DummyPlanner(TrajPlanner):
+        def _plan(self, arm, targets, **kw):
+            calls.append(list(targets))
+
+        def sample_frame(self, t_abs):
+            return TrajFrame(time=t_abs, q=np.zeros(6))
+
+    dp = DummyPlanner(plan_hz=2.0, sample_hz=100.0)
+    assert dp.plan_hz == 2.0 and dp.sample_hz == 100.0
+    dp.plan(None, TrajFrame(time=10.0, q=np.zeros(6)))   # 单帧归一为列表
+    assert len(calls) == 1 and len(calls[0]) == 1
+    try:
+        dp.plan(None, [TrajFrame(time=10.0)])            # 无效 → 不触内核
+        raise AssertionError("无效目标应抛 ValueError")
+    except ValueError:
+        assert len(calls) == 1
+
+    # JoyArm 轨迹桥：默认 None 初始态；set/get 对应；连续 set 取最新
+    arm = _arm()
+    assert arm.get_target_traj() is None and arm.get_current_frame() is None
+    arm.set_target_traj([TrajFrame(time=10.0, q=np.zeros(6))])
+    assert len(arm.get_target_traj()) == 1
+    arm.set_target_traj(TrajFrame(time=11.0, q=np.zeros(6)))   # 单帧归一
+    assert len(arm.get_target_traj()) == 1 and arm.get_target_traj()[0].time == 11.0
+    fr1 = TrajFrame(time=20.0, q=np.ones(6))
+    arm.set_current_frame(fr1)
+    assert arm.get_current_frame() is fr1
+    fr2 = TrajFrame(time=20.1, q=np.ones(6))
+    arm.set_current_frame(fr2)
+    assert arm.get_current_frame() is fr2
+
+    # Trajectory / TrajectorySpace 已删除，不可再导入
+    import joyarm_core
+    assert not hasattr(joyarm_core, "Trajectory")
+    assert not hasattr(joyarm_core, "TrajectorySpace")
 
 
 def test_repr_contains_state():
