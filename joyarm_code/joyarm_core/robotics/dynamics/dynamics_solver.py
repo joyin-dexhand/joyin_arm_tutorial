@@ -1,8 +1,10 @@
 """DynamicsSolver —— 动力学求解器接口（ABC）
 
-求解器子类需实现内核
-- :meth:`idyn`（逆动力学：状态+加速度 → τ）、:meth:`mass_matrix`（惯量 M）、
-  :meth:`coriolis`（科氏/向心 C 项）、:meth:`gravity`（重力 G 项）。
+求解器子类需实现
+- :meth:`idyn`（逆动力学：状态+加速度 → τ）
+- :meth:`mass_matrix`（惯量 M）
+- :meth:`coriolis`（科氏/向心 C 项）
+- :meth:`gravity`（重力 G 项）
 
 config ``robotics.dynamics`` 段写注册名，即按名实例化装入 ``_dynamics_solvers`` 成员字典。
 """
@@ -17,7 +19,7 @@ __all__ = ["DynamicsSolver"]
 
 
 class DynamicsSolver(ABC):
-    """动力学策略接口：``M(q)q̈ + C(q,q̇)q̇ + G(q) = τ``（无正动力学 fdyn）。"""
+    """动力学策略接口：``M(q)q̈ + C(q,q̇)q̇ + G(q) = τ``。"""
 
     @abstractmethod
     def idyn(self,
