@@ -1,0 +1,134 @@
+# ===================================================================
+# JoyArm 型号配置模板（四段：basic / joyarm / robotics / backend）
+# ===================================================================
+# 用途：新型号开发时复制本文件为 configs/<型号>.yaml（命名链三处一致：文件名 = basic.name 字段 = 工厂入参 joyarm_factory("<型号>")），再按真机逐段填写；
+#      配套动作：robot_model/<robot>/ 放 URDF+meshes、按需新写 backend/backend_<型号>.py（REGISTRY 一行；型号与整机后端 1:1）。
+# 说明：本文件数值为 参考值，仅示范结构与单位，真机须按标定修改；
+#      robotics 各域 REGISTRY 默认为空表，注册名未实现时告警置空。
+# ===================================================================
+
+# -------------------------------------------------------------------
+# 基本信息（basic）：型号标识 / robot_model URDF 索引 / utils 限位守卫
+# -------------------------------------------------------------------
+basic:
+  name: <型号名> # 型号名（命名链校验：= yaml 文件名 = 工厂入参）
+  robot: <robot_model子目录> # robot_model 下的 urdf + meshes 目录名
+  ee_frame: <末端帧名> # 末端坐标系名（pin 模型帧，URDF 中须存在）
+  utils: # utils/limits.py 指令守卫参数
+    joint_limits_soft_margin: 0.05 # 软限位内缩比例（0 = 软=硬）
+
+# -------------------------------------------------------------------
+# 设备模型（joyarm）：教学数据 / TCP 限位 / 特征位形
+# -------------------------------------------------------------------
+joyarm:
+  # # arm 的 MDH 参数及各关节限位：n 行 × [α_{i-1}, a_{i-1}, d_i, θ_i, q_min_i, q_max_i, dq_max_i, tau_max_i, soft_margin]，单位：rad, m, m, rad, rad, rad, rad/s, N·m, None
+  # arm_mdh_and_limits: # 算法全部采用 URDF + pin 计算时无需配置
+  #   - [0.0, 0.0, 0.0, 0.0, -2.80, 2.80, 50.0, 27.0, 0.05]
+  #   - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
+  #   - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
+  #   - [0.0, 0.0, 0.0, 0.0, -1.87, 1.57, 200.0, 7.0, 0.05]
+  #   - [0.0, 0.0, 0.0, 0.0, -1.57, 1.57, 200.0, 7.0, 0.05]
+  #   - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
+
+  # # 末 link 系 → end 系的固定位姿：4×4 齐次矩阵
+  # T_linkn_end: # 算法全部采用 URDF + pin 计算时无需配置
+  #   - [1.0, 0.0, 0.0, 0.0]
+  #   - [0.0, 1.0, 0.0, 0.0]
+  #   - [0.0, 0.0, 1.0, 0.0]
+  #   - [0.0, 0.0, 0.0, 1.0]
+
+  # 末端 tcp 限制: 结合实际任务配置
+  tcp_limits:
+    workspace_box: [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]] # [min, max] (m)
+    v_lin_max: 1.0 # m/s
+    v_ang_max: 3.0 # rad/s
+    f_max: 10.0 # N
+    t_max: 3.0 # N·m
+
+  # 特征位形（rad，n 维与 URDF 关节数一致）
+  q_zero: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 硬件零位（编码器标零基准）
+  q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 上电初始位形
+  q_neutral: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 数值求解默认初值（如 IK 迭代起点）
+
+# -------------------------------------------------------------------
+# 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按 REGISTRY 注册名加载激活）
+# 字典化配置：字段值为单个规格或规格列表（全部加载进 joyarm 成员字典，首个默认激活）；
+# 规格 = 注册名字符串 或 {name: 注册名, **构造参数}；运行期 arm.set_solver(域, 名) 切换。
+# -------------------------------------------------------------------
+robotics:
+  fkine:
+    - { name: mdh }
+  ikine:
+    - { name: analytic6r, tol: 1.0e-4, iters: 200 }
+  jacobian:
+    - { name: geometric }
+  dynamics:
+    - { name: lagrangian }
+  traj:
+    - { name: auto, plan_hz: 1.0, sample_hz: 200.0 }
+  control:
+    - {
+        name: auto,
+        type: joint_mit,
+        ctrl_hz: 200.0,
+        kp: [20.0, 20.0, 20.0, 8.0, 8.0, 8.0],
+        kd: [3.0, 3.0, 3.0, 1.0, 1.0, 1.0],
+      } # position_follow / velocity_follow / drag_gravity / joint_mit / osc（type 选择）
+    - { name: force, type: impedance } # impedance / hybrid（Ch6/Ch9）
+
+# -------------------------------------------------------------------
+# 通信层（backend）：arm 与 end 的硬件通讯（字段以 DM 实现为参照）
+# 契约通用键：channel / protocol / baud_rate / control_rate / joints；
+# joints 条目内各键由后端子类定义（model 型号枚举、MIT/POS_VEL 增益回退、
+# 末端行程/力度换算为 DM 特有）。
+# -------------------------------------------------------------------
+backend:
+  name: backend_dm # 选型键（backend/__init__.py REGISTRY 中的注册名）
+
+  arm: # 本体子段（n 个关节电机，joints 顺序与 URDF 关节一致）
+    channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）
+    protocol: serial_can # 协议标识（信息性；DM 固定 USB-CAN 串口桥）
+    baud_rate: 921600 # 波特率
+    control_rate: 200 # 控制频率（Hz，信息性）
+    joints:
+      - name: joint1 # 关节名（状态报告 / 模式缓存的键）
+        motor_id: 0x01 # CAN 指令 ID（MIT 帧 ID = motor_id）
+        feedback_id: 0x11 # 应答帧 CAN ID（RX 状态分发表键）
+        model: "4340P" # 电机型号（定 MIT 打包/解包量程：4310 / 4340 / 4340P）
+        MIT: # MIT 模式增益回退（指令未传 kp/kd 时使用）
+          kp: 120.0
+          kd: 8.0
+        POS_VEL: # 位置模式闭环增益（切 POSITION 时写入 RID25~28）+ 限速
+          vel_kp: 0.0125 # 速度环 Kp
+          vel_ki: 0.004 # 速度环 Ki
+          pos_kp: 150.0 # 位置环 Kp
+          pos_ki: 0.5 # 位置环 Ki
+          vlim: 5.0 # 位置/速度指令限速（rad/s）
+      # joint2 … jointN：同构复制上一条目，改 name / motor_id / feedback_id 与增益
+
+  end: # 末端子段（执行器电机组，可多电机如灵巧手；无末端型号可整段删除）
+    channel: /dev/ttyACM0 # 与 arm 相同 → 共享总线；不同 → 独立总线（互不干扰）
+    protocol: serial_can
+    baud_rate: 921600
+    control_rate: 200
+    joints:
+      - name: gripper # 末端电机名
+        motor_id: 0x07
+        feedback_id: 0x17
+        model: "4310"
+        # —— 末端特有键（arm 关节不配置）：行程/速度/力矩限位 + 力度换算 ——
+        q_min: -1.8 # 行程下限（rad，张开位）
+        q_max: 3.8 # 行程上限（rad，闭合位）
+        dq_max: 2.0 # 速度上限（rad/s）
+        tau_max: 1.0 # 力矩上限（N·m）
+        force_to_tau: 1 # 力度→前馈力矩近似换算系数（N→N·m，标定后修改）
+        MIT: # 末端默认纯力矩风格（需要位控刚度时自行调 kp/kd）
+          kp: 0.0
+          kd: 0.0
+        POS_VEL:
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 50.0
+          pos_ki: 1.0
+          vlim: 3.0
+      # 多电机末端（如灵巧手）：同构追加条目，逐电机独立 ID / 行程 / 增益

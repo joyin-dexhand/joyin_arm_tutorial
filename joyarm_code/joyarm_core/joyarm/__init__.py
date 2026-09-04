@@ -17,9 +17,9 @@ JoyArmFactory：按型号名创建（命名链校验）——外部推荐入口:
 
 **joyarm 新型号开发步骤**：
 
-    创建配置文件    ：  configs/<型号>.yaml
-    放置并修改 URDF ：  robot_model/资产 
-    配置硬件通信    ：  backend/backend_*.py**（如 joyarm_dm ↔ backend_dm）。
+    创建配置文件    ：  configs/<型号>.yaml（复制 joyarm_template.yaml 模板填写）
+    放置并修改 URDF ：  robot_model/URDF资产 （建议使用 sw_urdf_exporter 导出）
+    新实现硬件通信  ：  backend/backend_*.py**（如 joyarm_dm ↔ backend_dm）。
 
 
 """
@@ -71,13 +71,14 @@ class JoyArmFactory:
     __call__ = create
 
     def list_models(self) -> list:
-        """列出可用型号名（扫描 ``configs/*.yaml``）。"""
+        """列出可用型号名（扫描 ``configs/*.yaml``，排除 ``*_template.yaml`` 模板）。"""
         from .joyarm import _CONFIGS_DIR
 
         try:
             import os
 
-            return sorted(f[:-5] for f in os.listdir(_CONFIGS_DIR) if f.endswith(".yaml"))
+            return sorted(f[:-5] for f in os.listdir(_CONFIGS_DIR)
+                          if f.endswith(".yaml") and not f.endswith("_template.yaml"))
         except OSError:
             return []
 

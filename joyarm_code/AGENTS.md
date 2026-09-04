@@ -52,7 +52,9 @@ joyarm_code/
 │   │   │                            #       + 自检 + tcp_limits 解析 + load_config/_build_domain
 │   │   └── __init__.py              #     JoyArmFactory/joyarm_factory（软失败：失败→None+信息）
 │   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
-│   └── configs/joyarm_dm.yaml       #   per-model YAML（basic/joyarm/robotics/backend 四段）
+│   └── configs/                     #   per-model YAML（basic/joyarm/robotics/backend 四段）
+│       ├── joyarm_dm.yaml           #     正式型号配置
+│       └── joyarm_template.yaml     #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 list_models）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性，不复用 SDK）
 ├── test/                            # 测试套件（离线为主 + 真机分层测试）

@@ -22,6 +22,9 @@ __all__ = ["Controller"]
 class Controller(ABC):
     """控制律策略接口：当前轨迹帧 + 实测状态 → 电机控制指令。"""
 
+    # ----------------------------------------------------------
+    # control 构造与模板（ctrl_hz；step：状态缺省现读→内核→限位守卫→下发）
+    # ----------------------------------------------------------
     def __init__(self, ctrl_hz: float = 200.0):
         """控制频率为控制器参数，经 config ``robotics.control`` spec 的 ``**params`` 注入。
 
@@ -48,6 +51,9 @@ class Controller(ABC):
             cmd["tau"] = np.clip(cmd["tau"], -tau_max, tau_max)
         arm.set_arm_command(mode, **cmd)
 
+    # ----------------------------------------------------------
+    # control 抽象内核（_compute：参考帧+实测状态 → (模式, 指令字典)）
+    # ----------------------------------------------------------
     @abstractmethod
     def _compute(self, arm, frame: TrajFrame, state: ArmState,
                  **kw) -> Tuple[ControlMode, dict]:

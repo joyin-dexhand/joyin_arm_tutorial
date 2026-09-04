@@ -1,6 +1,6 @@
 """DynamicsSolver —— 动力学求解器接口（ABC）
 
-求解器子类需实现
+求解器子类只需实现
 - :meth:`idyn`（逆动力学：状态+加速度 → τ）
 - :meth:`mass_matrix`（惯量 M）
 - :meth:`coriolis`（科氏/向心 C 项）
@@ -21,6 +21,9 @@ __all__ = ["DynamicsSolver"]
 class DynamicsSolver(ABC):
     """动力学策略接口：``M(q)q̈ + C(q,q̇)q̇ + G(q) = τ``。"""
 
+    # ----------------------------------------------------------
+    # dynamics 抽象内核（idyn/mass_matrix/coriolis/gravity等）
+    # ----------------------------------------------------------
     @abstractmethod
     def idyn(self,
         arm,
@@ -43,6 +46,9 @@ class DynamicsSolver(ABC):
     def gravity(self, arm, q: np.ndarray) -> np.ndarray:
         """重力项 ``G(q)``，返回 ``(n,)``。"""
 
+    # ----------------------------------------------------------
+    # dynamics 派生量模板（cartesian_inertia 笛卡尔惯量等）
+    # ----------------------------------------------------------
     def cartesian_inertia(self, arm, q: np.ndarray, frame: Union[str, int]) -> np.ndarray:
         """笛卡尔惯量 ``Λ = J⁻ᵀ M J⁻¹``，返回 ``(6,6)``（J 经 ``arm.jac`` 门面取）。"""
         J_inv = np.linalg.inv(arm.jac(q, frame))
