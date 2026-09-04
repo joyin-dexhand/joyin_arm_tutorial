@@ -17,8 +17,11 @@ __all__ = ["TrajPlanner"]
 
 
 class TrajPlanner(ABC):
-    """轨迹规划策略接口：目标序列 → 插值参数 → 按绝对时间产帧。"""
+    """轨迹规划策略接口：目标序列（+当前状态） → 计算插值参数 → 按绝对时间采样帧。"""
 
+    # ----------------------------------------------------------
+    # traj 构造与模板（plan_hz/sample_hz；plan：校验后委托内核）
+    # ----------------------------------------------------------
     def __init__(self, plan_hz: float = 1.0, sample_hz: float = 200.0):
         """两频率为规划器参数，经 config ``robotics.traj`` 的 ``**params`` 注入。
 
@@ -38,6 +41,9 @@ class TrajPlanner(ABC):
         self._check_targets(targets)
         self._plan(arm, targets, **kw)
 
+    # ----------------------------------------------------------
+    # traj 抽象内核（_plan 插值参数 / sample_frame 按绝对时间采样帧）
+    # ----------------------------------------------------------
     @abstractmethod
     def _plan(self, arm, targets: List[TrajFrame], **kw) -> None:
         """内核：由目标序列计算**插值参数**并锚定绝对时间（参数结构存实例，算法自定）。"""
@@ -46,6 +52,9 @@ class TrajPlanner(ABC):
     def sample_frame(self, t_abs: float) -> TrajFrame:
         """内核：按绝对时间（Unix 秒）评估插值参数，产出当前轨迹帧。"""
 
+    # ----------------------------------------------------------
+    # traj 内部校验（_check_targets 目标有效性，收集全部问题一次抛出）
+    # ----------------------------------------------------------
     @staticmethod
     def _check_targets(targets: List[TrajFrame]) -> None:
         """目标有效性判别（求解前执行）：``time`` 必填（``0.0`` 视为未填）；

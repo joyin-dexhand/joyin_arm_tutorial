@@ -76,7 +76,7 @@ backend:
     channel: /dev/ttyACM0
     protocol: serial_can
     baud_rate: 921600
-    control_rate: 500
+    control_rate: 200
     joints:
       - name: joint1
         motor_id: 0x01
@@ -164,9 +164,9 @@ backend:
 
   end: # 末端后端
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
-    baud_rate: 921600
-    control_rate: 500
     protocol: serial_can
+    baud_rate: 921600
+    control_rate: 200
     joints:
       - name: gripper
         motor_id: 0x07

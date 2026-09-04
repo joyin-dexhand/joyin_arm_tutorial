@@ -55,6 +55,10 @@ __all__ = ["JoyArm", "load_config"]
 
 logger = logging.getLogger("joyarm_core.joyarm")
 
+
+# ============================================================
+# 模块级：路径常量与配置加载（load_config 为公开 API）
+# ============================================================
 # configs/ 目录（joyarm.py 位于 joyarm_core/joyarm/，上溯一级即包根）
 _CONFIGS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs"
@@ -91,6 +95,9 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
         raise ValueError(f"『{model}』型号在 configs 中未找到；可用：{avail}") from e
 
 
+# ============================================================
+# 模块级：六域规格常量与域构建（软失败语义）
+# ============================================================
 # config robotics 段 "default" 别名对应的各域默认注册名
 _DOMAIN_DEFAULTS = {
     "fkine": "pin",
@@ -166,6 +173,9 @@ class JoyArm:
         缺省自动加载 ``configs/<model>.yaml``，一次性存入 ``self._config``。
     """
 
+    # ----------------------------------------------------------
+    # init 初始化（config 驱动构造：URDF/pinocchio/限位/特征位形/后端/六域字典/轨迹桥）
+    # ----------------------------------------------------------
     def __init__(self,
         model: str,
         urdf_path: Optional[str] = None,
@@ -313,60 +323,48 @@ class JoyArm:
         self._current_frame: Optional[TrajFrame] = None       # 规划线程写
 
     # ----------------------------------------------------------
-    # 成员字典访问 / 切换（六域统一）
+    # init 内部：随包 URDF 解析（robot 资产加载逻辑）
     # ----------------------------------------------------------
-    def _members(self, domain: str) -> dict:
-        """域 → 成员字典。"""
-        return {
-            "fkine": self._fkine_solvers,
-            "ikine": self._ikine_solvers,
-            "jacobian": self._jacobian_solvers,
-            "dynamics": self._dynamics_solvers,
-            "traj": self._traj_planners,
-            "control": self._controllers,
-        }[domain]
+    @staticmethod
+    def _resolve_robot_urdf(robot: str) -> str:
+        """解析随包 URDF：``robot_model/<robot>/urdf/<robot>.urdf``。
 
-    def _active(self, domain: str):
-        """活动成员；域未加载时抛 ``RuntimeError``（软失败在门面调用处显性化）。"""
-        d = self._members(domain)
-        name = self._active_name.get(domain)
-        if name is None or name not in d:
-            raise RuntimeError(
-                f"robotics.{domain} 成员未加载（config 未配置或注册名未实现）；"
-                f"已加载：{sorted(d) or '无'}。教程各章实现算法并注册后，"
-                f"经 configs yaml 的 robotics.{domain} 段选型接入"
-            )
-        return d[name]
-
-    def _pick(self, domain: str, name: Optional[str]):
-        """按注册名取已加载成员（``None`` = 活动成员）。"""
-        if name is None:
-            return self._active(domain)
-        d = self._members(domain)
-        if name not in d:
-            raise ValueError(
-                f"『{name}』未在 robotics.{domain} 已加载成员中；已加载：{sorted(d)}"
-            )
-        return d[name]
-
-    def set_solver(self, domain: str, name: str):
-        """运行期切换活动成员（按注册名；域 ∈ fkine/ikine/jacobian/dynamics/traj/control）。"""
-        if domain not in _DOMAIN_REGISTRIES:
-            raise ValueError(f"未知域 {domain!r}；可用：{sorted(_DOMAIN_REGISTRIES)}")
-        inst = self._pick(domain, name)   # 校验已加载
-        self._active_name[domain] = name
-        return inst
-
-    def set_controller(self, name: str):
-        """运行期切换控制律（``set_solver("control", name)`` 的惯用别名）。"""
-        return self.set_solver("control", name)
-
-    def list_solvers(self, domain: str) -> list:
-        """列出某域已加载成员注册名（首个为活动成员）。"""
-        return sorted(self._members(domain))
+        :raises ValueError: 型号目录/URDF 不存在（列出可用型号）。
+        """
+        path = os.path.join(_ROBOT_MODEL_DIR, robot, "urdf", f"{robot}.urdf")
+        if os.path.isfile(path):
+            return path
+        try:
+            avail = sorted(d for d in os.listdir(_ROBOT_MODEL_DIR)
+                           if os.path.isdir(os.path.join(_ROBOT_MODEL_DIR, d)))
+        except OSError:
+            avail = []
+        raise ValueError(f"『{robot}』型号在 robot_model 中未找到；可用：{avail}")
 
     # ----------------------------------------------------------
-    # 特征位形（只读，返回拷贝）
+    # init 内部：TCP 空间限位应用（config joyarm 段）
+    # ----------------------------------------------------------
+    def _apply_tcp_limits(self, tl: dict) -> None:
+        """由 config 的 tcp_limits 段覆盖默认末端限位。
+
+        ``workspace_box`` 兼容两种写法：``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
+        （yaml 常用，min/max 两行）或每轴一行 ``[min,max]`` 的 ``(3,2)``；内部
+        统一为 :class:`TcpLimits` 约定的 ``(3,2)``。
+        """
+        box = np.asarray(tl.get("workspace_box",
+                                [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]), dtype=float)
+        if box.shape == (2, 3):          # [min 行, max 行] → 每轴 [min, max]
+            box = box.T
+        self.tcp_limits = TcpLimits(
+            workspace_box=box,
+            v_lin_max=float(tl.get("v_lin_max", 0.0)),
+            v_ang_max=float(tl.get("v_ang_max", 0.0)),
+            f_max=float(tl.get("f_max", 0.0)),
+            t_max=float(tl.get("t_max", 0.0)),
+        )
+
+    # ----------------------------------------------------------
+    # basic 特征位形（只读，返回拷贝）
     # ----------------------------------------------------------
     @property
     def q_zero(self) -> np.ndarray:
@@ -391,35 +389,43 @@ class JoyArm:
         return None
 
     # ----------------------------------------------------------
-    # 真机连接（connect 后才可执行 arm_*/end_*）
+    # basic 关节角采样 / 裁剪 / 校验（基于软限位）
     # ----------------------------------------------------------
-    def connect(self) -> None:
-        """连接真机（整机后端：本体 + 末端）。"""
-        self._require_backend()
-        self._backend.connect()
-        self.connected = True
+    def rand_q(self,
+        size: Optional[int] = None,
+        rng: Optional[np.random.Generator] = None,
+    ) -> np.ndarray:
+        """在**软限位**内均匀采样关节角。"""
+        rng = rng if rng is not None else np.random.default_rng()
+        low, high = self.qlow, self.qhigh
+        if size is None:
+            return rng.uniform(low, high)
+        return rng.uniform(low, high, size=(size, self.n))
 
-    def disconnect(self) -> None:
-        """断开真机（整机后端：本体 + 末端）。"""
-        if self._backend is not None:
-            self._backend.disconnect()
-        self.connected = False
+    def clamp_q(self, q: np.ndarray) -> np.ndarray:
+        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm_core.utils.limits.clamp_to_limits`）。"""
+        return clamp_to_limits(q, self.joint_limits_soft)
 
-    def _require_connected(self) -> None:
-        """执行类方法前置：未连接真机（离线）时抛 ``RuntimeError``。"""
-        if not self.connected:
-            raise RuntimeError(f"[{self.model}] 未连接真机（离线）；请先 connect()。")
-
-    def _require_backend(self) -> None:
-        """后端前置：无后端（未配置/选型无效）时抛 ``RuntimeError``。"""
-        if self._backend is None:
-            raise RuntimeError(
-                f"[{self.model}] 无整机后端（config backend 段缺失或选型无效），"
-                f"无法执行硬件操作。"
-            )
+    def is_q_valid(self, q: np.ndarray) -> bool:
+        """关节角是否在**软限位**内（单点）。"""
+        q = np.asarray(q, dtype=float).reshape(-1)
+        return bool(np.all(q >= self.qlow - 1e-9) and np.all(q <= self.qhigh + 1e-9))
 
     # ----------------------------------------------------------
-    # 配置：读取 / 运行期设置 / 自检（架构约束：配置功能全集）
+    # basic 打印表示
+    # ----------------------------------------------------------
+    def __repr__(self) -> str:
+        domains = {d: (self._active_name.get(d) or "-") for d in _DOMAIN_REGISTRIES}
+        return (
+            f"{type(self).__name__}(model={self.model!r}, n={self.n}, "
+            f"ee_frame={self.ee_frame_name!r}, "
+            f"solvers={domains}, "
+            f"backend={'yes' if self._backend else 'no'}, "
+            f"{'connected' if self.connected else 'offline'})"
+        )
+
+    # ----------------------------------------------------------
+    # config 配置：读取 / 运行期设置 / 自检（架构约束：配置功能全集）
     # ----------------------------------------------------------
     def get_config(self) -> dict:
         """当前配置深拷贝快照（四段 ``basic``/``joyarm``/``robotics``/``backend``）。
@@ -537,67 +543,68 @@ class JoyArm:
                 "硬件自检未通过：\n" + "\n".join(f"  - {p}" for p in problems))
 
     # ----------------------------------------------------------
-    # 内部：随包 URDF 解析（robot 资产加载逻辑）
+    # solver 成员字典访问 / 切换（六域统一）
     # ----------------------------------------------------------
-    @staticmethod
-    def _resolve_robot_urdf(robot: str) -> str:
-        """解析随包 URDF：``robot_model/<robot>/urdf/<robot>.urdf``。
+    def _members(self, domain: str) -> dict:
+        """域 → 成员字典。"""
+        return {
+            "fkine": self._fkine_solvers,
+            "ikine": self._ikine_solvers,
+            "jacobian": self._jacobian_solvers,
+            "dynamics": self._dynamics_solvers,
+            "traj": self._traj_planners,
+            "control": self._controllers,
+        }[domain]
 
-        :raises ValueError: 型号目录/URDF 不存在（列出可用型号）。
-        """
-        path = os.path.join(_ROBOT_MODEL_DIR, robot, "urdf", f"{robot}.urdf")
-        if os.path.isfile(path):
-            return path
-        try:
-            avail = sorted(d for d in os.listdir(_ROBOT_MODEL_DIR)
-                           if os.path.isdir(os.path.join(_ROBOT_MODEL_DIR, d)))
-        except OSError:
-            avail = []
-        raise ValueError(f"『{robot}』型号在 robot_model 中未找到；可用：{avail}")
+    def _active(self, domain: str):
+        """活动成员；域未加载时抛 ``RuntimeError``（软失败在门面调用处显性化）。"""
+        d = self._members(domain)
+        name = self._active_name.get(domain)
+        if name is None or name not in d:
+            raise RuntimeError(
+                f"robotics.{domain} 成员未加载（config 未配置或注册名未实现）；"
+                f"已加载：{sorted(d) or '无'}。教程各章实现算法并注册后，"
+                f"经 configs yaml 的 robotics.{domain} 段选型接入"
+            )
+        return d[name]
 
-    # ----------------------------------------------------------
-    # 打印表示
-    # ----------------------------------------------------------
-    def __repr__(self) -> str:
-        domains = {d: (self._active_name.get(d) or "-") for d in _DOMAIN_REGISTRIES}
-        return (
-            f"{type(self).__name__}(model={self.model!r}, n={self.n}, "
-            f"ee_frame={self.ee_frame_name!r}, "
-            f"solvers={domains}, "
-            f"backend={'yes' if self._backend else 'no'}, "
-            f"{'connected' if self.connected else 'offline'})"
-        )
+    def _pick(self, domain: str, name: Optional[str]):
+        """按注册名取已加载成员（``None`` = 活动成员）。"""
+        if name is None:
+            return self._active(domain)
+        d = self._members(domain)
+        if name not in d:
+            raise ValueError(
+                f"『{name}』未在 robotics.{domain} 已加载成员中；已加载：{sorted(d)}"
+            )
+        return d[name]
 
-    # ----------------------------------------------------------
-    # 关节角采样 / 裁剪 / 校验（基于软限位）
-    # ----------------------------------------------------------
-    def rand_q(self,
-        size: Optional[int] = None,
-        rng: Optional[np.random.Generator] = None,
-    ) -> np.ndarray:
-        """在**软限位**内均匀采样关节角。"""
-        rng = rng if rng is not None else np.random.default_rng()
-        low, high = self.qlow, self.qhigh
-        if size is None:
-            return rng.uniform(low, high)
-        return rng.uniform(low, high, size=(size, self.n))
+    def set_solver(self, domain: str, name: str):
+        """运行期切换活动成员（按注册名；域 ∈ fkine/ikine/jacobian/dynamics/traj/control）。"""
+        if domain not in _DOMAIN_REGISTRIES:
+            raise ValueError(f"未知域 {domain!r}；可用：{sorted(_DOMAIN_REGISTRIES)}")
+        inst = self._pick(domain, name)   # 校验已加载
+        self._active_name[domain] = name
+        return inst
 
-    def clamp_q(self, q: np.ndarray) -> np.ndarray:
-        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm_core.utils.limits.clamp_to_limits`）。"""
-        return clamp_to_limits(q, self.joint_limits_soft)
+    def set_controller(self, name: str):
+        """运行期切换控制律（``set_solver("control", name)`` 的惯用别名）。"""
+        return self.set_solver("control", name)
 
-    def is_q_valid(self, q: np.ndarray) -> bool:
-        """关节角是否在**软限位**内（单点）。"""
-        q = np.asarray(q, dtype=float).reshape(-1)
-        return bool(np.all(q >= self.qlow - 1e-9) and np.all(q <= self.qhigh + 1e-9))
+    def list_solvers(self, domain: str) -> list:
+        """列出某域已加载成员注册名（首个为活动成员）。"""
+        return sorted(self._members(domain))
 
     # ----------------------------------------------------------
-    # robotics 求解算法（门面 → 活动策略成员；参数排序：通用在前、特有 keyword-only 在后）
+    # fkine 正运动学（门面 → 活动策略成员；参数排序：通用在前、特有 keyword-only 在后）
     # ----------------------------------------------------------
     def fkine(self, q: np.ndarray, frame: Union[str, int], rep: str = "pose"):
         """正运动学（``frame`` 目标帧名/索引，必填；``rep`` 取 ``pose``（默认，xyz+四元数）/``T``（4×4 矩阵）/``se3``（pin.SE3））。"""
         return self._active("fkine").solve(self, q, frame=frame, rep=rep)
 
+    # ----------------------------------------------------------
+    # ikine 逆运动学（门面 → 活动策略成员）
+    # ----------------------------------------------------------
     def ikine(self, target: Pose, frame: Union[str, int], q0: np.ndarray, **kw):
         """逆运动学单解（``q0`` ``(n,)`` 必填：数值法迭代起点 / 解析法限位剔除后
         选最近解的参考；``tol``/``iters`` 等为求解器特有参数）。"""
@@ -608,6 +615,9 @@ class JoyArm:
         数值法实现不支持）。"""
         return self._active("ikine").solve_all(self, target, frame, **kw)
 
+    # ----------------------------------------------------------
+    # jacobian 雅可比及衍生量（门面 → 活动策略成员）
+    # ----------------------------------------------------------
     def jac(self, q: np.ndarray, frame: Union[str, int], ref: str = "base"):
         """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端帧系 / 基座系）。"""
         return self._active("jacobian").jac(self, q, frame=frame, ref=ref)
@@ -624,6 +634,9 @@ class JoyArm:
         """静力学 τ = JᵀF（雅可比衍生量）。"""
         return self._active("jacobian").statics(self, q, F, frame=frame)
 
+    # ----------------------------------------------------------
+    # dynamics 动力学（门面 → 活动策略成员）
+    # ----------------------------------------------------------
     def idyn(self, q, dq, ddq, f_ext=None):
         """逆动力学（委托活动动力学成员）。"""
         return self._active("dynamics").idyn(self, q, dq, ddq, f_ext=f_ext)
@@ -645,7 +658,7 @@ class JoyArm:
         return self._active("dynamics").cartesian_inertia(self, q, frame=frame)
 
     # ----------------------------------------------------------
-    # 轨迹桥（规划线程 ⇄ 控制线程的数据管道；线程本体属 Ch5/Ch6 教学内容）
+    # traj 轨迹桥（规划线程 ⇄ 控制线程的数据管道；线程本体属 Ch5/Ch6 教学内容）
     # ----------------------------------------------------------
     def set_target_traj(self, targets) -> None:
         """写入目标序列（写者：应用线程，低频）。
@@ -673,7 +686,35 @@ class JoyArm:
         return self._current_frame
 
     # ----------------------------------------------------------
-    # 紧急阻尼（纯后端安全操作，任意状态可用）
+    # backend 真机连接（connect 后才可执行 arm_*/end_*）
+    # ----------------------------------------------------------
+    def connect(self) -> None:
+        """连接真机（整机后端：本体 + 末端）。"""
+        self._require_backend()
+        self._backend.connect()
+        self.connected = True
+
+    def disconnect(self) -> None:
+        """断开真机（整机后端：本体 + 末端）。"""
+        if self._backend is not None:
+            self._backend.disconnect()
+        self.connected = False
+
+    def _require_connected(self) -> None:
+        """执行类方法前置：未连接真机（离线）时抛 ``RuntimeError``。"""
+        if not self.connected:
+            raise RuntimeError(f"[{self.model}] 未连接真机（离线）；请先 connect()。")
+
+    def _require_backend(self) -> None:
+        """后端前置：无后端（未配置/选型无效）时抛 ``RuntimeError``。"""
+        if self._backend is None:
+            raise RuntimeError(
+                f"[{self.model}] 无整机后端（config backend 段缺失或选型无效），"
+                f"无法执行硬件操作。"
+            )
+
+    # ----------------------------------------------------------
+    # backend 紧急阻尼（纯后端安全操作，任意状态可用）
     # ----------------------------------------------------------
     def damping_mode(self, kd: float = 10.0) -> None:
         """紧急阻尼模式：**任何状态**下将全部电机（本体 + 末端）切为 MIT 纯阻尼
@@ -727,7 +768,7 @@ class JoyArm:
         _send_end("末端（使能后）")
 
     # ----------------------------------------------------------
-    # 本体执行类方法（依赖 _backend；未连接 raise；arm_* 与 end_* 对应）
+    # backend 本体执行类方法（依赖 _backend；未连接 raise；arm_* 与 end_* 对应）
     # ----------------------------------------------------------
     def enable_arm(self, joint: Optional[int] = None) -> None:
         """使能本体关节电机（``joint=None`` 全部）。"""
@@ -853,7 +894,7 @@ class JoyArm:
             raise ValueError(f"未知控制模式：{mode}")
 
     # ----------------------------------------------------------
-    # 电机参数读写（依赖 _backend；未连接 raise）
+    # backend 电机参数读写（依赖 _backend；未连接 raise）
     # ----------------------------------------------------------
     def read_param_arm(self, key: str, joint: Optional[int] = None):
         """读本体关节电机参数（key 为参数名，语义由后端定义）。
@@ -890,7 +931,7 @@ class JoyArm:
         return self._backend.write_param_end(key, value, joint, persist=persist)
 
     # ----------------------------------------------------------
-    # 末端执行类方法（依赖 _backend；未连接 raise）
+    # backend 末端执行类方法（依赖 _backend；未连接 raise）
     # ----------------------------------------------------------
     def enable_end(self, joint: Optional[int] = None) -> None:
         """使能末端执行器电机（``joint=None`` 全部）。"""
@@ -952,25 +993,3 @@ class JoyArm:
         """
         self._require_connected()
         return self._backend.read_state_end(joint)
-
-    # ----------------------------------------------------------
-    # 内部：TCP 空间限位应用（config joyarm 段）
-    # ----------------------------------------------------------
-    def _apply_tcp_limits(self, tl: dict) -> None:
-        """由 config 的 tcp_limits 段覆盖默认末端限位。
-
-        ``workspace_box`` 兼容两种写法：``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
-        （yaml 常用，min/max 两行）或每轴一行 ``[min,max]`` 的 ``(3,2)``；内部
-        统一为 :class:`TcpLimits` 约定的 ``(3,2)``。
-        """
-        box = np.asarray(tl.get("workspace_box",
-                                [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]), dtype=float)
-        if box.shape == (2, 3):          # [min 行, max 行] → 每轴 [min, max]
-            box = box.T
-        self.tcp_limits = TcpLimits(
-            workspace_box=box,
-            v_lin_max=float(tl.get("v_lin_max", 0.0)),
-            v_ang_max=float(tl.get("v_ang_max", 0.0)),
-            f_max=float(tl.get("f_max", 0.0)),
-            t_max=float(tl.get("t_max", 0.0)),
-        )

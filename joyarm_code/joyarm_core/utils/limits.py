@@ -14,6 +14,9 @@ from .types import JointLimits
 __all__ = ["clamp_to_limits", "joint_limits_from_model", "soft_limits"]
 
 
+# ============================================================
+# 限位裁剪（clamp_to_limits：指令越限就近裁剪）
+# ============================================================
 def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
     """运动指令逐元素裁剪到关节限位内；返回与 ``targets`` 同形状。
 
@@ -44,6 +47,9 @@ def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
     return np.clip(targets, q_min, q_max)
 
 
+# ============================================================
+# 限位构建（joint_limits_from_model 硬限位解析 / soft_limits 软限位派生）
+# ============================================================
 def joint_limits_from_model(model) -> JointLimits:
     """从模型对象解析**硬限位**（鸭子类型，仅访问属性，不依赖 pinocchio）。
 

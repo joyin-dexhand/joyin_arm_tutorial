@@ -25,10 +25,16 @@ __all__ = ["FkineSolver"]
 class FkineSolver(ABC):
     """正运动学策略接口：关节角 → 末端（或任意帧）位姿。"""
 
+    # ----------------------------------------------------------
+    # fkine 抽象内核（frame_pose：单帧位姿，各章实现）
+    # ----------------------------------------------------------
     @abstractmethod
     def frame_pose(self, arm, q: np.ndarray, frame: Union[str, int]) -> Pose:
         """内核：指定帧在基坐标系下的位姿（含 ``T_base`` 偏移）。"""
 
+    # ----------------------------------------------------------
+    # fkine 模板：solve（单点/批量分发 + rep 三态 pose/T/se3）
+    # ----------------------------------------------------------
     def solve(self,
         arm,
         q: np.ndarray,
@@ -47,6 +53,9 @@ class FkineSolver(ABC):
         else:
             raise ValueError(f"q 维度需为 1 或 2，收到 q.shape={q_arr.shape}")
 
+    # ----------------------------------------------------------
+    # fkine 内部助手（_to_rep 表示转换 / _solve_batch 批量）
+    # ----------------------------------------------------------
     @staticmethod
     def _to_rep(pose: Pose, rep: str):
         """``Pose`` → 指定表示。"""

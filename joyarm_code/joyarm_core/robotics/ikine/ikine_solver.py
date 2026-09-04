@@ -27,6 +27,9 @@ __all__ = ["IkineSolver"]
 class IkineSolver(ABC):
     """逆运动学策略接口：目标位姿 → 关节角。"""
 
+    # ----------------------------------------------------------
+    # ikine 抽象内核：solve（单解；数值法迭代 / 解析法选解）
+    # ----------------------------------------------------------
     @abstractmethod
     def solve(self,
         arm,
@@ -50,6 +53,9 @@ class IkineSolver(ABC):
         :return: :class:`IKResult`，``q`` 为 ``(n,)`` 单解；无可行解时``success=False``,``q`` 为空。
         """
 
+    # ----------------------------------------------------------
+    # ikine 可选覆盖：solve_all（全解，仅解析法实现提供）
+    # ----------------------------------------------------------
     def solve_all(self,
         arm,
         target: Pose,
@@ -66,7 +72,7 @@ class IkineSolver(ABC):
         raise NotImplementedError("solve_all 仅解析法实现提供")
 
     # ----------------------------------------------------------
-    # 共享助手（把选解契约做成可执行逻辑，解析法实现直接复用）
+    # ikine 共享助手（±2π 归位 + 限位剔除选最近；解析法实现直接复用）
     # ----------------------------------------------------------
     @staticmethod
     def _shift_2pi(q: np.ndarray, q_min: np.ndarray, q_max: np.ndarray) -> np.ndarray:

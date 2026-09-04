@@ -1,9 +1,7 @@
-"""``Backend`` —— 整机硬件通信后端抽象基类（通信层）。
+"""``Backend`` —— 整机硬件通信后端抽象基类（定义多厂商关节电机的通用功能）。
 
-一个后端 = 一台完整设备（多轴本体 + 末端执行器，共用或各用通信总线）；
-子类按**电机厂商/型号**派生（结构相同、参数不同），如 :class:`joyarm_core.
-backend.backend_dm.BackendDM`。契约方法扁平挂在单类上，以 ``_arm`` / ``_end``
-后缀区分本体与末端两组。
+一个后端 = 一台完整设备的硬件（多轴本体 + 末端执行器，共用或各用通信总线）；
+子类按**电机厂商/型号**派生（结构相同、参数不同），以 ``_arm`` / ``_end``后缀区分本体与末端两组。
 
 配置结构即代码结构（yaml ``backend:`` 段，``name`` 选型键经 ``REGISTRY`` 解析）::
 
@@ -12,9 +10,9 @@ backend.backend_dm.BackendDM`。契约方法扁平挂在单类上，以 ``_arm``
       arm: {channel, protocol, baud_rate, control_rate, joints}   # 本体子段
       end: {channel, protocol, baud_rate, control_rate, joints}   # 末端子段
 
-接口按功能分类：生命周期（connect/disconnect）、使能失能（enable/disable/
-set_zero）、状态读取（read_state）、模式切换（set_mode）、指令下发（send_*）、
-电机参数读写（read_param/write_param）。收录多厂商关节电机的通用功能。
+接口按功能分类：生命周期（connect/disconnect）、使能失能（enable/disable/set_zero）、状态读取（read_state）、
+模式切换（set_mode）、指令下发（send_*）、电机参数读写（read_param/write_param）。
+
 """
 from __future__ import annotations
 
