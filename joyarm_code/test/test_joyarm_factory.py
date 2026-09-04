@@ -22,6 +22,7 @@ sys.path.insert(0, str(_ROOT))
 from joyarm_core import (  # noqa: E402
     joyarm_factory, JoyArmFactory, JoyArm, Pose, Wrench,
     IKResult, IkineSolver, TrajFrame, TrajPlanner,
+    Controller, ControlMode, JointLimits, ArmState,
 )
 from joyarm_core.joyarm import load_config  # noqa: E402
 from joyarm_core.joyarm.joyarm import _build_domain  # noqa: E402
@@ -284,6 +285,43 @@ def test_traj_frame_and_planner():
     import joyarm_core
     assert not hasattr(joyarm_core, "Trajectory")
     assert not hasattr(joyarm_core, "TrajectorySpace")
+
+
+def test_controller_step():
+    """Controller.step 模板：状态缺省现读、q/dq 限位守卫、set_arm_command 下发。"""
+    class FakeArm:
+        def __init__(self):
+            self.joint_limits_soft = JointLimits(
+                q_min=np.full(6, -1.0), q_max=np.full(6, 1.0),
+                dq_max=np.full(6, 2.0), tau_max=np.full(6, 10.0))
+            self.state = ArmState()
+            self.reads = 0
+            self.sent = []
+
+        def get_arm_state(self):
+            self.reads += 1
+            return self.state
+
+        def set_arm_command(self, mode, **cmd):
+            self.sent.append((mode, cmd))
+
+    class DummyCtrl(Controller):
+        def _compute(self, arm, frame, state, **kw):
+            return ControlMode.MIT, {"q": np.full(6, 5.0),   # 越软限位 → 裁回 1.0
+                                     "dq": np.full(6, 9.0),  # 越 dq_max → 裁回 2.0
+                                     "tau": np.zeros(6)}     # 未守卫字段原样透传
+
+    arm = FakeArm()
+    c = DummyCtrl(ctrl_hz=100.0)
+    assert c.ctrl_hz == 100.0
+    c.step(arm, TrajFrame(time=1.0, q=np.zeros(6)))          # state 缺省 → 现读一次
+    assert arm.reads == 1 and len(arm.sent) == 1
+    mode, cmd = arm.sent[0]
+    assert mode is ControlMode.MIT
+    assert np.allclose(cmd["q"], 1.0) and np.allclose(cmd["dq"], 2.0)
+    assert np.allclose(cmd["tau"], 0.0)
+    c.step(arm, TrajFrame(time=1.0, q=np.zeros(6)), state=arm.state)   # 传 state → 不再读
+    assert arm.reads == 1 and len(arm.sent) == 2
 
 
 def test_repr_contains_state():

@@ -4,7 +4,6 @@
 - :meth:`_plan`（由目标序列计算插值参数并锚定绝对时间，参数存实例）；
 - :meth:`sample_frame`（按绝对时间评估插值参数，产出当前轨迹帧 TrajFrame）。
 
-通用模板 :meth:`plan` 代劳目标归一与有效性判别后委托内核。
 config ``robotics.traj`` 段写注册名，即按名实例化装入 ``_traj_planners`` 成员字典。
 """
 from __future__ import annotations
@@ -21,7 +20,7 @@ class TrajPlanner(ABC):
     """轨迹规划策略接口：目标序列 → 插值参数 → 按绝对时间产帧。"""
 
     def __init__(self, plan_hz: float = 1.0, sample_hz: float = 200.0):
-        """两频率为规划器参数，经 config ``robotics.traj`` spec 的 ``**params`` 注入。
+        """两频率为规划器参数，经 config ``robotics.traj`` 的 ``**params`` 注入。
 
         :param plan_hz: 规划频率（低频重规划），Hz。
         :param sample_hz: 采样频率（≈控制频率，按绝对时间采样产当前轨迹帧），Hz。

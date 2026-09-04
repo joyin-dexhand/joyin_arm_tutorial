@@ -15,10 +15,22 @@ jacobian Ch4 / trajectory Ch5 / control Ch6、Ch8-9 / dynamics Ch8），章节�
 - dynamics：逆动力学与 M/C/G（Ch8）
 - control：控制律（Ch6/8/9）
 """
+from .fkine import FkineSolver
+from .ikine import IkineSolver
+from .jacobian import JacobianSolver
+from .dynamics import DynamicsSolver
 from .trajectory import TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
+from .control import Controller, AutoController, ForceController
 
 __all__ = [
+    "FkineSolver",
+    "IkineSolver",
+    "JacobianSolver",
+    "DynamicsSolver",
     "TrajPlanner",
     "AutoTrajPlanner",
     "ForceTrajPlanner",
+    "Controller",
+    "AutoController",
+    "ForceController",
 ]

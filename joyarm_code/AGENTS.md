@@ -41,7 +41,7 @@ joyarm_code/
 │   │   ├── jacobian/                #     JacobianSolver(ABC，衍生量模板)——Ch4
 │   │   ├── trajectory/              #     TrajPlanner(ABC) + AutoTrajPlanner/ForceTrajPlanner
 │   │   ├── dynamics/                #     DynamicsSolver(ABC，Λ 模板)——Ch8
-│   │   └── control/                 #     Controller(ABC)——Ch6/8/9
+│   │   └── control/                 #     Controller(ABC) + AutoController/ForceController 桩——Ch6/9
 │   ├── backend/                    #   通信层（整机 Backend + name 选型）
 │   │   ├── backend.py               #     Backend（整机 ABC：*_arm/*_end + 参数读写方法族）
 │   │   ├── backend_dm.py            #     BackendDM（DM 整机 7 电机；内含私有协议层 DmMotor/DmCanBus）✅
@@ -144,7 +144,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（`manipulability`/`cond_number`/`statics` 衍生量模板在 ABC） | Ch4 | 🟡 |
 | `robotics/trajectory/` | `TrajPlanner(ABC)`（`plan` 模板 + `_plan`/`sample_frame` 内核 + `_check_targets`）+ AutoTrajPlanner/ForceTrajPlanner 桩 | Ch5/9 | 🟡 |
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（Λ=J⁻ᵀMJ⁻¹ 模板在 ABC）；实现待 Ch8 | Ch8 | 🟡 |
-| `robotics/control/` | `Controller(ABC)`（`compute(arm, target, state)` 契约）；控制律与执行循环待 Ch6/8/9 | Ch6/8/9 | 🟡 |
+| `robotics/control/` | `Controller(ABC)`（`step` 模板 + `_compute` 内核 + 限位守卫）+ AutoController/ForceController 桩 | Ch6/9 | 🟡 |
 | `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检）+ `load_config` + `_build_domain` | — | ✅ |
 | `joyarm/__init__.py` | `JoyArmFactory`（软失败；`list_models` 扫描 configs） | — | ✅ |
 | `configs/joyarm_dm.yaml` | 型号 YAML 四段（robotics 段留档注释，各章实现后启用） | — | ✅ |
@@ -197,6 +197,8 @@ JoyArm.set/get_target_traj(targets) · set/get_current_frame(frame)   # 轨迹�
 FkineSolver / IkineSolver / JacobianSolver / DynamicsSolver / TrajPlanner / Controller   # ABC 契约 🟡
 TrajPlanner(plan_hz, sample_hz)：plan(arm, targets)→_plan / sample_frame(t_abs)→TrajFrame   # 目标驱动规划 🟡
 AutoTrajPlanner（关节/位姿 × 单值/序列 四情形）/ ForceTrajPlanner（阻抗/导纳/力位混合）   # 注释桩 🟡
+Controller(ctrl_hz)：step(arm, frame, state=None)→_compute→限位守卫(q 软限位/dq 幅值)→set_arm_command   # 模板已实现 ✅
+AutoController（type 五类型）/ ForceController（impedance/hybrid）   # 注释桩 🟡
 # 求解器用法二选一：子类实例.solve(arm, q)（arm 鸭子类型，课堂/单测）或 arm.* 门面（活动成员，应用）
 ```
 

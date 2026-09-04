@@ -77,7 +77,7 @@ from .robotics.ikine import IkineSolver
 from .robotics.jacobian import JacobianSolver
 from .robotics.dynamics import DynamicsSolver
 from .robotics.trajectory import TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
-from .robotics.control import Controller
+from .robotics.control import Controller, AutoController, ForceController
 
 # ---- 指令路径守卫（clamp_to_limits；状态监测/日志归 ROS2 节点，Ch11）----
 from .utils.limits import clamp_to_limits
@@ -143,6 +143,8 @@ __all__ = [
     "AutoTrajPlanner",
     "ForceTrajPlanner",
     "Controller",
+    "AutoController",
+    "ForceController",
     # 指令路径守卫（监测/日志归 ROS2 节点）
     "clamp_to_limits",
     # 通信层（整机后端）
