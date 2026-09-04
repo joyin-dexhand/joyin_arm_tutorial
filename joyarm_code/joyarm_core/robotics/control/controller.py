@@ -38,11 +38,14 @@ class Controller(ABC):
         if state is None:
             state = arm.get_arm_state()
         mode, cmd = self._compute(arm, frame, state)
-        if cmd.get("q") is not None:    # 位置指令裁剪到软限位（防轨迹跳变越限）
+        if cmd.get("q") is not None:    # 位置指令裁剪到软限位
             cmd["q"] = clamp_to_limits(cmd["q"], arm.joint_limits_soft)
-        if cmd.get("dq") is not None:   # 速度指令幅值裁剪（防过速）
+        if cmd.get("dq") is not None:   # 速度指令幅值裁剪
             dq_max = arm.joint_limits_soft.dq_max
             cmd["dq"] = np.clip(cmd["dq"], -dq_max, dq_max)
+        if cmd.get("tau") is not None:  # 力矩前馈幅值裁剪
+            tau_max = arm.joint_limits_soft.tau_max
+            cmd["tau"] = np.clip(cmd["tau"], -tau_max, tau_max)
         arm.set_arm_command(mode, **cmd)
 
     @abstractmethod

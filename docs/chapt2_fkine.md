@@ -488,18 +488,18 @@ $$
 JoyArm 机械臂的基座、关节 1 和连杆 1 的URDF定义示例如下
 
 ```xml
-<link name="base_link">
+<link name="link_base">
   <visual>
     <origin xyz="0 0 0" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="../meshes/base_link.STL"/>
+      <mesh filename="../meshes/link_base.STL"/>
     </geometry>
   </visual>
 </link>
 
 <joint name="joint1" type="revolute">
   <origin xyz="-8.416E-05 0 0.08465" rpy="0 0 0"/>
-  <parent link="base_link"/>
+  <parent link="link_base"/>
   <child  link="link1"/>
   <axis xyz="0 0 1"/>
   <limit lower="-2.8" upper="2.8" effort="27" velocity="50"/>
@@ -538,9 +538,9 @@ data  = model.createData() # 数据
 # 2. 给定六关节角（rad）
 q = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) 
 
-# 3. 求解末端（"ee" 帧）相对基座的位姿
+# 3. 求解末端（"link_end" 帧）相对基座的位姿
 pin.forwardKinematics(model, data, q) # 计算正运动学
-T_ee = pin.updateFramePlacement(model, data, model.getFrameId("ee")) # 获取结果
+T_ee = pin.updateFramePlacement(model, data, model.getFrameId("link_end")) # 获取结果
 ```
 
 > 💡 **何时手写、何时用库？** 学原理时手写（理解参数与矩阵对应），做项目时用库（避免低级错误）。本教程作为教学，实践脚本（[第 5 节](#5-joyarm)）两种方式都会给出。
@@ -581,14 +581,14 @@ T_ee = pin.updateFramePlacement(model, data, model.getFrameId("ee")) # 获取结
 
 #### 5.2.1 实现方案
 
-脚本 `joyarm_code/chapt/chapt2_workspace.py` 完成如下流程（核心功能调用 `joyarm_core` 的 `fkine` 与 `JoyArm` 类）：
+脚本 `joyarm_code/chapt/chapt2_workspace.py` 完成如下流程（核心功能调用 `joyarm_core` 的 `JoyArm` 类与 Pinocchio 正解，离线运行无需连接硬件）：
 
 | 模块 | 功能 | 实现要点 |
 |:---:|:---:|:---:|
-| 模型加载 | 读取 MDH 参数（或 URDF） | 调用 `joyarm_core` 的 `JoyArm` 类 |
-| 关节采样 | 六维关节空间均匀随机采样 $N$ 组 | `numpy.random.uniform(qlow, qhigh, (N,6))` |
-| 正运动学 | 对每组关节角求末端位置 | 批量调用 `fkine` |
-| 可视化 | MeshCat / Matplotlib 3D 绘点云 | 动态刷新，逐批添加点 |
+| 模型加载 | 加载 JoyArm 的 URDF 模型 | 调用 `joyarm_core` 的 `JoyArm` 类 |
+| 关节采样 | 六维关节空间均匀随机采样 $N$ 组 | 调用 `arm.rand_q(N)`（软限位内采样） |
+| 正运动学 | 对每组关节角求末端位置 | Pinocchio 批量正解（同 [4.3.2 节](#432-用库自动求解正运动学)） |
+| 可视化 | MeshCat 3D 绘点云 | 按到基座距离着色，动态刷新、逐批添加点 |
 
 #### 5.2.2 运行脚本
 

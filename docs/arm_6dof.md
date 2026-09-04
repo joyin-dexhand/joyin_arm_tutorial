@@ -22,7 +22,6 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接 [第N章](chapterN_M.md)。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】joyarm/joyarm.py、robotics/control/、joyarm_core/apps/teleop.py。
 -->
 
 ## 1 操作安全须知

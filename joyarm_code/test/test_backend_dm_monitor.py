@@ -13,7 +13,7 @@
 - angle_ok 无独立反馈（以通讯近似），不显示。
 
 【环境与运行】
-1. 新建环境并安装依赖：``cd joyarm_code && uv venv && uv sync``
+1. 新建环境并安装依赖：``cd joyarm_code && uv sync``
 2. 激活环境：``source .venv/bin/activate``
 3. 接好达妙 CAN 桥（默认 ``/dev/ttyACM0``）与电机电源后运行：
    - ``python test/test_backend_dm_monitor.py``     # 无限刷新，Ctrl+C 退出

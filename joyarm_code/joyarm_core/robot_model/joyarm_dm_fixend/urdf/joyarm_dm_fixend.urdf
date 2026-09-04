@@ -5,7 +5,7 @@
 <robot
   name="joyarm_dm_fixend">
   <link
-    name="base_link">
+    name="link_base">
     <inertial>
       <origin
         xyz="-7.849E-06 -1.1531E-06 0.029841"
@@ -26,7 +26,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="../meshes/base_link.STL" />
+          filename="../meshes/link_base.STL" />
       </geometry>
       <material
         name="">
@@ -40,7 +40,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="../meshes/base_link.STL" />
+          filename="../meshes/link_base.STL" />
       </geometry>
     </collision>
   </link>
@@ -91,7 +91,7 @@
       xyz="-8.416E-05 0 0.08465"
       rpy="0 0 0" />
     <parent
-      link="base_link" />
+      link="link_base" />
     <child
       link="link1" />
     <axis
@@ -393,7 +393,7 @@
       velocity="200" />
   </joint>
   <link
-    name="end_link">
+    name="link_end">
     <inertial>
       <origin
         xyz="-0.0737654295815033 -9.5080995865868E-06 7.04327840286845E-06"
@@ -414,7 +414,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="../meshes/end_link.STL" />
+          filename="../meshes/link_end.STL" />
       </geometry>
       <material
         name="">
@@ -428,7 +428,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="../meshes/end_link.STL" />
+          filename="../meshes/link_end.STL" />
       </geometry>
     </collision>
   </link>
@@ -441,7 +441,7 @@
     <parent
       link="link6" />
     <child
-      link="end_link" />
+      link="link_end" />
     <axis
       xyz="0 0 0" />
   </joint>

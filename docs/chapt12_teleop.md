@@ -9,7 +9,6 @@
 【固定骨架】
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
-    ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
   · 💡 建议补一节「## 5 本章实践：JoyArm 示教与遥操作综合」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt12_teleop_demo.py。
 【全局写作规范】（详见 AGENTS.md）
@@ -22,7 +21,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第三章](chapt3_ikine.md) IK 用于异构臂、[第十一章](chapt11_safety.md) 遥操作安全）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、joyarm_core/apps/teleop.py、joyarm/joyarm.py、joyarm/joyarm_dm.py、robotics/ikine/、robotics/fkine/。
+【本章可引用的脚本/库】chapt12_teleop_demo.py（待建）、joyarm_core/apps/teleop.py（规划）、joyarm/joyarm.py、robotics/ikine/、robotics/fkine/。
 -->
 
 ## 1 同臂示教数据记录与回放

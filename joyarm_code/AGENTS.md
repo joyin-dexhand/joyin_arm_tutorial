@@ -181,7 +181,7 @@ JoyArm.jac(q, frame, ref="base") · manipulability / cond_number / statics(q, F,
 JoyArm.idyn / mass_matrix / coriolis / gravity · cartesian_inertia(q, frame)
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
 JoyArm.connect() / disconnect() · enable/disable_{arm,end} · set_zero_{arm,end} · set_mode_{arm,end}(mode=POSITION, joint=None) · read_mode_{arm,end}
-JoyArm.get_arm_state() → ArmState（fkine 已注册时填 tcp.pose）· set_arm_command(mode, q/dq/tau/kp/kd, joint=None) · read/write_param_{arm,end}
+JoyArm.get_arm_state() → ArmState（fkine 已注册时填 tcp.pose）· set_arm_command(mode, q/dq/tau/kp/kd, joint=None)（下发前守卫：q 软限位裁剪、dq/tau 幅值裁剪，越界告警） · read/write_param_{arm,end}
 JoyArm.end_open/end_close/end_zero(joint=None) · set_end_position / set_end_force / get_end_state
 JoyArm.damping_mode(kd=10.0)                    # 紧急阻尼：任何状态全电机（含末端）MIT 纯阻尼 ✅
 JoyArm.state → ArmState|None · rand_q / clamp_q / is_q_valid
@@ -197,7 +197,7 @@ JoyArm.set/get_target_traj(targets) · set/get_current_frame(frame)   # 轨迹�
 FkineSolver / IkineSolver / JacobianSolver / DynamicsSolver / TrajPlanner / Controller   # ABC 契约 🟡
 TrajPlanner(plan_hz, sample_hz)：plan(arm, targets)→_plan / sample_frame(t_abs)→TrajFrame   # 目标驱动规划 🟡
 AutoTrajPlanner（关节/位姿 × 单值/序列 四情形）/ ForceTrajPlanner（阻抗/导纳/力位混合）   # 注释桩 🟡
-Controller(ctrl_hz)：step(arm, frame, state=None)→_compute→限位守卫(q 软限位/dq 幅值)→set_arm_command   # 模板已实现 ✅
+Controller(ctrl_hz)：step(arm, frame, state=None)→_compute→限位守卫(q 软限位/dq/tau 幅值)→set_arm_command   # 模板已实现 ✅
 AutoController（type 五类型）/ ForceController（impedance/hybrid）   # 注释桩 🟡
 # 求解器用法二选一：子类实例.solve(arm, q)（arm 鸭子类型，课堂/单测）或 arm.* 门面（活动成员，应用）
 ```
@@ -217,7 +217,7 @@ transforms.py 23 函数（rpy/rodrigues/quat/T/adT/slerp，纯 numpy）✅ · ty
 
 - 两份 md 只写**精简概述**；详细规则写进代码 docstring（各包 `__init__.py` 一句话职责 + `:param:`/`:return:`/`:raises:`/章节标记）。
 - **每次 `joyarm_code/` 任何变化后必须同步更新本文件**：公开 API 变 → §3；目录变 → §1.1；安装/用法/章节状态变 → README；架构/约定变 → §0-2。**架构约束（§0）变更须人工确认后先改本节再动代码。**
-- 提交前自检：新增公开符号已收录、已补 docstring；删除符号已移除；目录树一致；`wc -l` ≤ 500。
+- 提交前自检：新增公开符号已收录、已补 docstring；删除符号已移除；目录树一致。
 
 ### 行数上限：≤ 300 行
 

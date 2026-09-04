@@ -9,7 +9,6 @@
 【固定骨架】
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
-    ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
   · 末节固定为「## 4 本章实践：JoyArm 基于运动学的控制实现」，对应脚本 joyarm_code/chapt/chapt6_control_demo.py。
 【全局写作规范】（详见 AGENTS.md）
@@ -18,12 +17,12 @@
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 数学：行内 $...$、独立 $$...$$，传递函数/控制律用 $\bm{K}_p$ 等；多画控制框图（mermaid 或图占位）。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt6_control_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm_core/：control（控制）/ arm（JoyArm 类）/ fkine / jacobian / trajectory。
+  · 可复用核心库 joyarm_code/joyarm_core/：control（控制）/ joyarm（JoyArm 类）/ fkine / jacobian / trajectory。
   · 图示：配图放 docs/images/chapt6_control/，未就绪用 ![图片占位：描述]()；控制框图可用 mermaid ```mermaid``` 围栏。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接（如 [第四章](chapt4_jacobian.md) 雅可比）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt6_control_demo.py、robotics/control/、joyarm/joyarm.py、robotics/fkine/、robotics/jacobian/、robotics/trajectory/。
+【本章可引用的脚本/库】chapt6_control_demo.py（待建）、robotics/control/、joyarm/joyarm.py、robotics/fkine/、robotics/jacobian/、robotics/trajectory/。
 -->
 
 ## 1 单关节电机控制

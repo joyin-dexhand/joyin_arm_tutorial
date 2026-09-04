@@ -21,26 +21,18 @@
 
     irm https://astral.sh/uv/install.ps1 | iex
 
-### 2.2 拉取代码并创建虚拟环境
-
-**拉取代码：**
+### 2.2 拉取代码
 
 ```shell
 git clone *待补充*
+cd joyin_arm_tutorial/joyarm_code
 ```
 
-**创建并激活 uv 虚拟环境：**
+### 2.3 创建环境并安装依赖
 
 ```shell
-cd joyin_arm_tutorial
-uv venv --python 3.10
+uv sync   # 创建 .venv + 按 uv.lock 安装全部依赖 + 可编辑安装 joyarm_core
 source .venv/bin/activate
-```
-
-### 2.3 安装依赖
-
-```shell
-uv pip install PySide6 numpy matplotlib
 ```
 
 

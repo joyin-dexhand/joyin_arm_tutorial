@@ -9,7 +9,6 @@
 【固定骨架】
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
-    ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
   · 💡 建议补一节「## 7 本章实践：多模态用户接口集成」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt14_ui_demo.py。
 【全局写作规范】（详见 AGENTS.md）
@@ -23,7 +22,7 @@
   · 跨章引用用相对链接（如 [第十二章](chapt12_teleop.md) 体感/VR、[第十五章](chapt15_project.md) 综合项目）。
   · 未知参数/型号用 *待补充*。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt14_ui_demo.py（待建）、joyarm_core/apps/vision.py、viz.py（待建，建议 quickstart/ 或 joyarm_core/apps/）、joyarm/joyarm.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）。
+【本章可引用的脚本/库】chapt14_ui_demo.py（待建）、joyarm_core/apps/vision.py（规划）、viz.py（待建，建议 quickstart/ 或 joyarm_core/apps/）、joyarm/joyarm.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）。
 -->
 
 ## 1 UI界面

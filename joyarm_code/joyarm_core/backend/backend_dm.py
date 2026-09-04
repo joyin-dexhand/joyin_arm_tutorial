@@ -718,7 +718,7 @@ class BackendDM(Backend):
     def send_velocity_arm(self, dq: np.ndarray, joint: Optional[int] = None) -> None:
         self._require_mode_arm(ControlMode.VELOCITY, self._motors_for(joint))
         for m, dqi in self._rows(dq, "dq", joint):
-            m.bus.send_vel(m, float(dqi))
+            m.bus.send_vel(m, float(np.clip(dqi, -m.vlim, m.vlim)))  # 限速：config POS_VEL.vlim
 
     def send_mit_arm(
         self,

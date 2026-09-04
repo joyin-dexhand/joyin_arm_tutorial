@@ -1,4 +1,5 @@
 site_name: JoyArm 机械臂教程
+site_url: https://joyin-dexhand.github.io/joyin_arm_tutorial/ # GitHub Pages 线上地址
 theme:
   name: material
   language: zh # 开启中文支持

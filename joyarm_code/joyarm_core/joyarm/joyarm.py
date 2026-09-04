@@ -177,8 +177,6 @@ class JoyArm:
         if pin is None:
             raise ImportError(
                 "JoyArm 需要 pinocchio 才能加载 URDF 与计算运动学。请安装：\n"
-                "  uv pip install pin\n"
-                "  # 或：pip install pin"
             )
 
         # ---- 型号 config（工厂注入；直用时自动加载 configs/<model>.yaml）----
@@ -772,6 +770,34 @@ class JoyArm:
             state.tcp.pose = self.fkine(state.joint.q, self.ee_frame_name)   # 默认 rep="pose" → Pose
         return state
 
+    def _guard_command(self, name: str, arr: np.ndarray,
+                       joint: Optional[int]) -> np.ndarray:
+        """指令下发守卫：``q`` 裁剪到软限位、``dq``/``tau`` 裁剪到幅值上限。
+
+        纵深防御：无论指令来自控制模板还是直接调用，越限值一律就近
+        裁剪后下发（与 :meth:`joyarm_core.robotics.control.Controller.step`
+        的守卫语义一致）；维度不符时原样放行，由 backend 报清晰的维度错误。
+        """
+        limits = self.joint_limits_soft
+        if name == "q":
+            lo, hi = limits.q_min, limits.q_max
+        elif name == "dq":
+            lo, hi = -limits.dq_max, limits.dq_max
+        elif name == "tau":
+            lo, hi = -limits.tau_max, limits.tau_max
+        else:
+            return arr
+        if joint is not None:               # 单关节：取该关节限位（arr 长度 1）
+            lo, hi = lo[joint:joint + 1], hi[joint:joint + 1]
+        if arr.shape != np.shape(lo):       # 整体指令长度 ≠ n → 交 backend 校验
+            return arr
+        clipped = np.clip(arr, lo, hi)
+        if not np.array_equal(arr, clipped):
+            logger.warning("set_arm_command: %s 指令越限，已就近裁剪 %s → %s",
+                           name, np.round(arr, 4).tolist(),
+                           np.round(clipped, 4).tolist())
+        return clipped
+
     def set_arm_command(self,
         mode: ControlMode = ControlMode.POSITION,
         q: Optional[np.ndarray] = None,
@@ -787,6 +813,9 @@ class JoyArm:
         MIT 模式 ``kp/kd`` 可缺省（``None`` 透传后端回退 config 增益）；
         纯力矩不设独立模式，经 MIT（``kp=kd=0``）实现。
 
+        下发前自动守卫（防失控）：``q`` 裁剪到软限位、``dq``/``tau`` 裁剪到
+        幅值上限，越界告警并就近裁剪（``kp``/``kd`` 为标定增益，不裁剪）。
+
         :raises RuntimeError: 未连接真机时抛出。
         :raises ValueError: 对应模式所需参数缺失时抛出。
         """
@@ -800,21 +829,26 @@ class JoyArm:
         if mode == ControlMode.POSITION:
             if q is None:
                 raise ValueError("POSITION 模式需要 q")
-            self._backend.send_position_arm(_vec(q), joint)
+            self._backend.send_position_arm(
+                self._guard_command("q", _vec(q), joint), joint)
         elif mode == ControlMode.VELOCITY:
             if dq is None:
                 raise ValueError("VELOCITY 模式需要 dq")
-            self._backend.send_velocity_arm(_vec(dq), joint)
+            self._backend.send_velocity_arm(
+                self._guard_command("dq", _vec(dq), joint), joint)
         elif mode == ControlMode.MIT:
             missing = [
                 name for name, val in (("q", q), ("dq", dq), ("tau", tau)) if val is None
             ]
             if missing:
                 raise ValueError(f"MIT 模式缺少参数：{missing}")
-            self._backend.send_mit_arm(_vec(q), _vec(dq), _vec(tau),
-                                       kp=_vec(kp) if kp is not None else None,
-                                       kd=_vec(kd) if kd is not None else None,
-                                       joint=joint)
+            self._backend.send_mit_arm(
+                self._guard_command("q", _vec(q), joint),
+                self._guard_command("dq", _vec(dq), joint),
+                self._guard_command("tau", _vec(tau), joint),
+                kp=_vec(kp) if kp is not None else None,
+                kd=_vec(kd) if kd is not None else None,
+                joint=joint)
         else:
             raise ValueError(f"未知控制模式：{mode}")
 

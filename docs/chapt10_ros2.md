@@ -9,7 +9,6 @@
 【固定骨架】
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
-    ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
   · 末节固定为「## 6 本章实践：JoyArm 的 ROS2 结构与实现」，对应脚本 joyarm_code/chapt/chapt10_ros2_demo.py。
 【全局写作规范】（详见 AGENTS.md）
@@ -22,7 +21,7 @@
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [第七章](chapt7_urdf.md) URDF、[第六章](chapt6_control.md) 控制为 moveit2 底层）。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt10_ros2_demo.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）、joyarm/joyarm.py、robotics/control/、robotics/fkine/、robotics/ikine/。
+【本章可引用的脚本/库】chapt10_ros2_demo.py（待建）、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）、joyarm/joyarm.py、robotics/control/、robotics/fkine/、robotics/ikine/。
 -->
 
 ## 1 基本概念和工作空间结构

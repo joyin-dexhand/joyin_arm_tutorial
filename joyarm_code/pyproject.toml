@@ -1,3 +1,6 @@
+[build-system] # 显式声明构建后端，避免 pip/uv 隐式回退旧版 setuptools
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "joyarm_code"
 version = "0.1.0"
@@ -13,3 +16,9 @@ dependencies = [
     "numpy>=2.0.1",
     "pyserial>=3.5",
 ]
+
+[tool.setuptools.packages.find] # 平铺布局多顶层目录，显式只打包核心 SDK
+include = ["joyarm_core*"]
+
+[dependency-groups]
+dev = ["pytest>=8"]

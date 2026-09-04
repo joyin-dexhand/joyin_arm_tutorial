@@ -9,21 +9,20 @@
 【固定骨架】
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
-    ⚠️ 当前第 3 行是纯文本，撰写时请改写为该 blockquote 格式。
   · 正文按 ## → ### → #### 展开，每个顶级 ## 之间用 `---` 分隔。
-  · 末节固定为「## 5 JoyArm 综合任务部署与联调」，对应脚本 joyarm_code/chapt/chapt15_project_demo.py。
+  · 末节固定为「## 5 本章实践：JoyArm 综合任务部署与联调」，对应脚本 joyarm_code/chapt/chapt15_project_demo.py。
 【全局写作规范】（详见 AGENTS.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt15_project_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm_core/：joyarm / joyarm_dm / fkine / ikine / jacobian / trajectory / control /
-    dynamics / gripper / teleop / vision / viz / ros2（监测在 ROS2 节点；几乎全库参与）。
+  · 可复用核心库 joyarm_code/joyarm_core/：joyarm / fkine / ikine / jacobian / trajectory / control /
+    dynamics（几乎全库参与；teleop / vision 管线规划在 joyarm_core/apps/，监测在 ROS2 节点）。
   · 图示：配图放 docs/images/chapt15_project/；系统分层/数据流用 mermaid ```mermaid``` 围栏。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用（本章尤其多）  ｜  > ⚠️ 警告/注意（联调安全）。
   · 跨章引用用相对链接，覆盖基础/进阶/应用各篇。
   · 不写"本章小结"——第 3 行概述已替代它（作为全教程收尾，概述可适当拔高）。
-【本章可引用的脚本/库】chapt15_project_demo.py、以及 joyarm_core/ 全部核心库。
+【本章可引用的脚本/库】chapt15_project_demo.py（待建）、以及 joyarm_core/ 全部核心库。
 -->
 
 ## 1 任务定义与系统架构
@@ -58,7 +57,7 @@
   · ⚠️ 提示：接触/力控阶段务必启用 [第十一章](chapt11_safety.md) 的力/速度安全防护。
 -->
 
-## 5 JoyArm 综合任务部署与联调
+## 5 本章实践：JoyArm 综合任务部署与联调
 
 在真机或仿真中完成联调。
 
