@@ -43,7 +43,8 @@ class FkineSolver(ABC):
     ):
         """模板：``frame`` 为目标帧；``q`` 为 ``(n,)`` 单点 / ``(N,n)`` 批量；``rep`` 取 ``"pose"``（默认，xyz+四元数）/``"T"``(4×4)/``"se3"``。"""
         if rep not in ("pose", "T", "se3"):
-            raise ValueError(f"未知 rep={rep!r}（仅支持 'pose'/'T'/'se3'）")
+            raise ValueError(
+                f"fkine_solver.py - FkineSolver.solve：未知 rep={rep!r}（仅支持 'pose'/'T'/'se3'）")
 
         q_arr = np.asarray(q, dtype=float)
         if q_arr.ndim == 1:
@@ -51,7 +52,9 @@ class FkineSolver(ABC):
         elif q_arr.ndim == 2:
             return self._solve_batch(arm, q_arr, frame, rep)
         else:
-            raise ValueError(f"q 维度需为 1 或 2，收到 q.shape={q_arr.shape}")
+            raise ValueError(
+                f"fkine_solver.py - FkineSolver.solve：q 维度需为 1 或 2，"
+                f"收到 q.shape={q_arr.shape}")
 
     # ----------------------------------------------------------
     # fkine 内部助手（_to_rep 表示转换 / _solve_batch 批量）

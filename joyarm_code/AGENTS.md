@@ -51,12 +51,12 @@ joyarm_code/
 │   │   ├── joyarm.py                #     JoyArm（单类）：config 驱动构造 + 六域字典组装 + 公开门面
 │   │   │                            #       + 自检 + tcp_limits 解析 + load_config/_build_domain
 │   │   └── __init__.py              #     JoyArmFactory/joyarm_factory（软失败：失败→None+信息）
-│   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
+│   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）；joyarm_dm/ 为旧版原始构型参照（现行配置用 joyarm_dm_fixend）
 │   └── configs/                     #   per-model YAML（basic/joyarm/robotics/backend 四段）
 │       ├── joyarm_dm.yaml           #     正式型号配置
 │       └── joyarm_template.yaml     #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 list_models）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
-├── chapt/                           # 章节教学示例脚本（一次性，不复用 SDK）
+├── chapt/                           # 章节教学示例脚本（一次性；基础设施优先复用 joyarm_core，章节算法可自行实现）
 ├── test/                            # 测试套件（离线为主 + 真机分层测试）
 │   ├── test_backend_dm*.py          #   DM 协议离线单测 + 真机监视/调试/全覆盖（4 个）
 │   ├── test_joyarm_full.py          #   JoyArm 真机分层测试（29 项九层风险递增；回放/求解器类随各章实现补回）
@@ -123,7 +123,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 | **核心轻依赖** | 核心仅 `numpy`/`pin`/`pyyaml`；`rclpy` 仅 ws |
 | **开闭原则** | 新型号 = config yaml + robot_model 资产 + backend 文件（REGISTRY 一行）；换算法 = 改 config 注册名（约束9） |
 
-编码约定：`q=(n,)` 或 `(N,n)`、`T=(4,4)`、角度弧度；FK `rep` 三态、雅可比 `ref` 两态（local/base）；软/硬限位分级（`clamp_to_limits`）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数**通用在前、特有 keyword-only 在后**（约束5）；可视化不在核心包。
+编码约定：`q=(n,)` 或 `(N,n)`、`T=(4,4)`、角度弧度；FK `rep` 三态、雅可比 `ref` 两态（local/base）；软/硬限位分级（`clamp_to_limits`）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数**通用在前、特有 keyword-only 在后**（约束5）；可视化不在核心包；异常消息统一格式**『文件名 - 故障的功能：具体原因』**（含 NotImplementedError 教学桩，新代码一律遵守）。
 
 ### 2.3 库边界
 

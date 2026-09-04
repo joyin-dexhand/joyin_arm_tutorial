@@ -79,8 +79,8 @@ from .robotics.dynamics import DynamicsSolver
 from .robotics.trajectory import TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
 from .robotics.control import Controller, AutoController, ForceController
 
-# ---- 指令路径守卫（clamp_to_limits；状态监测/日志归 ROS2 节点，Ch11）----
-from .utils.limits import clamp_to_limits
+# ---- 指令路径守卫（clamp_to_limits）----
+from .utils.limits import clamp_to_limits, joint_limits_from_model, soft_limits
 
 # ---- 通信层（整机后端，两层继承 + name 选型注册表）----
 from . import backend
@@ -145,8 +145,10 @@ __all__ = [
     "Controller",
     "AutoController",
     "ForceController",
-    # 指令路径守卫（监测/日志归 ROS2 节点）
+    # 指令路径守卫 + 限位构建辅助
     "clamp_to_limits",
+    "joint_limits_from_model",
+    "soft_limits",
     # 通信层（整机后端）
     "backend",
     "Backend",

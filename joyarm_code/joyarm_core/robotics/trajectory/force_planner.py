@@ -21,10 +21,12 @@ class ForceTrajPlanner(TrajPlanner):
     """力规划器：阻抗 / 导纳 / 力位混合（Ch5/Ch9 实现）。"""
 
     def _plan(self, arm, targets: List[TrajFrame], **kw) -> None:
-        raise NotImplementedError("ForceTrajPlanner 未实现")
+        raise NotImplementedError(
+            "force_planner.py - ForceTrajPlanner._plan：Ch5/Ch9 教学内容，尚未实现")
 
     def sample_frame(self, t_abs: float) -> TrajFrame:
-        raise NotImplementedError("ForceTrajPlanner 未实现")
+        raise NotImplementedError(
+            "force_planner.py - ForceTrajPlanner.sample_frame：Ch5/Ch9 教学内容，尚未实现")
 
     # def plan_impedance(self, arm, target: TrajFrame) -> None:
     #     """阻抗规划：期望柔顺动力学参数 → 参考轨迹 + 力矩前馈。"""

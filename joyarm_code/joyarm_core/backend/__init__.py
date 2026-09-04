@@ -30,5 +30,7 @@ def get_backend(name: str) -> type:
     :raises ValueError: 注册名未知时抛出，并列出全部可选项。
     """
     if name not in REGISTRY:
-        raise ValueError(f"『{name}』型号在 backend 中未找到；可用：{sorted(REGISTRY)}")
+        raise ValueError(
+            f"backend/__init__.py - get_backend：『{name}』型号在 backend 中未找到；"
+            f"可用：{sorted(REGISTRY)}")
     return REGISTRY[name]

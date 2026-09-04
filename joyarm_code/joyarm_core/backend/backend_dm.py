@@ -32,6 +32,7 @@ USB-CAN 串口桥（如 ``/dev/ttyACM0``，921600）驱动整机 7 个 DM 电机
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from struct import pack, unpack
@@ -43,6 +44,8 @@ from ..utils.types import ArmState, ControlMode, JointState
 from .backend import Backend
 
 __all__ = ["BackendDM"]
+
+logger = logging.getLogger("joyarm_core.backend_dm")
 
 
 # ============================================================
@@ -177,7 +180,7 @@ def _pack_tx(can_id: int, data: bytes) -> bytes:
     """封装串口桥发送帧（30 字节定长模板，仅 CAN ID 与载荷段可变）。"""
     if len(data) != 8:
         # 切片赋值 f[21:29] 不保长：短载荷会把 30 字节帧缩成 <30，桥接固件丢帧
-        raise ValueError(f"CAN 载荷须为 8 字节，收到 {len(data)}")
+        raise ValueError(f"backend_dm.py - _pack_tx：CAN 载荷须为 8 字节，收到 {len(data)}")
     f = bytearray(30)
     f[0], f[1] = 0x55, 0xAA       # 帧头
     f[2] = 0x1E                    # 帧长 30
@@ -237,7 +240,8 @@ class DmMotor:
         model = str(jcfg.get("model", ""))
         if model not in _MOTOR_LIMITS:
             raise ValueError(
-                f"关节 {self.name} 电机型号 {model!r} 不受支持；可用：{sorted(_MOTOR_LIMITS)}"
+                f"backend_dm.py - DmMotor.__init__：关节 {self.name} 电机型号 {model!r} "
+                f"不受支持；可用：{sorted(_MOTOR_LIMITS)}"
             )
         self.model = model
         self.limits = _MOTOR_LIMITS[model]
@@ -272,11 +276,13 @@ class DmMotor:
     # ---- 状态槽 ----
     def update_state(self, q: float, dq: float, tau: float, err: int,
                      t_mos: int, t_rotor: int) -> None:
+        """回填状态槽并置位应答事件（RX 线程调用）。"""
         self.q, self.dq, self.tau, self.err = q, dq, tau, err
         self.t_mos, self.t_rotor = t_mos, t_rotor
         self._state_event.set()
 
     def clear_state(self) -> None:
+        """清状态应答事件（发请求帧前调用，防 wait 读到旧应答）。"""
         self._state_event.clear()
 
     def wait_state(self, timeout: float) -> bool:
@@ -285,10 +291,12 @@ class DmMotor:
 
     # ---- 参数槽 ----
     def update_param(self, rid: int, value) -> None:
+        """回填参数槽并置位该 RID 应答事件（RX 线程调用）。"""
         self.params[rid] = value
         self._param_events.setdefault(rid, threading.Event()).set()
 
     def clear_param(self, rid: int) -> None:
+        """清参数应答事件并丢弃旧值（发请求帧前调用）。"""
         self.params.pop(rid, None)
         # 事件常驻（同 _state_event 的 clear 而非移除）：否则发请求后事件不存在，
         # wait_param 无法在应答到达前阻塞等待，参数读写必然超时
@@ -325,6 +333,7 @@ class DmCanBus:
 
     # ---- 生命周期 ----
     def open(self) -> None:
+        """打开串口并启动 RX 守护线程（已打开则幂等返回）。"""
         import serial  # 延迟导入
 
         if self._ser is not None and self._ser.is_open:
@@ -337,6 +346,7 @@ class DmCanBus:
         self._rx_thread.start()
 
     def close(self) -> None:
+        """停 RX 线程并关闭串口（幂等；共享总线只关一次，由 disconnect 统一调度）。"""
         self._stop = True
         if self._rx_thread is not None:
             self._rx_thread.join(timeout=1.0)
@@ -346,6 +356,7 @@ class DmCanBus:
         self._ser = None
 
     def add_motor(self, motor: DmMotor) -> None:
+        """注册电机到三个分发表（feedback_id / 低 4 位回退 / motor_id 参数通道）。"""
         motor.bus = self
         self._by_fid[motor.feedback_id] = motor
         self._by_fid_low[motor.feedback_id & 0x0F] = motor
@@ -362,8 +373,10 @@ class DmCanBus:
         while not self._stop:
             try:
                 data = self._ser.read(4096)
-            except Exception:
-                break  # 串口关闭/拔出
+            except Exception as e:
+                # 串口关闭/拔出：线程退出，此后所有应答等待将超时——必须留痕可排查
+                logger.warning("RX 线程退出（%s）：%s", self.channel, e)
+                break
             if data:
                 self._feed(data)
 
@@ -404,23 +417,29 @@ class DmCanBus:
 
     # ---- 电机原语：指令 ----
     def send_mit(self, m: DmMotor, q: float, dq: float, tau: float, kp: float, kd: float) -> None:
+        """下发 MIT 指令帧（CAN ID = motor_id，8 字节位打包）。"""
         self.send(m.motor_id, _pack_mit(q, dq, tau, kp, kd, m.limits))
 
     def send_pos_vel(self, m: DmMotor, p: float, v: float) -> None:
+        """下发 POS_VEL 位置速度帧（CAN ID = 0x100 + motor_id）。"""
         self.send(0x100 + m.motor_id, pack("<ff", p, v))
 
     def send_vel(self, m: DmMotor, v: float) -> None:
+        """下发纯速度帧（CAN ID = 0x200 + motor_id；速度 float32 + 4 字节补零）。"""
         # 速度 float32 占前 4 字节、后 4 字节补零（对齐厂商 control_Vel 布局）
         self.send(0x200 + m.motor_id, pack("<f", v) + b"\x00" * 4)
 
     # ---- 电机原语：使能/失能/标零/状态请求 ----
     def enable(self, m: DmMotor) -> None:
+        """使能电机（``FF×7 + 0xFC``）。"""
         self.send(m.motor_id, b"\xff" * 7 + b"\xfc")
 
     def disable(self, m: DmMotor) -> None:
+        """失能电机（``FF×7 + 0xFD``）。"""
         self.send(m.motor_id, b"\xff" * 7 + b"\xfd")
 
     def set_zero(self, m: DmMotor) -> None:
+        """零位标定帧（``FF×7 + 0xFE``；须先失能且反馈无故障）。"""
         self.send(m.motor_id, b"\xff" * 7 + b"\xfe")
 
     def refresh(self, m: DmMotor) -> None:
@@ -444,7 +463,9 @@ class DmCanBus:
             self._send_param_frame(m, 0x33, rid)
             if m.wait_param(rid, timeout):
                 return m.params[rid]
-        raise TimeoutError(f"电机 {m.name} 读参数 RID={rid} 无应答（{self.channel}）")
+        raise TimeoutError(
+            f"backend_dm.py - read_param：电机 {m.name} 读参数 RID={rid} "
+            f"无应答（{self.channel}）")
 
     def write_param(self, m: DmMotor, rid: int, value, timeout: float = 0.1,
                     retries: int = 5) -> None:
@@ -457,7 +478,7 @@ class DmCanBus:
             self._send_param_frame(m, 0x55, rid, payload)
             if m.wait_param(rid, timeout) and _value_matches(m.params[rid], value):
                 return
-        raise RuntimeError(f"电机 {m.name} 写参数 RID={rid}={value} 未确认")
+        raise RuntimeError(f"backend_dm.py - write_param：电机 {m.name} 写参数 RID={rid}={value} 未确认")
 
     def save_params(self, m: DmMotor) -> None:
         """参数存闪存（0xAA；**须先失能**，此处自动失能且保持失能态）。"""
@@ -499,13 +520,13 @@ class BackendDM(Backend):
     # ----------------------------------------------------------
     def _check_open(self) -> None:
         if not self._buses:
-            raise RuntimeError("BackendDM 未连接；请先 connect()")
+            raise RuntimeError("backend_dm.py - _check_open：BackendDM 未连接；请先 connect()")
 
     def _motors_for(self, joint: Optional[int]) -> list[DmMotor]:
         if joint is None:
             return self._arm_motors
         if not 0 <= joint < self._n:
-            raise ValueError(f"关节索引 {joint} 超出 [0, {self._n})")
+            raise ValueError(f"backend_dm.py - _motors_for：关节索引 {joint} 超出 [0, {self._n})")
         return [self._arm_motors[joint]]
 
     def _rows(self, cmd, name: str, joint: Optional[int]) -> list[tuple[DmMotor, float]]:
@@ -513,28 +534,38 @@ class BackendDM(Backend):
         motors = self._motors_for(joint)
         a = np.asarray(cmd, dtype=float).reshape(-1)
         if a.size != len(motors):
-            raise ValueError(f"{name} 维度 {a.size} ≠ 关节数 {len(motors)}")
+            raise ValueError(f"backend_dm.py - _rows：{name} 维度 {a.size} ≠ 关节数 {len(motors)}")
         return list(zip(motors, a))
 
     def _require_mode_arm(self, mode: ControlMode, motors: list[DmMotor]) -> None:
+        """指令前置：已连接（未连接报清晰错误，而非误导性的模式错误）。"""
+        self._check_open()
         bad = [m.name for m in motors if self._mode_arm.get(m.name) != mode]
         if bad:
-            raise RuntimeError(f"关节 {bad} 未处于 {mode.value} 模式；请先 set_mode_arm({mode.value})")
+            raise RuntimeError(
+                f"backend_dm.py - _require_mode_arm：关节 {bad} 未处于 {mode.value} 模式；"
+                f"请先 set_mode_arm({mode.value})")
 
     def _end_motors_for(self, joint: Optional[int]) -> list[DmMotor]:
         """取末端电机子集（``joint=None`` 全部）；未配置末端时抛 ``RuntimeError``。"""
         if not self._end_motors:
-            raise RuntimeError("本型号未配置末端（config backend.end 缺失）")
+            raise RuntimeError("backend_dm.py - _end_motors_for：本型号未配置末端（config backend.end 缺失）")
         if joint is None:
             return self._end_motors
         if not 0 <= joint < len(self._end_motors):
-            raise ValueError(f"末端电机索引 {joint} 超出 [0, {len(self._end_motors)})")
+            raise ValueError(
+                f"backend_dm.py - _end_motors_for：末端电机索引 {joint} "
+                f"超出 [0, {len(self._end_motors)})")
         return [self._end_motors[joint]]
 
     def _require_mode_end(self, mode: ControlMode, motors: list[DmMotor]) -> None:
+        """指令前置：已连接（未连接报清晰错误，而非误导性的模式错误）。"""
+        self._check_open()
         bad = [m.name for m in motors if self._mode_end.get(m.name) != mode]
         if bad:
-            raise RuntimeError(f"末端电机 {bad} 未处于 {mode.value} 模式；请先 set_mode_end({mode.value})")
+            raise RuntimeError(
+                f"backend_dm.py - _require_mode_end：末端电机 {bad} 未处于 {mode.value} 模式；"
+                f"请先 set_mode_end({mode.value})")
 
     @staticmethod
     def _end_speed(m: DmMotor) -> float:
@@ -548,18 +579,72 @@ class BackendDM(Backend):
         if a.size == 1:
             return np.full(len(motors), float(a[0]))
         if a.size != len(motors):
-            raise ValueError(f"{name} 维度 {a.size} ≠ 所选末端电机数 {len(motors)}")
+            raise ValueError(
+                f"backend_dm.py - _values_for：{name} 维度 {a.size} "
+                f"≠ 所选电机数 {len(motors)}")
         return a
 
+    @staticmethod
+    def _vec_values(v, name: str, motors: list[DmMotor],
+                    default_per_motor=None) -> np.ndarray:
+        """指令向量 → 与所选电机数对齐的向量（``None`` 回退逐电机默认值，如 config 增益）。"""
+        if v is None:
+            return np.array(default_per_motor, dtype=float)
+        a = np.asarray(v, dtype=float).reshape(-1)
+        if a.size != len(motors):
+            raise ValueError(
+                f"backend_dm.py - _vec_values：{name} 维度 {a.size} "
+                f"≠ 所选电机数 {len(motors)}")
+        return a
+
+    def _send_mit_group(self, motors: list[DmMotor], q, dq, tau_ff,
+                        kp, kd) -> None:
+        """MIT 指令逐电机下发（arm/end 共用；``kp/kd`` 为 ``None`` 时回退 config 增益）。"""
+        q_v = self._vec_values(q, "q", motors)
+        dq_v = self._vec_values(dq, "dq", motors)
+        tau_v = self._vec_values(tau_ff, "tau_ff", motors)
+        kp_v = self._vec_values(kp, "kp", motors, [m.mit_kp for m in motors])
+        kd_v = self._vec_values(kd, "kd", motors, [m.mit_kd for m in motors])
+        for m, qi, dqi, ti, kpi, kdi in zip(motors, q_v, dq_v, tau_v, kp_v, kd_v):
+            m.bus.send_mit(m, qi, dqi, ti, kpi, kdi)
+
+    def _read_params(self, motors: list[DmMotor], key: str) -> list:
+        """参数名校验 + 逐电机读（0x33 通道，arm/end 共用）。"""
+        self._check_open()
+        rid = _PARAM_RIDS.get(key)
+        if rid is None:
+            raise ValueError(
+                f"backend_dm.py - _read_params：未知参数名 {key!r}；可用：{sorted(_PARAM_RIDS)}")
+        return [m.bus.read_param(m, rid) for m in motors]
+
+    def _write_params(self, motors: list[DmMotor], key: str, value,
+                      persist: bool) -> None:
+        """参数名/只读校验 + 逐电机写确认（0x55 通道，arm/end 共用）。"""
+        self._check_open()
+        rid = _PARAM_RIDS.get(key)
+        if rid is None:
+            raise ValueError(
+                f"backend_dm.py - _write_params：未知参数名 {key!r}；可用：{sorted(_PARAM_RIDS)}")
+        if key in _READONLY_KEYS:
+            raise ValueError(
+                f"backend_dm.py - _write_params：参数 {key!r} 只读；"
+                f"只读参数：{sorted(_READONLY_KEYS)}")
+        for m, v in zip(motors, self._values_for(value, "value", motors)):
+            m.bus.write_param(m, rid, v)
+            if persist:
+                m.bus.save_params(m)  # 自动失能并保持失能（DM 存闪存硬约束）
+
     def _enable_motors(self, motors: list[DmMotor]) -> None:
+        """逐电机使能：清事件 → 发使能帧 → 等应答并校验错误码。"""
         for m in motors:
             m.clear_state()
             m.bus.enable(m)
             if not m.wait_state(0.5):
-                raise RuntimeError(f"电机 {m.name} 使能无应答")
+                raise RuntimeError(f"backend_dm.py - _enable_motors：电机 {m.name} 使能无应答")
             if m.err != _ERR_ENABLED:
                 raise RuntimeError(
-                    f"电机 {m.name} 使能失败（{_ERR_FAULT_NAMES.get(m.err, '故障')}({m.err:#x})）"
+                    f"backend_dm.py - _enable_motors：电机 {m.name} 使能失败"
+                    f"（{_ERR_FAULT_NAMES.get(m.err, '故障')}({m.err:#x})）"
                 )
 
     def _set_zero_motors(self, motors: list[DmMotor]) -> None:
@@ -575,22 +660,23 @@ class BackendDM(Backend):
                     break
             if not ok:
                 raise RuntimeError(
-                    f"电机 {m.name} 标零前存在故障"
+                    f"backend_dm.py - _set_zero_motors：电机 {m.name} 标零前存在故障"
                     f"（{_ERR_FAULT_NAMES.get(m.err, '故障')}({m.err:#x})）"
                 )
             m.clear_state()
             m.bus.set_zero(m)
-            m.wait_state(0.5)
+            if not m.wait_state(0.5):
+                raise RuntimeError(f"backend_dm.py - _set_zero_motors：电机 {m.name} 标零无应答")
 
     def _switch_group_mode(self, motors: list[DmMotor], mode: ControlMode) -> None:
         """逐电机切模式：POSITION 先写 POS_VEL 闭环增益（RID25~28）再切模式确认。"""
         dm_mode = _DM_MODE.get(mode)
         if dm_mode is None:
-            raise ValueError(f"未知控制模式：{mode}")
+            raise ValueError(f"backend_dm.py - _switch_group_mode：未知控制模式：{mode}")
         for m in motors:
             if mode == ControlMode.POSITION:
-                for rid, key in ((25, "vel_kp"), (26, "vel_ki"), (27, "pos_kp"), (28, "pos_ki")):
-                    m.bus.write_param(m, rid, m.gains[key])
+                for key in ("vel_kp", "vel_ki", "pos_kp", "pos_ki"):
+                    m.bus.write_param(m, _PARAM_RIDS[key], m.gains[key])
             m.bus.switch_mode(m, dm_mode)
 
     @staticmethod
@@ -606,10 +692,18 @@ class BackendDM(Backend):
     # 生命周期
     # ----------------------------------------------------------
     def connect(self) -> None:
-        for sec, motors in ((self._arm_cfg, self._arm_motors), (self._end_cfg, self._end_motors)):
+        """语义见 :meth:`Backend.connect`；DM 实现：逐段建总线（同 channel 共享）并注册电机。"""
+        for sec_name, sec, motors in (
+            ("arm", self._arm_cfg, self._arm_motors),
+            ("end", self._end_cfg, self._end_motors),
+        ):
             if not sec:
                 continue
             channel = sec.get("channel")
+            if not channel:
+                raise ValueError(
+                    f"backend_dm.py - connect：config backend.{sec_name}.channel 缺失"
+                    f"（串口设备路径，如 /dev/ttyACM0）")
             bus = self._buses.get(channel)
             if bus is None:
                 bus = DmCanBus(channel, sec.get("baud_rate", 921600))
@@ -619,6 +713,7 @@ class BackendDM(Backend):
                 bus.add_motor(m)
 
     def disconnect(self) -> None:
+        """语义见 :meth:`Backend.disconnect`；DM 实现：失能电机 → 停 RX 关串口 → 清模式缓存。"""
         # 顺序：失能电机 → 停 RX 线程 → 关串口（共享总线只关一次）
         for m in self._arm_motors + self._end_motors:
             if m.bus is not None:
@@ -640,20 +735,24 @@ class BackendDM(Backend):
     # 本体：_arm
     # ----------------------------------------------------------
     def enable_arm(self, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.enable_arm`；DM 实现：逐电机使能并等应答、校验错误码。"""
         self._check_open()
         self._enable_motors(self._motors_for(joint))
 
     def disable_arm(self, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.disable_arm`；DM 实现：逐电机发失能帧（不等应答）。"""
         self._check_open()
         for m in self._motors_for(joint):
             m.bus.disable(m)
 
     def set_zero_arm(self, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.set_zero_arm`；DM 实现：失能 → 轮询至无故障 → 标零并等应答。"""
         self._check_open()
         self._set_zero_motors(self._motors_for(joint))
 
     def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION,
                      joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.set_mode_arm`；DM 实现：仅对需切换的电机写增益/模式并确认。"""
         self._check_open()
         motors = self._motors_for(joint)
         need = [m for m in motors if self._mode_arm.get(m.name) != mode]
@@ -672,6 +771,7 @@ class BackendDM(Backend):
         return modes.pop() if len(modes) == 1 else None
 
     def read_state_arm(self, joint: Optional[int] = None) -> ArmState:
+        """语义见 :meth:`Backend.read_state_arm`；DM 实现：两段式批量刷新产出完整 ``ArmState``。"""
         self._check_open()
         motors = self._motors_for(joint)
         arrived = self._read_group_state(motors)
@@ -704,11 +804,13 @@ class BackendDM(Backend):
         )
 
     def send_position_arm(self, q: np.ndarray, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.send_position_arm`；DM 实现：POS_VEL 帧，速度取 config ``vlim``。"""
         self._require_mode_arm(ControlMode.POSITION, self._motors_for(joint))
         for m, qi in self._rows(q, "q", joint):
             m.bus.send_pos_vel(m, float(qi), m.vlim)  # 限速取 config POS_VEL.vlim
 
     def send_velocity_arm(self, dq: np.ndarray, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.send_velocity_arm`；DM 实现：VEL 帧并按 ``vlim`` 限幅。"""
         self._require_mode_arm(ControlMode.VELOCITY, self._motors_for(joint))
         for m, dqi in self._rows(dq, "dq", joint):
             m.bus.send_vel(m, float(np.clip(dqi, -m.vlim, m.vlim)))  # 限速：config POS_VEL.vlim
@@ -722,66 +824,43 @@ class BackendDM(Backend):
         kd: Optional[np.ndarray] = None,
         joint: Optional[int] = None,
     ) -> None:
+        """语义见 :meth:`Backend.send_mit_arm`；DM 实现：MIT 帧，``kp/kd`` 缺省回退 config 增益。"""
         motors = self._motors_for(joint)
         self._require_mode_arm(ControlMode.MIT, motors)
-
-        def _vec(v, name, default_per_motor=None):
-            if v is None:
-                return np.array(default_per_motor, dtype=float)
-            a = np.asarray(v, dtype=float).reshape(-1)
-            if a.size != len(motors):
-                raise ValueError(f"{name} 维度 {a.size} ≠ 关节数 {len(motors)}")
-            return a
-
-        q_v = _vec(q, "q")
-        dq_v = _vec(dq, "dq")
-        tau_v = _vec(tau_ff, "tau_ff")
-        kp_v = _vec(kp, "kp", [m.mit_kp for m in motors])  # None → config MIT.kp
-        kd_v = _vec(kd, "kd", [m.mit_kd for m in motors])
-        for m, qi, dqi, ti, kpi, kdi in zip(motors, q_v, dq_v, tau_v, kp_v, kd_v):
-            m.bus.send_mit(m, qi, dqi, ti, kpi, kdi)
+        self._send_mit_group(motors, q, dq, tau_ff, kp, kd)
 
     def read_param_arm(self, key: str, joint: Optional[int] = None):
-        self._check_open()
-        rid = _PARAM_RIDS.get(key)
-        if rid is None:
-            raise ValueError(f"未知参数名 {key!r}；可用：{sorted(_PARAM_RIDS)}")
-        motors = self._motors_for(joint)
-        values = [m.bus.read_param(m, rid) for m in motors]
+        """语义见 :meth:`Backend.read_param_arm`；DM 实现：0x33 参数通道（arm/end 共用助手）。"""
+        values = self._read_params(self._motors_for(joint), key)
         return values[0] if joint is not None else values
 
     def write_param_arm(self, key: str, value, joint: Optional[int] = None,
                         persist: bool = False) -> None:
-        self._check_open()
-        rid = _PARAM_RIDS.get(key)
-        if rid is None:
-            raise ValueError(f"未知参数名 {key!r}；可用：{sorted(_PARAM_RIDS)}")
-        if key in _READONLY_KEYS:
-            raise ValueError(f"参数 {key!r} 只读；只读参数：{sorted(_READONLY_KEYS)}")
-        motors = self._motors_for(joint)
-        for m, v in zip(motors, self._values_for(value, "value", motors)):
-            m.bus.write_param(m, rid, v)
-            if persist:
-                m.bus.save_params(m)  # 自动失能并保持失能（DM 存闪存硬约束）
+        """语义见 :meth:`Backend.write_param_arm`；DM 实现：0x55 写回读比对确认。"""
+        self._write_params(self._motors_for(joint), key, value, persist)
 
     # ----------------------------------------------------------
-    # 末端：_end（电机组，本型号=单夹爪电机；位置语义为电机弧度，0=张开、q_max=闭合）
+    # 末端：_end（电机组，本型号=单夹爪电机；位置语义为电机弧度，q_min=张开、q_max=闭合）
     # ----------------------------------------------------------
     def enable_end(self, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.enable_end`；DM 实现：同 ``enable_arm``（共用使能流程）。"""
         self._check_open()
         self._enable_motors(self._end_motors_for(joint))
 
     def disable_end(self, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.disable_end`；DM 实现：逐电机发失能帧（不等应答）。"""
         self._check_open()
         for m in self._end_motors_for(joint):
             m.bus.disable(m)
 
     def set_zero_end(self, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.set_zero_end`；DM 实现：同 ``set_zero_arm``（共用标零流程）。"""
         self._check_open()
         self._set_zero_motors(self._end_motors_for(joint))
 
     def set_mode_end(self, mode: ControlMode = ControlMode.POSITION,
                      joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.set_mode_end`；DM 实现：同 ``set_mode_arm``（写增益/模式确认）。"""
         self._check_open()
         motors = self._end_motors_for(joint)
         need = [m for m in motors if self._mode_end.get(m.name) != mode]
@@ -796,6 +875,7 @@ class BackendDM(Backend):
         return modes.pop() if len(modes) == 1 else None
 
     def read_state_end(self, joint: Optional[int] = None) -> dict:
+        """语义见 :meth:`Backend.read_state_end`；DM 实现：两段式刷新，返回逐电机字段字典。"""
         self._check_open()
         motors = self._end_motors_for(joint)
         arrived = self._read_group_state(motors)
@@ -811,11 +891,14 @@ class BackendDM(Backend):
         }
 
     def send_position_end(self, position, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend.send_position_end`；DM 实现：裁剪到 ``q_min/q_max`` 行程内。"""
         motors = self._end_motors_for(joint)
         self._require_mode_end(ControlMode.POSITION, motors)
         for m, p in zip(motors, self._values_for(position, "position", motors)):
             if m.q_min is None or m.q_max is None:
-                raise ValueError(f"末端关节 {m.name} 缺少 q_min/q_max 行程配置（config backend.end.joints）")
+                raise ValueError(
+                    f"backend_dm.py - send_position_end：末端关节 {m.name} "
+                    f"缺少 q_min/q_max 行程配置（config backend.end.joints）")
             m.bus.send_pos_vel(m, _clamp(float(p), m.q_min, m.q_max), self._end_speed(m))
 
     def send_force_end(self, force, joint: Optional[int] = None) -> None:
@@ -828,7 +911,9 @@ class BackendDM(Backend):
         self._require_mode_end(ControlMode.MIT, motors)
         for m, f in zip(motors, self._values_for(force, "force", motors)):
             if m.q_max is None:
-                raise ValueError(f"末端关节 {m.name} 缺少 q_max 行程配置（config backend.end.joints）")
+                raise ValueError(
+                    f"backend_dm.py - send_force_end：末端关节 {m.name} "
+                    f"缺少 q_max 行程配置（config backend.end.joints）")
             tau = float(f) * m.force_to_tau
             if m.tau_max is not None:
                 tau = _clamp(tau, -m.tau_max, m.tau_max)
@@ -843,36 +928,24 @@ class BackendDM(Backend):
         kd: Optional[np.ndarray] = None,
         joint: Optional[int] = None,
     ) -> None:
-        """末端 MIT 指令（紧急阻尼通道）：``q/dq/tau_ff`` 与所选电机数一致，
-        ``kp/kd`` 缺省回退 config 末端 ``MIT`` 增益。"""
+        """语义见 :meth:`Backend.send_mit_end`（紧急阻尼通道）；DM 实现：与 ``send_mit_arm`` 共用下发助手。"""
         motors = self._end_motors_for(joint)
         self._require_mode_end(ControlMode.MIT, motors)
-
-        def _vec(v, name, default_per_motor=None):
-            if v is None:
-                return np.array(default_per_motor, dtype=float)
-            a = np.asarray(v, dtype=float).reshape(-1)
-            if a.size != len(motors):
-                raise ValueError(f"{name} 维度 {a.size} ≠ 末端电机数 {len(motors)}")
-            return a
-
-        q_v = _vec(q, "q")
-        dq_v = _vec(dq, "dq")
-        tau_v = _vec(tau_ff, "tau_ff")
-        kp_v = _vec(kp, "kp", [m.mit_kp for m in motors])
-        kd_v = _vec(kd, "kd", [m.mit_kd for m in motors])
-        for m, qi, dqi, ti, kpi, kdi in zip(motors, q_v, dq_v, tau_v, kp_v, kd_v):
-            m.bus.send_mit(m, qi, dqi, ti, kpi, kdi)
+        self._send_mit_group(motors, q, dq, tau_ff, kp, kd)
 
     def send_action_end(self, action: str, joint: Optional[int] = None) -> None:
         """末端离散动作：``open``→``q_min``、``close``→``q_max``、``zero``→电机弧度 0。"""
         motors = self._end_motors_for(joint)
         self._require_mode_end(ControlMode.POSITION, motors)
         if action not in ("open", "close", "zero"):
-            raise ValueError(f"未知末端动作 {action!r}；可用：['open', 'close', 'zero']")
+            raise ValueError(
+                f"backend_dm.py - send_action_end：未知末端动作 {action!r}；"
+                f"可用：['open', 'close', 'zero']")
         for m in motors:
             if m.q_min is None or m.q_max is None:
-                raise ValueError(f"末端关节 {m.name} 缺少 q_min/q_max 行程配置（config backend.end.joints）")
+                raise ValueError(
+                    f"backend_dm.py - send_action_end：末端关节 {m.name} "
+                    f"缺少 q_min/q_max 行程配置（config backend.end.joints）")
             if action == "zero":
                 # 行程不含 0 的末端（如 q_min>0）直接发 0 会越限，裁剪保安全
                 target = _clamp(0.0, m.q_min, m.q_max)
@@ -881,24 +954,11 @@ class BackendDM(Backend):
             m.bus.send_pos_vel(m, target, self._end_speed(m))
 
     def read_param_end(self, key: str, joint: Optional[int] = None):
-        self._check_open()
-        rid = _PARAM_RIDS.get(key)
-        if rid is None:
-            raise ValueError(f"未知参数名 {key!r}；可用：{sorted(_PARAM_RIDS)}")
-        motors = self._end_motors_for(joint)
-        values = [m.bus.read_param(m, rid) for m in motors]
+        """语义见 :meth:`Backend.read_param_end`；DM 实现：0x33 参数通道（arm/end 共用助手）。"""
+        values = self._read_params(self._end_motors_for(joint), key)
         return values[0] if joint is not None else values
 
     def write_param_end(self, key: str, value, joint: Optional[int] = None,
                         persist: bool = False) -> None:
-        self._check_open()
-        rid = _PARAM_RIDS.get(key)
-        if rid is None:
-            raise ValueError(f"未知参数名 {key!r}；可用：{sorted(_PARAM_RIDS)}")
-        if key in _READONLY_KEYS:
-            raise ValueError(f"参数 {key!r} 只读；只读参数：{sorted(_READONLY_KEYS)}")
-        motors = self._end_motors_for(joint)
-        for m, v in zip(motors, self._values_for(value, "value", motors)):
-            m.bus.write_param(m, rid, v)
-            if persist:
-                m.bus.save_params(m)
+        """语义见 :meth:`Backend.write_param_end`；DM 实现：0x55 写回读比对确认。"""
+        self._write_params(self._end_motors_for(joint), key, value, persist)

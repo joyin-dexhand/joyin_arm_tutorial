@@ -33,7 +33,9 @@ class AutoController(Controller):
 
     def _compute(self, arm, frame: TrajFrame, state: ArmState,
                  **kw) -> tuple[ControlMode, dict]:
-        raise NotImplementedError("AutoController 为 Ch6 教学内容")
+        raise NotImplementedError(
+            "auto_controller.py - AutoController._compute：Ch6 教学内容，尚未实现"
+            "（五种控制律见类 docstring）")
 
     # Ch6 实现概要（函数头草案，实现时取消注释并补充算法体）：
     # def ctrl_position_follow(self, arm, frame, state):

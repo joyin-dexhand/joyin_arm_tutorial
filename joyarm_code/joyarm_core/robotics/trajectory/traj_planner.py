@@ -75,4 +75,5 @@ class TrajPlanner(ABC):
                     problems.append(f"[{i}] {name} 应为空（目标不携带该字段）")
         if problems:
             raise ValueError(
-                "目标序列无效：\n" + "\n".join(f"  - {p}" for p in problems))
+                "traj_planner.py - TrajPlanner._check_targets：目标序列无效：\n"
+                + "\n".join(f"  - {p}" for p in problems))

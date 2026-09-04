@@ -23,10 +23,11 @@ class AutoTrajPlanner(TrajPlanner):
     """自动规划器：目标类型驱动——关节/位姿 × 单值/序列 四种情形。"""
 
     def _plan(self, arm, targets: List[TrajFrame], **kw) -> None:
-        raise NotImplementedError("AutoTrajPlanner 未实现")
+        raise NotImplementedError("auto_planner.py - AutoTrajPlanner._plan：Ch5 教学内容，尚未实现")
 
     def sample_frame(self, t_abs: float) -> TrajFrame:
-        raise NotImplementedError("AutoTrajPlanner 未实现")
+        raise NotImplementedError(
+            "auto_planner.py - AutoTrajPlanner.sample_frame：Ch5 教学内容，尚未实现")
 
     # def plan_joint_to_point(self, arm, q0, target: TrajFrame) -> None:
     #     """q0→q 三次多项式插值：当前关节角到目标关节角。"""

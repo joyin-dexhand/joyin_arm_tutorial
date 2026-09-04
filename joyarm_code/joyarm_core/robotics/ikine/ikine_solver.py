@@ -69,7 +69,9 @@ class IkineSolver(ABC):
         :return: :class:`IKResult`，``q`` 为 ``(K,n)``（每行一组解；6R 通常``K=8``）。
         **不做限位剔除**，但逐关节尝试 ``±2π`` 平移，使每组解尽量落入关节限位范围内（等价角中取离限位区间最近者）。
         """
-        raise NotImplementedError("solve_all 仅解析法实现提供")
+        raise NotImplementedError(
+            "ikine_solver.py - IkineSolver.solve_all：默认实现不可用"
+            "（仅解析法子类覆盖提供；数值法无全解概念）")
 
     # ----------------------------------------------------------
     # ikine 共享助手（±2π 归位 + 限位剔除选最近；解析法实现直接复用）

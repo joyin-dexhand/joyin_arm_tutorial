@@ -27,7 +27,9 @@ class ForceController(Controller):
 
     def _compute(self, arm, frame: TrajFrame, state: ArmState,
                  **kw) -> tuple[ControlMode, dict]:
-        raise NotImplementedError("ForceController 为 Ch6/Ch9 教学内容")
+        raise NotImplementedError(
+            "force_controller.py - ForceController._compute：Ch6/Ch9 教学内容，尚未实现"
+            "（阻抗/力位混合见类 docstring）")
 
     # 实现概要（函数头草案，实现时取消注释并补充算法体）：
     # def ctrl_impedance(self, arm, frame, state):

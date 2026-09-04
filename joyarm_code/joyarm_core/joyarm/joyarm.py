@@ -83,7 +83,7 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
         with open(os.path.join(_CONFIGS_DIR, f"{model}.yaml"), encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         if not isinstance(cfg, dict):
-            raise ValueError(f"顶层应为映射，实际 {type(cfg).__name__}")
+            raise ValueError(f"joyarm.py - load_config：顶层应为映射，实际 {type(cfg).__name__}")
         return cfg
     except Exception as e:
         if not strict:
@@ -92,7 +92,9 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
             avail = sorted(f[:-5] for f in os.listdir(_CONFIGS_DIR) if f.endswith(".yaml"))
         except OSError:
             avail = []
-        raise ValueError(f"『{model}』型号在 configs 中未找到；可用：{avail}") from e
+        raise ValueError(
+            f"joyarm.py - load_config：『{model}』型号在 configs 中未找到；可用：{avail}"
+        ) from e
 
 
 # ============================================================
@@ -105,7 +107,7 @@ _DOMAIN_DEFAULTS = {
     "jacobian": "pin",
     "dynamics": "pin",
     "traj": "auto",
-    "control": "position",
+    "control": "auto",
 }
 
 # 域 → 注册表（六域统一字典化；config 规格可为单值或列表，全部加载、首个活动）
@@ -186,7 +188,8 @@ class JoyArm:
     ):
         if pin is None:
             raise ImportError(
-                "JoyArm 需要 pinocchio 才能加载 URDF 与计算运动学。请安装：\n"
+                "joyarm.py - JoyArm.__init__：缺少 pinocchio（加载 URDF 与计算运动学必需）；"
+                "请安装：pip install pin（或 uv sync 安装本项目全部依赖）。"
             )
 
         # ---- 型号 config（工厂注入；直用时自动加载 configs/<model>.yaml）----
@@ -204,14 +207,14 @@ class JoyArm:
             robot = basic.get("robot")
             if robot is None:
                 raise ValueError(
-                    "未指定 urdf_path，且 config basic.robot 缺失，无法解析 URDF。\n"
-                    "请传入 urdf_path，或在 configs yaml 配置 basic.robot"
-                    "（如 joyarm_dm_fixend）。"
+                    "joyarm.py - JoyArm.__init__：未指定 urdf_path，且 config basic.robot "
+                    "缺失，无法解析 URDF。\n请传入 urdf_path，或在 configs yaml 配置 "
+                    "basic.robot（如 joyarm_dm_fixend）。"
                 )
             urdf_path = self._resolve_robot_urdf(robot)
         if not os.path.isfile(urdf_path):
             raise FileNotFoundError(
-                f"未找到 URDF 文件：{urdf_path}\n"
+                f"joyarm.py - JoyArm.__init__：未找到 URDF 文件：{urdf_path}\n"
                 f"请将正式 URDF 放入 joyarm_core/robot_model/。"
             )
         self._urdf_path: str = urdf_path
@@ -252,7 +255,7 @@ class JoyArm:
         self.ee_frame_id: int = self.pin_model.getFrameId(ee_frame_name)
         if self.ee_frame_id >= len(self.pin_model.frames):
             raise ValueError(
-                f"URDF 中找不到末端帧 '{ee_frame_name}'；"
+                f"joyarm.py - JoyArm.__init__：URDF 中找不到末端帧 '{ee_frame_name}'；"
                 f"可用帧：{[f.name for f in self.pin_model.frames]}"
             )
 
@@ -267,18 +270,17 @@ class JoyArm:
         self.qhigh: np.ndarray = self.joint_limits_soft.q_max
 
         # ---- 特征位形（config joyarm 段优先，缺失回退 q_zero）----
+        # 长度合法时统一裁剪到硬限位；长度错误不在此拦截——软失败构造，由 check_config 报告
         jcfg = cfg.get("joyarm") or {}
-        self._q_zero: np.ndarray = np.clip(
-            np.asarray(jcfg.get("q_zero", np.zeros(self.n)), dtype=float).reshape(-1),
-            self.joint_limits.q_min,
-            self.joint_limits.q_max,
-        )
-        self._q_home: np.ndarray = np.asarray(
-            jcfg.get("q_home", self._q_zero), dtype=float
-        ).reshape(-1)
-        self._q_neutral: np.ndarray = np.asarray(
-            jcfg.get("q_neutral", self._q_zero), dtype=float
-        ).reshape(-1)
+
+        def _pose(key, fallback):
+            arr = np.asarray(jcfg.get(key, fallback), dtype=float).reshape(-1)
+            return np.clip(arr, self.joint_limits.q_min, self.joint_limits.q_max) \
+                if arr.size == self.n else arr
+
+        self._q_zero: np.ndarray = _pose("q_zero", np.zeros(self.n))
+        self._q_home: np.ndarray = _pose("q_home", self._q_zero)
+        self._q_neutral: np.ndarray = _pose("q_neutral", self._q_zero)
 
         # ---- TCP 空间限位：joyarm 段提供则覆盖默认占位 ----
         self.tcp_limits: TcpLimits = TcpLimits()
@@ -339,7 +341,8 @@ class JoyArm:
                            if os.path.isdir(os.path.join(_ROBOT_MODEL_DIR, d)))
         except OSError:
             avail = []
-        raise ValueError(f"『{robot}』型号在 robot_model 中未找到；可用：{avail}")
+        raise ValueError(
+            f"joyarm.py - _resolve_robot_urdf：『{robot}』型号在 robot_model 中未找到；可用：{avail}")
 
     # ----------------------------------------------------------
     # init 内部：TCP 空间限位应用（config joyarm 段）
@@ -444,7 +447,7 @@ class JoyArm:
         handler = _SETTABLE.get(path)
         if handler is None:
             raise ValueError(
-                f"path={path!r} 不在运行期可设白名单内：{sorted(_SETTABLE)}"
+                f"joyarm.py - set_config：path={path!r} 不在运行期可设白名单内：{sorted(_SETTABLE)}"
                 f"（其余配置请直接编辑 configs yaml）"
             )
         getattr(self, handler)(value)
@@ -505,7 +508,8 @@ class JoyArm:
                     problems.append(f"backend.arm.joints 数量 {nb} ≠ 关节数 {self.n}")
         if problems:
             raise ValueError(
-                "配置自检未通过：\n" + "\n".join(f"  - {p}" for p in problems))
+                "joyarm.py - check_config：配置自检未通过：\n"
+                + "\n".join(f"  - {p}" for p in problems))
 
     def check_hardware(self) -> None:
         """硬件最小自检（需 ``connect()``）：逐关节通讯/电机故障/编码器有效性，
@@ -530,8 +534,9 @@ class JoyArm:
                 problems.append(f"本体关节[{i}] 编码器角度无效")
         try:
             es = self._backend.read_state_end()
-        except Exception:
+        except Exception as e:
             es = {}
+            problems.append(f"末端状态读取失败：{e}")
         for i, ok in enumerate(es.get("comm_ok", [])):
             if not ok:
                 problems.append(f"末端电机[{i}] 通讯无应答")
@@ -540,7 +545,8 @@ class JoyArm:
                 problems.append(f"末端电机[{i}] 电机故障（故障标志置位）")
         if problems:
             raise RuntimeError(
-                "硬件自检未通过：\n" + "\n".join(f"  - {p}" for p in problems))
+                "joyarm.py - check_hardware：硬件自检未通过：\n"
+                + "\n".join(f"  - {p}" for p in problems))
 
     # ----------------------------------------------------------
     # solver 成员字典访问 / 切换（六域统一）
@@ -562,9 +568,9 @@ class JoyArm:
         name = self._active_name.get(domain)
         if name is None or name not in d:
             raise RuntimeError(
-                f"robotics.{domain} 成员未加载（config 未配置或注册名未实现）；"
-                f"已加载：{sorted(d) or '无'}。教程各章实现算法并注册后，"
-                f"经 configs yaml 的 robotics.{domain} 段选型接入"
+                f"joyarm.py - _active：robotics.{domain} 成员未加载"
+                f"（config 未配置或注册名未实现）；已加载：{sorted(d) or '无'}。"
+                f"教程各章实现算法并注册后，经 configs yaml 的 robotics.{domain} 段选型接入"
             )
         return d[name]
 
@@ -575,14 +581,16 @@ class JoyArm:
         d = self._members(domain)
         if name not in d:
             raise ValueError(
-                f"『{name}』未在 robotics.{domain} 已加载成员中；已加载：{sorted(d)}"
+                f"joyarm.py - _pick：『{name}』未在 robotics.{domain} 已加载成员中；"
+                f"已加载：{sorted(d)}"
             )
         return d[name]
 
     def set_solver(self, domain: str, name: str):
         """运行期切换活动成员（按注册名；域 ∈ fkine/ikine/jacobian/dynamics/traj/control）。"""
         if domain not in _DOMAIN_REGISTRIES:
-            raise ValueError(f"未知域 {domain!r}；可用：{sorted(_DOMAIN_REGISTRIES)}")
+            raise ValueError(
+                f"joyarm.py - set_solver：未知域 {domain!r}；可用：{sorted(_DOMAIN_REGISTRIES)}")
         inst = self._pick(domain, name)   # 校验已加载
         self._active_name[domain] = name
         return inst
@@ -692,7 +700,7 @@ class JoyArm:
         """连接真机（整机后端：本体 + 末端）。"""
         self._require_backend()
         self._backend.connect()
-        self.connected = True
+        self.connected = bool(self._backend.connected)
 
     def disconnect(self) -> None:
         """断开真机（整机后端：本体 + 末端）。"""
@@ -703,14 +711,16 @@ class JoyArm:
     def _require_connected(self) -> None:
         """执行类方法前置：未连接真机（离线）时抛 ``RuntimeError``。"""
         if not self.connected:
-            raise RuntimeError(f"[{self.model}] 未连接真机（离线）；请先 connect()。")
+            raise RuntimeError(
+                f"joyarm.py - _require_connected：[{self.model}] 未连接真机（离线）；"
+                f"请先 connect()。")
 
     def _require_backend(self) -> None:
         """后端前置：无后端（未配置/选型无效）时抛 ``RuntimeError``。"""
         if self._backend is None:
             raise RuntimeError(
-                f"[{self.model}] 无整机后端（config backend 段缺失或选型无效），"
-                f"无法执行硬件操作。"
+                f"joyarm.py - _require_backend：[{self.model}] 无整机后端"
+                f"（config backend 段缺失或选型无效），无法执行硬件操作。"
             )
 
     # ----------------------------------------------------------
@@ -869,12 +879,12 @@ class JoyArm:
         self._require_connected()
         if mode == ControlMode.POSITION:
             if q is None:
-                raise ValueError("POSITION 模式需要 q")
+                raise ValueError("joyarm.py - set_arm_command：POSITION 模式需要 q")
             self._backend.send_position_arm(
                 self._guard_command("q", _vec(q), joint), joint)
         elif mode == ControlMode.VELOCITY:
             if dq is None:
-                raise ValueError("VELOCITY 模式需要 dq")
+                raise ValueError("joyarm.py - set_arm_command：VELOCITY 模式需要 dq")
             self._backend.send_velocity_arm(
                 self._guard_command("dq", _vec(dq), joint), joint)
         elif mode == ControlMode.MIT:
@@ -882,7 +892,7 @@ class JoyArm:
                 name for name, val in (("q", q), ("dq", dq), ("tau", tau)) if val is None
             ]
             if missing:
-                raise ValueError(f"MIT 模式缺少参数：{missing}")
+                raise ValueError(f"joyarm.py - set_arm_command：MIT 模式缺少参数：{missing}")
             self._backend.send_mit_arm(
                 self._guard_command("q", _vec(q), joint),
                 self._guard_command("dq", _vec(dq), joint),
@@ -891,7 +901,7 @@ class JoyArm:
                 kd=_vec(kd) if kd is not None else None,
                 joint=joint)
         else:
-            raise ValueError(f"未知控制模式：{mode}")
+            raise ValueError(f"joyarm.py - set_arm_command：未知控制模式：{mode}")
 
     # ----------------------------------------------------------
     # backend 电机参数读写（依赖 _backend；未连接 raise）
