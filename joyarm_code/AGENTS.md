@@ -80,8 +80,7 @@ joyarm_code/
 ```yaml
 basic: {name, robot, ee_frame, utils: {joint_limits_soft_margin}}
 joyarm: {arm_mdh_and_limits, T_linkn_end, tcp_limits, q_zero, q_home, q_neutral}   # MDH/T_linkn_end 为教学数据（算法层按需读取，约束8）；workspace_box 兼容 (2,3)/(3,2)
-robotics: {}   # 六域选型（注册名 / {name, **参数} / 规格列表）——教学过渡态留空，
-    # 各章实现注册后按注释示例取消注释（fkine/ikine/jacobian/dynamics/traj/control）
+robotics: {六域契约规格}   # 六域选型（注册名 / {name, **参数} / 规格列表）
 backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {同构, joints}}
 ```
 
@@ -147,7 +146,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `robotics/control/` | `Controller(ABC)`（`step` 模板 + `_compute` 内核 + 限位守卫）+ AutoController/ForceController 桩 | Ch6/9 | 🟡 |
 | `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检）+ `load_config` + `_build_domain` | — | ✅ |
 | `joyarm/__init__.py` | `JoyArmFactory`（软失败；`list_models` 扫描 configs） | — | ✅ |
-| `configs/joyarm_dm.yaml` | 型号 YAML 四段（robotics 段留档注释，各章实现后启用） | — | ✅ |
+| `configs/joyarm_dm.yaml` | 型号 YAML 四段（robotics 段已预配置各章注册名契约，未注册时告警置空） | — | ✅ |
 
 ### 3.2 组装与数据流
 

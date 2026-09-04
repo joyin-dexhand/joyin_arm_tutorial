@@ -1,4 +1,5 @@
 [build-system] # 显式声明构建后端，避免 pip/uv 隐式回退旧版 setuptools
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
