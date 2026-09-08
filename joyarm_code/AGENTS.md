@@ -46,6 +46,7 @@ joyarm_code/
 │   ├── backend/                    #   通信层（整机 Backend + name 选型）
 │   │   ├── backend.py               #     Backend（整机 ABC：*_arm/*_end + 参数读写；限位 __init__ 构建 + send_* 守卫模板）
 │   │   ├── backend_dm.py            #     BackendDM（DM 整机 7 电机；内含私有协议层 DmMotor/DmCanBus）✅
+│   │   ├── backend_dm_mujoco.py     #     BackendDMMujoco（DM 机械臂 MuJoCo 仿真后端桩，待实现）🟡
 │   │   ├── u2can/                   #     厂商 DM 参考库（协议参照用，不依赖不导入）
 │   │   └── __init__.py              #     REGISTRY + get_backend(name)
 │   ├── joyarm/                     #   设备模型层（组合根 + 型号工厂）
@@ -144,6 +145,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/limits.py` | `clamp_to_limits` + `joint_limits_from_model`/`soft_limits`（绝对余量） | Ch11 | ✅ |
 | `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写 + 限位构建 + send_* 两族守卫模板） | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus） | Ch6/13 | ✅ |
+| `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
 | `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）；MDH 白盒 FK 待 Ch2 实现 | Ch2 | 🟡 |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 + solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）；数值/解析实现待 Ch3 | Ch3 | 🟡 |
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（`manipulability`/`cond_number`/`statics` 衍生量模板在 ABC） | Ch4 | 🟡 |
@@ -191,11 +193,11 @@ JoyArm.end_open/end_close/end_zero(joint=None) · set_end_position / set_end_for
 JoyArm.damping_mode(kd=10.0)                    # 紧急阻尼：任何状态全电机（含末端）MIT 纯阻尼 ✅
 # 运动便利与安全层 ✅（move_j 为独立功能、与规划管线并行，仅安全层/直接调用；常规运动走轨迹桥→规划器→控制器）
 JoyArm.hold_position(kp,kd,tau)（MIT 阻抗保持当前姿态，tau 缺省重力前馈）· lock_position()（急停锁定：切位置模式锁当前 q）
-JoyArm.move_j(q, t=None, rate/tol/timeout kw)（三次多项式阻塞运动，精确定时器逐帧下发+到位等待）· move_l(pose, t)（占位：Ch3/Ch5 后）
+JoyArm.move_j(q, t=None, rate/tol/timeout kw)（三次多项式阻塞运动，精确定时器逐帧下发+到位等待；q 入口裁软限位，判定以裁剪后为准）· move_l(pose, t)（占位：Ch3/Ch5 后）· teach_mode(on=True)（占位：拖动示教，Ch8 重力补偿后）
 JoyArm.safe_home(t) · home_to_zero(t)（先校验位于 home）· safe_zero()（组合：lock→home→zero）· is_in_position(q 或 pose, 容差) → bool（单入口双判断）
 JoyArm.rand_q(size, rng)（软限位内采样；裁剪/校验统一 utils.clamp_to_limits）· joint_names · joint_index(name)
 JoyArm.set/get_target_traj(targets) · set/get_current_frame(frame)   # 轨迹桥：应用→规划→控制（TrajFrame；发布即不可变+原子交换）✅
-# 关键属性：model / pin_model / pin_data / n / nv / ee_frame_* / joint_limits(_soft) / end_limits(_soft) / q_zero / q_home / q_neutral / tcp_limits / T_base / _backend / connected
+# 关键属性：model / pin_model / pin_data / n / ee_frame_* / joint_limits(_soft) / end_limits(_soft) / q_zero / q_home / q_neutral / tcp_limits / _backend / connected
 #   六域字典：_fkine_solvers/_ikine_solvers/_jacobian_solvers/_dynamics_solvers/_traj_planners/_controllers + _active_name
 #   轨迹桥（私有）：_target_traj（List[TrajFrame]，写者=应用线程）/ _current_frame（TrajFrame，写者=规划线程）
 ```
@@ -218,6 +220,7 @@ AutoController（type 五类型）/ ForceController（impedance/hybrid）   # �
 Backend(ABC, cfg, joint_limits=None, joint_soft_margins=None, end_soft_margins=None) ✅   # 限位 __init__ 自建（本体=传入 URDF 硬限位−margin；末端=自解析 end.joints 四键−margin，缺键 ±∞）；属性 arm_limits_soft / end_limits(_soft)；standalone 构造同样自带守卫
 send_position/velocity/mit_{arm,end} 守卫模板→抽象内核 _send_*_{arm,end}（限位裁剪唯一执行点；末端标量广播逐电机裁剪、力度按 ±tau_max 数值裁剪；越限告警节流每 0.5s 至多一条；send_action_end 离散不模板化）；set_arm/end_limits_soft 运行期替换 ✅
 get_backend(name) · REGISTRY     # config backend.name 选型 ✅
+BackendDMMujoco（DM 机械臂 MuJoCo 仿真后端桩，待实现、未注册 REGISTRY）🟡
 clamp_to_limits(targets, limits) · joint_limits_from_model(model) · soft_limits(hard, margins 四键字典)   # ✅
 transforms.py 23 函数（rpy/rodrigues/quat/T/adT/slerp，纯 numpy）✅ · types.py 枚举+数据类 ✅
 ```

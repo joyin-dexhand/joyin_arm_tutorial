@@ -24,6 +24,7 @@ from joyarm_core import (  # noqa: E402
     joyarm_factory, JoyArmFactory, JoyArm, Pose, Wrench,
     IKResult, IkineSolver, TrajFrame, TrajPlanner,
     Controller, ControlMode, ArmState, JointState, Backend, cubic_traj,
+    clamp_to_limits,
 )
 from joyarm_core.joyarm import load_config  # noqa: E402
 from joyarm_core.joyarm.joyarm import _build_domain  # noqa: E402
@@ -538,7 +539,7 @@ def test_move_j():
     s = _FakeSession(q0=np.zeros(6))
     try:
         arm, be = s.arm, s.be
-        target = np.array([0.06, 0.05, 0.04, 0.03, 0.02, 0.01])
+        target = np.array([0.06, -0.25, -0.35, 0.03, 0.02, 0.01])  # 软限位内目标
         arm.move_j(target, t=0.12, rate=200, wait_timeout=2.0)
         frames = [c for c in be.calls if c[0] == "send_position_arm"]
         ts, qs, _ = cubic_traj(np.zeros(6), target, 0.12, 200)
@@ -548,6 +549,17 @@ def test_move_j():
         assert arm.is_in_position(q=target)                      # 到位收尾
     finally:
         s.restore()
+    s3 = _FakeSession(q0=np.zeros(6))                            # 目标越软限位：入口裁剪
+    try:
+        arm3, be3 = s3.arm, s3.be
+        tgt = np.full(6, 5.0)                                    # 全关节越软上限
+        exp = clamp_to_limits(tgt, arm3.joint_limits_soft)       # 判定以裁剪后为准
+        arm3.move_j(tgt, t=0.02, wait_timeout=2.0)
+        frames3 = [c for c in be3.calls if c[0] == "send_position_arm"]
+        assert np.allclose(frames3[-1][1], exp)                  # 末帧 = 裁剪后目标
+        assert arm3.is_in_position(q=exp)
+    finally:
+        s3.restore()
     s2 = _FakeSession(q0=np.zeros(6), converge=0.0)              # 永不收敛
     try:
         try:
@@ -568,6 +580,7 @@ def test_safe_home_zero_and_composition():
     s = _FakeSession(q0=np.full(6, 0.3))
     try:
         arm, be = s.arm, s.be
+        qz = clamp_to_limits(arm.q_zero, arm.joint_limits_soft)  # 软限位投影后 zero/home
         try:                                                      # home 前置校验
             arm.home_to_zero()
             raise AssertionError("不在 home 应抛 RuntimeError")
@@ -576,14 +589,14 @@ def test_safe_home_zero_and_composition():
         arm.safe_zero()                                           # 组合：lock → home → zero
         frames = [c for c in be.calls if c[0] == "send_position_arm"]
         assert np.allclose(frames[0][1], 0.3)                    # 首帧 = 急停锁定当前 q
-        assert np.allclose(frames[-1][1], np.zeros(6))           # 末帧 = zero
-        assert arm.is_in_position(q=np.zeros(6))
+        assert np.allclose(frames[-1][1], qz)                    # 末帧 = 裁剪后 zero
+        assert arm.is_in_position(q=qz)
         be.calls.clear()                                          # safe_home 单独
         be._q = np.full(6, 0.2)
         be._target = be._q.copy()
         arm.safe_home(t=0.1)
-        assert np.allclose(be.calls[-1][1], np.zeros(6))         # 末帧 = home
-        assert arm.is_in_position(q=np.zeros(6))
+        assert np.allclose(be.calls[-1][1], qz)                  # 末帧 = 裁剪后 home
+        assert arm.is_in_position(q=qz)
     finally:
         s.restore()
 

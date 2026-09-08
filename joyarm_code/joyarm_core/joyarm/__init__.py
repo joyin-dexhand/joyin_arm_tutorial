@@ -38,7 +38,7 @@ class JoyArmFactory:
     """按型号名创建机械臂：加载 ``configs/<型号>.yaml`` → 校验命名链 → 实例化 JoyArm。
 
     每次调用返回新实例（机械臂对象有状态、可连真机，不做缓存）；
-    ``create(model, **kwargs)`` 的额外参数透传 :class:`JoyArm`（如 ``load_geometry``）。
+    ``create(model, **kwargs)`` 的额外参数透传 :class:`JoyArm`（如 ``urdf_path``）。
     创建失败（config 缺失 / 命名链不符 / 初始化异常）返回 ``None`` 并输出失败信息。
     """
 

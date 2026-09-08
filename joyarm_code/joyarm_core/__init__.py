@@ -88,6 +88,7 @@ from . import backend
 from .backend import (
     Backend,
     BackendDM,
+    BackendDMMujoco,
     get_backend,
 )
 
@@ -156,6 +157,7 @@ __all__ = [
     "backend",
     "Backend",
     "BackendDM",
+    "BackendDMMujoco",
     "get_backend",
     # 版本
     "__version__",

@@ -3,23 +3,22 @@
 继承层次（类名驼峰、文件名小写）::
 
     Backend                  # 整机后端抽象根（backend.py）：本体+末端一体，
-    └── BackendDM            #   方法以 _arm / _end 后缀区分两组
-        └── …                #   其他型号子类（结构同、参数异）
+    ├── BackendDM            #   方法以 _arm / _end 后缀区分两组（真机）
+    └── BackendDMMujoco      #   DM 机械臂 MuJoCo 仿真后端（待实现）
 
 子类与机械臂型号 **1:1 对应**派生（``backend(_joyarm)_dm`` ↔ ``joyarm_dm``，
 即每个型号一个专属整机后端）；``REGISTRY`` 供 config ``backend.name`` 选型
 （JoyArm 解析 yaml 后经 :func:`get_backend` 构建子类实例）。
-不设物理仿真后端：仿真 / 预演 / 教学走 ``JoyArm`` 离线模式（``connected=False``，
-纯运动学计算）；可视化在兄弟包 ``joyarm_ros2_ws`` 用 rviz2 呈现。
 """
 from .backend import Backend
 from .backend_dm import BackendDM
+from .backend_dm_mujoco import BackendDMMujoco
 
 REGISTRY = {
     "backend_dm": BackendDM,
 }
 
-__all__ = ["Backend", "BackendDM", "REGISTRY", "get_backend"]
+__all__ = ["Backend", "BackendDM", "BackendDMMujoco", "REGISTRY", "get_backend"]
 
 
 def get_backend(name: str) -> type:

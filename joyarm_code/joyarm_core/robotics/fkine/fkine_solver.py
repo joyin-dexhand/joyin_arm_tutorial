@@ -30,7 +30,7 @@ class FkineSolver(ABC):
     # ----------------------------------------------------------
     @abstractmethod
     def frame_pose(self, arm, q: np.ndarray, frame: Union[str, int]) -> Pose:
-        """内核：指定帧在基坐标系下的位姿（含 ``T_base`` 偏移）。"""
+        """内核：指定帧在基坐标系下的位姿。"""
 
     # ----------------------------------------------------------
     # fkine 模板：solve（单点/批量分发 + rep 三态 pose/T/se3）

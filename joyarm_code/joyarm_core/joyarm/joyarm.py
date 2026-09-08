@@ -30,7 +30,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ..utils.limits import joint_limits_from_model, soft_limits
+from ..utils.limits import clamp_to_limits, joint_limits_from_model, soft_limits
 from ..utils.transforms import quat_conj, quat_mul, quat_to_axis_angle
 from ..utils.types import (
     ArmState,
@@ -174,7 +174,6 @@ class JoyArm:
     :param urdf_path: URDF 路径；缺省由 config ``basic.robot`` 解析随包资产
         （``robot_model/<robot>/urdf/<robot>.urdf``）。
     :param ee_frame_name: 末端帧名；缺省取 config ``basic.ee_frame``，再回退 ``"ee"``。
-    :param mesh_dirs: mesh 搜索目录；``load_geometry``: 是否加载 visual/collision 几何。
     :param config: 型号 YAML 字典（``basic``/``joyarm``/``robotics``/``backend`` 段）；
         缺省自动加载 ``configs/<model>.yaml``，一次性存入 ``self._config``。
     """
@@ -186,8 +185,6 @@ class JoyArm:
         model: str,
         urdf_path: Optional[str] = None,
         ee_frame_name: Optional[str] = None,
-        mesh_dirs: Optional[List[str]] = None,
-        load_geometry: bool = False,
         config: Optional[dict] = None,
     ):
         if pin is None:
@@ -225,31 +222,11 @@ class JoyArm:
         ee_frame_name = ee_frame_name or basic.get("ee_frame") or "ee"
 
         # ---- 构建 pinocchio 模型（构型加载，URDF 驱动）----
-        if mesh_dirs:
-            self.pin_model = pin.buildModelFromUrdf(urdf_path, package_dirs=mesh_dirs)
-        else:
-            self.pin_model = pin.buildModelFromUrdf(urdf_path)
-
-        self.collision_model: Optional[object] = None
-        self.visual_model: Optional[object] = None
-        if load_geometry:
-            try:
-                geo_dirs = mesh_dirs or [os.path.dirname(urdf_path)]
-                self.collision_model = pin.buildGeomFromUrdf(
-                    self.pin_model, urdf_path, pin.GeometryType.COLLISION, package_dirs=geo_dirs
-                )
-                self.visual_model = pin.buildGeomFromUrdf(
-                    self.pin_model, urdf_path, pin.GeometryType.VISUAL, package_dirs=geo_dirs
-                )
-            except Exception as e:
-                import warnings
-
-                warnings.warn(f"几何模型加载失败：{e}")
+        self.pin_model = pin.buildModelFromUrdf(urdf_path)
         self.pin_data = self.pin_model.createData()
 
         # ---- 基本属性 ----
         self.n: int = self.pin_model.nq
-        self.nv: int = self.pin_model.nv
         self.model: str = model
         self.connected: bool = False
 
@@ -309,7 +286,6 @@ class JoyArm:
         self.tcp_limits: TcpLimits = TcpLimits()
         if jcfg.get("tcp_limits"):
             self._apply_tcp_limits(jcfg["tcp_limits"])
-        self.T_base: np.ndarray = np.eye(4)  # 基坐标系偏移
 
         # ---- 整机通信后端：config backend 段 name 选型（软失败：无效置空+警告）----
         self._backend = None
@@ -881,7 +857,8 @@ class JoyArm:
         ``POS_VEL.vlim`` 约束，超出时实际时长 > ``t``（由末段到位等待兜底）；
         真机使用前请先安全化 config（vlim/kp/kd 封顶）。
 
-        :param q: 目标关节角 ``(n,)``，弧度（后端守卫自动裁软限位）。
+        :param q: 目标关节角 ``(n,)``，弧度（入口裁剪到软限位——规划与到位
+            判定均以裁剪后目标为准，后端守卫再裁为幂等空操作）。
         :param t: 总时长（秒）；缺省 ``max|q−q_cur|``（隐含峰值 1.5 rad/s）；
             ``t ≤ 0`` 直发目标。
         :param rate: 发送率（Hz）；缺省 config ``backend.arm.control_rate``
@@ -896,6 +873,14 @@ class JoyArm:
         if q.shape[0] != self.n:
             raise ValueError(
                 f"joyarm.py - move_j：目标维度 {q.shape[0]} 与关节数 {self.n} 不符")
+        # 入口裁软限位：规划、下发、到位判定统一用裁剪后目标，消除
+        # 「后端裁剪到位 ≠ 判定目标」的失配超时（后端守卫再裁为幂等空操作）
+        q_c = clamp_to_limits(q, self.joint_limits_soft)
+        if not np.array_equal(q, q_c):
+            logger.warning("move_j：目标关节角越软限位，已裁剪 %s → %s"
+                           "（规划与到位判定以裁剪后为准）",
+                           np.round(q, 4).tolist(), np.round(q_c, 4).tolist())
+        q = q_c
         q0 = np.asarray(self.get_arm_state().joint.q, dtype=float).reshape(-1)
         if rate is None:
             rate = float(((self._config.get("backend") or {}).get("arm") or {})
@@ -929,6 +914,18 @@ class JoyArm:
             "joyarm.py - move_l：笛卡尔直线运动需 ikine（Ch3）+ 笛卡尔规划"
             "（Ch5），尚未实现；常规运动请走 轨迹桥 → 规划器 → 控制器 管线")
 
+    def teach_mode(self, on: bool = True) -> None:
+        """拖动示教模式（**占位**）：需 dynamics 重力补偿（Ch8）落地后实现。
+
+        目标语义：MIT 模式 + ``gravity(q_cur)`` 前馈 + 零刚度（``kp=0``）——
+        臂仅余重力补偿，可徒手拖动（``on=False`` 退出恢复）；示教录制/回放
+        为 Ch12 章节内容。与 :meth:`hold_position` 区分：后者锁定当前姿态
+        （位置阻抗），本方法零刚度自由拖动。
+        """
+        raise NotImplementedError(
+            "joyarm.py - teach_mode：拖动示教需 dynamics 重力补偿（Ch8）落地后"
+            "实现（MIT 模式 + gravity 前馈 + 零刚度 kp=0）；示教录制/回放见 Ch12")
+
     def safe_home(self, t=None, *, wait_tol: float = 0.05,
                   wait_timeout: float = 10.0) -> None:
         """安全回 home：位置模式下由当前姿态恢复到 home 位形。
@@ -942,13 +939,15 @@ class JoyArm:
 
     def home_to_zero(self, t=None, *, wait_tol: float = 0.05,
                      wait_timeout: float = 10.0) -> None:
-        """home → zero：**先检查当前位于 home**（容差 ``wait_tol``），再运动到零位。
+        """home → zero：**先检查当前位于 home**（软限位投影后，容差 ``wait_tol``），
+        再运动到零位（与 :meth:`move_j` 的入口裁剪判定基准一致）。
 
         :raises RuntimeError: 当前不在 home 位形（请先 :meth:`safe_home` /
             :meth:`safe_zero`）。
         """
         self._require_connected()
-        if not self.is_in_position(q=self.q_home, tol_q=wait_tol):
+        q_home_eff = clamp_to_limits(self.q_home, self.joint_limits_soft)
+        if not self.is_in_position(q=q_home_eff, tol_q=wait_tol):
             raise RuntimeError(
                 f"joyarm.py - home_to_zero：当前不在 home 位形（容差 {wait_tol} rad）；"
                 f"请先 safe_home() 或 safe_zero()")
