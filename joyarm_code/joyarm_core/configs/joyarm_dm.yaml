@@ -1,12 +1,10 @@
 # ===================================================================
-# 基本信息（basic）：型号标识 / robot_model URDF 索引 / utils 限位守卫
+# 基本信息（basic）：型号标识 / robot_model URDF 索引 / 末端坐标系
 # ===================================================================
 basic:
   name: joyarm_dm # 型号名（命名校验）
   robot: joyarm_dm_fixend # robot_model下的urdf+mesh
   ee_frame: link_end # 末端坐标系名（pin 模型帧）
-  utils: # utils/limits.py 指令守卫参数
-    joint_limits_soft_margin: 0.05
 
 # ===================================================================
 # 设备模型（joyarm）
@@ -27,6 +25,19 @@ joyarm:
     - [-3.4033564e-10, -1.0, -9.2653590e-05, 0.0]
     - [1.0, 0.0, -3.6732051e-06, 0.15539]
     - [0.0, 0.0, 0.0, 1.0]
+
+  # 关节软限位 margin（绝对余量）：硬限位向内收，逐关节设置
+  # 四键：q_upper/q_lower(rad)、dq(rad/s)、tau(N·m)；每键写标量（全关节统一）或 n 元列表（逐关节）；缺省键 = 0（该项软=硬）
+  joint_soft_margins: # 本体（硬限位 = URDF limit 字段）
+    q_upper: [0.28, 0.16, 0.16, 0.17, 0.16, 0.31] # rad（≈原 5% 行程跨度，保持等效边界）
+    q_lower: [0.28, 0.16, 0.16, 0.17, 0.16, 0.31] # rad
+    dq: [5.0, 5.0, 5.0, 20.0, 20.0, 20.0] # rad/s（URDF velocity 上限的 10%）
+    tau: [2.7, 2.7, 2.7, 0.7, 0.7, 0.7] # N·m（URDF effort 上限的 10%）
+  end_soft_margins: # 末端（硬限位 = backend.end.joints 的 q_min/q_max/dq_max/tau_max；0 = 软=硬，保持现行为）
+    q_upper: 0.0 # rad
+    q_lower: 0.0 # rad
+    dq: 0.0 # rad/s
+    tau: 0.0 # N·m
 
   # 末端系空间限位
   tcp_limits:

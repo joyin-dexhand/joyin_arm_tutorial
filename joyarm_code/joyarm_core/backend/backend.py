@@ -11,19 +11,28 @@
       end: {channel, protocol, baud_rate, control_rate, joints}   # 末端子段
 
 接口按功能分类：生命周期（connect/disconnect）、使能失能（enable/disable/set_zero）、状态读取（read_state）、
-模式切换（set_mode）、指令下发（send_*）、电机参数读写（read_param/write_param）。
+模式切换（set_mode）、指令下发（send_*，「限位守卫模板 + 子类内核」）、电机参数读写（read_param/write_param）。
 
 """
 from __future__ import annotations
 
+import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
 import numpy as np
 
-from ..utils.types import ArmState, ControlMode
+from ..utils.limits import soft_limits
+from ..utils.types import ArmState, ControlMode, JointLimits
 
 __all__ = ["Backend"]
+
+logger = logging.getLogger("joyarm_core.backend")
+
+# 越限告警节流间隔（秒）：控制周期（如 200 Hz）内持续越限至多每 0.5s 告警一条，
+# 裁剪本身不受节流影响、始终执行
+_WARN_INTERVAL = 0.5
 
 
 class Backend(ABC):
@@ -31,13 +40,96 @@ class Backend(ABC):
 
     ``joint`` 形参：电机索引，``None`` 表示全部电机。
 
+    **限位构建（构造时，arm/end 统一）**：软限位在 ``__init__`` 内构建，独立
+    使用后端（不经 JoyArm）同样自带守卫——
+
+    - 本体：硬限位（URDF 来源）经 ``joint_limits`` 传入，按 ``joint_soft_margins``
+      四键绝对余量内缩；未传硬限位则本体守卫不启用（放行）；
+    - 末端：硬限位自解析 cfg ``end.joints`` 条目的 ``q_min``/``q_max``/``dq_max``/
+      ``tau_max``（**ABC 契约标准键**，缺键量纲置 ±∞；多执行器末端逐条对应），
+      按 ``end_soft_margins`` 内缩；无 ``end`` 段则末端守卫不启用。
+
+    **指令限位守卫（基类模板，限位裁剪的唯一执行点）**：``send_position/velocity/mit``
+    三法 × arm/end 两族在基类内为具体模板——先守卫（``q`` 裁剪到软限位、
+    ``dq``/``tau`` 裁剪到幅值上限，越限就近裁剪并告警，告警节流每 0.5s 至多一条；
+    末端标量指令按逐电机限位广播裁剪），再委托子类抽象内核 ``_send_*`` 下发；
+    ``kp``/``kd`` 增益不裁剪；``send_action_end`` 为离散动作，不模板化。
+
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 两个子段，各含 ``channel`` / ``protocol`` /
         ``baud_rate`` / ``control_rate`` / ``joints``（电机配置列表）。
+    :param joint_limits: 本体硬限位（``JointLimits``，URDF/pin 来源，由组合根
+        传入）；``None``（独立使用）则本体守卫不启用。
+    :param joint_soft_margins: 本体软限位 margin（四键字典，语义见
+        ``utils/limits.soft_limits``）；缺省全零（软=硬）。
+    :param end_soft_margins: 末端软限位 margin（四键字典，逐电机）；缺省全零。
     """
 
-    def __init__(self, cfg: dict) -> None:
+    def __init__(self, cfg: dict,
+                 joint_limits: Optional[JointLimits] = None,
+                 joint_soft_margins: Optional[dict] = None,
+                 end_soft_margins: Optional[dict] = None) -> None:
         self.cfg = cfg
+        self._warn_last = 0.0          # 越限告警节流：上次告警的 time.monotonic 时刻
+        # ---- 限位构建（守卫依据；构造即生效，无需另行注入）----
+        self._arm_limits_soft: Optional[JointLimits] = (
+            soft_limits(joint_limits, joint_soft_margins or {})
+            if joint_limits is not None else None)
+        self._end_limits: Optional[JointLimits] = self.end_limits_from_cfg(cfg)
+        self._end_limits_soft: Optional[JointLimits] = (
+            soft_limits(self._end_limits, end_soft_margins or {})
+            if self._end_limits is not None else None)
+
+    # ----------------------------------------------------------
+    # 限位属性与运行期替换（arm_limits_soft / end_limits(_soft)）
+    # ----------------------------------------------------------
+    @property
+    def arm_limits_soft(self) -> Optional[JointLimits]:
+        """本体软限位（未构建为 ``None``，本体守卫放行）。"""
+        return self._arm_limits_soft
+
+    @property
+    def end_limits(self) -> Optional[JointLimits]:
+        """末端硬限位（自 cfg ``end.joints`` 解析；无末端段为 ``None``）。"""
+        return self._end_limits
+
+    @property
+    def end_limits_soft(self) -> Optional[JointLimits]:
+        """末端软限位（硬限位按 ``end_soft_margins`` 内缩；无末端段为 ``None``）。"""
+        return self._end_limits_soft
+
+    def set_arm_limits_soft(self, limits: JointLimits) -> None:
+        """运行期替换本体软限位（构造时已由入参构建；运行期改 margin 后同步）。"""
+        self._arm_limits_soft = limits
+
+    def set_end_limits_soft(self, limits: JointLimits) -> None:
+        """运行期替换末端软限位（末端硬限位仍以 config 解析为准）。"""
+        self._end_limits_soft = limits
+
+    @staticmethod
+    def end_limits_from_cfg(cfg: dict) -> Optional[JointLimits]:
+        """从 backend config 解析**末端硬限位**（逐电机，多执行器末端通用）。
+
+        末端 joint 条目的 ``q_min`` / ``q_max`` / ``dq_max`` / ``tau_max`` 四键
+        为 ABC 契约标准限位键（弧度 / rad/s / N·m，位置语义由子类约定）；缺键
+        的量纲置 ±∞（不参与守卫）。无 ``end`` 段或 ``joints`` 为空 → ``None``。
+
+        :param cfg: yaml ``backend:`` 段字典（含 ``end.joints`` 列表）。
+        """
+        joints = ((cfg or {}).get("end") or {}).get("joints") or []
+        if not joints:
+            return None
+
+        def _num(j, key, default):
+            v = j.get(key)
+            return float(v) if v is not None else default
+
+        return JointLimits(
+            q_min=np.array([_num(j, "q_min", -np.inf) for j in joints]),
+            q_max=np.array([_num(j, "q_max", np.inf) for j in joints]),
+            dq_max=np.array([_num(j, "dq_max", np.inf) for j in joints]),
+            tau_max=np.array([_num(j, "tau_max", np.inf) for j in joints]),
+        )
 
     # ----------------------------------------------------------
     # 生命周期
@@ -71,6 +163,17 @@ class Backend(ABC):
         """本体零位标定（先失能，反馈无故障后再标零）。"""
 
     @abstractmethod
+    def clear_fault_arm(self, joint: Optional[int] = None) -> None:
+        """本体关节故障清除（验证式复位：失能清错 → 核对 → 使能 → 核对）。
+
+        语义：逐电机 best-effort 执行协议规定的清错流程并**验证结果**；
+        仍存在未恢复故障（如需断电的硬故障）时抛 ``RuntimeError`` 汇总
+        （电机名 + 剩余故障码），全部恢复则静默返回。
+
+        :param joint: 关节索引，``None`` 表示全部电机。
+        """
+
+    @abstractmethod
     def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION,
                      joint: Optional[int] = None) -> None:
         """切换本体控制模式（收指令前必须先切到对应模式；默认位置模式）。
@@ -100,21 +203,100 @@ class Backend(ABC):
         :return: :class:`ArmState` 快照。
         """
 
-    @abstractmethod
+    # ----------------------------------------------------------
+    # 指令限位守卫（arm/end 两族共用裁剪核；send_* 模板前置）
+    # ----------------------------------------------------------
+    def _guard_arm(self, name: str, arr: np.ndarray,
+                   joint: Optional[int]) -> np.ndarray:
+        """本体指令守卫：``q`` 软限位裁剪、``dq``/``tau`` 幅值裁剪。
+
+        纵深防御（与 :meth:`joyarm_core.robotics.control.Controller.step` 的
+        守卫各自独立实现）；未构建软限位 / 维度不符时原样放行（后者由子类
+        内核报清晰的维度错误）。
+        """
+        return self._clip_within(self._arm_limits_soft, name, arr, joint,
+                                 family="arm", broadcast=False)
+
+    def _guard_end(self, name: str, arr: np.ndarray,
+                   joint: Optional[int]) -> np.ndarray:
+        """末端指令守卫（逐电机限位；多执行器末端支持标量广播裁剪）。"""
+        return self._clip_within(self._end_limits_soft, name, arr, joint,
+                                 family="end", broadcast=True)
+
+    def _clip_within(self, limits: Optional[JointLimits], name: str,
+                     arr: Optional[np.ndarray], joint: Optional[int],
+                     family: str, broadcast: bool) -> Optional[np.ndarray]:
+        """裁剪核：``q`` → [q_min, q_max]，``dq``/``tau`` → ±幅值上限，其余放行。
+
+        ``joint`` 指定时取该关节限位切片；指令长度与限位不符时放行交内核校验；
+        ``broadcast=True``（末端）且为标量/单元素整体指令时，按逐电机限位
+        **广播裁剪**为 ``(n_end,)``（每电机各自就近裁剪，支持多执行器末端）。
+        越限告警经节流（每 ``_WARN_INTERVAL`` 秒至多一条，防控制周期高频刷屏；
+        裁剪本身始终执行），返回裁剪值。
+        """
+        if limits is None or arr is None:
+            return arr
+        if name == "q":
+            lo, hi = limits.q_min, limits.q_max
+        elif name == "dq":
+            lo, hi = -limits.dq_max, limits.dq_max
+        elif name == "tau":
+            lo, hi = -limits.tau_max, limits.tau_max
+        else:
+            return arr
+        if joint is not None:               # 单关节：取该关节限位（arr 长度 1）
+            lo, hi = lo[joint:joint + 1], hi[joint:joint + 1]
+        if arr.shape != np.shape(lo):       # 长度 ≠ 限位数 → 交内核报维度错误
+            if not (broadcast and arr.size == 1 and lo.size > 1):
+                return arr
+        clipped = np.clip(arr, lo, hi)      # 末端标量广播：→ (n_end,) 逐电机裁剪
+        if not np.array_equal(np.broadcast_to(arr, clipped.shape), clipped):
+            now = time.monotonic()
+            if now - self._warn_last >= _WARN_INTERVAL:
+                self._warn_last = now
+                logger.warning("send_*_%s: %s 指令越限，已就近裁剪 %s → %s",
+                               family, name, np.round(arr, 4).tolist(),
+                               np.round(clipped, 4).tolist())
+        return clipped
+
+    @staticmethod
+    def _vec(x) -> Optional[np.ndarray]:
+        """指令升维：标量/列表 → ``(k,)`` float 数组（``None`` 透传）。"""
+        if x is None:
+            return None
+        return np.atleast_1d(np.asarray(x, dtype=float))
+
+    # ----------------------------------------------------------
+    # 本体指令下发（send_*_arm 基类守卫模板 → 子类抽象内核 _send_*_arm）
+    # ----------------------------------------------------------
     def send_position_arm(self, q: np.ndarray, joint: Optional[int] = None) -> None:
-        """本体位置指令（实现须按 config ``POS_VEL.vlim`` 限速）。
+        """本体位置指令（守卫模板：``q`` 软限位裁剪 → 内核限速下发）。
 
-        :param q: 关节角目标 ``(n,)``，弧度。
+        :param q: 关节角目标 ``(n,)``，弧度；越限时就近裁剪到软限位并告警。
         """
+        self._send_position_arm(self._guard_arm("q", self._vec(q), joint), joint)
 
     @abstractmethod
+    def _send_position_arm(self, q: np.ndarray, joint: Optional[int] = None) -> None:
+        """本体位置指令内核（实现须按 config ``POS_VEL.vlim`` 限速）。
+
+        :param q: 关节角目标 ``(n,)``，弧度（已经守卫裁剪）。
+        """
+
     def send_velocity_arm(self, dq: np.ndarray, joint: Optional[int] = None) -> None:
-        """本体速度指令。
+        """本体速度指令（守卫模板：``dq`` 幅值裁剪 → 内核下发）。
 
-        :param dq: 关节速度目标 ``(n,)``，rad/s。
+        :param dq: 关节速度目标 ``(n,)``，rad/s；越限时裁剪到软限位幅值并告警。
         """
+        self._send_velocity_arm(self._guard_arm("dq", self._vec(dq), joint), joint)
 
     @abstractmethod
+    def _send_velocity_arm(self, dq: np.ndarray, joint: Optional[int] = None) -> None:
+        """本体速度指令内核。
+
+        :param dq: 关节速度目标 ``(n,)``，rad/s（已经守卫裁剪）。
+        """
+
     def send_mit_arm(
         self,
         q: np.ndarray,
@@ -124,7 +306,10 @@ class Backend(ABC):
         kd: Optional[np.ndarray] = None,
         joint: Optional[int] = None,
     ) -> None:
-        """本体 MIT 阻抗/前馈指令：``τ = kp·(q_des−q) + kd·(dq_des−dq) + tau_ff``。
+        """本体 MIT 阻抗/前馈指令（守卫模板：``τ = kp·(q_des−q) + kd·(dq_des−dq) + tau_ff``）。
+
+        ``q``/``dq``/``tau_ff`` 越限时就近裁剪并告警（``kp``/``kd`` 为标定增益，
+        不裁剪），再委托内核下发。
 
         :param q: 位置目标 ``(n,)``，弧度。
         :param dq: 速度目标 ``(n,)``，rad/s。
@@ -132,6 +317,26 @@ class Backend(ABC):
         :param kp: 位置增益 ``(n,)``；``None`` 回退 config ``MIT.kp``。
         :param kd: 速度阻尼 ``(n,)``；``None`` 回退 config ``MIT.kd``。
         """
+        self._send_mit_arm(
+            self._guard_arm("q", self._vec(q), joint),
+            self._guard_arm("dq", self._vec(dq), joint),
+            self._guard_arm("tau", self._vec(tau_ff), joint),
+            kp=self._vec(kp),
+            kd=self._vec(kd),
+            joint=joint)
+
+    @abstractmethod
+    def _send_mit_arm(
+        self,
+        q: np.ndarray,
+        dq: np.ndarray,
+        tau_ff: np.ndarray,
+        kp: Optional[np.ndarray] = None,
+        kd: Optional[np.ndarray] = None,
+        joint: Optional[int] = None,
+    ) -> None:
+        """本体 MIT 指令内核（q/dq/tau_ff 已经守卫裁剪）。"""
+
 
     @abstractmethod
     def read_param_arm(self, key: str, joint: Optional[int] = None):
@@ -157,7 +362,8 @@ class Backend(ABC):
         """
 
     # ----------------------------------------------------------
-    # 末端（执行器电机组）：_end 后缀（可多电机，如灵巧手）
+    # 末端（执行器电机组）：_end 后缀（可多电机，如灵巧手）；
+    # 连续量三法为「基类守卫模板 → 子类抽象内核」，离散动作不模板化
     # ----------------------------------------------------------
     @abstractmethod
     def enable_end(self, joint: Optional[int] = None) -> None:
@@ -170,6 +376,10 @@ class Backend(ABC):
     @abstractmethod
     def set_zero_end(self, joint: Optional[int] = None) -> None:
         """末端零位标定（先失能，反馈无故障后再标零；``joint=None`` 全部）。"""
+
+    @abstractmethod
+    def clear_fault_end(self, joint: Optional[int] = None) -> None:
+        """末端电机故障清除（语义同 :meth:`clear_fault_arm`，验证式复位）。"""
 
     @abstractmethod
     def set_mode_end(self, mode: ControlMode = ControlMode.POSITION,
@@ -200,24 +410,38 @@ class Backend(ABC):
             "temp_rotor": [...]}``。
         """
 
-    @abstractmethod
     def send_position_end(self, position, joint: Optional[int] = None) -> None:
-        """末端位置控制（连续量）。
+        """末端位置控制（守卫模板：``q`` 逐电机行程裁剪 → 内核下发）。
 
-        :param position: 位置目标，标量（作用于所选全部电机）或与所选电机数
-            一致的序列；单位语义由子类约定（如夹爪电机弧度）。
+        :param position: 位置目标，标量（作用于所选全部电机，越限时按逐电机
+            限位**广播就近裁剪**）或与所选电机数一致的序列；单位语义由子类
+            约定（如夹爪电机弧度）。
         :param joint: 末端电机索引，``None`` 表示全部。
         """
+        self._send_position_end(self._guard_end("q", self._vec(position), joint),
+                                joint)
 
     @abstractmethod
+    def _send_position_end(self, position, joint: Optional[int] = None) -> None:
+        """末端位置指令内核（position 已经守卫裁剪）。"""
+
     def send_force_end(self, force, joint: Optional[int] = None) -> None:
-        """末端力度控制（连续量；DM 夹爪经 MIT 近似实现）。
+        """末端力度控制（守卫模板：force **数值**裁剪到逐电机 ±tau_max → 内核）。
+
+        守卫不做力—力矩换算（换算系数如 ``force_to_tau`` 为子类语义，由内核
+        处理）；``force_to_tau = 1`` 的末端（如 DM 夹爪）守卫即精确。
 
         :param force: 力度目标，标量（作用于所选全部电机）或与所选电机数一致
             的序列；语义由子类约定（如夹持力 N）。
         :param joint: 末端电机索引，``None`` 表示全部。
         """
+        self._send_force_end(self._guard_end("tau", self._vec(force), joint),
+                             joint)
+
     @abstractmethod
+    def _send_force_end(self, force, joint: Optional[int] = None) -> None:
+        """末端力度指令内核（force 数值已经 ±tau_max 守卫裁剪）。"""
+
     def send_mit_end(
         self,
         q: np.ndarray,
@@ -227,10 +451,12 @@ class Backend(ABC):
         kd: Optional[np.ndarray] = None,
         joint: Optional[int] = None,
     ) -> None:
-        """末端 MIT 阻抗/前馈指令：``τ = kp·(q_des−q) + kd·(dq_des−dq) + tau_ff``。
+        """末端 MIT 阻抗/前馈指令（守卫模板：``τ = kp·(q_des−q) + kd·(dq_des−dq) + tau_ff``）。
 
-        紧急阻尼（``JoyArm.damping_mode``）的末端通道：``q=dq=tau=kp=0, kd>0``
-        即纯黏滞阻尼。``kp/kd`` 为 ``None`` 时回退 config 末端 ``MIT`` 增益。
+        ``q``/``dq``/``tau_ff`` 越限时就近裁剪并告警（``kp``/``kd`` 为标定增益，
+        不裁剪），再委托内核。紧急阻尼（``JoyArm.damping_mode``）的末端通道：
+        ``q=dq=tau=kp=0, kd>0`` 即纯黏滞阻尼；``kp/kd`` 为 ``None`` 时回退
+        config 末端 ``MIT`` 增益。
 
         :param q: 位置目标（与所选电机数一致；``kp=0`` 时固件忽略）。
         :param dq: 速度目标。
@@ -239,6 +465,25 @@ class Backend(ABC):
         :param kd: 速度阻尼；``None`` 回退 config。
         :param joint: 末端电机索引，``None`` 表示全部。
         """
+        self._send_mit_end(
+            self._guard_end("q", self._vec(q), joint),
+            self._guard_end("dq", self._vec(dq), joint),
+            self._guard_end("tau", self._vec(tau_ff), joint),
+            kp=self._vec(kp),
+            kd=self._vec(kd),
+            joint=joint)
+
+    @abstractmethod
+    def _send_mit_end(
+        self,
+        q: np.ndarray,
+        dq: np.ndarray,
+        tau_ff: np.ndarray,
+        kp: Optional[np.ndarray] = None,
+        kd: Optional[np.ndarray] = None,
+        joint: Optional[int] = None,
+    ) -> None:
+        """末端 MIT 指令内核（q/dq/tau_ff 已经守卫裁剪）。"""
 
     @abstractmethod
     def send_action_end(self, action: str, joint: Optional[int] = None) -> None:

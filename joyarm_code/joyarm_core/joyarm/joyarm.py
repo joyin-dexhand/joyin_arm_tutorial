@@ -25,11 +25,13 @@ from __future__ import annotations
 import copy
 import logging
 import os
+import time
 from typing import List, Optional, Union
 
 import numpy as np
 
-from ..utils.limits import clamp_to_limits, joint_limits_from_model, soft_limits
+from ..utils.limits import joint_limits_from_model, soft_limits
+from ..utils.transforms import quat_conj, quat_mul, quat_to_axis_angle
 from ..utils.types import (
     ArmState,
     ControlMode,
@@ -43,12 +45,13 @@ try:
 except ImportError:
     pin = None
 
-from ..backend import get_backend
+from ..backend import Backend, get_backend
 from ..robotics.fkine import REGISTRY as _FKINE_REGISTRY
 from ..robotics.ikine import REGISTRY as _IKINE_REGISTRY
 from ..robotics.jacobian import REGISTRY as _JACOBIAN_REGISTRY
 from ..robotics.dynamics import REGISTRY as _DYNAMICS_REGISTRY
 from ..robotics.trajectory import REGISTRY as _TRAJ_REGISTRY
+from ..robotics.trajectory import cubic_traj as _cubic_traj
 from ..robotics.control import REGISTRY as _CONTROL_REGISTRY
 
 __all__ = ["JoyArm", "load_config"]
@@ -122,7 +125,8 @@ _DOMAIN_REGISTRIES = {
 
 # 运行期可设参数白名单（set_config 点路径 → 应用函数；config 文件不回写）
 _SETTABLE = {
-    "basic.utils.joint_limits_soft_margin": "_set_soft_margin",
+    "joyarm.joint_soft_margins": "_set_arm_soft_margin",
+    "joyarm.end_soft_margins": "_set_end_soft_margin",
 }
 
 
@@ -259,19 +263,38 @@ class JoyArm:
                 f"可用帧：{[f.name for f in self.pin_model.frames]}"
             )
 
-        # ---- 关节限位（硬 + 软）----
-        # margin 具体值由 yaml basic.utils.joint_limits_soft_margin 提供；未配置时取 0（软=硬）
-        self.joint_limits = joint_limits_from_model(self.pin_model)
+        # ---- config joyarm 段（margin / 特征位形 / TCP 限位共用源）----
+        jcfg = cfg.get("joyarm") or {}
         utils_cfg = (cfg.get("basic") or {}).get("utils") or {}
-        self.joint_limits_soft = soft_limits(
-            self.joint_limits, margin=float(utils_cfg.get("joint_limits_soft_margin", 0.0))
-        )
-        self.qlow: np.ndarray = self.joint_limits_soft.q_min
-        self.qhigh: np.ndarray = self.joint_limits_soft.q_max
+        for old_key in ("joint_limits_soft_margin", "joint_soft_margins"):
+            if old_key in utils_cfg:
+                logger.warning(
+                    "config basic.utils.%s 已迁移至 joyarm 段（joint_soft_margins /"
+                    " end_soft_margins 四键绝对余量），本次不生效；请移动该键", old_key)
+        arm_soft_margins = jcfg.get("joint_soft_margins") or {}
+        end_soft_margins = jcfg.get("end_soft_margins") or {}
+
+        # ---- 关节限位（硬 + 软）----
+        # 硬限位来自 URDF（经 pinocchio 解析）；软限位 = 硬限位按 config
+        # joyarm.joint_soft_margins 四种逐关节绝对余量（上/下/速度/力矩）内缩，
+        # 未配置时全零 margin（软=硬）
+        self.joint_limits = joint_limits_from_model(self.pin_model)
+        self.joint_limits_soft = soft_limits(self.joint_limits, margins=arm_soft_margins)
+
+        # ---- 末端限位（硬限位自 backend.end.joints 逐电机解析；无末端段为 None）----
+        backend_cfg = cfg.get("backend") or {}
+        self.end_limits = Backend.end_limits_from_cfg(backend_cfg)
+        self.end_limits_soft = (soft_limits(self.end_limits, margins=end_soft_margins)
+                                if self.end_limits is not None else None)
+
+        # ---- 关节名称（config backend.arm.joints 顺序；教学/日志按名寻址）----
+        self._joint_names: List[str] = [
+            str(j.get("name", f"joint{i + 1}"))
+            for i, j in enumerate(backend_cfg.get("arm", {}).get("joints") or [])
+        ]
 
         # ---- 特征位形（config joyarm 段优先，缺失回退 q_zero）----
         # 长度合法时统一裁剪到硬限位；长度错误不在此拦截——软失败构造，由 check_config 报告
-        jcfg = cfg.get("joyarm") or {}
 
         def _pose(key, fallback):
             arr = np.asarray(jcfg.get(key, fallback), dtype=float).reshape(-1)
@@ -290,7 +313,6 @@ class JoyArm:
 
         # ---- 整机通信后端：config backend 段 name 选型（软失败：无效置空+警告）----
         self._backend = None
-        backend_cfg = cfg.get("backend")
         if backend_cfg:
             backend_cfg = dict(backend_cfg)
             backend_name = backend_cfg.pop("name", None)
@@ -298,7 +320,13 @@ class JoyArm:
                 logger.warning("config backend 段缺少选型键 name；后端置空（离线计算仍可用）")
             else:
                 try:
-                    self._backend = get_backend(backend_name)(backend_cfg)
+                    # 限位参数传递（组合根职责）：URDF 硬限位 + 两份 margin；
+                    # 软限位由后端基类 __init__ 自建（限位裁剪唯一执行点，独立使用后端同样生效）
+                    self._backend = get_backend(backend_name)(
+                        backend_cfg,
+                        joint_limits=self.joint_limits,
+                        joint_soft_margins=arm_soft_margins,
+                        end_soft_margins=end_soft_margins)
                 except Exception as e:
                     logger.error("后端『%s』构建失败：%s（后端置空，离线计算仍可用）",
                                  backend_name, e)
@@ -384,15 +412,28 @@ class JoyArm:
         """数值求解默认初值 ``(n,)``（如 IK 迭代起点）。"""
         return self._q_neutral.copy()
 
+    # ----------------------------------------------------------
+    # basic 关节名称（config 顺序；按名寻址）
+    # ----------------------------------------------------------
     @property
-    def state(self) -> Optional[ArmState]:
-        """最新状态快照：已连接现读一次 ``get_arm_state()``，离线 ``None``。"""
-        if self.connected:
-            return self.get_arm_state()
-        return None
+    def joint_names(self) -> List[str]:
+        """本体关节名列表（config ``backend.arm.joints`` 顺序；无 backend 段为空）。"""
+        return list(self._joint_names)
+
+    def joint_index(self, name: str) -> int:
+        """关节名 → 索引（教学/日志按名寻址）。
+
+        :raises ValueError: 名称不在关节名列表中（消息列出可用名）。
+        """
+        try:
+            return self._joint_names.index(str(name))
+        except ValueError:
+            raise ValueError(
+                f"joyarm.py - joint_index：关节名 {name!r} 未找到；"
+                f"可用：{self._joint_names}") from None
 
     # ----------------------------------------------------------
-    # basic 关节角采样 / 裁剪 / 校验（基于软限位）
+    # basic 关节角采样（基于软限位；裁剪/校验统一走 utils.clamp_to_limits）
     # ----------------------------------------------------------
     def rand_q(self,
         size: Optional[int] = None,
@@ -400,19 +441,11 @@ class JoyArm:
     ) -> np.ndarray:
         """在**软限位**内均匀采样关节角。"""
         rng = rng if rng is not None else np.random.default_rng()
-        low, high = self.qlow, self.qhigh
+        low = self.joint_limits_soft.q_min
+        high = self.joint_limits_soft.q_max
         if size is None:
             return rng.uniform(low, high)
         return rng.uniform(low, high, size=(size, self.n))
-
-    def clamp_q(self, q: np.ndarray) -> np.ndarray:
-        """将关节角裁剪到**软限位**内（薄委托 :func:`joyarm_core.utils.limits.clamp_to_limits`）。"""
-        return clamp_to_limits(q, self.joint_limits_soft)
-
-    def is_q_valid(self, q: np.ndarray) -> bool:
-        """关节角是否在**软限位**内（单点）。"""
-        q = np.asarray(q, dtype=float).reshape(-1)
-        return bool(np.all(q >= self.qlow - 1e-9) and np.all(q <= self.qhigh + 1e-9))
 
     # ----------------------------------------------------------
     # basic 打印表示
@@ -441,7 +474,7 @@ class JoyArm:
     def set_config(self, path: str, value) -> None:
         """运行期设置参数（白名单内即时生效；config 文件不回写，重启以 yaml 为准）。
 
-        :param path: 点路径，如 ``"basic.utils.joint_limits_soft_margin"``。
+        :param path: 点路径，如 ``"joyarm.joint_soft_margins"``。
         :raises ValueError: 路径不在白名单内（其余项请手改 configs yaml，保留注释）。
         """
         handler = _SETTABLE.get(path)
@@ -463,10 +496,21 @@ class JoyArm:
         if isinstance(node, dict):
             node[keys[-1]] = value
 
-    def _set_soft_margin(self, v) -> None:
-        self.joint_limits_soft = soft_limits(self.joint_limits, float(v))
-        self.qlow = self.joint_limits_soft.q_min
-        self.qhigh = self.joint_limits_soft.q_max
+    def _set_arm_soft_margin(self, v) -> None:
+        """重算本体软限位并同步后端守卫（``v`` 为四键 margin 字典）。"""
+        self.joint_limits_soft = soft_limits(self.joint_limits, margins=v or {})
+        if self._backend is not None:   # 后端基类守卫同步换用新软限位
+            self._backend.set_arm_limits_soft(self.joint_limits_soft)
+
+    def _set_end_soft_margin(self, v) -> None:
+        """重算末端软限位并同步后端守卫；无末端执行器时不可设。"""
+        if self.end_limits is None:
+            raise ValueError(
+                "joyarm.py - set_config：无末端执行器（config backend.end.joints），"
+                "joyarm.end_soft_margins 不可设置")
+        self.end_limits_soft = soft_limits(self.end_limits, margins=v or {})
+        if self._backend is not None:
+            self._backend.set_end_limits_soft(self.end_limits_soft)
 
     def check_config(self) -> None:
         """配置最小自检（离线可跑）：basic 段齐全 / 命名链 / URDF 存在 /
@@ -517,7 +561,7 @@ class JoyArm:
 
         最小检查语义：通过则静默返回；发现硬故障则 ``RuntimeError`` 携带全部
         问题一次抛出。运行期安全监控（关节过温、碰撞等）归 ROS2 节点，不在
-        核心库；指令越限由指令路径的限位裁剪（``clamp_to_limits``）兜底。
+        核心库；指令越限由后端基类限位守卫（``Backend.send_*`` 模板）兜底。
 
         :raises RuntimeError: 未连接真机，或存在硬故障时抛出（消息列出全部问题）。
         """
@@ -594,10 +638,6 @@ class JoyArm:
         inst = self._pick(domain, name)   # 校验已加载
         self._active_name[domain] = name
         return inst
-
-    def set_controller(self, name: str):
-        """运行期切换控制律（``set_solver("control", name)`` 的惯用别名）。"""
-        return self.set_solver("control", name)
 
     def list_solvers(self, domain: str) -> list:
         """列出某域已加载成员注册名（首个为活动成员）。"""
@@ -708,6 +748,22 @@ class JoyArm:
             self._backend.disconnect()
         self.connected = False
 
+    def __enter__(self) -> "JoyArm":
+        """上下文管理入口：未连接时自动 ``connect()``；退出时安全收尾。"""
+        if not self.connected:
+            self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        """退出收尾（尽力而为）：失能本体/末端 → 断开；各步失败仅告警不抛。"""
+        for name, fn in (("disable_arm", self.disable_arm),
+                         ("disable_end", self.disable_end),
+                         ("disconnect", self.disconnect)):
+            try:
+                fn()
+            except Exception as e:
+                logger.warning("__exit__：%s 失败：%s", name, e)
+
     def _require_connected(self) -> None:
         """执行类方法前置：未连接真机（离线）时抛 ``RuntimeError``。"""
         if not self.connected:
@@ -778,6 +834,183 @@ class JoyArm:
         _send_end("末端（使能后）")
 
     # ----------------------------------------------------------
+    # 运动便利与安全层（hold/lock/move_j/safe_*；move_j 为独立功能，
+    # 与「轨迹桥 → 规划器 → 控制器」常规管线并行，仅安全层与直接调用使用）
+    # ----------------------------------------------------------
+    def hold_position(self, kp=None, kd=None, tau=None) -> None:
+        """原位保持（阻抗锁定当前姿态，含 tau 前馈补偿）。
+
+        读当前关节角 → 切 MIT 模式 → ``q=当前, dq=0, tau_ff`` 阻抗保持。
+        ``tau`` 缺省自动取重力前馈：dynamics 域已注册时 ``gravity(q_cur)``，
+        未注册（Ch8 前）置零并告警（退化保持）；可用 ``tau=`` 显式覆盖。
+        ``kp``/``kd`` 缺省 ``None`` 透传后端回退 config ``MIT`` 增益。
+
+        与 :meth:`damping_mode` 区分：阻尼为零目标纯黏滞（防坠落），本方法
+        为锁定**当前**姿态的位置阻抗 + 重力补偿。
+        """
+        self._require_connected()
+        q = np.asarray(self.get_arm_state().joint.q, dtype=float).reshape(-1)
+        if tau is None:
+            try:
+                tau = np.asarray(self.gravity(q), dtype=float).reshape(-1)
+            except RuntimeError:
+                tau = np.zeros(self.n)
+                logger.warning("hold_position：dynamics 域未注册，tau 前馈置零（退化保持）")
+        self.set_mode_arm(ControlMode.MIT)
+        self.set_arm_command(ControlMode.MIT, q=q, dq=np.zeros(self.n), tau=tau,
+                             kp=kp, kd=kd)
+
+    def lock_position(self) -> None:
+        """急停锁定：任意模式立刻切位置模式并维持当前关节角（q 锁定）。"""
+        self._require_connected()
+        q = np.asarray(self.get_arm_state().joint.q, dtype=float).reshape(-1)
+        self.set_mode_arm(ControlMode.POSITION)
+        self.set_arm_command(ControlMode.POSITION, q=q)
+
+    def move_j(self, q, t=None, *, rate=None,
+               wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
+        """关节空间点到点阻塞运动（三次多项式插值）——**独立功能，与规划器并行**。
+
+        边界：本方法直接借 ``robotics.trajectory.planning`` 规划纯函数 + 位置
+        指令流下发，**不经**「轨迹桥 → 规划器 → 控制器」管线；仅供安全层
+        （safe_home/safe_zero）与直接调用。**常规运动**一律走
+        ``set_target_traj → 规划器 → 控制器 → set_arm_command`` 管线。
+
+        调度为精确定时器（绝对时间表 + sleep/自旋混合等待，帧间隔亚毫秒
+        抖动）。注意：峰值关节速度 = ``1.5·max|q−q_cur|/t``，受 config
+        ``POS_VEL.vlim`` 约束，超出时实际时长 > ``t``（由末段到位等待兜底）；
+        真机使用前请先安全化 config（vlim/kp/kd 封顶）。
+
+        :param q: 目标关节角 ``(n,)``，弧度（后端守卫自动裁软限位）。
+        :param t: 总时长（秒）；缺省 ``max|q−q_cur|``（隐含峰值 1.5 rad/s）；
+            ``t ≤ 0`` 直发目标。
+        :param rate: 发送率（Hz）；缺省 config ``backend.arm.control_rate``
+            （回退 100），钳制 ≤1000（DM 控制帧间隔 ≥1ms）。
+        :param wait_tol: 末段到位容差（rad，经 :meth:`is_in_position`）。
+        :param wait_timeout: 到位等待超时（秒），超时 ``RuntimeError``。
+        :raises ValueError: 目标维度与 ``n`` 不符。
+        :raises RuntimeError: 未连接 / 到位超时。
+        """
+        self._require_connected()
+        q = np.asarray(q, dtype=float).reshape(-1)
+        if q.shape[0] != self.n:
+            raise ValueError(
+                f"joyarm.py - move_j：目标维度 {q.shape[0]} 与关节数 {self.n} 不符")
+        q0 = np.asarray(self.get_arm_state().joint.q, dtype=float).reshape(-1)
+        if rate is None:
+            rate = float(((self._config.get("backend") or {}).get("arm") or {})
+                         .get("control_rate", 100.0))
+        rate = min(float(rate), 1000.0)
+        if t is None:
+            t = float(np.max(np.abs(q - q0)))
+        ts, qs, _ = _cubic_traj(q0, q, float(t), rate)
+        self.set_mode_arm(ControlMode.POSITION)          # 非位置模式先切
+        start = time.perf_counter()
+        spin_margin = 0.001                               # 先 sleep 到 deadline−margin 再自旋
+        for ti, qi in zip(ts, qs):
+            deadline = start + float(ti)
+            now = time.perf_counter()
+            if deadline - now > spin_margin:
+                time.sleep(deadline - now - spin_margin)
+            while time.perf_counter() < deadline:
+                pass
+            self._backend.send_position_arm(qi)
+        if not self._wait_in_position(q, wait_tol, wait_timeout):
+            raise RuntimeError(
+                f"joyarm.py - move_j：到位超时（{wait_timeout}s 内未达容差 "
+                f"{wait_tol} rad；可能受 vlim 限速，请增大 t 或检查 config）")
+
+    def move_l(self, pose, t=None, **kw) -> None:
+        """笛卡尔直线阻塞运动（**占位**）：需 ikine（Ch3）+ 笛卡尔规划（Ch5）落地后实现。
+
+        常规运动管线：``set_target_traj → 规划器 → 控制器 → set_arm_command``。
+        """
+        raise NotImplementedError(
+            "joyarm.py - move_l：笛卡尔直线运动需 ikine（Ch3）+ 笛卡尔规划"
+            "（Ch5），尚未实现；常规运动请走 轨迹桥 → 规划器 → 控制器 管线")
+
+    def safe_home(self, t=None, *, wait_tol: float = 0.05,
+                  wait_timeout: float = 10.0) -> None:
+        """安全回 home：位置模式下由当前姿态恢复到 home 位形。
+
+        非位置模式先切位置模式，再经 :meth:`move_j`（三次多项式）运动；
+        ``t`` 缺省 ``max|q_home − q_cur|``。
+        """
+        self._require_connected()
+        self.set_mode_arm(ControlMode.POSITION)
+        self.move_j(self.q_home, t, wait_tol=wait_tol, wait_timeout=wait_timeout)
+
+    def home_to_zero(self, t=None, *, wait_tol: float = 0.05,
+                     wait_timeout: float = 10.0) -> None:
+        """home → zero：**先检查当前位于 home**（容差 ``wait_tol``），再运动到零位。
+
+        :raises RuntimeError: 当前不在 home 位形（请先 :meth:`safe_home` /
+            :meth:`safe_zero`）。
+        """
+        self._require_connected()
+        if not self.is_in_position(q=self.q_home, tol_q=wait_tol):
+            raise RuntimeError(
+                f"joyarm.py - home_to_zero：当前不在 home 位形（容差 {wait_tol} rad）；"
+                f"请先 safe_home() 或 safe_zero()")
+        self.move_j(self.q_zero, t, wait_tol=wait_tol, wait_timeout=wait_timeout)
+
+    def safe_zero(self) -> None:
+        """安全回零（组合）：急停锁定 → 回 home → home 检查 → 回 zero。
+
+        依次执行 :meth:`lock_position` → :meth:`safe_home` →
+        :meth:`home_to_zero`，任一段失败即抛出中断。末端执行器不参与
+        （需要时先 :meth:`end_zero`）。
+        """
+        self._require_connected()
+        self.lock_position()
+        self.safe_home()
+        self.home_to_zero()
+
+    def is_in_position(self, q=None, pose=None, frame=None,
+                       tol_q: float = 0.05, tol_pos: float = 1e-3,
+                       tol_rot: float = 1e-2) -> bool:
+        """到位判断（单入口双判断）：关节目标 ``q`` 或笛卡尔目标 ``pose`` 恰一。
+
+        :param q: 关节目标 ``(n,)``——逐关节 ``‖Δq‖∞ ≤ tol_q``（rad）。
+        :param pose: 笛卡尔目标 :class:`Pose`——位置 ``‖Δp‖ ≤ tol_pos``（m）
+            且姿态四元数误差角 ≤ ``tol_rot``（rad）。
+        :param frame: pose 分支参考帧名；缺省 ``ee_frame_name``。
+        :raises ValueError: ``q``/``pose`` 双空或双给、维度不符。
+        :raises RuntimeError: 未连接；pose 分支 fkine 域未注册（无 TCP 位姿）。
+        """
+        if (q is None) == (pose is None):
+            raise ValueError("joyarm.py - is_in_position：q 与 pose 必须恰给其一")
+        st = self.get_arm_state()                        # 未连接在此抛 RuntimeError
+        if q is not None:
+            q = np.asarray(q, dtype=float).reshape(-1)
+            if q.shape[0] != self.n:
+                raise ValueError(
+                    f"joyarm.py - is_in_position：目标维度 {q.shape[0]} "
+                    f"与关节数 {self.n} 不符")
+            cur = np.asarray(st.joint.q, dtype=float).reshape(-1)
+            return bool(np.max(np.abs(cur - q)) <= tol_q)
+        frame = frame or self.ee_frame_name
+        # 始终经 fkine 门面现算当前 TCP 位姿（fkine 未注册时报清晰 RuntimeError；
+        # 不用 st.tcp.pose——未注册时其为恒等默认值，不可作比较基准）
+        cur_pose = self.fkine(st.joint.q, frame)
+        tgt = pose if isinstance(pose, Pose) else Pose()
+        d_pos = float(np.linalg.norm(
+            np.asarray(cur_pose.position, float) - np.asarray(tgt.position, float)))
+        q_err = quat_mul(quat_conj(np.asarray(cur_pose.orientation, float)),
+                         np.asarray(tgt.orientation, float))
+        d_rot = float(quat_to_axis_angle(q_err)[1])
+        return bool(d_pos <= tol_pos and d_rot <= tol_rot)
+
+    def _wait_in_position(self, q, tol_q: float, timeout: float) -> bool:
+        """轮询到位（50ms 周期）；超时前最后一次复查后返回结果。"""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.is_in_position(q=q, tol_q=tol_q):
+                return True
+            time.sleep(0.05)
+        return self.is_in_position(q=q, tol_q=tol_q)
+
+    # ----------------------------------------------------------
     # backend 本体执行类方法（依赖 _backend；未连接 raise；arm_* 与 end_* 对应）
     # ----------------------------------------------------------
     def enable_arm(self, joint: Optional[int] = None) -> None:
@@ -794,6 +1027,16 @@ class JoyArm:
         """本体零位标定（先失能，反馈无故障后再标零）。"""
         self._require_connected()
         self._backend.set_zero_arm(joint)
+
+    def clear_fault_arm(self, joint: Optional[int] = None) -> None:
+        """本体关节故障清除（验证式复位：失能清错 → 核对 → 使能 → 核对）。
+
+        仍存在未恢复故障时后端抛 ``RuntimeError`` 汇总（电机名 + 故障码）。
+
+        :param joint: 关节索引，``None`` 表示全部电机。
+        """
+        self._require_connected()
+        self._backend.clear_fault_arm(joint)
 
     def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION,
                      joint: Optional[int] = None) -> None:
@@ -821,34 +1064,6 @@ class JoyArm:
             state.tcp.pose = self.fkine(state.joint.q, self.ee_frame_name)   # 默认 rep="pose" → Pose
         return state
 
-    def _guard_command(self, name: str, arr: np.ndarray,
-                       joint: Optional[int]) -> np.ndarray:
-        """指令下发守卫：``q`` 裁剪到软限位、``dq``/``tau`` 裁剪到幅值上限。
-
-        纵深防御：无论指令来自控制模板还是直接调用，越限值一律就近
-        裁剪后下发（与 :meth:`joyarm_core.robotics.control.Controller.step`
-        的守卫语义一致）；维度不符时原样放行，由 backend 报清晰的维度错误。
-        """
-        limits = self.joint_limits_soft
-        if name == "q":
-            lo, hi = limits.q_min, limits.q_max
-        elif name == "dq":
-            lo, hi = -limits.dq_max, limits.dq_max
-        elif name == "tau":
-            lo, hi = -limits.tau_max, limits.tau_max
-        else:
-            return arr
-        if joint is not None:               # 单关节：取该关节限位（arr 长度 1）
-            lo, hi = lo[joint:joint + 1], hi[joint:joint + 1]
-        if arr.shape != np.shape(lo):       # 整体指令长度 ≠ n → 交 backend 校验
-            return arr
-        clipped = np.clip(arr, lo, hi)
-        if not np.array_equal(arr, clipped):
-            logger.warning("set_arm_command: %s 指令越限，已就近裁剪 %s → %s",
-                           name, np.round(arr, 4).tolist(),
-                           np.round(clipped, 4).tolist())
-        return clipped
-
     def set_arm_command(self,
         mode: ControlMode = ControlMode.POSITION,
         q: Optional[np.ndarray] = None,
@@ -864,42 +1079,30 @@ class JoyArm:
         MIT 模式 ``kp/kd`` 可缺省（``None`` 透传后端回退 config 增益）；
         纯力矩不设独立模式，经 MIT（``kp=kd=0``）实现。
 
-        下发前自动守卫（防失控）：``q`` 裁剪到软限位、``dq``/``tau`` 裁剪到
-        幅值上限，越界告警并就近裁剪（``kp``/``kd`` 为标定增益，不裁剪）。
+        限位守卫在后端基类 ``Backend.send_*_arm`` 模板内（指令路径唯一裁剪点）：
+        ``q`` 裁剪到软限位、``dq``/``tau`` 裁剪到幅值上限，越界告警（节流每
+        0.5s 至多一条）就近裁剪（``kp``/``kd`` 为标定增益，不裁剪）；软限位
+        由后端构造时自建。
 
         :raises RuntimeError: 未连接真机时抛出。
         :raises ValueError: 对应模式所需参数缺失时抛出。
         """
-
-        def _vec(x):
-            if x is None:
-                return None
-            return np.atleast_1d(np.asarray(x, dtype=float))
-
         self._require_connected()
         if mode == ControlMode.POSITION:
             if q is None:
                 raise ValueError("joyarm.py - set_arm_command：POSITION 模式需要 q")
-            self._backend.send_position_arm(
-                self._guard_command("q", _vec(q), joint), joint)
+            self._backend.send_position_arm(q, joint)
         elif mode == ControlMode.VELOCITY:
             if dq is None:
                 raise ValueError("joyarm.py - set_arm_command：VELOCITY 模式需要 dq")
-            self._backend.send_velocity_arm(
-                self._guard_command("dq", _vec(dq), joint), joint)
+            self._backend.send_velocity_arm(dq, joint)
         elif mode == ControlMode.MIT:
             missing = [
                 name for name, val in (("q", q), ("dq", dq), ("tau", tau)) if val is None
             ]
             if missing:
                 raise ValueError(f"joyarm.py - set_arm_command：MIT 模式缺少参数：{missing}")
-            self._backend.send_mit_arm(
-                self._guard_command("q", _vec(q), joint),
-                self._guard_command("dq", _vec(dq), joint),
-                self._guard_command("tau", _vec(tau), joint),
-                kp=_vec(kp) if kp is not None else None,
-                kd=_vec(kd) if kd is not None else None,
-                joint=joint)
+            self._backend.send_mit_arm(q, dq, tau, kp=kp, kd=kd, joint=joint)
         else:
             raise ValueError(f"joyarm.py - set_arm_command：未知控制模式：{mode}")
 
@@ -957,6 +1160,11 @@ class JoyArm:
         """末端零位标定（先失能，反馈无故障后再标零）。"""
         self._require_connected()
         self._backend.set_zero_end(joint)
+
+    def clear_fault_end(self, joint: Optional[int] = None) -> None:
+        """末端电机故障清除（语义同 :meth:`clear_fault_arm`，验证式复位）。"""
+        self._require_connected()
+        self._backend.clear_fault_end(joint)
 
     def set_mode_end(self, mode: ControlMode = ControlMode.POSITION,
                      joint: Optional[int] = None) -> None:

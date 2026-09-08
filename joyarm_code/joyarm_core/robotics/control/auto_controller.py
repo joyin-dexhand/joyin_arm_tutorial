@@ -5,7 +5,7 @@
    （backend POS_VEL.vlim），防轨迹跳变引发过速危险；
 2. ``velocity_follow``（VELOCITY 模式）：``dq + k·(q_ref − q)`` 下发；config 配
    关节扭矩/电流上限（backend 基类支持才配置，不支持则不配）；
-3. ``drag_gravity``（MIT 模式，零力拖动示教）：重力补偿前馈 ``tau`` + 微小阻尼
+3. ``drag_gravity``（MIT 模式，零力拖动·重力补偿）：重力补偿前馈 ``tau`` + 微小阻尼
    ``kd`` + 小 ``kp`` 原位保持——不拖时维持构型不漂移，稍用力即可拖动；
 4. ``joint_mit``（MIT 模式，整臂关节控制）：完整 MIT 控制律
    ``tau = tau_ff + kp·(q_ref − q) + kd·(dq_ref − dq)``，``kp``/``kd`` 由 config 配置；

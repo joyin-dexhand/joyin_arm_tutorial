@@ -69,7 +69,7 @@ mdh = arm.get_config()["joyarm"]["arm_mdh_and_limits"]   # 教学数据从类内
 # 等价直用：from joyarm_core import JoyArm; arm = JoyArm("joyarm_dm")
 ```
 
-> **离线语义**：`connected=False`（默认）时已注册域的计算类（`rand_q`/`clamp_q`/…）可用；执行类（`get_arm_state`/`set_arm_command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用。
+> **离线语义**：`connected=False`（默认）时已注册域的计算类（`rand_q`/`clamp_to_limits`/…）可用；执行类（`get_arm_state`/`set_arm_command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用（支持 `with` 上下文自动连接与安全收尾）。
 
 ## 5. 运行章节示例
 

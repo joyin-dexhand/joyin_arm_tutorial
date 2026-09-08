@@ -76,7 +76,8 @@ from .robotics.fkine import FkineSolver
 from .robotics.ikine import IkineSolver
 from .robotics.jacobian import JacobianSolver
 from .robotics.dynamics import DynamicsSolver
-from .robotics.trajectory import TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
+from .robotics.trajectory import (TrajPlanner, AutoTrajPlanner, ForceTrajPlanner,
+                                  cubic_q, cubic_traj)
 from .robotics.control import Controller, AutoController, ForceController
 
 # ---- 指令路径守卫（clamp_to_limits）----
@@ -142,6 +143,8 @@ __all__ = [
     "TrajPlanner",
     "AutoTrajPlanner",
     "ForceTrajPlanner",
+    "cubic_q",
+    "cubic_traj",
     "Controller",
     "AutoController",
     "ForceController",

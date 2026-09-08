@@ -33,7 +33,7 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core import JoyArm  # noqa: E402
+from joyarm_core import JoyArm, clamp_to_limits  # noqa: E402
 from joyarm_core.utils.types import ControlMode  # noqa: E402
 
 # ---- 安全上限（与 test_joyarm_full.py 相同）----
@@ -82,8 +82,13 @@ class JoyArmRecoveryTest:
     # ----------------------------------------------------------
     @staticmethod
     def _safeguard(cfg: dict) -> None:
-        b = cfg.setdefault("basic", {}).setdefault("utils", {})
-        b["joint_limits_soft_margin"] = SOFT_MARGIN
+        j = cfg.setdefault("joyarm", {})
+        n = len(cfg["backend"]["arm"]["joints"])
+        j["joint_soft_margins"] = {k: [SOFT_MARGIN] * n
+                                   for k in ("q_upper", "q_lower", "dq", "tau")}
+        ne = len(cfg["backend"]["end"]["joints"])
+        j["end_soft_margins"] = {k: [SOFT_MARGIN] * ne
+                                 for k in ("q_upper", "q_lower", "dq", "tau")}
         for j in cfg["backend"]["arm"]["joints"]:
             j.setdefault("POS_VEL", {})["vlim"] = min(float(j["POS_VEL"].get("vlim", 0.0)), SAFE_ARM_VLIM)
             mit = j.setdefault("MIT", {})
@@ -135,7 +140,7 @@ class JoyArmRecoveryTest:
         测试预案卡（参数/模式/预期/保护/急停），执行前打印供人工审阅。"""
         return [
             ("R0-构造连接与基准位形", "低",
-             "安全化构造（margin=0/限速/增益）→ connect → q_base=clamp_q(当前 q)",
+             "安全化构造（margin=0/限速/增益）→ connect → q_base=clamp_to_limits(当前 q)",
              self.step_setup, self.brief_setup),
             ("R1-阻尼使能+位置保持", "中",
              "MIT 阻尼安全使能（kp=0/kd=1.5）→ 切 POSITION 保持 q_base；扶稳大臂",
@@ -170,7 +175,7 @@ class JoyArmRecoveryTest:
             f"[安全化] margin={SOFT_MARGIN}（软=URDF 硬限位）| 本体限速 {SAFE_ARM_VLIM} rad/s"
             f" | MIT 回退增益 kp≤{SAFE_ARM_MIT_KP}/kd≤{SAFE_ARM_MIT_KD} | 末端 tau≤{SAFE_END_TAU} N·m",
             "[内容] 纯只读：建立串口总线连接（电机保持失能），读取当前关节角，",
-            "       q_base = clamp_q(当前 q)（joint2/3 越界部分将被夹回，作为后续基准）。",
+            "       q_base = clamp_to_limits(当前 q)（joint2/3 越界部分将被夹回，作为后续基准）。",
             "[本步无任何运动/使能指令]",
             self._ESTOP,
         ])
@@ -209,7 +214,7 @@ class JoyArmRecoveryTest:
     def step_setup(self) -> None:
         self.arm.connect()
         q = self._q_now()
-        self.q_base = self.arm.clamp_q(q)
+        self.q_base = clamp_to_limits(q, self.arm.joint_limits_soft)
         print(f"✓ 已连接；当前 q：{_fmt(q)}")
         print(f"  q_base（夹紧后基准）：{_fmt(self.q_base)}")
         print(f"✓ JoyArm（model={self.arm.model}）：{self.arm!r}")

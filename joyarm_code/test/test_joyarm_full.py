@@ -53,7 +53,7 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core import joyarm_factory, JoyArm  # noqa: E402
+from joyarm_core import joyarm_factory, JoyArm, clamp_to_limits  # noqa: E402
 from joyarm_core.utils.types import ControlMode  # noqa: E402
 
 # ---- 安全上限（构造前写进 config，全程生效）----
@@ -118,10 +118,17 @@ class JoyArmFullTest:
     @staticmethod
     def _safeguard(cfg: dict) -> list[tuple[str, str, float, float]]:
         diff: list[tuple[str, str, float, float]] = []
-        b = cfg.setdefault("basic", {}).setdefault("utils", {})
-        old = float(b.get("joint_limits_soft_margin", 0.0))
-        b["joint_limits_soft_margin"] = SOFT_MARGIN
-        diff.append(("basic", "soft_margin", old, SOFT_MARGIN))
+        j = cfg.setdefault("joyarm", {})
+        n = len(cfg["backend"]["arm"]["joints"])
+        old = j.get("joint_soft_margins")
+        j["joint_soft_margins"] = {k: [SOFT_MARGIN] * n
+                                   for k in ("q_upper", "q_lower", "dq", "tau")}
+        diff.append(("joyarm", "joint_soft_margins", old, j["joint_soft_margins"]))
+        ne = len(cfg["backend"]["end"]["joints"])
+        old_e = j.get("end_soft_margins")
+        j["end_soft_margins"] = {k: [SOFT_MARGIN] * ne
+                                 for k in ("q_upper", "q_lower", "dq", "tau")}
+        diff.append(("joyarm", "end_soft_margins", old_e, j["end_soft_margins"]))
         for j in cfg["backend"]["arm"]["joints"]:
             pv = j.setdefault("POS_VEL", {})
             old, pv["vlim"] = float(pv.get("vlim", 0.0)), min(float(pv.get("vlim", SAFE_ARM_VLIM)), SAFE_ARM_VLIM)
@@ -208,7 +215,8 @@ class JoyArmFullTest:
     def _safe_dir(self, i: int) -> int:
         """第 i 关节的安全运动方向：朝限位区间较宽一侧；**该侧余量不足
         MOVE_AMP 时换向**（q 贴边时"宽侧"可能是零余量方向）。"""
-        q, lo, hi = self.q_base[i], self.arm.qlow[i], self.arm.qhigh[i]
+        q, lo, hi = (self.q_base[i], self.arm.joint_limits_soft.q_min[i],
+                        self.arm.joint_limits_soft.q_max[i])
         d = 1 if (q - lo) >= (hi - q) else -1
         if d > 0 and (hi - q) < MOVE_AMP:
             d = -1
@@ -234,14 +242,14 @@ class JoyArmFullTest:
             ("L0-工厂与软失败", "低", "joyarm_factory 正常创建 + 未知型号返回 None（离线第二实例，不连接）", self.step_factory),
             ("L0-配置 API", "低", "get_config 深拷贝 / set_config 白名单与越界拒绝", self.step_config_api),
             ("L0-六域空表与门面守卫", "低", "各域默认空表（教学过渡态）、未加载域门面 RuntimeError", self.step_domains),
-            ("L0-采样与限位", "低", "rand_q/is_q_valid/clamp_q；margin=0 下软限位==URDF 硬限位", self.step_sampling),
+            ("L0-采样与限位", "低", "rand_q + utils clamp_to_limits 裁剪；margin=0 下软限位==URDF 硬限位", self.step_sampling),
             ("L0-配置自检", "低", "check_config 正常静默通过（异常则 ValueError）", self.step_check_config),
             # ---- L1 连接只读层（不使能）----
             ("L1-connect", "低", "建立通信（共享总线，电机保持失能）；离线守卫抽查", self.step_connect),
-            ("L1-读状态与模式", "低", "get_arm_state / state property / read_mode_arm·end（失能态）", self.step_read_state),
+            ("L1-读状态与模式", "低", "get_arm_state / read_mode_arm·end（失能态）", self.step_read_state),
             ("L1-末端状态", "低", "get_end_state 字段族（joint=None/0）", self.step_end_state),
             ("L1-硬件自检", "低", "check_hardware 最小自检（通讯/故障/编码器；正常静默通过，异常 RuntimeError）", self.step_check_hw),
-            ("L1-安全基准位形", "低", "q_base = clamp_q(当前 q)（joint2/3 上限 0，越界部分将被夹回，后续小幅运动的基准）", self.step_qbase),
+            ("L1-安全基准位形", "低", "q_base = clamp_to_limits(当前 q)（joint2/3 上限 0，越界部分将被夹回）", self.step_qbase),
             # ---- L2 使能层 ----
             ("L2-模式轮切与混合语义", "中", "失能态轮切 MIT/POSITION/VELOCITY + read_mode 混合语义验证（无运动）", self.step_modes),
             ("L2-安全使能（MIT 阻尼）", "中", "使能后立刻下发 kp=0/kd=1.5 阻尼指令；⚠ 请扶稳大臂防下垂", self.step_safe_enable),
@@ -260,18 +268,24 @@ class JoyArmFullTest:
             # ---- L5 本体位置层 ----
             ("L5-位置保持", "中", "POSITION 使能并保持 q_base（首次指令会把 joint2/3 夹回限位内）", self.step_pos_hold),
             ("L5-逐关节小幅往返", "中", "joint1~6 依次 ±0.05 rad（安全方向）→ 回基准（含单关节 joint= API）", self.step_pos_sweep),
+            ("L5-move_j 小行程", "中", "三次多项式小行程往返（q_base±0.05 安全方向）+ is_in_position 到位判断", self.step_move_j),
             # ---- L6 MIT 层 ----
             ("L6-MIT 小增益步进", "中", "joint1 MIT kp=5/kd=1 步进 +0.05 rad → 回基准（电机侧 PD）", self.step_mit_step),
             # ---- L7 速度层 ----
             ("L7-速度模式（短时小速）", "高", "VELOCITY 使能+零速 → joint1 0.2 rad/s×0.6 s → 归零；⚠ 周围无障碍", self.step_velocity),
             # ---- L8 恢复层 ----
             ("L8-本体标零（自动恢复）", "高", "选 |q| 最小关节：标零→回原零位→恢复标零→回原位置→验证", self.step_set_zero_arm),
+            ("L8-急停锁定与原位保持", "中", "lock_position 位置锁定 + hold_position 阻抗保持（tau 前馈退化 0）；⚠ 请扶稳", self.step_lock_hold),
+            ("L8-安全回零族", "高", "safe_home → home_to_zero（safe_zero 组合；⚠ 大范围运动，请清场扶稳）", self.step_safe_family),
+            ("L8-故障清除（正常态）", "低", "clear_fault_arm/end 验证式复位（无故障应静默通过）", self.step_clear_fault),
             ("L8-失能断开与守卫", "低", "回 q_base → 失能全部 → disconnect → 断开后守卫", self.step_teardown),
         ]
 
     # ================= L0 离线计算层 =================
     def step_construct(self) -> None:
         def _fv(v):
+            if isinstance(v, dict):
+                return str({k: _fv(x) for k, x in v.items()})
             return _fmt(v, 1) if isinstance(v, list) else f"{v:.3f}"
         print("安全化对照（原值 → 测试值）：")
         for name, key, old, new in self._safe_diff:
@@ -282,7 +296,9 @@ class JoyArmFullTest:
         mdh = arm.get_config()["joyarm"]["arm_mdh_and_limits"]   # 类内 config 读取教学数据
         print(f"✓ 教学数据（config 内读取）：arm_mdh_and_limits {len(mdh)}×{len(mdh[0])}"
               f"（MDH 白盒链路，Ch2 教学算法使用）")
-        print(f"✓ 软限位 margin={SOFT_MARGIN}：qlow={_fmt(arm.qlow, 2)} qhigh={_fmt(arm.qhigh, 2)}")
+        print(f"✓ 软限位 margin={SOFT_MARGIN}："
+              f"q_min={_fmt(arm.joint_limits_soft.q_min, 2)} "
+              f"q_max={_fmt(arm.joint_limits_soft.q_max, 2)}")
         self._expect(RuntimeError, lambda: arm.damping_mode(), "未连接调用 damping_mode")
 
     def step_factory(self) -> None:
@@ -296,7 +312,7 @@ class JoyArmFullTest:
         cfg = arm.get_config()
         cfg["basic"]["name"] = "hacked"
         assert arm.get_config()["basic"]["name"] == "joyarm_dm"   # 深拷贝
-        assert np.allclose(arm.qlow, arm.joint_limits.q_min)      # margin=0 → 软=硬
+        assert np.allclose(arm.joint_limits_soft.q_min, arm.joint_limits.q_min)  # margin=0 → 软=硬
         self._expect(ValueError, lambda: arm.set_config("backend.name", "x"),
                      "set_config 白名单外路径")
         print("✓ 配置 API：深拷贝快照 / 越界拒绝")
@@ -313,10 +329,10 @@ class JoyArmFullTest:
         arm = self.arm
         rng = np.random.default_rng(0)
         q = arm.rand_q(rng=rng)
-        assert arm.is_q_valid(q)
-        assert not arm.is_q_valid(q + 10.0)
-        assert arm.is_q_valid(arm.clamp_q(q + 10.0))
-        print(f"✓ 采样/校验/裁剪：rand_q {q.round(2)}（软=硬限位内）")
+        clipped = clamp_to_limits(q + 10.0, arm.joint_limits_soft)
+        assert np.allclose(q, clamp_to_limits(q, arm.joint_limits_soft))  # 采样在限位内
+        assert not np.allclose(q + 10.0, clipped)                        # 越限被裁
+        print(f"✓ 采样/裁剪：rand_q {q.round(2)}（软=硬限位内，经 utils.clamp_to_limits）")
 
     def step_check_config(self) -> None:
         self.arm.check_config()    # 正常 → 静默通过；异常 → ValueError 列出全部问题
@@ -330,7 +346,7 @@ class JoyArmFullTest:
 
     def step_read_state(self) -> None:
         self._print_arm_state()
-        st = self.arm.state
+        st = self.arm.get_arm_state()
         assert st is not None and st.joint.q.size == 6
         m_arm, m_end = self.arm.read_mode_arm(), self.arm.read_mode_end()
         assert m_arm is None and m_end is None
@@ -348,10 +364,11 @@ class JoyArmFullTest:
 
     def step_qbase(self) -> None:
         q = self._q_now()
-        self.q_base = self.arm.clamp_q(q)
+        self.q_base = clamp_to_limits(q, self.arm.joint_limits_soft)
         print(f"  当前 q：{_fmt(q)}")
         print(f"  q_base（夹紧后，后续小幅运动基准）：{_fmt(self.q_base)}")
-        assert self.arm.is_q_valid(self.q_base)
+        assert np.all(self.q_base >= self.arm.joint_limits_soft.q_min - 1e-9)
+        assert np.all(self.q_base <= self.arm.joint_limits_soft.q_max + 1e-9)
         print("✓ 安全基准位形已建立")
 
     # ================= L2 使能层 =================
@@ -536,7 +553,8 @@ class JoyArmFullTest:
         worst = 0.0
         for j, nm in enumerate(self.arm_names):
             target = float(np.clip(self.q_base[j] + self._safe_dir(j) * MOVE_AMP,
-                                   self.arm.qlow[j], self.arm.qhigh[j]))
+                                   self.arm.joint_limits_soft.q_min[j],
+                                   self.arm.joint_limits_soft.q_max[j]))
             self.arm.set_arm_command(ControlMode.POSITION, q=[target], joint=j)
             ok1 = self._wait_arm_q(j, target)
             self.arm.set_arm_command(ControlMode.POSITION, q=[float(self.q_base[j])], joint=j)
@@ -603,6 +621,42 @@ class JoyArmFullTest:
         q_now = float(self._q_now()[j])
         assert abs(q_now - q0) < 0.05, f"零位恢复失败：{q_now:+.4f} vs {q0:+.4f}"
         print(f"✓ 本体标零→恢复完成（当前 {q_now:+.4f} ≈ 原 {q0:+.4f}，零位已还原）")
+
+    def step_move_j(self) -> None:
+        """L5：move_j 三次多项式小行程（与规划器并行的独立功能）+ 到位判断。"""
+        arm = self.arm
+        j = 0
+        target = float(np.clip(self.q_base[j] + self._safe_dir(j) * 0.05,
+                               arm.joint_limits_soft.q_min[j],
+                               arm.joint_limits_soft.q_max[j]))
+        q_t = np.asarray(self.q_base, dtype=float).copy()
+        q_t[j] = target
+        arm.move_j(q_t, t=0.6, wait_timeout=5.0)
+        assert arm.is_in_position(q=q_t)
+        arm.move_j(np.asarray(self.q_base, dtype=float), t=0.6, wait_timeout=5.0)
+        assert arm.is_in_position(q=self.q_base)
+        print("✓ move_j：小行程三次多项式往返 + is_in_position 通过")
+
+    def step_lock_hold(self) -> None:
+        """L8：急停锁定 + 原位保持。"""
+        self.arm.lock_position()
+        self.arm.hold_position()
+        print("✓ lock_position / hold_position：位置锁定 + 阻抗保持（tau 前馈退化 0）")
+
+    def step_safe_family(self) -> None:
+        """L8：safe_home → home_to_zero（safe_zero 组合的大范围运动，需清场）。"""
+        arm = self.arm
+        arm.safe_home(t=3.0, wait_timeout=10.0)
+        assert arm.is_in_position(q=arm.q_home)
+        arm.home_to_zero(t=3.0, wait_timeout=10.0)
+        assert arm.is_in_position(q=arm.q_zero)
+        print("✓ safe_home / home_to_zero：安全回零族通过（当前位于 zero）")
+
+    def step_clear_fault(self) -> None:
+        """L8：clear_fault 验证式复位（正常态应静默通过）。"""
+        self.arm.clear_fault_arm()
+        self.arm.clear_fault_end()
+        print("✓ clear_fault_arm/end：正常态静默通过（失能→核对→使能→核对）")
 
     def step_teardown(self) -> None:
         arm = self.arm

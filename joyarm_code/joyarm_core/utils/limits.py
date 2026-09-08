@@ -1,7 +1,7 @@
 """关节限位守卫（指令路径防护底层）+ 限位构建辅助。
 
 ``clamp_to_limits``：运动指令下发前逐元素裁剪到关节限位内；``joint_limits_from_model`` / ``soft_limits``：从任意
-运动学模型对象（鸭子类型：pinocchio model 或等价结构）解析硬限位、按比例内缩生成软限位。
+运动学模型对象（鸭子类型：pinocchio model 或等价结构）解析硬限位、按四种逐关节绝对余量内缩生成软限位。
 """
 from __future__ import annotations
 
@@ -79,7 +79,70 @@ def joint_limits_from_model(model) -> JointLimits:
     return JointLimits(q_min=q_min, q_max=q_max, dq_max=dq_max, tau_max=tau_max)
 
 
-def soft_limits(hard: JointLimits, margin: float) -> JointLimits:
-    """由硬限位按跨度比例 ``margin`` 内缩生成**软限位**（``margin=0`` 时软=硬）。"""
-    span = hard.q_max - hard.q_min
-    return replace(hard, q_min=hard.q_min + margin * span, q_max=hard.q_max - margin * span)
+# 软限位 margin 四键（config basic.utils.joint_soft_margins 的合法键集）
+_MARGIN_KEYS = ("q_upper", "q_lower", "dq", "tau")
+
+
+def _parse_margins(margins: dict, n: int) -> dict:
+    """把 config margin 字典解析为 ``{键: (n,) 数组}``（标量广播、缺省键 = 0）。
+
+    :raises ValueError: margins 非字典、含未知键、值含负数或列表长度 ≠ n。
+    """
+    if not isinstance(margins, dict):
+        raise ValueError(
+            f"limits.py - soft_limits：margins 需为四键字典（键取 {_MARGIN_KEYS}），"
+            f"实际类型 {type(margins).__name__}")
+    unknown = [k for k in margins if k not in _MARGIN_KEYS]
+    if unknown:
+        raise ValueError(
+            f"limits.py - soft_limits：margin 含未知键 {unknown}（合法键 {_MARGIN_KEYS}）")
+    parsed = {}
+    for key in _MARGIN_KEYS:
+        raw = margins.get(key, 0.0)
+        arr = np.asarray(raw, dtype=float)
+        if arr.ndim == 0:                       # 标量：全关节统一
+            arr = np.full(n, float(arr))
+        else:                                   # 列表：逐关节
+            arr = arr.reshape(-1)
+        if arr.shape[0] != n:
+            raise ValueError(
+                f"limits.py - soft_limits：margin[{key!r}] 长度 {arr.shape[0]} "
+                f"与关节数 {n} 不匹配（逐关节需 n 元列表，或写标量统一全关节）")
+        if np.any(arr < 0):
+            raise ValueError(f"limits.py - soft_limits：margin[{key!r}] 不允许负值：{raw!r}")
+        parsed[key] = arr
+    return parsed
+
+
+def soft_limits(hard: JointLimits, margins: dict) -> JointLimits:
+    """由硬限位按四种**逐关节绝对余量**内缩生成**软限位**（全零 margin 时软=硬）。
+
+    位置上下各自内缩、速度/力矩上限各自下调（inf 限位减 margin 仍为 inf）::
+
+        soft.q_max   = hard.q_max   - margins["q_upper"]   # rad
+        soft.q_min   = hard.q_min   + margins["q_lower"]   # rad
+        soft.dq_max  = hard.dq_max  - margins["dq"]        # rad/s
+        soft.tau_max = hard.tau_max - margins["tau"]       # N·m
+
+    :param hard: 硬限位（如 :func:`joint_limits_from_model` 产物，URDF 来源）。
+    :param margins: 四键字典 ``{"q_upper", "q_lower", "dq", "tau"}``，每键为标量
+        （全关节统一）或 n 元列表（逐关节），缺省键视为 0——对应 config
+        ``basic.utils.joint_soft_margins`` 段。
+    :raises ValueError: margins 结构非法（非字典/未知键/负值/长度不符），或内缩后
+        位置限位交叉（``q_min > q_max``）、速度/力矩上限为负。
+    """
+    n = np.asarray(hard.q_min).shape[0]
+    m = _parse_margins(margins, n)
+    soft = replace(hard,
+                   q_min=hard.q_min + m["q_lower"],
+                   q_max=hard.q_max - m["q_upper"],
+                   dq_max=hard.dq_max - m["dq"],
+                   tau_max=hard.tau_max - m["tau"])
+    bad_q = np.where(soft.q_min > soft.q_max)[0]
+    if bad_q.size > 0:
+        raise ValueError(
+            f"limits.py - soft_limits：位置 margin 过大导致限位交叉（q_min > q_max，"
+            f"关节索引 {bad_q.tolist()}）；请减小 q_upper/q_lower")
+    if np.any(soft.dq_max < 0) or np.any(soft.tau_max < 0):
+        raise ValueError("limits.py - soft_limits：dq/tau margin 不小于对应硬上限，请减小 margin")
+    return soft
