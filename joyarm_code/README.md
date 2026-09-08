@@ -33,9 +33,9 @@ joyarm_code/
 
 核心概念：
 
-- **组合根 `JoyArm`（单类，无型号子类）**：完整机械臂 = arm 本体 + end 执行器。**型号差异全部由配置表达**——新型号 = `configs/<型号>.yaml` + `robot_model/` URDF 资产 + `backend/backend_*.py`（型号与整机后端 1:1）。持有一个**整机通信后端** `_backend`（私有，yaml `backend.name` 选型构建）与**六域策略成员字典**（`_fkine_solvers` / `_ikine_solvers` / …，config 可指定加载多个、首个为活动）；公开门面（`arm.fkine()` / `arm.end_open()`…）全部委托活动成员，`connect()` 后才可执行硬件操作。config 在构造时一次性加载存为类内成员，教学数据（如 MDH 参数）经 `arm.get_config()` 读取、不重读 yaml。
-- **成员即策略（config 可换、字典化加载）**：`configs/<model>.yaml` 的 `robotics:` 段按各域注册名选型（值可为单个规格或列表，全部加载）；运行期 `arm.set_solver(域, 名)` 切换。各域 `REGISTRY` 默认仅有 ABC 接口（空表）——具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 / control Ch6 / dynamics Ch8），章节实现注册后经 config 选型接入。
-- **型号工厂 `joyarm_factory`**：按型号名（唯一参数）创建机械臂——自动加载 `configs/<型号>.yaml` 并校验命名链（入参 = 文件名 = `basic.name`）；**型号不存在或初始化失败时返回 `None` 并输出失败信息**（不抛异常）。
+- **组合根 `JoyArm`（单类，无型号子类）**：完整机械臂 = arm 本体 + end 执行器。**型号差异全部由配置表达**——新型号 = `configs/<型号>.yaml` + `robot_model/` URDF 资产 + `backend/backend_*.py`（型号与整机后端 1:1）。持有一个**整机通信后端** `_backend`（私有，yaml `backend.name` 选型构建、必配）与**六域策略成员字典**（`_fkine_solvers` / `_ikine_solvers` / …，config 可指定加载多个、首个为激活）；公开门面（`arm.fkine()` / `arm.set_end_open()`…）全部委托激活成员，`connect()` 后才可执行硬件操作。config 必需且构造前经 `JoyArm.check_config` 静态自检（通过才初始化）；构造时一次性深拷贝存为类内成员，教学数据（如 MDH 参数）经 `arm.get_config()` 读取、不重读 yaml。
+- **成员即策略（config 可换、字典化加载）**：`configs/<model>.yaml` 的 `robotics:` 段按各域注册名选型（值可为单个规格或列表，全部加载、首个激活；注册名 = 求解器类名小写+下划线）；运行期 `arm.set_solver(域, 名)` 切换（有且仅一个激活）。各域 `REGISTRY` 默认仅有 ABC 接口（空表）——域未配置即无成员（门面调用显性报错）；**配置的注册名必须已实现且实例化成功，否则构造失败（硬失败）**。
+- **型号工厂 `joyarm_factory`**：按型号名（唯一参数）创建机械臂——自动加载 `configs/<型号>.yaml` 并校验命名链（入参 = 文件名 = `basic.name`）；**型号不存在或初始化失败时返回 `None` 并输出失败信息**（不抛异常；仅工厂入口软化，`JoyArm` 直用为硬失败）。
 - **Backend 整机两层**：`Backend`（整机根，方法以 `*_arm` / `*_end` 后缀区分本体与末端）→ `BackendDM`（与机械臂型号 **1:1** 派生：`backend_dm` ↔ `joyarm_dm`）；yaml `backend:` 段 `name` 选型，arm/end 同 channel 共享总线、异 channel 独立。
 
 ## 3. 环境安装
@@ -56,20 +56,22 @@ source .venv/bin/activate  # 激活后直接用 python；或免激活用 uv run 
 ## 4. 快速开始
 
 ```python
-from joyarm_core import joyarm_factory
+from joyarm_core import joyarm_factory, JoyArm
 
 arm = joyarm_factory("joyarm_dm")  # 推荐：型号名唯一参数；默认未连接（离线），
-                                   # 自动加载 configs/joyarm_dm.yaml + URDF，按 robotics: 组装成员
-                                   # 型号不存在时返回 None 并输出失败信息
-Q = arm.rand_q(size=100_000)       # 软限位内采样 (N,6)
-arm.check_config()                 # 配置最小自检：正常静默通过，异常 ValueError 列出全部问题
+                                   # 自动加载 configs/joyarm_dm.yaml + URDF（config 必需、
+                                   # 自检通过才初始化）；型号不存在时返回 None 并输出失败信息
+Q = arm.rand_q_arm(size=100_000)   # 本体软限位内采样 (N, 6)
+JoyArm.check_config("joyarm_dm", arm.get_config())   # 配置静态自检：正常静默通过，异常 ValueError
 mdh = arm.get_config()["joyarm"]["arm_mdh_and_limits"]   # 教学数据从类内 config 读取
-# arm.fkine(Q, arm.ee_frame_name) / arm.ikine(...)  # 求解器门面：各章实现算法并注册后即可用（当前注册表为空）
-# arm.connect(); arm.check_hardware(); arm.enable_arm()  # 硬件最小自检同上（异常 RuntimeError）
+# arm.fkine(Q, arm.ee_frame_name) / arm.ikine(...)  # 求解器门面：各域 REGISTRY 当前为空，
+                                                   # 章节实现注册并在 config robotics: 选型后可用
+# arm.check_hardware()   # 硬件自检：自包含（临时连接→失能状态检查→断开），手动调用
+# arm.connect(); arm.enable_arm()
 # 等价直用：from joyarm_core import JoyArm; arm = JoyArm("joyarm_dm")
 ```
 
-> **离线语义**：`connected=False`（默认）时已注册域的计算类（`rand_q`/`clamp_to_limits`/…）可用；执行类（`get_arm_state`/`set_arm_command`/`end_open()`）`raise RuntimeError`，`connect()` 后可用（支持 `with` 上下文自动连接与安全收尾）。
+> **离线语义**：`connected=False`（默认）时计算类（`rand_q_arm`/`clamp_to_limits`/…）可用；执行类（`get_arm_state`/`set_arm_command`/`set_end_open()`）`raise RuntimeError`，`connect()` 后可用（支持 `with` 上下文自动连接与安全收尾）。
 
 ## 5. 运行章节示例
 

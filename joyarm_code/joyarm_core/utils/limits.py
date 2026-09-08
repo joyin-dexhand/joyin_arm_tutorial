@@ -1,17 +1,20 @@
-"""关节限位守卫（指令路径防护底层）+ 限位构建辅助。
+"""关节限位守卫（指令路径防护底层）+ 限位构建/采样辅助。
 
-``clamp_to_limits``：运动指令下发前逐元素裁剪到关节限位内；``joint_limits_from_model`` / ``soft_limits``：从任意
-运动学模型对象（鸭子类型：pinocchio model 或等价结构）解析硬限位、按四种逐关节绝对余量内缩生成软限位。
+``clamp_to_limits``：运动指令下发前逐元素裁剪到关节限位内；``joint_limits_from_model`` /
+``limits_from_joint_cfgs`` / ``soft_limits``：硬限位解析（URDF 模型 / config 关节条目）
+与按四种逐关节绝对余量内缩的软限位派生；``rand_within_limits``：限位内均匀采样。
 """
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Optional
 
 import numpy as np
 
 from .types import JointLimits
 
-__all__ = ["clamp_to_limits", "joint_limits_from_model", "soft_limits"]
+__all__ = ["clamp_to_limits", "joint_limits_from_model", "limits_from_joint_cfgs",
+           "soft_limits", "rand_within_limits"]
 
 
 # ============================================================
@@ -20,8 +23,8 @@ __all__ = ["clamp_to_limits", "joint_limits_from_model", "soft_limits"]
 def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
     """运动指令逐元素裁剪到关节限位内；返回与 ``targets`` 同形状。
 
-    传硬限位（``JoyArm.joint_limits``）裁到硬限位；传软限位
-    （``joint_limits_soft``，即 ``qlow/qhigh``）则留缓冲。
+    传硬限位（如 ``JoyArm.arm_limits``）裁到硬限位；传软限位
+    （如 ``JoyArm.arm_limits_soft``）则留缓冲。
 
     :param targets: ``(n,)`` 或 ``(N,n)`` 目标关节角，弧度。
     :raises ValueError: 限位 ``q_min > q_max``（配置错误）、标量输入、末维与限位不匹配。
@@ -79,7 +82,7 @@ def joint_limits_from_model(model) -> JointLimits:
     return JointLimits(q_min=q_min, q_max=q_max, dq_max=dq_max, tau_max=tau_max)
 
 
-# 软限位 margin 四键（config basic.utils.joint_soft_margins 的合法键集）
+# 软限位 margin 四键（config joyarm.arm_soft_margins / end_soft_margins 的合法键集）
 _MARGIN_KEYS = ("q_upper", "q_lower", "dq", "tau")
 
 
@@ -114,6 +117,47 @@ def _parse_margins(margins: dict, n: int) -> dict:
     return parsed
 
 
+def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
+    """从 config 关节条目列表解析**硬限位**（arm/end 同构；空列表返回 ``None``）。
+
+    条目四键 ``q_min``/``q_max``/``dq_max``/``tau_max``（rad / rad/s / N·m，
+    末端为电机空间行程）；缺键量纲置 ±∞（不参与守卫）。JoyArm 的
+    ``arm_limits``/``end_limits`` 均由此解析（arm 条目四键在
+    ``JoyArm.check_config`` 中强制齐全，数值须与 URDF limit 标定保持一致）。
+
+    :param joint_cfgs: ``backend.arm.joints`` / ``backend.end.joints`` 条目列表。
+    """
+    joints = list(joint_cfgs or [])
+    if not joints:
+        return None
+
+    def _num(j, key, default):
+        v = j.get(key)
+        return float(v) if v is not None else default
+
+    return JointLimits(
+        q_min=np.array([_num(j, "q_min", -np.inf) for j in joints]),
+        q_max=np.array([_num(j, "q_max", np.inf) for j in joints]),
+        dq_max=np.array([_num(j, "dq_max", np.inf) for j in joints]),
+        tau_max=np.array([_num(j, "tau_max", np.inf) for j in joints]),
+    )
+
+
+def rand_within_limits(limits: JointLimits, size: Optional[int] = None,
+                       rng: Optional[np.random.Generator] = None) -> np.ndarray:
+    """在限位内均匀采样关节角（``(n,)``；``size`` 给出 ``(size, n)``）。
+
+    :param limits: 限位（通常传软限位，如 ``JoyArm.arm_limits_soft``）。
+    :param size: 采样组数；缺省单组 ``(n,)``。
+    :param rng: ``numpy`` 随机生成器；缺省 ``np.random.default_rng()``。
+    """
+    rng = rng if rng is not None else np.random.default_rng()
+    n = np.asarray(limits.q_min).shape[0]
+    if size is None:
+        return rng.uniform(limits.q_min, limits.q_max)
+    return rng.uniform(limits.q_min, limits.q_max, size=(size, n))
+
+
 def soft_limits(hard: JointLimits, margins: dict) -> JointLimits:
     """由硬限位按四种**逐关节绝对余量**内缩生成**软限位**（全零 margin 时软=硬）。
 
@@ -124,10 +168,10 @@ def soft_limits(hard: JointLimits, margins: dict) -> JointLimits:
         soft.dq_max  = hard.dq_max  - margins["dq"]        # rad/s
         soft.tau_max = hard.tau_max - margins["tau"]       # N·m
 
-    :param hard: 硬限位（如 :func:`joint_limits_from_model` 产物，URDF 来源）。
+    :param hard: 硬限位（URDF 或 config 来源，初始化后固定）。
     :param margins: 四键字典 ``{"q_upper", "q_lower", "dq", "tau"}``，每键为标量
         （全关节统一）或 n 元列表（逐关节），缺省键视为 0——对应 config
-        ``basic.utils.joint_soft_margins`` 段。
+        ``joyarm.arm_soft_margins``（末端 ``end_soft_margins``）段。
     :raises ValueError: margins 结构非法（非字典/未知键/负值/长度不符），或内缩后
         位置限位交叉（``q_min > q_max``）、速度/力矩上限为负。
     """

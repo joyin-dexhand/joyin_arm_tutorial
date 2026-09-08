@@ -31,8 +31,9 @@ class JacobianSolver(ABC):
         """``(6,n)`` 雅可比；``ref`` 取 base（默认，基座系）/ local（自身系）。"""
 
     # ----------------------------------------------------------
-    # jacobian 派生量模板（可操作度 / 条件数 / 静力学，基于 self.jac）
+    # jacobian 派生量模板（速度运动学 / 可操作度 / 条件数 / 静力学，基于 self.jac）
     # ----------------------------------------------------------
+
     def manipulability(self, arm, q: np.ndarray, frame: Union[str, int]) -> float:
         """Yoshikawa 可操作度 ``w = sqrt(det(J Jᵀ))``（椭球体积度量）。"""
         J = self.jac(arm, q, frame)
@@ -43,5 +44,6 @@ class JacobianSolver(ABC):
         return float(np.linalg.cond(self.jac(arm, q, frame)))
 
     def statics(self, arm, q: np.ndarray, F: np.ndarray, frame: Union[str, int]) -> np.ndarray:
-        """静力学：``τ = JᵀF``，``F`` 为 (6,) 末端六维力（N / N·m）。"""
+        """静力学 ``τ = JᵀF``：``F`` 为 ``(6,)`` 末端六维力旋量（力 N + 力矩
+        N·m），返回 ``τ ∈ R^n`` 关节力矩（``n`` = 本体关节数）。"""
         return self.jac(arm, q, frame).T @ np.asarray(F, dtype=float)

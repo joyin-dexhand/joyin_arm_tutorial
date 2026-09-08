@@ -75,7 +75,7 @@ def main() -> None:
         raise SystemExit("JoyArm 创建失败：请在 joyarm_code/ 下安装依赖（uv sync）")
     print(f"模型就绪：{arm}\n")
 
-    Q = arm.rand_q(args.n, rng=np.random.default_rng(args.seed))
+    Q = arm.rand_q_arm(args.n, rng=np.random.default_rng(args.seed))
     print(f"软限位内采样 {args.n} 组关节角，每批 {args.batch} 组……")
 
     vis = None

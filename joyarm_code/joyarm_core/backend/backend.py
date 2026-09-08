@@ -23,7 +23,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..utils.limits import soft_limits
+from ..utils.limits import limits_from_joint_cfgs, soft_limits
 from ..utils.types import ArmState, ControlMode, JointLimits
 
 __all__ = ["Backend"]
@@ -43,7 +43,8 @@ class Backend(ABC):
     **限位构建（构造时，arm/end 统一）**：软限位在 ``__init__`` 内构建，独立
     使用后端（不经 JoyArm）同样自带守卫——
 
-    - 本体：硬限位（URDF 来源）经 ``joint_limits`` 传入，按 ``joint_soft_margins``
+    - 本体：硬限位经 ``arm_limits`` 传入（config ``backend.arm.joints`` 四键
+      解析，数值与 URDF limit 标定保持一致），按 ``arm_soft_margins``
       四键绝对余量内缩；未传硬限位则本体守卫不启用（放行）；
     - 末端：硬限位自解析 cfg ``end.joints`` 条目的 ``q_min``/``q_max``/``dq_max``/
       ``tau_max``（**ABC 契约标准键**，缺键量纲置 ±∞；多执行器末端逐条对应），
@@ -58,23 +59,23 @@ class Backend(ABC):
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 两个子段，各含 ``channel`` / ``protocol`` /
         ``baud_rate`` / ``control_rate`` / ``joints``（电机配置列表）。
-    :param joint_limits: 本体硬限位（``JointLimits``，URDF/pin 来源，由组合根
-        传入）；``None``（独立使用）则本体守卫不启用。
-    :param joint_soft_margins: 本体软限位 margin（四键字典，语义见
+    :param arm_limits: 本体硬限位（``JointLimits``，config ``backend.arm.joints``
+        四键解析后由组合根传入）；``None``（独立使用）则本体守卫不启用。
+    :param arm_soft_margins: 本体软限位 margin（四键字典，语义见
         ``utils/limits.soft_limits``）；缺省全零（软=硬）。
     :param end_soft_margins: 末端软限位 margin（四键字典，逐电机）；缺省全零。
     """
 
     def __init__(self, cfg: dict,
-                 joint_limits: Optional[JointLimits] = None,
-                 joint_soft_margins: Optional[dict] = None,
+                 arm_limits: Optional[JointLimits] = None,
+                 arm_soft_margins: Optional[dict] = None,
                  end_soft_margins: Optional[dict] = None) -> None:
         self.cfg = cfg
         self._warn_last = 0.0          # 越限告警节流：上次告警的 time.monotonic 时刻
         # ---- 限位构建（守卫依据；构造即生效，无需另行注入）----
         self._arm_limits_soft: Optional[JointLimits] = (
-            soft_limits(joint_limits, joint_soft_margins or {})
-            if joint_limits is not None else None)
+            soft_limits(arm_limits, arm_soft_margins or {})
+            if arm_limits is not None else None)
         self._end_limits: Optional[JointLimits] = self.end_limits_from_cfg(cfg)
         self._end_limits_soft: Optional[JointLimits] = (
             soft_limits(self._end_limits, end_soft_margins or {})
@@ -116,20 +117,7 @@ class Backend(ABC):
 
         :param cfg: yaml ``backend:`` 段字典（含 ``end.joints`` 列表）。
         """
-        joints = ((cfg or {}).get("end") or {}).get("joints") or []
-        if not joints:
-            return None
-
-        def _num(j, key, default):
-            v = j.get(key)
-            return float(v) if v is not None else default
-
-        return JointLimits(
-            q_min=np.array([_num(j, "q_min", -np.inf) for j in joints]),
-            q_max=np.array([_num(j, "q_max", np.inf) for j in joints]),
-            dq_max=np.array([_num(j, "dq_max", np.inf) for j in joints]),
-            tau_max=np.array([_num(j, "tau_max", np.inf) for j in joints]),
-        )
+        return limits_from_joint_cfgs(((cfg or {}).get("end") or {}).get("joints") or [])
 
     # ----------------------------------------------------------
     # 生命周期

@@ -1,16 +1,17 @@
 """JoyArm 工厂与单类离线测试（不依赖硬件）。
 
-覆盖架构约束的单类行为：①工厂软失败语义（未知型号 → ``None`` + 失败信息）；
-②六域成员字典机制（各域 REGISTRY 默认空表——教学各章实现注册后接入）；③配置
-读取/运行期设置/自检（``get_config``/``set_config``/``check_config``）；④离线
-语义（执行类抛错、未加载域门面显性报错）。
+覆盖架构约束的单类行为：①工厂软化语义（未知型号 → ``None`` + 失败信息；
+JoyArm 直用为硬失败——坏注册名 / 缺 backend / 缺 config 构造即抛）；②六域
+成员字典机制（各域 REGISTRY 默认空表，域未配置即无成员、门面调用显性报错；
+配置的成员必须全部创建成功）；③配置读取/运行期设置/静态自检
+（``get_config``/``set_config``/``check_config``）；④离线语义（执行类抛错）
+与拷贝隔离（config / 轨迹桥深拷贝）；⑤前置校验族（connected / enabled / mode）。
 
 运行：``python test/test_joyarm_factory.py`` 或 pytest。
 """
 from __future__ import annotations
 
 import copy
-import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,13 +43,14 @@ def _arm():
 
 def test_factory_creates_dm():
     arm = _arm()
-    assert arm.n == 6
+    assert arm.n_arm == 6
+    assert arm.n_end == 1
     assert arm.model == "joyarm_dm"
     assert JoyArmFactory().list_models() == ["joyarm_dm"]
 
 
 def test_factory_unknown_model_returns_none():
-    """软失败语义（架构约束）：未知型号返回 None + 输出失败信息（不抛异常）。"""
+    """软化语义（仅工厂入口）：未知型号返回 None + 输出失败信息（不抛异常）。"""
     for bad in ("joyarm_nx", "", "backend_dm"):
         assert joyarm_factory(bad) is None, f"{bad!r} 应返回 None"
 
@@ -63,14 +65,37 @@ def test_load_config_strict_and_lenient():
         pass
 
 
+def test_hardfail_construction():
+    """硬失败语义：坏注册名 / 缺 backend / 缺 config 构造即抛 ValueError。"""
+    cfg = copy.deepcopy(load_config("joyarm_dm"))
+    cfg["robotics"] = {"fkine": "bogus"}               # 未实现注册名
+    try:
+        JoyArm(model="joyarm_dm", config=cfg)
+        raise AssertionError("未注册求解器应抛 ValueError")
+    except ValueError as e:
+        assert "bogus" in str(e)
+    cfg2 = copy.deepcopy(load_config("joyarm_dm"))
+    del cfg2["backend"]                                # backend 必配
+    try:
+        JoyArm(model="joyarm_dm", config=cfg2)
+        raise AssertionError("缺 backend 段应抛 ValueError")
+    except ValueError as e:
+        assert "backend" in str(e)
+    try:
+        JoyArm("nonexistent_model")                    # config 缺失（自动加载失败）
+        raise AssertionError("缺 config 应抛 ValueError")
+    except ValueError:
+        pass
+
+
 def test_domain_dicts_default_empty():
-    """教学过渡态：各域 REGISTRY 默认空表、config 未配置即无成员；门面调用显性报错。"""
+    """过渡态：各域 REGISTRY 默认空表、config 未配置即无成员；门面调用显性报错。"""
     arm = _arm()
     for d in ("fkine", "ikine", "jacobian", "dynamics", "traj", "control"):
         assert arm._active_name[d] is None
         assert arm.list_solvers(d) == []
     try:
-        arm.fkine(arm.rand_q(rng=np.random.default_rng(0)), "ee")
+        arm.fkine(arm.rand_q_arm(rng=np.random.default_rng(0)), "ee")
         raise AssertionError("未加载 fkine 应抛 RuntimeError")
     except RuntimeError:
         pass
@@ -109,14 +134,18 @@ def test_set_solver_switch_and_alias():
     arm._active_name["control"] = None
 
 
-def test_build_domain_soft_fail_and_multiload():
-    """软失败（架构约束）：无效注册名跳过 + 警告；列表多载全部加载；未配置静默跳过。"""
+def test_build_domain_hard_fail_and_multiload():
+    """硬失败（架构约束）：任一成员规格非法/注册名不存在即抛；列表多载全部加载；未配置跳过。"""
     reg = {"a": _DummyA, "b": _DummyB}
-    members = _build_domain("control", reg, [{"name": "bogus"}, {"name": "b", "x": 123}])
-    assert sorted(members) == ["b"] and members["b"].x == 123
-    m2 = _build_domain("control", reg, ["a", "b"])
-    assert sorted(m2) == ["a", "b"]
-    assert _build_domain("control", reg, None) == {}   # 域未配置：静默跳过
+    assert _build_domain("control", reg, None) == {}   # 域未配置：跳过
+    members = _build_domain("control", reg, [{"name": "b", "x": 123}, "a"])
+    assert sorted(members) == ["a", "b"] and members["b"].x == 123
+    for bad in ({"name": "bogus"}, "bogus", {"x": 1}, 123):
+        try:
+            _build_domain("control", reg, bad)
+            raise AssertionError(f"{bad!r} 应抛 ValueError（硬失败）")
+        except ValueError:
+            pass
 
 
 def test_get_config_deepcopy():
@@ -129,27 +158,41 @@ def test_get_config_deepcopy():
     assert fresh["basic"]["name"] == "joyarm_dm"
 
 
+def test_config_and_traj_deepcopy_isolation():
+    """深拷贝隔离：外部 config 改动、发布后帧修改均不影响类内数据。"""
+    cfg = load_config("joyarm_dm")
+    arm = JoyArm(model="joyarm_dm", config=cfg)
+    cfg["basic"]["name"] = "hacked"                  # 构造后外部改动
+    assert arm.get_config()["basic"]["name"] == "joyarm_dm"
+    fr = TrajFrame(time=10.0, q=np.zeros(6))
+    arm.set_current_frame(fr)
+    fr.time = 99.0                                   # 发布后修改原对象
+    assert arm.get_current_frame().time == 10.0
+    seq = [TrajFrame(time=1.0, q=np.zeros(6))]
+    arm.set_target_traj(seq)
+    seq[0].time = 55.0
+    assert arm.get_target_traj()[0].time == 1.0
+
+
 def test_set_config_whitelist():
     arm = _arm()
     # 本体软限位即时生效（四键绝对余量；缺省键不内缩）
-    arm.set_config("joyarm.joint_soft_margins", {"q_upper": 0.2, "q_lower": 0.2})
-    soft = arm.joint_limits_soft
-    assert np.allclose(soft.q_min, arm.joint_limits.q_min + 0.2)
-    assert np.allclose(soft.q_max, arm.joint_limits.q_max - 0.2)
-    assert np.allclose(soft.dq_max, arm.joint_limits.dq_max)
+    arm.set_config("joyarm.arm_soft_margins", {"q_upper": 0.2, "q_lower": 0.2})
+    soft = arm.arm_limits_soft
+    assert np.allclose(soft.q_min, arm.arm_limits.q_min + 0.2)
+    assert np.allclose(soft.q_max, arm.arm_limits.q_max - 0.2)
+    assert np.allclose(soft.dq_max, arm.arm_limits.dq_max)
     # 后端守卫同步换用新软限位
-    assert arm._backend is not None and \
-        np.allclose(arm._backend.arm_limits_soft.q_min, soft.q_min)
+    assert np.allclose(arm._backend.arm_limits_soft.q_min, soft.q_min)
     # 末端软限位同理
     arm.set_config("joyarm.end_soft_margins", {"q_upper": 0.1})
     assert np.allclose(arm.end_limits_soft.q_max, arm.end_limits.q_max - 0.1)
     assert np.allclose(arm._backend.end_limits_soft.q_max, arm.end_limits.q_max - 0.1)
     j = load_config("joyarm_dm")["joyarm"]                  # 还原
-    arm.set_config("joyarm.joint_soft_margins", j["joint_soft_margins"])
+    arm.set_config("joyarm.arm_soft_margins", j["arm_soft_margins"])
     arm.set_config("joyarm.end_soft_margins", j["end_soft_margins"])
-    # 白名单外拒绝（含 basic.utils 两代旧键路径）
-    for path in ("backend.name", "basic.utils.joint_limits_soft_margin",
-                 "basic.utils.joint_soft_margins"):
+    # 白名单外拒绝（含两代旧键路径）
+    for path in ("backend.name", "joyarm.q_home", "basic.utils.joint_soft_margins"):
         try:
             arm.set_config(path, "x")
             raise AssertionError(f"白名单外路径 {path!r} 应抛 ValueError")
@@ -157,89 +200,71 @@ def test_set_config_whitelist():
             pass
 
 
-def test_joint_soft_margins_from_config():
-    """config joyarm 段四键 margin → 本体/末端软限位（URDF / end.joints 硬限位内缩）。"""
+def test_arm_limits_from_config():
+    """硬限位自 config backend.*.joints 四键解析；软限位按 joyarm 段 margin 内缩。"""
     arm = _arm()
     cfg = load_config("joyarm_dm")
-    m = cfg["joyarm"]["joint_soft_margins"]
-    assert np.allclose(arm.joint_limits_soft.q_min,
-                       arm.joint_limits.q_min + np.asarray(m["q_lower"], float))
-    assert np.allclose(arm.joint_limits_soft.q_max,
-                       arm.joint_limits.q_max - np.asarray(m["q_upper"], float))
-    assert np.allclose(arm.joint_limits_soft.dq_max,
-                       arm.joint_limits.dq_max - np.asarray(m["dq"], float))
-    assert np.allclose(arm.joint_limits_soft.tau_max,
-                       arm.joint_limits.tau_max - np.asarray(m["tau"], float))
+    aj = cfg["backend"]["arm"]["joints"]
+    assert arm.n_arm == len(aj) == 6
+    assert np.allclose(arm.arm_limits.q_min, [j["q_min"] for j in aj])
+    assert np.allclose(arm.arm_limits.q_max, [j["q_max"] for j in aj])
+    assert np.allclose(arm.arm_limits.dq_max, [j["dq_max"] for j in aj])
+    assert np.allclose(arm.arm_limits.tau_max, [j["tau_max"] for j in aj])
+    m = cfg["joyarm"]["arm_soft_margins"]
+    assert np.allclose(arm.arm_limits_soft.q_min,
+                       arm.arm_limits.q_min + np.asarray(m["q_lower"], float))
+    assert np.allclose(arm.arm_limits_soft.q_max,
+                       arm.arm_limits.q_max - np.asarray(m["q_upper"], float))
+    assert np.allclose(arm.arm_limits_soft.dq_max,
+                       arm.arm_limits.dq_max - np.asarray(m["dq"], float))
+    assert np.allclose(arm.arm_limits_soft.tau_max,
+                       arm.arm_limits.tau_max - np.asarray(m["tau"], float))
     # 末端：end_limits 自 backend.end.joints 逐电机解析；margin 全 0 → 软=硬
     ej = cfg["backend"]["end"]["joints"][0]
+    assert arm.n_end == 1
     assert arm.end_limits is not None and np.allclose(arm.end_limits.q_min, ej["q_min"])
     assert np.allclose(arm.end_limits.q_max, ej["q_max"])
     assert np.array_equal(arm.end_limits_soft.q_min, arm.end_limits.q_min)
     # 后端基类守卫副本一致（构造参数传递 → 后端 __init__ 自建）
-    assert arm._backend is not None and \
-        np.allclose(arm._backend.arm_limits_soft.q_max, arm.joint_limits_soft.q_max) and \
-        np.allclose(arm._backend.end_limits_soft.tau_max, arm.end_limits_soft.tau_max)
+    assert np.allclose(arm._backend.arm_limits_soft.q_max, arm.arm_limits_soft.q_max) \
+        and np.allclose(arm._backend.end_limits_soft.tau_max, arm.end_limits_soft.tau_max)
 
 
-def test_old_margin_key_deprecated():
-    """basic.utils 两代旧键均告警且不生效；margin 一律以 joyarm 段为准。"""
-    cfg = copy.deepcopy(load_config("joyarm_dm"))
-    cfg.setdefault("basic", {})["utils"] = {
-        "joint_limits_soft_margin": 0.05, "joint_soft_margins": {"q_upper": 0.5}}
-
-    class _Cap(logging.Handler):
-        def __init__(self):
-            super().__init__()
-            self.msgs = []
-
-        def emit(self, record):
-            self.msgs.append(record.getMessage())
-
-    cap = _Cap()
-    log = logging.getLogger("joyarm_core.joyarm")
-    log.addHandler(cap)
-    try:
-        arm = JoyArm(model="joyarm_dm", config=cfg)
-    finally:
-        log.removeHandler(cap)
-    assert len([m for m in cap.msgs if "迁移" in m]) == 2
-    m = load_config("joyarm_dm")["joyarm"]["joint_soft_margins"]
-    assert np.allclose(arm.joint_limits_soft.q_max,
-                       arm.joint_limits.q_max - np.asarray(m["q_upper"], float))
-
-
-def test_check_config_clean_passes():
+def test_feature_poses():
+    """特征位形：zero/neutral 按自由度全零（不经 config）；home 自 config 并可裁剪。"""
     arm = _arm()
-    arm.check_config()          # 正常 → 静默通过（异常则 ValueError）
+    assert np.array_equal(arm.arm_zero, np.zeros(6)) and arm.arm_zero.shape == (6,)
+    assert np.array_equal(arm.arm_neutral, np.zeros(6))
+    assert np.array_equal(arm.end_zero, np.zeros(1)) and arm.end_zero.shape == (1,)
+    assert np.array_equal(arm.end_neutral, np.zeros(1))
+    assert np.array_equal(arm.arm_home, np.zeros(6))     # config arm_home 全零
+    assert np.array_equal(arm.end_home, np.zeros(1))     # config end_home 全零
+    # home 越限自动裁剪并告警
+    cfg = copy.deepcopy(load_config("joyarm_dm"))
+    cfg["joyarm"]["arm_home"] = [9.0] * 6
+    arm2 = JoyArm(model="joyarm_dm", config=cfg)
+    assert np.allclose(arm2.arm_home, arm2.arm_limits.q_max)   # 裁到硬限位
 
 
-def test_check_config_detects_problems():
-    cfg = load_config("joyarm_dm")
-    # q_home 长度错 + backend 关节数不符（bogus 注册名走软失败架构，由门面调用报错）
-    cfg = copy.deepcopy(cfg)
-    cfg["joyarm"]["q_home"] = [0.0, 0.0]
-    cfg["robotics"]["ikine"] = "bogus"
-    cfg["backend"]["arm"]["joints"] = cfg["backend"]["arm"]["joints"][:4]
-    arm = JoyArm(model="joyarm_dm", config=cfg)
+def test_check_config_static():
+    """check_config 静态自检：通过则静默；坏配置一次列出全部问题。"""
+    JoyArm.check_config("joyarm_dm", load_config("joyarm_dm"))   # 正常 → 静默通过
+    cfg = copy.deepcopy(load_config("joyarm_dm"))
+    cfg["joyarm"]["arm_home"] = [0.0, 0.0]                       # 长度错
+    cfg["backend"]["arm"]["joints"][0].pop("q_min")              # 限位键缺失
     try:
-        arm.check_config()
+        JoyArm.check_config("joyarm_dm", cfg)
         raise AssertionError("坏配置应抛 ValueError")
     except ValueError as e:
-        assert "q_home" in str(e) and "backend.arm.joints" in str(e)
-    # 未加载域的门面调用显性报错
-    try:
-        arm.ikine(Pose(), "ee", np.zeros(6))
-        raise AssertionError("未加载 ikine 应抛 RuntimeError")
-    except RuntimeError:
-        pass
+        assert "arm_home" in str(e) and "q_min" in str(e)
 
 
 def test_offline_execution_raises():
     """离线语义：限位采样等纯计算可用、执行类 RuntimeError。"""
     arm = _arm()
-    q = arm.rand_q(rng=np.random.default_rng(1))
-    assert q.shape == (arm.n,)
-    for fn in (arm.get_arm_state, arm.enable_arm, arm.end_open):
+    q = arm.rand_q_arm(rng=np.random.default_rng(1))
+    assert q.shape == (arm.n_arm,)
+    for fn in (arm.get_arm_state, arm.enable_arm, arm.set_end_open):
         try:
             fn()
             raise AssertionError(f"{fn.__name__} 离线应抛 RuntimeError")
@@ -332,19 +357,17 @@ def test_traj_frame_and_planner():
     except ValueError:
         assert len(calls) == 1
 
-    # JoyArm 轨迹桥：默认 None 初始态；set/get 对应；连续 set 取最新
+    # JoyArm 轨迹桥：默认 None 初始态；set/get 对应；连续 set 取最新（深拷贝隔离）
     arm = _arm()
     assert arm.get_target_traj() is None and arm.get_current_frame() is None
     arm.set_target_traj([TrajFrame(time=10.0, q=np.zeros(6))])
     assert len(arm.get_target_traj()) == 1
     arm.set_target_traj(TrajFrame(time=11.0, q=np.zeros(6)))   # 单帧归一
     assert len(arm.get_target_traj()) == 1 and arm.get_target_traj()[0].time == 11.0
-    fr1 = TrajFrame(time=20.0, q=np.ones(6))
-    arm.set_current_frame(fr1)
-    assert arm.get_current_frame() is fr1
-    fr2 = TrajFrame(time=20.1, q=np.ones(6))
-    arm.set_current_frame(fr2)
-    assert arm.get_current_frame() is fr2
+    arm.set_current_frame(TrajFrame(time=20.0, q=np.ones(6)))
+    assert arm.get_current_frame().time == 20.0
+    arm.set_current_frame(TrajFrame(time=20.1, q=np.ones(6)))
+    assert arm.get_current_frame().time == 20.1
 
     # Trajectory / TrajectorySpace 已删除，不可再导入
     import joyarm_core
@@ -354,7 +377,7 @@ def test_traj_frame_and_planner():
 
 def test_controller_step():
     """Controller.step 模板：状态缺省现读、指令原样下发（限位守卫统一在后端基类）。"""
-    class FakeArm:                       # 鸭子契约放宽：无需 joint_limits_soft
+    class FakeArm:                       # 鸭子契约放宽：无需 arm_limits_soft
         def __init__(self):
             self.state = ArmState()
             self.reads = 0
@@ -395,19 +418,42 @@ def test_repr_contains_state():
 # ----------------------------------------------------------
 # 运动便利与安全层（FakeBackend 注入离线测；_arm 单例须还原）
 # ----------------------------------------------------------
-def _fake_backend(q0=None, converge: float = 0.5, n: int = 6) -> Backend:
-    """离线哑后端：记录全部调用；q 状态机每次读状态向最后位置目标靠近 converge 比例。"""
+def _fake_backend(q0=None, converge: float = 0.5, n: int = 6, enabled: bool = True) -> Backend:
+    """离线哑后端：记录全部调用；q 状态机每次读状态向最后位置目标靠近 converge 比例。
+
+    模式缓存（set/read_mode_*）与使能位语义同 backend_dm：read_mode_* 离线可查、
+    各电机模式唯一才返回；state.enabled 由 ``enabled`` 参数控制。
+    """
 
     def _init(self):
         Backend.__init__(self, {})
         self.calls = []                      # (方法名, 参数...)
         self._q = np.zeros(n) if q0 is None else np.array(q0, dtype=float)
         self._target = self._q.copy()
+        self._mode_arm: dict = {}            # 电机名 → 模式（空=未设置）
+        self._mode_end: dict = {}
 
     def _rec(name):
         def _m(self, *a, **k):
             self.calls.append((name,) + a)
         return _m
+
+    def _set_mode_arm(self, mode, joint=None):
+        self.calls.append(("set_mode_arm", mode, joint))
+        for i in range(n):
+            self._mode_arm[f"joint{i + 1}"] = mode
+
+    def _read_mode_arm(self, joint=None):
+        vals = list(self._mode_arm.values())
+        return vals[0] if len(self._mode_arm) == n and len(set(vals)) == 1 else None
+
+    def _set_mode_end(self, mode, joint=None):
+        self.calls.append(("set_mode_end", mode, joint))
+        self._mode_end["gripper"] = mode
+
+    def _read_mode_end(self, joint=None):
+        vals = list(self._mode_end.values())
+        return vals[0] if len(self._mode_end) == 1 else None
 
     def _pos(self, q, joint=None):
         self._target = np.asarray(q, dtype=float).copy()
@@ -421,23 +467,32 @@ def _fake_backend(q0=None, converge: float = 0.5, n: int = 6) -> Backend:
 
     def _read_state(self, joint=None):
         self._q = self._q + converge * (self._target - self._q)   # 模真机跟随
+        ok = np.full(n, enabled, dtype=bool)
         return ArmState(joint=JointState(q=self._q.copy(), dq=np.zeros(n),
-                                         tau=np.zeros(n)))
+                                         tau=np.zeros(n), enabled=ok,
+                                         comm_ok=np.ones(n, dtype=bool),
+                                         error=np.zeros(n, dtype=bool),
+                                         angle_ok=np.ones(n, dtype=bool)))
 
     def _read_state_end(self, joint=None):
         self.calls.append(("read_state_end", joint))
-        return {"q": [0.0], "comm_ok": [True], "error": [False]}
+        return {"q": [0.0], "comm_ok": [True], "error": [False], "enabled": [True]}
+
+    def _pos_end(self, position, joint=None):
+        self.calls.append(("send_position_end", np.asarray(position, dtype=float).copy(), joint))
 
     ns = {"__init__": _init, "connected": property(lambda self: True),
           "_send_position_arm": _pos, "_send_mit_arm": _mit,
-          "read_state_arm": _read_state, "read_state_end": _read_state_end}
+          "_send_position_end": _pos_end,
+          "read_state_arm": _read_state, "read_state_end": _read_state_end,
+          "set_mode_arm": _set_mode_arm, "read_mode_arm": _read_mode_arm,
+          "set_mode_end": _set_mode_end, "read_mode_end": _read_mode_end}
     for name in ("connect", "disconnect",
                  "enable_arm", "disable_arm", "set_zero_arm", "clear_fault_arm",
-                 "set_mode_arm", "read_mode_arm", "read_param_arm", "write_param_arm",
+                 "read_param_arm", "write_param_arm",
                  "_send_velocity_arm",
                  "enable_end", "disable_end", "set_zero_end", "clear_fault_end",
-                 "set_mode_end", "read_mode_end",
-                 "_send_position_end", "_send_force_end", "_send_mit_end",
+                 "_send_force_end", "_send_mit_end",
                  "send_action_end", "read_param_end", "write_param_end"):
         ns[name] = _rec(name)
     return type("FakeBackend", (Backend,), ns)()
@@ -446,10 +501,10 @@ def _fake_backend(q0=None, converge: float = 0.5, n: int = 6) -> Backend:
 class _FakeSession:
     """单例 arm 换装哑后端并置为已连接；用毕 restore 还原（单例跨测试共享）。"""
 
-    def __init__(self, q0=None, converge: float = 0.5):
+    def __init__(self, q0=None, converge: float = 0.5, enabled: bool = True):
         self.arm = _arm()
         self._saved = (self.arm._backend, self.arm.connected)
-        self.be = _fake_backend(q0, converge, n=self.arm.n)
+        self.be = _fake_backend(q0, converge, n=self.arm.n_arm, enabled=enabled)
         self.arm._backend = self.be
         self.arm.connected = True
 
@@ -461,19 +516,73 @@ def test_deleted_redundant_apis():
     arm = _arm()
     for name in ("state", "qlow", "qhigh", "set_controller", "clamp_q", "is_q_valid"):
         assert not hasattr(arm, name), f"{name} 应已删除"
-    q = arm.rand_q(rng=np.random.default_rng(0))
-    assert q.shape == (arm.n,)                      # rand_q 保留，按软限位采样
+    q = arm.rand_q_arm(rng=np.random.default_rng(0))
+    assert q.shape == (arm.n_arm,)                # rand_q_arm：按本体软限位采样
 
 
 def test_joint_names_and_index():
     arm = _arm()
-    assert arm.joint_names == [f"joint{i+1}" for i in range(arm.n)]
-    assert arm.joint_index("joint3") == 2
+    assert arm.joint_names_arm == [f"joint{i+1}" for i in range(arm.n_arm)]
+    assert arm.joint_names_end == ["gripper"]
+    assert arm.joint_index_arm("joint3") == 2
+    assert arm.joint_index_end("gripper") == 0
     try:
-        arm.joint_index("bogus")
+        arm.joint_index_arm("bogus")
         raise AssertionError("未知名应抛 ValueError")
     except ValueError as e:
         assert "joint" in str(e)
+
+
+def test_require_guards():
+    """前置校验族：未切模式 / 模式不符 / 未使能均显性报错。"""
+    s = _FakeSession(q0=np.zeros(6))
+    try:
+        arm = s.arm
+        try:
+            arm.set_arm_command(ControlMode.POSITION, q=np.zeros(6))
+            raise AssertionError("未切模式应抛 RuntimeError")
+        except RuntimeError as e:
+            assert "set_mode_arm" in str(e)
+        arm.set_mode_arm(ControlMode.POSITION)
+        arm.set_arm_command(ControlMode.POSITION, q=np.zeros(6))   # 已切模式 → 通过
+        try:
+            arm.set_arm_command(ControlMode.MIT, q=np.zeros(6),
+                                dq=np.zeros(6), tau=np.zeros(6))
+            raise AssertionError("模式不符应抛 RuntimeError")
+        except RuntimeError:
+            pass
+    finally:
+        s.restore()
+    s2 = _FakeSession(q0=np.zeros(6), enabled=False)               # 未使能
+    try:
+        try:
+            s2.arm.move_j(np.zeros(6), t=0.01, wait_timeout=0.3)
+            raise AssertionError("未使能应抛 RuntimeError")
+        except RuntimeError as e:
+            assert "使能" in str(e)
+    finally:
+        s2.restore()
+
+
+def test_check_hardware_connects_and_disconnects():
+    """硬件自检自包含：临时连接（失能状态）→ 全部自检 → 断开；已连接则沿用。"""
+    s = _FakeSession()
+    try:
+        arm, be = s.arm, s.be
+        arm.connected = False
+        arm.check_hardware()                     # 通过则静默
+        names = [c[0] for c in be.calls]
+        assert "connect" in names and "disconnect" in names
+        assert names.index("connect") < names.index("disconnect")
+        assert not arm.connected
+        be.calls.clear()
+        arm.connect()                            # 已连接：沿用连接、检完不断开
+        arm.check_hardware()
+        names = [c[0] for c in be.calls]
+        assert "connect" in names and "disconnect" not in names
+        assert arm.connected
+    finally:
+        s.restore()
 
 
 def test_is_in_position_joint_branch():
@@ -496,10 +605,10 @@ def test_is_in_position_joint_branch():
         raise AssertionError("离线应抛 RuntimeError")
     except RuntimeError:
         pass
-    s2 = _FakeSession()                                          # pose 分支：fkine 未注册
+    s2 = _FakeSession()                                          # pose 分支：fkine 未配置
     try:
         s2.arm.is_in_position(pose=Pose())
-        raise AssertionError("fkine 未注册应抛 RuntimeError")
+        raise AssertionError("fkine 未配置应抛 RuntimeError")
     except RuntimeError:
         pass
     finally:
@@ -511,9 +620,9 @@ def test_lock_and_hold_position():
     try:
         arm, be = s.arm, s.be
         arm.lock_position()                                      # 急停锁定
-        assert be.calls[-2] == ("set_mode_arm", ControlMode.POSITION, None)
-        assert be.calls[-1][0] == "send_position_arm" and \
-            np.allclose(be.calls[-1][1], [0.1, -0.2, 0.3, 0, 0, 0])
+        assert ("set_mode_arm", ControlMode.POSITION, None) in be.calls
+        pos = [c for c in be.calls if c[0] == "send_position_arm"][-1]
+        assert np.allclose(pos[1], [0.1, -0.2, 0.3, 0, 0, 0])
         arm.hold_position()                                      # 原位保持（tau 前馈缺省 0）
         mit = [c for c in be.calls if c[0] == "send_mit_arm"][-1]
         assert np.allclose(mit[1], [0.1, -0.2, 0.3, 0, 0, 0])    # q=当前
@@ -521,7 +630,7 @@ def test_lock_and_hold_position():
         # 注入伪 dynamics → tau 前馈 = gravity(q)
         class _Dyn:
             def gravity(self, arm, q):
-                return np.full(arm.n, 2.5)
+                return np.full(arm.n_arm, 2.5)
         arm._dynamics_solvers["fake"] = _Dyn()
         arm._active_name["dynamics"] = "fake"
         try:
@@ -545,7 +654,7 @@ def test_move_j():
         ts, qs, _ = cubic_traj(np.zeros(6), target, 0.12, 200)
         assert len(frames) == len(ts)                            # 帧数 = 采样数
         assert np.allclose(np.array([f[1] for f in frames]), qs)  # 帧落在三次曲线上
-        assert ("set_mode_arm", ControlMode.POSITION, None) in be.calls[:2]
+        assert ("set_mode_arm", ControlMode.POSITION, None) in be.calls[:3]
         assert arm.is_in_position(q=target)                      # 到位收尾
     finally:
         s.restore()
@@ -553,7 +662,7 @@ def test_move_j():
     try:
         arm3, be3 = s3.arm, s3.be
         tgt = np.full(6, 5.0)                                    # 全关节越软上限
-        exp = clamp_to_limits(tgt, arm3.joint_limits_soft)       # 判定以裁剪后为准
+        exp = clamp_to_limits(tgt, arm3.arm_limits_soft)         # 判定以裁剪后为准
         arm3.move_j(tgt, t=0.02, wait_timeout=2.0)
         frames3 = [c for c in be3.calls if c[0] == "send_position_arm"]
         assert np.allclose(frames3[-1][1], exp)                  # 末帧 = 裁剪后目标
@@ -577,25 +686,22 @@ def test_move_j():
 
 
 def test_safe_home_zero_and_composition():
+    """安全起停（arm+end）：本体 MIT 阻抗流 + 末端位置模式；safe_zero = home → zero。"""
     s = _FakeSession(q0=np.full(6, 0.3))
     try:
         arm, be = s.arm, s.be
-        qz = clamp_to_limits(arm.q_zero, arm.joint_limits_soft)  # 软限位投影后 zero/home
+        qz = clamp_to_limits(arm.arm_zero, arm.arm_limits_soft)  # 软限位投影后 zero/home
         try:                                                      # home 前置校验
             arm.home_to_zero()
             raise AssertionError("不在 home 应抛 RuntimeError")
         except RuntimeError as e:
             assert "home" in str(e)
-        arm.safe_zero()                                           # 组合：lock → home → zero
-        frames = [c for c in be.calls if c[0] == "send_position_arm"]
-        assert np.allclose(frames[0][1], 0.3)                    # 首帧 = 急停锁定当前 q
-        assert np.allclose(frames[-1][1], qz)                    # 末帧 = 裁剪后 zero
-        assert arm.is_in_position(q=qz)
-        be.calls.clear()                                          # safe_home 单独
-        be._q = np.full(6, 0.2)
-        be._target = be._q.copy()
-        arm.safe_home(t=0.1)
-        assert np.allclose(be.calls[-1][1], qz)                  # 末帧 = 裁剪后 home
+        arm.safe_zero()                                           # 组合：home → home 检查 → zero
+        assert ("set_mode_arm", ControlMode.MIT, None) in be.calls   # MIT 阻抗模式
+        mits = [c for c in be.calls if c[0] == "send_mit_arm"]
+        assert mits and np.allclose(mits[-1][1], qz)             # 末帧 = 裁剪后 zero
+        end_pos = [c for c in be.calls if c[0] == "send_position_end"]
+        assert end_pos and np.allclose(end_pos[-1][1], arm.end_home)   # 末端随动（位置模式）
         assert arm.is_in_position(q=qz)
     finally:
         s.restore()

@@ -504,11 +504,11 @@ class BackendDM(Backend):
         ``tau_max`` / ``force_to_tau``）。
     """
 
-    def __init__(self, cfg: dict, joint_limits: Optional[JointLimits] = None,
-                 joint_soft_margins: Optional[dict] = None,
+    def __init__(self, cfg: dict, arm_limits: Optional[JointLimits] = None,
+                 arm_soft_margins: Optional[dict] = None,
                  end_soft_margins: Optional[dict] = None) -> None:
-        super().__init__(cfg, joint_limits=joint_limits,
-                         joint_soft_margins=joint_soft_margins,
+        super().__init__(cfg, arm_limits=arm_limits,
+                         arm_soft_margins=arm_soft_margins,
                          end_soft_margins=end_soft_margins)
         self._arm_cfg = cfg.get("arm") or {}
         self._end_cfg = cfg.get("end") or {}

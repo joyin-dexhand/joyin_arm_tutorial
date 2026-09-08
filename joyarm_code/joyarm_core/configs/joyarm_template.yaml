@@ -4,7 +4,7 @@
 # 用途：新型号开发时复制本文件为 configs/<型号>.yaml（命名链三处一致：文件名 = basic.name 字段 = 工厂入参 joyarm_factory("<型号>")），再按真机逐段填写；
 #      配套动作：robot_model/<robot>/ 放 URDF+meshes、按需新写 backend/backend_<型号>.py（REGISTRY 一行；型号与整机后端 1:1）。
 # 说明：本文件数值为 参考值，仅示范结构与单位，真机须按标定修改；
-#      robotics 各域 REGISTRY 默认为空表，注册名未实现时告警置空。
+#      robotics 各域 REGISTRY 默认为空表
 # ===================================================================
 
 # -------------------------------------------------------------------
@@ -38,7 +38,7 @@ joyarm:
   # 关节软限位 margin（绝对余量）：硬限位向内收，逐关节设置
   # 四键：q_upper/q_lower(rad)、dq(rad/s)、tau(N·m)；每键写标量（全关节统一）
   # 或 n 元列表（逐关节，如 [0.28, 0.16, 0.16, 0.17, 0.16, 0.31]）；缺省键 = 0（该项软=硬）
-  joint_soft_margins: # 本体（硬限位 = URDF limit 字段）
+  arm_soft_margins: # 本体（硬限位 = backend.arm.joints 四键，与 URDF limit 标定一致）
     q_upper: 0.10 # rad：软上限 = URDF upper − q_upper
     q_lower: 0.10 # rad：软下限 = URDF lower + q_lower
     dq: 1.0 # rad/s：软速度上限 = URDF velocity − dq
@@ -57,36 +57,36 @@ joyarm:
     f_max: 10.0 # N
     t_max: 3.0 # N·m
 
-  # 特征位形（rad，n 维与 URDF 关节数一致）
-  q_zero: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 硬件零位（编码器标零基准）
-  q_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 上电初始位形
-  q_neutral: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # 数值求解默认初值（如 IK 迭代起点）
+  # 特征位形（rad）：zero/neutral 按自由度全零（代码实现）；
+  arm_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  end_home: [0.0]
 
 # -------------------------------------------------------------------
 # 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按 REGISTRY 注册名加载激活）
 # 字典化配置：字段值为单个规格或规格列表（全部加载进 joyarm 成员字典，首个默认激活）；
 # 规格 = 注册名字符串 或 {name: 注册名, **构造参数}；运行期 arm.set_solver(域, 名) 切换。
+# 注册名约定：与求解器类名对应（类名小写 + 下划线，如 FkinePin → "fkine_pin"）。
 # -------------------------------------------------------------------
-robotics:
-  fkine:
-    - { name: mdh }
-  ikine:
-    - { name: analytic6r, tol: 1.0e-4, iters: 200 }
-  jacobian:
-    - { name: geometric }
-  dynamics:
-    - { name: lagrangian }
-  traj:
-    - { name: auto, plan_hz: 1.0, sample_hz: 200.0 }
-  control:
-    - {
-        name: auto,
-        type: joint_mit,
-        ctrl_hz: 200.0,
-        kp: [20.0, 20.0, 20.0, 8.0, 8.0, 8.0],
-        kd: [3.0, 3.0, 3.0, 1.0, 1.0, 1.0],
-      } # position_follow / velocity_follow / drag_gravity / joint_mit / osc（type 选择）
-    - { name: force, type: impedance } # impedance / hybrid（Ch6/Ch9）
+# robotics:
+#   fkine:
+#     - { name: mdh }
+#   ikine:
+#     - { name: analytic6r, tol: 1.0e-4, iters: 200 }
+#   jacobian:
+#     - { name: geometric }
+#   dynamics:
+#     - { name: lagrangian }
+#   traj:
+#     - { name: auto, plan_hz: 1.0, sample_hz: 200.0 }
+#   control:
+#     - {
+#         name: auto,
+#         type: joint_mit,
+#         ctrl_hz: 200.0,
+#         kp: [20.0, 20.0, 20.0, 8.0, 8.0, 8.0],
+#         kd: [3.0, 3.0, 3.0, 1.0, 1.0, 1.0],
+#       } # position_follow / velocity_follow / drag_gravity / joint_mit / osc（type 选择）
+#     - { name: force, type: impedance } # impedance / hybrid
 
 # -------------------------------------------------------------------
 # 通信层（backend）：arm 与 end 的硬件通讯（字段以 DM 实现为参照）
@@ -107,6 +107,11 @@ backend:
         motor_id: 0x01 # CAN 指令 ID（MIT 帧 ID = motor_id）
         feedback_id: 0x11 # 应答帧 CAN ID（RX 状态分发表键）
         model: "4340P" # 电机型号（定 MIT 打包/解包量程：4310 / 4340 / 4340P）
+        # —— 限位四键（硬限位，与 end.joints 同构；数值须与 URDF limit 标定保持一致）——
+        q_min: -2.8 # 行程下限（rad）
+        q_max: 2.8 # 行程上限（rad）
+        dq_max: 50.0 # 速度上限（rad/s）
+        tau_max: 27.0 # 力矩上限（N·m）
         MIT: # MIT 模式增益回退（指令未传 kp/kd 时使用）
           kp: 120.0
           kd: 8.0
@@ -116,7 +121,7 @@ backend:
           pos_kp: 150.0 # 位置环 Kp
           pos_ki: 0.5 # 位置环 Ki
           vlim: 5.0 # 位置/速度指令限速（rad/s）
-      # joint2 … jointN：同构复制上一条目，改 name / motor_id / feedback_id 与增益
+      # joint2 … jointN：同构复制上一条目，改 name / motor_id / feedback_id / 限位四键与增益
 
   end: # 末端子段（执行器电机组，可多电机如灵巧手；无末端型号可整段删除）
     channel: /dev/ttyACM0 # 与 arm 相同 → 共享总线；不同 → 独立总线（互不干扰）
@@ -128,7 +133,7 @@ backend:
         motor_id: 0x07
         feedback_id: 0x17
         model: "4310"
-        # —— 末端特有键（arm 关节不配置）：行程/速度/力矩限位 + 力度换算 ——
+        # —— 限位四键（与 arm 关节同构）+ 末端特有力度换算 ——
         q_min: -1.8 # 行程下限（rad，张开位）
         q_max: 3.8 # 行程上限（rad，闭合位）
         dq_max: 2.0 # 速度上限（rad/s）

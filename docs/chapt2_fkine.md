@@ -586,7 +586,7 @@ T_ee = pin.updateFramePlacement(model, data, model.getFrameId("link_end")) # 获
 | 模块 | 功能 | 实现要点 |
 |:---:|:---:|:---:|
 | 模型加载 | 加载 JoyArm 的 URDF 模型 | 调用 `joyarm_core` 的 `JoyArm` 类 |
-| 关节采样 | 六维关节空间均匀随机采样 $N$ 组 | 调用 `arm.rand_q(N)`（软限位内采样） |
+| 关节采样 | 六维关节空间均匀随机采样 $N$ 组 | 调用 `arm.rand_q_arm(N)`（本体软限位内采样） |
 | 正运动学 | 对每组关节角求末端位置 | Pinocchio 批量正解（同 [4.3.2 节](#432-用库自动求解正运动学)） |
 | 可视化 | MeshCat 3D 绘点云 | 按到基座距离着色，动态刷新、逐批添加点 |
 

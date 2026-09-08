@@ -224,8 +224,8 @@ class JointLimits(_ArrayEqMixin):
 
     所有数组维度均为 ``(n,)``，``n`` 为机械臂自由度数。
 
-    - **硬限位**实例（``JoyArm.joint_limits``）：URDF/电机物理极限；
-    - **软限位**实例（``JoyArm.joint_limits_soft``）：略窄于硬限位、留余量。
+    - **硬限位**实例（如 ``JoyArm.arm_limits``）：URDF/电机物理极限；
+    - **软限位**实例（如 ``JoyArm.arm_limits_soft``）：略窄于硬限位、留余量。
 
     :ivar q_min: ``(n,)`` 关节角下限，弧度。
     :ivar q_max: ``(n,)`` 关节角上限，弧度。

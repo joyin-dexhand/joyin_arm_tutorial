@@ -120,10 +120,10 @@ class JoyArmFullTest:
         diff: list[tuple[str, str, float, float]] = []
         j = cfg.setdefault("joyarm", {})
         n = len(cfg["backend"]["arm"]["joints"])
-        old = j.get("joint_soft_margins")
-        j["joint_soft_margins"] = {k: [SOFT_MARGIN] * n
+        old = j.get("arm_soft_margins")
+        j["arm_soft_margins"] = {k: [SOFT_MARGIN] * n
                                    for k in ("q_upper", "q_lower", "dq", "tau")}
-        diff.append(("joyarm", "joint_soft_margins", old, j["joint_soft_margins"]))
+        diff.append(("joyarm", "arm_soft_margins", old, j["arm_soft_margins"]))
         ne = len(cfg["backend"]["end"]["joints"])
         old_e = j.get("end_soft_margins")
         j["end_soft_margins"] = {k: [SOFT_MARGIN] * ne
@@ -215,8 +215,8 @@ class JoyArmFullTest:
     def _safe_dir(self, i: int) -> int:
         """第 i 关节的安全运动方向：朝限位区间较宽一侧；**该侧余量不足
         MOVE_AMP 时换向**（q 贴边时"宽侧"可能是零余量方向）。"""
-        q, lo, hi = (self.q_base[i], self.arm.joint_limits_soft.q_min[i],
-                        self.arm.joint_limits_soft.q_max[i])
+        q, lo, hi = (self.q_base[i], self.arm.arm_limits_soft.q_min[i],
+                        self.arm.arm_limits_soft.q_max[i])
         d = 1 if (q - lo) >= (hi - q) else -1
         if d > 0 and (hi - q) < MOVE_AMP:
             d = -1
@@ -242,7 +242,7 @@ class JoyArmFullTest:
             ("L0-工厂与软失败", "低", "joyarm_factory 正常创建 + 未知型号返回 None（离线第二实例，不连接）", self.step_factory),
             ("L0-配置 API", "低", "get_config 深拷贝 / set_config 白名单与越界拒绝", self.step_config_api),
             ("L0-六域空表与门面守卫", "低", "各域默认空表（教学过渡态）、未加载域门面 RuntimeError", self.step_domains),
-            ("L0-采样与限位", "低", "rand_q + utils clamp_to_limits 裁剪；margin=0 下软限位==URDF 硬限位", self.step_sampling),
+            ("L0-采样与限位", "低", "rand_q_arm + utils clamp_to_limits 裁剪；margin=0 下软限位==硬限位（config 四键）", self.step_sampling),
             ("L0-配置自检", "低", "check_config 正常静默通过（异常则 ValueError）", self.step_check_config),
             # ---- L1 连接只读层（不使能）----
             ("L1-connect", "低", "建立通信（共享总线，电机保持失能）；离线守卫抽查", self.step_connect),
@@ -262,7 +262,7 @@ class JoyArmFullTest:
             ("L3-persist 存闪存", "高", "acc 原值写入并存闪存（自动失能）；掉电不丢", self.step_persist),
             # ---- L4 末端层 ----
             ("L4-末端位置往返", "中", "POSITION 使能+保持+±0.2 rad 往返（标量/序列两种形式）", self.step_end_pos),
-            ("L4-末端动作与裁剪", "中", "end_open/close/zero + 越行程裁剪（99 rad→q_max）+ 非法动作拒绝", self.step_end_actions),
+            ("L4-末端动作与裁剪", "中", "set_end_open/close/zero + 越行程裁剪（99 rad→q_max）+ 非法动作拒绝", self.step_end_actions),
             ("L4-末端力度控制", "中", "set_end_force 0.5 N（MIT 近似闭合，前馈封顶 0.5 N·m）；⚠ 勿放手指", self.step_end_force),
             ("L4-末端标零（自动恢复）", "高", "set_zero_end → 回原零位 → 恢复标零 → 回原位置 → 验证", self.step_set_zero_end),
             # ---- L5 本体位置层 ----
@@ -297,13 +297,13 @@ class JoyArmFullTest:
         print(f"✓ 教学数据（config 内读取）：arm_mdh_and_limits {len(mdh)}×{len(mdh[0])}"
               f"（MDH 白盒链路，Ch2 教学算法使用）")
         print(f"✓ 软限位 margin={SOFT_MARGIN}："
-              f"q_min={_fmt(arm.joint_limits_soft.q_min, 2)} "
-              f"q_max={_fmt(arm.joint_limits_soft.q_max, 2)}")
+              f"q_min={_fmt(arm.arm_limits_soft.q_min, 2)} "
+              f"q_max={_fmt(arm.arm_limits_soft.q_max, 2)}")
         self._expect(RuntimeError, lambda: arm.damping_mode(), "未连接调用 damping_mode")
 
     def step_factory(self) -> None:
         a = joyarm_factory("joyarm_dm")
-        assert a is not None and a.n == 6
+        assert a is not None and a.n_arm == 6
         assert joyarm_factory("joyarm_nx") is None        # 软失败：None + 日志
         print("✓ 工厂：joyarm_dm 创建成功；未知型号返回 None（失败信息见日志）")
 
@@ -312,7 +312,7 @@ class JoyArmFullTest:
         cfg = arm.get_config()
         cfg["basic"]["name"] = "hacked"
         assert arm.get_config()["basic"]["name"] == "joyarm_dm"   # 深拷贝
-        assert np.allclose(arm.joint_limits_soft.q_min, arm.joint_limits.q_min)  # margin=0 → 软=硬
+        assert np.allclose(arm.arm_limits_soft.q_min, arm.arm_limits.q_min)  # margin=0 → 软=硬
         self._expect(ValueError, lambda: arm.set_config("backend.name", "x"),
                      "set_config 白名单外路径")
         print("✓ 配置 API：深拷贝快照 / 越界拒绝")
@@ -322,20 +322,20 @@ class JoyArmFullTest:
         for d in ("fkine", "ikine", "jacobian", "dynamics", "traj", "control"):
             assert arm.list_solvers(d) == [], f"{d} 应为空（教学过渡态）"
         self._expect(RuntimeError,
-                     lambda: arm.fkine(arm.q_zero, "ee"), "调用未加载域 fkine 门面")
+                     lambda: arm.fkine(arm.arm_zero, "ee"), "调用未加载域 fkine 门面")
         print("✓ 六域默认空表；未加载域门面显性 RuntimeError（各章实现注册后接入）")
 
     def step_sampling(self) -> None:
         arm = self.arm
         rng = np.random.default_rng(0)
-        q = arm.rand_q(rng=rng)
-        clipped = clamp_to_limits(q + 10.0, arm.joint_limits_soft)
-        assert np.allclose(q, clamp_to_limits(q, arm.joint_limits_soft))  # 采样在限位内
+        q = arm.rand_q_arm(rng=rng)
+        clipped = clamp_to_limits(q + 10.0, arm.arm_limits_soft)
+        assert np.allclose(q, clamp_to_limits(q, arm.arm_limits_soft))  # 采样在限位内
         assert not np.allclose(q + 10.0, clipped)                        # 越限被裁
-        print(f"✓ 采样/裁剪：rand_q {q.round(2)}（软=硬限位内，经 utils.clamp_to_limits）")
+        print(f"✓ 采样/裁剪：rand_q_arm {q.round(2)}（软=硬限位内，经 utils.clamp_to_limits）")
 
     def step_check_config(self) -> None:
-        self.arm.check_config()    # 正常 → 静默通过；异常 → ValueError 列出全部问题
+        JoyArm.check_config(self.arm.model, self.arm.get_config())    # 正常 → 静默通过；异常 → ValueError 列出全部问题
         print("✓ check_config：通过")
 
     # ================= L1 连接只读层 =================
@@ -364,11 +364,11 @@ class JoyArmFullTest:
 
     def step_qbase(self) -> None:
         q = self._q_now()
-        self.q_base = clamp_to_limits(q, self.arm.joint_limits_soft)
+        self.q_base = clamp_to_limits(q, self.arm.arm_limits_soft)
         print(f"  当前 q：{_fmt(q)}")
         print(f"  q_base（夹紧后，后续小幅运动基准）：{_fmt(self.q_base)}")
-        assert np.all(self.q_base >= self.arm.joint_limits_soft.q_min - 1e-9)
-        assert np.all(self.q_base <= self.arm.joint_limits_soft.q_max + 1e-9)
+        assert np.all(self.q_base >= self.arm.arm_limits_soft.q_min - 1e-9)
+        assert np.all(self.q_base <= self.arm.arm_limits_soft.q_max + 1e-9)
         print("✓ 安全基准位形已建立")
 
     # ================= L2 使能层 =================
@@ -553,8 +553,8 @@ class JoyArmFullTest:
         worst = 0.0
         for j, nm in enumerate(self.arm_names):
             target = float(np.clip(self.q_base[j] + self._safe_dir(j) * MOVE_AMP,
-                                   self.arm.joint_limits_soft.q_min[j],
-                                   self.arm.joint_limits_soft.q_max[j]))
+                                   self.arm.arm_limits_soft.q_min[j],
+                                   self.arm.arm_limits_soft.q_max[j]))
             self.arm.set_arm_command(ControlMode.POSITION, q=[target], joint=j)
             ok1 = self._wait_arm_q(j, target)
             self.arm.set_arm_command(ControlMode.POSITION, q=[float(self.q_base[j])], joint=j)
@@ -627,8 +627,8 @@ class JoyArmFullTest:
         arm = self.arm
         j = 0
         target = float(np.clip(self.q_base[j] + self._safe_dir(j) * 0.05,
-                               arm.joint_limits_soft.q_min[j],
-                               arm.joint_limits_soft.q_max[j]))
+                               arm.arm_limits_soft.q_min[j],
+                               arm.arm_limits_soft.q_max[j]))
         q_t = np.asarray(self.q_base, dtype=float).copy()
         q_t[j] = target
         arm.move_j(q_t, t=0.6, wait_timeout=5.0)
@@ -647,9 +647,9 @@ class JoyArmFullTest:
         """L8：safe_home → home_to_zero（safe_zero 组合的大范围运动，需清场）。"""
         arm = self.arm
         arm.safe_home(t=3.0, wait_timeout=10.0)
-        assert arm.is_in_position(q=arm.q_home)
+        assert arm.is_in_position(q=arm.arm_home)
         arm.home_to_zero(t=3.0, wait_timeout=10.0)
-        assert arm.is_in_position(q=arm.q_zero)
+        assert arm.is_in_position(q=arm.arm_zero)
         print("✓ safe_home / home_to_zero：安全回零族通过（当前位于 zero）")
 
     def step_clear_fault(self) -> None:
