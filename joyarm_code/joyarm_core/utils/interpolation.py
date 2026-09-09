@@ -1,13 +1,4 @@
-"""规划算法（关节空间 + 笛卡尔空间轨迹规划方法的统一存放地）。
-
-本模块只放**纯函数**（无 ``arm`` 依赖、可独立复用与测试）：三次/五次多项式、
-速度启发式途经点插值、笛卡尔直线/圆弧等规划方法都在此实现。**轨迹规划器**
-（``TrajPlanner`` 子类，Ch5 教学内容）与上层应用（如 ``JoyArm.move_j``）对
-本模块**导入并封装委托**——不在求解器内部直接实现规划方法，因为外部会复用
-同一批规划函数。
-
-本章先实现关节空间点到点三次多项式（``cubic_q`` / ``cubic_traj``），
-后续章节的规划方法陆续加入本模块。
+"""关节空间插值原语（无 ``arm`` 依赖的纯函数，仅依赖 numpy）。
 """
 from __future__ import annotations
 
@@ -45,7 +36,7 @@ def cubic_traj(q0, q1, t: float, rate: float = 100.0):
     :param t: 总时长（秒）；``t ≤ 0`` 退化为单帧直发目标。
     :param rate: 采样率（Hz）。
     :return: ``(ts, q, dq)``——时间戳 ``(N,)``、关节角 ``(N, n)``、关节速度
-        ``(N, n)``（``dq/dt`` 解析导数 ``6(s−s²)·Δq/t``，供速度前馈/规划器复用）。
+        ``(N, n)``（``dq/dt`` 解析导数 ``6(s−s²)·Δq/t`）。
     """
     q0, q1 = np.asarray(q0, dtype=float), np.asarray(q1, dtype=float)
     t, rate = float(t), float(rate)

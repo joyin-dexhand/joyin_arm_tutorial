@@ -14,10 +14,7 @@ import numpy as np
 
 from ...utils.types import Pose
 
-try:
-    import pinocchio as pin
-except ImportError:  # pragma: no cover
-    pin = None
+import pinocchio as pin
 
 __all__ = ["FkineSolver"]
 
@@ -26,7 +23,7 @@ class FkineSolver(ABC):
     """正运动学策略接口：关节角 → 末端（或任意帧）位姿。"""
 
     # ----------------------------------------------------------
-    # fkine 抽象内核（frame_pose：单帧位姿，各章实现）
+    # fkine 抽象内核（frame_pose：单帧位姿）
     # ----------------------------------------------------------
     @abstractmethod
     def frame_pose(self, arm, q: np.ndarray, frame: Union[str, int]) -> Pose:

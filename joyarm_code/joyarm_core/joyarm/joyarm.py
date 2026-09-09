@@ -17,6 +17,7 @@ import pinocchio as pin
 from ..utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
 from ..utils.transforms import quat_conj, quat_mul, quat_to_axis_angle
 from ..utils.types import ArmState, ControlMode, JointLimits, Pose, TcpLimits, TrajFrame
+from ..utils.interpolation import cubic_traj as _cubic_traj
 
 from ..backend import Backend, get_backend
 from ..robotics.fkine import REGISTRY as _FKINE_REGISTRY
@@ -24,7 +25,6 @@ from ..robotics.ikine import REGISTRY as _IKINE_REGISTRY
 from ..robotics.jacobian import REGISTRY as _JACOBIAN_REGISTRY
 from ..robotics.dynamics import REGISTRY as _DYNAMICS_REGISTRY
 from ..robotics.trajectory import REGISTRY as _TRAJ_REGISTRY
-from ..robotics.trajectory import cubic_traj as _cubic_traj
 from ..robotics.control import REGISTRY as _CONTROL_REGISTRY
 
 __all__ = ["JoyArm", "load_config"]
@@ -761,22 +761,31 @@ class JoyArm:
         """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端帧系 / 基座系）。"""
         return self._active("jacobian").jac(self, q, frame=frame, ref=ref)
 
-    def vel_kine(self, q: np.ndarray, dq: np.ndarray,
-                 frame: Union[str, int], ref: str = "base"):
-        """速度运动学 ``V = J(q)·q̇``（微分运动学正解）。
+    def fkine_vel(self, q: np.ndarray, dq: np.ndarray,
+                  frame: Union[str, int], ref: str = "base"):
+        """速度正解 ``V = J(q)·q̇``（微分运动学正解）。
 
         :param q: 关节角 ``(n_arm,)``；``dq`` 关节速度 ``(n_arm,)``（rad/s）。
         :return: ``(6,)`` 末端速度旋量（线速度 m/s + 角速度 rad/s，参考系同 ``ref``）。
         """
-        return self._active("jacobian").vel_kine(self, q, dq, frame, ref=ref)
+        return self._active("jacobian").fkine_vel(self, q, dq, frame, ref=ref)
+
+    def ikine_vel(self, q: np.ndarray, V: np.ndarray,
+                  frame: Union[str, int], ref: str = "base",
+                  damping: float = 1e-3) -> np.ndarray:
+        """速度逆解（微分逆解）``q̇ = J*·V``（阻尼最小二乘：冗余臂最小范数解，
+        奇异附近阻尼正则化）。
+
+        :param q: 关节角 ``(n_arm,)``；``V`` 末端速度旋量 ``(6,)``（参考系同 ``ref``）。
+        :param damping: DLS 阻尼 λ（默认 ``1e-3``）。
+        :return: ``(n_arm,)`` 关节速度（rad/s）。
+        """
+        return self._active("jacobian").ikine_vel(
+            self, q, V, frame, ref=ref, damping=damping)
 
     def manipulability(self, q: np.ndarray, frame: Union[str, int]) -> float:
         """Yoshikawa 可操作度（雅可比衍生量）。"""
         return self._active("jacobian").manipulability(self, q, frame=frame)
-
-    def cond_number(self, q: np.ndarray, frame: Union[str, int]) -> float:
-        """雅可比条件数（雅可比衍生量）。"""
-        return self._active("jacobian").cond_number(self, q, frame=frame)
 
     def statics(self, q: np.ndarray, F: np.ndarray, frame: Union[str, int]):
         """静力学 ``τ = JᵀF``：``F`` 为 ``(6,)`` 末端六维力旋量（力 N + 力矩
@@ -1195,7 +1204,7 @@ class JoyArm:
         """关节空间点到点阻塞运动（三次多项式插值，位置模式指令流）——
         **独立功能，与规划器并行**。
 
-        边界：本方法直接借 ``robotics.trajectory.planning`` 规划纯函数 + 位置
+        边界：本方法直接借 ``utils.interpolation`` 插值原语 + 位置
         指令流下发，**不经**「轨迹桥 → 规划器 → 控制器」管线，仅供直接调用。
         **常规运动**一律走 ``set_target_traj → 规划器 → 控制器 → set_arm_command``
         管线；安全回位（``safe_*``）走 MIT 阻抗模式（见 :meth:`safe_home`）。

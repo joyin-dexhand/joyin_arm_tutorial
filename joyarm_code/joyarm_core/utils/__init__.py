@@ -5,6 +5,7 @@
 - :mod:`joyarm_core.utils.transforms` ：  SE(3)/SO(3) 数学（旋转矩阵、RPY、轴角、四元数、齐次变换、球面插值 slerp）。
 - :mod:`joyarm_core.utils.types`      ：  跨层共享的 ``@dataclass`` 数据类型（``ArmState``、``Pose``、``JointLimits`` 等）与枚举（``ControlMode`` 等）。
 - :mod:`joyarm_core.utils.limits`     ：  ``clamp_to_limits`` 关节限位守卫（指令路径防护）。
+- :mod:`joyarm_core.utils.interpolation` ：关节空间插值原语（``cubic_q``/``cubic_traj``；move_j/急停复位直连使用）。
 
 """
 
@@ -52,6 +53,7 @@ from .transforms import (
     slerp,
 )
 from .limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
+from .interpolation import cubic_q, cubic_traj
 
 __all__ = [
     # types
@@ -97,4 +99,7 @@ __all__ = [
     "limits_from_joint_cfgs",
     "rand_within_limits",
     "soft_limits_from_cfg",
+    # interpolation
+    "cubic_q",
+    "cubic_traj",
 ]

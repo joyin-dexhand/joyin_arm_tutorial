@@ -37,7 +37,7 @@ class IkineSolver(ABC):
         frame: Union[str, int],
         q0: np.ndarray,
         *,
-        tol: float = 1e-4,
+        tol: float = 1e-3,
         iters: int = 200,
         **kwargs,
     ) -> IKResult:
@@ -48,7 +48,7 @@ class IkineSolver(ABC):
         :param q0: ``(n,)`` 关节角参考，弧度——数值法作**迭代起点**；
             解析法作**选解参考**：全部闭式解先剔除超出关节软限位者，再取与``q0`` 各关节角
             偏差平方和最小的一组（即构型上最接近 ``q0`` 的解，避免机械臂大幅换构型）。
-        :param tol: 残差范数收敛容差（数值法特有，默认 ``1e-4``）。
+        :param tol: 残差范数收敛容差（数值法特有，默认 ``1e-3``）。
         :param iters: 迭代次数上限（数值法特有，默认 ``200``）。
         :return: :class:`IKResult`，``q`` 为 ``(n,)`` 单解；无可行解时``success=False``,``q`` 为空。
         """
@@ -70,8 +70,7 @@ class IkineSolver(ABC):
         **不做限位剔除**，但逐关节尝试 ``±2π`` 平移，使每组解尽量落入关节限位范围内（等价角中取离限位区间最近者）。
         """
         raise NotImplementedError(
-            "ikine_solver.py - IkineSolver.solve_all：默认实现不可用"
-            "（仅解析法子类覆盖提供；数值法无全解概念）")
+            "ikine_solver.py - IkineSolver.solve_all：默认实现不可用")
 
     # ----------------------------------------------------------
     # ikine 共享助手（±2π 归位 + 限位剔除选最近；解析法实现直接复用）

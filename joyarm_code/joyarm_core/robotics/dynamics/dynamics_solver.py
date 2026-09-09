@@ -6,6 +6,8 @@
 - :meth:`coriolis`（科氏/向心 C 项）
 - :meth:`gravity`（重力 G 项）
 
+派生量：正动力学 / 笛卡尔惯量
+
 config ``robotics.dynamics`` 段写注册名，即按名实例化装入 ``_dynamics_solvers`` 成员字典。
 """
 from __future__ import annotations
@@ -47,9 +49,19 @@ class DynamicsSolver(ABC):
         """重力项 ``G(q)``，返回 ``(n,)``。"""
 
     # ----------------------------------------------------------
-    # dynamics 派生量模板（cartesian_inertia 笛卡尔惯量等）
+    # dynamics 派生量：正动力学 / 笛卡尔惯量
+    #（基于四个抽象内核；cartesian_inertia 经 ``arm.jac`` 门面取 J）
     # ----------------------------------------------------------
-    def cartesian_inertia(self, arm, q: np.ndarray, frame: Union[str, int]) -> np.ndarray:
+    def fdyn(self, arm, q: np.ndarray, dq: np.ndarray,
+             tau: np.ndarray) -> np.ndarray:
+        """正动力学 ``q̈ = M⁻¹(τ − h)``（``h = C(q,q̇)q̇ + G(q)`` 偏置力），
+        返回 ``(n,)``。末端外力旋量 ``F`` 请先并入力矩（``τ ← τ − JᵀF``）。"""
+        M = self.mass_matrix(arm, q)
+        h = self.coriolis(arm, q, dq) + self.gravity(arm, q)
+        return np.linalg.solve(M, np.asarray(tau, dtype=float) - h)
+
+    def cartesian_inertia(self, arm, q: np.ndarray,
+            frame: Union[str, int], ref: str = "base") -> np.ndarray:
         """笛卡尔惯量 ``Λ = J⁺ᵀ M J⁺``，返回 ``(6,6)``（J 经 ``arm.jac``）。"""
-        J_pinv = np.linalg.pinv(arm.jac(q, frame))
+        J_pinv = np.linalg.pinv(arm.jac(q, frame, ref=ref))
         return J_pinv.T @ self.mass_matrix(arm, q) @ J_pinv
