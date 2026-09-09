@@ -237,10 +237,10 @@ class JoyArm:
                 f"≠ URDF 关节数 {self.pin_model.nq}（本体关节须一一对应）")
 
         # ---- 硬限位（config backend.*.joints 四键；初始化后即固定）----
-        # arm 四键数值须与 URDF limit 标定保持一致（维护约定）；末端为电机空间行程；
-        # 无末端段（end.joints 为空）则末端限位为 None。backend 下发指令只裁硬限位
+        # arm 四键数值须与 URDF limit 标定保持一致（维护约定）；backend 下发指令只裁硬限位
         self.arm_limits = limits_from_joint_cfgs(arm_joint_cfgs)
         self.end_limits = limits_from_joint_cfgs(end_joint_cfgs)
+        self._check_arm_limits_vs_urdf(self._urdf_path, arm_joint_cfgs)
 
         # ---- 软限位（config joyarm.arm_soft_limits / end_soft_limits 四键直值，
         # arm/end 分开配置；未配置时软=硬）。仅加载备用：上层"超软限位→状态异常
@@ -295,14 +295,12 @@ class JoyArm:
             self._apply_tcp_limits(jcfg["tcp_limits"])
 
         # ---- 整机通信后端（config backend 段 name 选型；必须成功，失败即构造失败）----
-        # 硬限位传递（组合根职责，深拷贝隔离）；backend 守卫只裁硬限位
-        # （限位裁剪唯一执行点，独立使用后端同样生效）
+        # 硬限位由 backend 自 cfg 四键解析（arm/end 同构，与 JoyArm 侧同源同值）；
+        # backend 守卫只裁硬限位（限位裁剪唯一执行点，独立使用后端同样生效）
         backend_name = str(backend_cfg["name"])          # check_config 已确保存在
         bcfg_rest = dict(backend_cfg)
         bcfg_rest.pop("name", None)
-        self._backend = get_backend(backend_name)(
-            bcfg_rest,
-            arm_limits=copy.deepcopy(self.arm_limits))
+        self._backend = get_backend(backend_name)(bcfg_rest)
 
         # ---- 六域策略成员字典（config 选型；任一成员创建失败即构造失败；首个激活）----
         robotics_cfg = cfg.get("robotics") or {}
@@ -328,6 +326,80 @@ class JoyArm:
             avail = []
         raise ValueError(
             f"joyarm.py - _resolve_robot_urdf：『{robot}』型号在 robot_model 中未找到；可用：{avail}")
+
+    # ---- init 内部：URDF 关节限位解析 + config 一致性自检（仅告警）----
+    @staticmethod
+    def _urdf_joint_limits(urdf_path: str) -> dict:
+        """解析 URDF 活动关节的限位与 mimic 标记（一致性自检的 URDF 侧数据源）。
+
+        仅收录有限位的活动关节（revolute / continuous / prismatic；fixed 等
+        无限位关节不参与检查）；``<limit>`` 属性映射为四键——``lower``→``q_min``、
+        ``upper``→``q_max``、``velocity``→``dq_max``、``effort``→``tau_max``
+        （缺属性为 ``None``，如 continuous 关节无位置上下限属正常）。
+
+        :param urdf_path: URDF 文件路径。
+        :return: ``{关节名: {q_min, q_max, dq_max, tau_max, mimic}}``，
+            前四值为 float 或 ``None``，``mimic`` 为是否含 ``<mimic>`` 标签。
+        """
+        import xml.etree.ElementTree as ET
+
+        def _num(lim, key: str):
+            v = None if lim is None else lim.get(key)
+            return None if v is None else float(v)
+
+        joints: dict = {}
+        for j in ET.parse(urdf_path).getroot().iterfind("joint"):
+            if j.get("type") not in ("revolute", "continuous", "prismatic"):
+                continue
+            lim = j.find("limit")
+            joints[j.get("name")] = {
+                "q_min": _num(lim, "lower"), "q_max": _num(lim, "upper"),
+                "dq_max": _num(lim, "velocity"), "tau_max": _num(lim, "effort"),
+                "mimic": j.find("mimic") is not None,
+            }
+        return joints
+
+    @staticmethod
+    def _check_arm_limits_vs_urdf(urdf_path: str, arm_joint_cfgs: list) -> None:
+        """config ``backend.arm.joints`` 四键 ↔ URDF ``limit`` 一致性自检（仅告警）。
+
+        维护约定：arm 硬限位以 config 四键为唯一生效源（守卫/规划均消费），
+        URDF ``limit`` 为标定基准——不一致仅 ``logger.warning`` 提示核对，
+        不阻断初始化（数值以 config 为准）。三类检查：
+
+        ① config 关节在 URDF 中不存在（限位无法与标定核对）；
+        ② 同名关节四键数值与 URDF 不一致（容差 1e-6，逐键比对）；
+        ③ URDF 存在未被 config 定义的非 mimic 活动关节（活动关节应一一对应，
+        mimic 从动关节随主动关节定义，不单独配置）。
+
+        末端为电机空间行程（URDF 通常不含末端关节），不参与比对。
+
+        :param urdf_path: URDF 文件路径（``basic.robot`` 解析产物）。
+        :param arm_joint_cfgs: config ``backend.arm.joints`` 条目列表。
+        """
+        urdf = JoyArm._urdf_joint_limits(urdf_path)
+        for j in arm_joint_cfgs or []:
+            name = str(j.get("name", ""))
+            u = urdf.get(name)
+            if u is None:
+                logger.warning(
+                    "URDF 限位自检：config 关节 %r 在 URDF 中不存在（限位无法与 URDF 标定核对）",
+                    name)
+                continue
+            for key in ("q_min", "q_max", "dq_max", "tau_max"):
+                cfg_v, urdf_v = j.get(key), u[key]
+                if cfg_v is None or urdf_v is None:
+                    continue     # config 缺键由 check_config 把关；URDF 缺属性不比对
+                if abs(float(cfg_v) - urdf_v) > 1e-6:
+                    logger.warning(
+                        "URDF 限位自检：关节 %r 的 %s 不一致——config=%s，URDF=%s"
+                        "（数值以 config 为准，请核对标定）", name, key, cfg_v, urdf_v)
+        defined = {str(j.get("name", "")) for j in arm_joint_cfgs or []}
+        for name, u in urdf.items():
+            if name not in defined and not u["mimic"]:
+                logger.warning(
+                    "URDF 限位自检：URDF 活动关节 %r 未在 config backend.arm.joints 中定义",
+                    name)
 
     # ---- init 内部：TCP 空间限位应用（config joyarm 段）----
     def _apply_tcp_limits(self, tl: dict) -> None:

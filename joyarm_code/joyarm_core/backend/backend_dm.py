@@ -40,7 +40,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..utils.types import ArmState, ControlMode, JointLimits, JointState
+from ..utils.types import ArmState, ControlMode, JointState
 from .backend import Backend
 
 __all__ = ["BackendDM"]
@@ -499,12 +499,12 @@ class BackendDM(Backend):
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 子段（``channel`` / ``baud_rate`` / ``joints``，
         joints 各含 ``motor_id`` / ``feedback_id`` / ``model`` / ``MIT`` /
-        ``POS_VEL``，end 关节另含 ``q_min`` / ``q_max`` / ``dq_max`` /
-        ``tau_max``）。
+        ``POS_VEL``，四键限位由基类自 cfg 解析；end 关节另含 ``q_min`` /
+        ``q_max`` / ``dq_max`` / ``tau_max``）。
     """
 
-    def __init__(self, cfg: dict, arm_limits: Optional[JointLimits] = None) -> None:
-        super().__init__(cfg, arm_limits=arm_limits)
+    def __init__(self, cfg: dict) -> None:
+        super().__init__(cfg)
         self._arm_cfg = cfg.get("arm") or {}
         self._end_cfg = cfg.get("end") or {}
         self._arm_motors = [DmMotor(j) for j in self._arm_cfg.get("joints") or []]

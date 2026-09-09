@@ -86,7 +86,7 @@ joyarm_code/
 basic: {name, robot, ee_frame}
 joyarm: {arm_mdh_and_limits, T_linkn_end, arm_soft_limits, end_soft_limits, tcp_limits, arm_home, end_home}   # 软限位四键直值 {q_min, q_max, dq_max, tau_max}（arm/end 分开，标量或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero/neutral 按自由度全零（代码固定，不经 config）；MDH/T_linkn_end 为教学数据（约束8）；workspace_box 兼容 (2,3)/(3,2)
 robotics: {六域契约规格}   # 六域选型（注册名 / {name, **参数} / 规格列表，全部加载、首个激活）；当前整段注释过渡——注册名实现并注册后取消注释接入（硬失败语义）
-backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {channel, protocol, baud_rate, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源；arm 数值须与 URDF limit 标定保持一致）；
+backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {channel, protocol, baud_rate, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源，backend `__init__` 自解析；arm 数值须与 URDF limit 标定保持一致，JoyArm init 三类自检告警：关节缺失/数值不一致/URDF 多余非 mimic 活动关节）；
 ```
 
 限位语义：**backend 下发指令只裁硬限位**（`Backend.send_*` 守卫模板，唯一执行点）；软限位由 JoyArm 直配加载（`arm_limits_soft`/`end_limits_soft`，缺省软=硬）仅作上层状态判断依据（超软限位→状态异常→急停恢复，后续实现）；config 改动重启生效，**不回写 yaml**。
@@ -126,7 +126,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 | **核心轻依赖** | 核心仅 `numpy`/`pin`/`pyyaml`；`rclpy` 仅 ws |
 | **开闭原则** | 新型号 = config yaml + robot_model 资产 + backend 文件（REGISTRY 一行）；换算法 = 改 config 注册名（约束9） |
 
-编码约定：`q=(n,)` 或 `(N,n)`、`T=(4,4)`、角度弧度；FK `rep` 三态、雅可比 `ref` 两态（local/base）；**限位单点守卫**（backend 下发只裁硬限位；裁剪唯一执行点 = `Backend.send_*_{arm,end}` 基类守卫模板，`Controller.step` 等上游一律原样透传不重复裁剪；硬限位自 config `backend.*.joints` 四键解析（arm 数值与 URDF limit 标定一致）；软限位 config 直配仅加载、不参与指令裁剪；越限告警节流每 0.5s 至多一条）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数**通用在前、特有 keyword-only 在后**（约束5）；可视化不在核心包；异常消息统一格式**『文件名 - 故障的功能：具体原因』**（含 NotImplementedError 教学桩，新代码一律遵守）。
+编码约定：`q=(n,)` 或 `(N,n)`、`T=(4,4)`、角度弧度；FK `rep` 三态、雅可比 `ref` 两态（local/base）；**限位单点守卫**（backend 下发只裁硬限位；裁剪唯一执行点 = `Backend.send_*_{arm,end}` 基类守卫模板，`Controller.step` 等上游一律原样透传不重复裁剪；硬限位自 config `backend.*.joints` 四键解析（arm/end 一致由 backend `__init__` 自解析；arm 数值与 URDF limit 标定一致，JoyArm init 自检不一致项告警）；软限位 config 直配仅加载、不参与指令裁剪；越限告警节流每 0.5s 至多一条）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数**通用在前、特有 keyword-only 在后**（约束5）；可视化不在核心包；异常消息统一格式**『文件名 - 故障的功能：具体原因』**（含 NotImplementedError 教学桩，新代码一律遵守）。
 
 ### 2.3 库边界
 

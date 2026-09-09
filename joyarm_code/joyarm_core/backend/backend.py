@@ -42,17 +42,15 @@ class Backend(ABC):
 
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 两个子段，各含 ``channel`` / ``protocol`` /
-        ``baud_rate`` / ``joints``（电机配置列表）。
-    :param arm_limits: 本体硬限位（``JointLimits``，config ``backend.arm.joints``
-        四键解析后由组合根传入）；``None``（独立使用）则本体守卫不启用。
+        ``baud_rate`` / ``joints``（电机配置列表，条目四键限位**自解析**为
+        arm/end 硬限位）。
     """
 
-    def __init__(self, cfg: dict,
-                 arm_limits: Optional[JointLimits] = None) -> None:
+    def __init__(self, cfg: dict) -> None:
         self.cfg = cfg
         self._warn_last = 0.0          # 越限告警节流：上次告警的 time.monotonic 时刻
-        # ---- 硬限位构建（守卫依据；构造即生效，无需另行注入）----
-        self._arm_limits: Optional[JointLimits] = arm_limits
+        # ---- 硬限位构建（守卫依据）----
+        self._arm_limits: Optional[JointLimits] = self.arm_limits_from_cfg(cfg)
         self._end_limits: Optional[JointLimits] = self.end_limits_from_cfg(cfg)
 
     # ----------------------------------------------------------
@@ -60,13 +58,26 @@ class Backend(ABC):
     # ----------------------------------------------------------
     @property
     def arm_limits(self) -> Optional[JointLimits]:
-        """本体硬限位（未传入为 ``None``，本体守卫放行）。"""
+        """本体硬限位（自 cfg ``arm.joints`` 解析；无 arm 段为 ``None``，守卫放行）。"""
         return self._arm_limits
 
     @property
     def end_limits(self) -> Optional[JointLimits]:
         """末端硬限位（自 cfg ``end.joints`` 解析；无末端段为 ``None``）。"""
         return self._end_limits
+
+    @staticmethod
+    def arm_limits_from_cfg(cfg: dict) -> Optional[JointLimits]:
+        """从 backend config 解析**本体硬限位**（与 :meth:`end_limits_from_cfg` 同构）。
+
+        arm joint 条目的 ``q_min`` / ``q_max`` / ``dq_max`` / ``tau_max`` 四键
+        为 ABC 契约标准限位键（弧度 / rad/s / N·m；四键齐全性由
+        ``JoyArm.check_config`` 保证，缺键量纲置 ±∞ 不参与守卫）。无 ``arm``
+        段或 ``joints`` 为空 → ``None``（本体守卫放行）。
+
+        :param cfg: yaml ``backend:`` 段字典（含 ``arm.joints`` 列表）。
+        """
+        return limits_from_joint_cfgs(((cfg or {}).get("arm") or {}).get("joints") or [])
 
     @staticmethod
     def end_limits_from_cfg(cfg: dict) -> Optional[JointLimits]:
@@ -159,9 +170,7 @@ class Backend(ABC):
                    joint: Optional[int]) -> np.ndarray:
         """本体指令守卫：``q`` 硬限位裁剪、``dq``/``tau`` 幅值裁剪。
 
-        纵深防御（与 :meth:`joyarm_core.robotics.control.Controller.step` 的
-        守卫各自独立实现）；未传入硬限位 / 维度不符时原样放行（后者由子类
-        内核报清晰的维度错误）。
+        无硬限位（cfg 未配置 ``arm.joints``）/ 维度不符时原样放行。
         """
         return self._clip_within(self._arm_limits, name, arr, joint,
                                  family="arm", broadcast=False)

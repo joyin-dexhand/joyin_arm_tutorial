@@ -1,7 +1,7 @@
 """Backend 基类限位守卫离线单测（硬限位裁剪唯一执行点：send_* 模板前置，arm/end 两族）。
 
-覆盖：①限位构建（构造参数：本体硬限位；cfg 自解析：末端逐电机硬限位，
-缺键量纲 ±∞，无 end 段不启用；只存硬限位、无软限位属性）；②本体守卫
+覆盖：①限位构建（cfg 自解析：本体/末端逐关节硬限位，缺键量纲 ±∞，无对应
+段不启用；只存硬限位、无软限位属性）；②本体守卫
 （q 硬限位 / dq、tau 幅值 / kp、kd 透传 / 单关节切片 / 维度不符放行）；
 ③末端守卫（逐电机裁剪 / 标量广播裁剪（多执行器）/ force 按 ±tau_max 数值
 守卫 / MIT 末端）；④越限告警节流。
@@ -20,7 +20,7 @@ import numpy as np
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core import Backend, JointLimits  # noqa: E402
+from joyarm_core import Backend  # noqa: E402
 
 # 与指令内核无关的其余抽象方法：哑化（type() 创建时注入以满足 ABC 检查；
 # send_position/force/mit_end 已为基类模板，不在哑化列表）
@@ -34,11 +34,11 @@ _STUB_NAMES = (
 )
 
 
-def _dummy_backend(cfg: dict | None = None, **ctor_kw) -> Backend:
+def _dummy_backend(cfg: dict | None = None) -> Backend:
     """离线哑后端：仅记录六个指令内核收到的参数；构造参数原样透传基类。"""
 
-    def _init(self, cfg=None, arm_limits=None):
-        Backend.__init__(self, cfg or {}, arm_limits=arm_limits)
+    def _init(self, cfg=None):
+        Backend.__init__(self, cfg or {})
         self.kernel = []          # [(方法名, 收到的参数元组)]
 
     def _noop(self, *a, **k):
@@ -68,13 +68,14 @@ def _dummy_backend(cfg: dict | None = None, **ctor_kw) -> Backend:
     ns["_send_mit_arm"] = _mit_arm
     ns["_send_mit_end"] = _mit_end
     ns.update({name: _noop for name in _STUB_NAMES})
-    return type("DummyBackend", (Backend,), ns)(cfg, **ctor_kw)
+    return type("DummyBackend", (Backend,), ns)(cfg)
 
 
-def _hard(n: int = 3) -> JointLimits:
-    """本体硬限位：q ∈ [-1,1]，dq ≤ 2，tau ≤ 10。"""
-    return JointLimits(q_min=np.full(n, -1.0), q_max=np.full(n, 1.0),
-                       dq_max=np.full(n, 2.0), tau_max=np.full(n, 10.0))
+# 本体三关节硬限位（cfg 四键）：q ∈ [-1,1]，dq ≤ 2，tau ≤ 10
+_ARM_CFG = {"arm": {"joints": [
+    {"name": f"j{i + 1}", "q_min": -1.0, "q_max": 1.0, "dq_max": 2.0, "tau_max": 10.0}
+    for i in range(3)
+]}}
 
 
 # 双电机末端：电机 2 缺 tau_max（→ ∞ 不参与守卫）、行程更紧
@@ -85,14 +86,16 @@ _END_CFG = {"end": {"joints": [
 
 
 # ----------------------------------------------------------
-# 限位构建（构造参数 + cfg 自解析）
+# 限位构建（cfg 自解析：arm/end 同构）
 # ----------------------------------------------------------
-def test_limits_build_from_constructor():
-    """本体硬限位随构造传入原样保存；backend 只存硬限位（无软限位属性）。"""
-    be = _dummy_backend(arm_limits=_hard(3))
+def test_arm_limits_from_cfg():
+    """本体硬限位自 cfg 逐关节解析；backend 只存硬限位（无软限位属性）。"""
+    be = _dummy_backend(cfg=_ARM_CFG)
     s = be.arm_limits
     assert np.allclose(s.q_min, -1.0) and np.allclose(s.q_max, 1.0)
     assert np.allclose(s.dq_max, 2.0) and np.allclose(s.tau_max, 10.0)
+    be0 = _dummy_backend(cfg={"end": {}})
+    assert be0.arm_limits is None                      # 无 arm 段 → 守卫放行
     for gone in ("arm_limits_soft", "end_limits_soft",
                  "set_arm_limits_soft", "set_end_limits_soft"):
         assert not hasattr(be, gone), f"{gone} 应已随软限位机制移除"
@@ -113,7 +116,7 @@ def test_end_limits_from_cfg():
 # 本体守卫（模板前置）
 # ----------------------------------------------------------
 def test_guard_passthrough_without_limits():
-    """未传本体硬限位（独立使用）：本体守卫放行。"""
+    """cfg 无 arm 段（独立使用无本体限位）：本体守卫放行。"""
     be = _dummy_backend()
     assert be.arm_limits is None
     be.send_position_arm(np.full(3, 99.0))
@@ -122,7 +125,7 @@ def test_guard_passthrough_without_limits():
 
 def test_guard_clips_q_dq_tau():
     """本体：q 硬限位裁剪、dq/tau 幅值裁剪、kp/kd 透传。"""
-    be = _dummy_backend(arm_limits=_hard(3))
+    be = _dummy_backend(cfg=_ARM_CFG)
     be.send_position_arm(np.full(3, 5.0))                       # q → 1.0（硬上限）
     assert be.kernel[-1][0] == "pos_arm" and np.allclose(be.kernel[-1][1], 1.0)
     be.send_velocity_arm(np.full(3, -9.0))                      # dq → -2.0
@@ -136,7 +139,7 @@ def test_guard_clips_q_dq_tau():
 
 def test_guard_single_joint_slice():
     """单关节指令：取该关节限位切片（其余关节限位不参与）。"""
-    be = _dummy_backend(arm_limits=_hard(3))
+    be = _dummy_backend(cfg=_ARM_CFG)
     be._arm_limits.q_max[1] = 0.5                       # joint2 上限更紧
     be.send_position_arm(np.array([99.0]), joint=1)
     assert be.kernel[-1][0] == "pos_arm" and np.allclose(be.kernel[-1][1], 0.5)
@@ -145,7 +148,7 @@ def test_guard_single_joint_slice():
 
 def test_guard_dimension_mismatch_passthrough():
     """指令长度 ≠ n：守卫放行，由内核（真实后端）报清晰的维度错误。"""
-    be = _dummy_backend(arm_limits=_hard(3))
+    be = _dummy_backend(cfg=_ARM_CFG)
     be.send_position_arm(np.zeros(4))
     assert be.kernel[-1][1].shape == (4,)
     be2 = _dummy_backend(cfg=_END_CFG)
@@ -155,7 +158,7 @@ def test_guard_dimension_mismatch_passthrough():
 
 def test_guard_scalar_promotion():
     """标量指令升维为 (1,)（单关节用法），守卫按长度放行交内核校验。"""
-    be = _dummy_backend(arm_limits=_hard(3))
+    be = _dummy_backend(cfg=_ARM_CFG)
     be.send_position_arm(1.5, joint=0)
     assert be.kernel[-1][1].shape == (1,) and np.allclose(be.kernel[-1][1], 1.0)
 
@@ -209,7 +212,7 @@ def test_end_guard_mit():
 
 def test_end_guard_without_end_section():
     """无 end 段：末端守卫放行（透传内核）。"""
-    be = _dummy_backend(arm_limits=_hard(3))
+    be = _dummy_backend(cfg=_ARM_CFG)
     be.send_position_end(np.array([99.0]))
     assert np.allclose(be.kernel[-1][1], 99.0)
 
@@ -231,7 +234,7 @@ class _Cap(logging.Handler):
 def test_guard_warns_on_clip():
     """越限告警节流：首条即告警，0.5s 内重复越限静默（裁剪照常），过后再告警。"""
     import joyarm_core.backend.backend as be_mod
-    be = _dummy_backend(arm_limits=_hard(3))
+    be = _dummy_backend(cfg=_ARM_CFG)
     cap = _Cap()
     log = logging.getLogger("joyarm_core.backend")
     log.addHandler(cap)
