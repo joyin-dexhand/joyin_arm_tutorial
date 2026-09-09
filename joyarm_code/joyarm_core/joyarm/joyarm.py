@@ -49,6 +49,9 @@ _ROBOT_MODEL_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "robot_model"
 )
 
+# arm 关节名约定：URDF 中仅 name 为 joint1~joint9 的关节被识别为本体关节，其余不参与关节数校验
+_ARM_JOINT_NAMES = {f"joint{i}" for i in range(1, 10)}
+
 
 def load_config(model: str, strict: bool = False) -> Optional[dict]:
     """加载 ``configs/<model>.yaml`` 型号配置。
@@ -220,7 +223,7 @@ class JoyArm:
                 f"可用帧：{[f.name for f in self.pin_model.frames]}"
             )
 
-        # ---- 关节数与关节名（config backend.*.joints 顺序；本体名数须与 URDF 一致）----
+        # ---- 关节数与关节名----
         self._arm_joint_names = [
             str(j.get("name", f"joint{i + 1}"))
             for i, j in enumerate(arm_joint_cfgs)
@@ -231,10 +234,12 @@ class JoyArm:
         ]
         self.n_arm = len(self._arm_joint_names)
         self.n_end = len(self._end_joint_names)
-        if self.n_arm != self.pin_model.nq:
+        arm_nq_urdf = self._urdf_arm_nq(self.pin_model)
+        if self.n_arm != arm_nq_urdf:
             raise ValueError(
                 f"joyarm.py - JoyArm.__init__：backend.arm.joints 数量 {self.n_arm} "
-                f"≠ URDF 关节数 {self.pin_model.nq}（本体关节须一一对应）")
+                f"≠ URDF arm 关节数 {arm_nq_urdf}（仅支持 arm 的关节数比对校验（config 与 urdf），"
+                f"name 为 joint1~joint9 的 arm 的 joint 才会被识别；end 关节不参与校验）")
 
         # ---- 硬限位（config backend.*.joints 四键；初始化后即固定）----
         # arm 四键数值须与 URDF limit 标定保持一致（维护约定）；backend 下发指令只裁硬限位
@@ -327,6 +332,22 @@ class JoyArm:
         raise ValueError(
             f"joyarm.py - _resolve_robot_urdf：『{robot}』型号在 robot_model 中未找到；可用：{avail}")
 
+    @staticmethod
+    def _urdf_arm_nq(pin_model) -> int:
+        """统计 pin 模型中 arm 关节（name 为 joint1~joint9）的自由度之和。
+
+        索引 0 为 universe 跳过；mimic 及 end/手指等其余关节名不在约定集合内、
+        不计入（关节数校验只比对 arm，end 不校验）。
+
+        :param pin_model: pinocchio 模型（``buildModelFromUrdf`` 产物）。
+        :return: arm 关节自由度之和。
+        """
+        nq = 0
+        for i in range(1, len(pin_model.names)):
+            if pin_model.names[i] in _ARM_JOINT_NAMES:
+                nq += pin_model.joints[i].nq
+        return nq
+
     # ---- init 内部：URDF 关节限位解析 + config 一致性自检（仅告警）----
     @staticmethod
     def _urdf_joint_limits(urdf_path: str) -> dict:
@@ -369,8 +390,9 @@ class JoyArm:
 
         ① config 关节在 URDF 中不存在（限位无法与标定核对）；
         ② 同名关节四键数值与 URDF 不一致（容差 1e-6，逐键比对）；
-        ③ URDF 存在未被 config 定义的非 mimic 活动关节（活动关节应一一对应，
-        mimic 从动关节随主动关节定义，不单独配置）。
+        ③ URDF 存在未被 config 定义的 arm 活动关节（name 为 joint1~joint9 的
+        非 mimic 关节应与 config 一一对应，mimic 从动关节随主动关节定义，不
+        单独配置；end/手指等其余关节不校验、不告警）。
 
         末端为电机空间行程（URDF 通常不含末端关节），不参与比对。
 
@@ -396,6 +418,8 @@ class JoyArm:
                         "（数值以 config 为准，请核对标定）", name, key, cfg_v, urdf_v)
         defined = {str(j.get("name", "")) for j in arm_joint_cfgs or []}
         for name, u in urdf.items():
+            if name not in _ARM_JOINT_NAMES:
+                continue    # 非 arm 关节（end/手指等）不校验
             if name not in defined and not u["mimic"]:
                 logger.warning(
                     "URDF 限位自检：URDF 活动关节 %r 未在 config backend.arm.joints 中定义",

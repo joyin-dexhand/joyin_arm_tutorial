@@ -50,6 +50,6 @@ class DynamicsSolver(ABC):
     # dynamics 派生量模板（cartesian_inertia 笛卡尔惯量等）
     # ----------------------------------------------------------
     def cartesian_inertia(self, arm, q: np.ndarray, frame: Union[str, int]) -> np.ndarray:
-        """笛卡尔惯量 ``Λ = J⁻ᵀ M J⁻¹``，返回 ``(6,6)``（J 经 ``arm.jac`` 门面取）。"""
-        J_inv = np.linalg.inv(arm.jac(q, frame))
-        return J_inv.T @ self.mass_matrix(arm, q) @ J_inv
+        """笛卡尔惯量 ``Λ = J⁺ᵀ M J⁺``，返回 ``(6,6)``（J 经 ``arm.jac``）。"""
+        J_pinv = np.linalg.pinv(arm.jac(q, frame))
+        return J_pinv.T @ self.mass_matrix(arm, q) @ J_pinv
