@@ -3,9 +3,10 @@
 覆盖架构约束的单类行为：①工厂软化语义（未知型号 → ``None`` + 失败信息；
 JoyArm 直用为硬失败——坏注册名 / 缺 backend / 缺 config 构造即抛）；②六域
 成员字典机制（各域 REGISTRY 默认空表，域未配置即无成员、门面调用显性报错；
-配置的成员必须全部创建成功）；③配置读取/运行期设置/静态自检
-（``get_config``/``set_config``/``check_config``）；④离线语义（执行类抛错）
-与拷贝隔离（config / 轨迹桥深拷贝）；⑤前置校验族（connected / enabled / mode）。
+配置的成员必须全部创建成功）；③配置读取/静态自检（``get_config``/
+``check_config``）与限位加载（硬限位 config 四键、软限位直配仅加载）；④离线
+语义（执行类抛错）与拷贝隔离（config / 轨迹桥深拷贝）；⑤前置校验族
+（connected / enabled / mode）。
 
 运行：``python test/test_joyarm_factory.py`` 或 pytest。
 """
@@ -174,34 +175,8 @@ def test_config_and_traj_deepcopy_isolation():
     assert arm.get_target_traj()[0].time == 1.0
 
 
-def test_set_config_whitelist():
-    arm = _arm()
-    # 本体软限位即时生效（四键绝对余量；缺省键不内缩）
-    arm.set_config("joyarm.arm_soft_margins", {"q_upper": 0.2, "q_lower": 0.2})
-    soft = arm.arm_limits_soft
-    assert np.allclose(soft.q_min, arm.arm_limits.q_min + 0.2)
-    assert np.allclose(soft.q_max, arm.arm_limits.q_max - 0.2)
-    assert np.allclose(soft.dq_max, arm.arm_limits.dq_max)
-    # 后端守卫同步换用新软限位
-    assert np.allclose(arm._backend.arm_limits_soft.q_min, soft.q_min)
-    # 末端软限位同理
-    arm.set_config("joyarm.end_soft_margins", {"q_upper": 0.1})
-    assert np.allclose(arm.end_limits_soft.q_max, arm.end_limits.q_max - 0.1)
-    assert np.allclose(arm._backend.end_limits_soft.q_max, arm.end_limits.q_max - 0.1)
-    j = load_config("joyarm_dm")["joyarm"]                  # 还原
-    arm.set_config("joyarm.arm_soft_margins", j["arm_soft_margins"])
-    arm.set_config("joyarm.end_soft_margins", j["end_soft_margins"])
-    # 白名单外拒绝（含两代旧键路径）
-    for path in ("backend.name", "joyarm.q_home", "basic.utils.joint_soft_margins"):
-        try:
-            arm.set_config(path, "x")
-            raise AssertionError(f"白名单外路径 {path!r} 应抛 ValueError")
-        except ValueError:
-            pass
-
-
 def test_arm_limits_from_config():
-    """硬限位自 config backend.*.joints 四键解析；软限位按 joyarm 段 margin 内缩。"""
+    """硬限位自 config backend.*.joints 四键解析；软限位直配加载（仅加载备用）。"""
     arm = _arm()
     cfg = load_config("joyarm_dm")
     aj = cfg["backend"]["arm"]["joints"]
@@ -210,24 +185,48 @@ def test_arm_limits_from_config():
     assert np.allclose(arm.arm_limits.q_max, [j["q_max"] for j in aj])
     assert np.allclose(arm.arm_limits.dq_max, [j["dq_max"] for j in aj])
     assert np.allclose(arm.arm_limits.tau_max, [j["tau_max"] for j in aj])
-    m = cfg["joyarm"]["arm_soft_margins"]
-    assert np.allclose(arm.arm_limits_soft.q_min,
-                       arm.arm_limits.q_min + np.asarray(m["q_lower"], float))
-    assert np.allclose(arm.arm_limits_soft.q_max,
-                       arm.arm_limits.q_max - np.asarray(m["q_upper"], float))
-    assert np.allclose(arm.arm_limits_soft.dq_max,
-                       arm.arm_limits.dq_max - np.asarray(m["dq"], float))
-    assert np.allclose(arm.arm_limits_soft.tau_max,
-                       arm.arm_limits.tau_max - np.asarray(m["tau"], float))
-    # 末端：end_limits 自 backend.end.joints 逐电机解析；margin 全 0 → 软=硬
+    # 软限位直配（joyarm.arm_soft_limits 四键直值，不经 margin 换算）
+    m = cfg["joyarm"]["arm_soft_limits"]
+    assert np.allclose(arm.arm_limits_soft.q_min, np.asarray(m["q_min"], float))
+    assert np.allclose(arm.arm_limits_soft.q_max, np.asarray(m["q_max"], float))
+    assert np.allclose(arm.arm_limits_soft.dq_max, np.asarray(m["dq_max"], float))
+    assert np.allclose(arm.arm_limits_soft.tau_max, np.asarray(m["tau_max"], float))
+    # 软限位 ⊆ 硬限位；末端直配 + 电机空间行程
     ej = cfg["backend"]["end"]["joints"][0]
     assert arm.n_end == 1
     assert arm.end_limits is not None and np.allclose(arm.end_limits.q_min, ej["q_min"])
-    assert np.allclose(arm.end_limits.q_max, ej["q_max"])
-    assert np.array_equal(arm.end_limits_soft.q_min, arm.end_limits.q_min)
-    # 后端基类守卫副本一致（构造参数传递 → 后端 __init__ 自建）
-    assert np.allclose(arm._backend.arm_limits_soft.q_max, arm.arm_limits_soft.q_max) \
-        and np.allclose(arm._backend.end_limits_soft.tau_max, arm.end_limits_soft.tau_max)
+    assert np.allclose(arm.arm_limits_soft.q_min, np.maximum(
+        arm.arm_limits_soft.q_min, arm.arm_limits.q_min))          # 软 ⊆ 硬（下界）
+    assert np.all(arm.arm_limits_soft.q_max <= arm.arm_limits.q_max + 1e-9)
+    assert np.allclose(arm.end_limits_soft.q_min, ej["q_min"])    # end_soft_limits = 硬限位
+    # backend 只存硬限位（下发只裁硬限位；无软限位属性）
+    assert np.allclose(arm._backend.arm_limits.q_max, arm.arm_limits.q_max)
+    for gone in ("arm_limits_soft", "end_limits_soft"):
+        assert not hasattr(arm._backend, gone)
+
+
+def test_soft_limits_default_and_validation():
+    """软限位缺省软=硬；越硬限位即构造失败（硬失败）；结构错误经 check_config 报告。"""
+    cfg = copy.deepcopy(load_config("joyarm_dm"))
+    del cfg["joyarm"]["arm_soft_limits"]                  # 缺省 → 软=硬
+    del cfg["joyarm"]["end_soft_limits"]
+    arm = JoyArm(model="joyarm_dm", config=cfg)
+    assert np.allclose(arm.arm_limits_soft.q_min, arm.arm_limits.q_min)
+    assert np.allclose(arm.end_limits_soft.q_max, arm.end_limits.q_max)
+    cfg2 = copy.deepcopy(load_config("joyarm_dm"))
+    cfg2["joyarm"]["arm_soft_limits"] = {"q_min": -9.9}   # 越硬限位下界
+    try:
+        JoyArm(model="joyarm_dm", config=cfg2)
+        raise AssertionError("软限位越硬限位应抛 ValueError")
+    except ValueError as e:
+        assert "soft_limits" in str(e)
+    cfg3 = copy.deepcopy(load_config("joyarm_dm"))
+    cfg3["joyarm"]["arm_soft_limits"] = {"q_min": [0.1, 0.2]}   # 长度错（静态自检捕获）
+    try:
+        JoyArm.check_config("joyarm_dm", cfg3)
+        raise AssertionError("软限位长度错应抛 ValueError")
+    except ValueError as e:
+        assert "arm_soft_limits" in str(e)
 
 
 def test_feature_poses():
@@ -514,10 +513,11 @@ class _FakeSession:
 
 def test_deleted_redundant_apis():
     arm = _arm()
-    for name in ("state", "qlow", "qhigh", "set_controller", "clamp_q", "is_q_valid"):
+    for name in ("state", "qlow", "qhigh", "set_controller", "clamp_q", "is_q_valid",
+                 "set_config", "set_arm_soft_margins", "set_end_soft_margins"):
         assert not hasattr(arm, name), f"{name} 应已删除"
     q = arm.rand_q_arm(rng=np.random.default_rng(0))
-    assert q.shape == (arm.n_arm,)                # rand_q_arm：按本体软限位采样
+    assert q.shape == (arm.n_arm,)                # rand_q_arm：按本体硬限位采样
 
 
 def test_joint_names_and_index():
@@ -661,8 +661,8 @@ def test_move_j():
     s3 = _FakeSession(q0=np.zeros(6))                            # 目标越软限位：入口裁剪
     try:
         arm3, be3 = s3.arm, s3.be
-        tgt = np.full(6, 5.0)                                    # 全关节越软上限
-        exp = clamp_to_limits(tgt, arm3.arm_limits_soft)         # 判定以裁剪后为准
+        tgt = np.full(6, 5.0)                                    # 全关节越硬上限
+        exp = clamp_to_limits(tgt, arm3.arm_limits)             # 判定以裁剪后为准
         arm3.move_j(tgt, t=0.02, wait_timeout=2.0)
         frames3 = [c for c in be3.calls if c[0] == "send_position_arm"]
         assert np.allclose(frames3[-1][1], exp)                  # 末帧 = 裁剪后目标
@@ -690,7 +690,7 @@ def test_safe_home_zero_and_composition():
     s = _FakeSession(q0=np.full(6, 0.3))
     try:
         arm, be = s.arm, s.be
-        qz = clamp_to_limits(arm.arm_zero, arm.arm_limits_soft)  # 软限位投影后 zero/home
+        qz = clamp_to_limits(arm.arm_zero, arm.arm_limits)  # 硬限位投影后 zero/home
         try:                                                      # home 前置校验
             arm.home_to_zero()
             raise AssertionError("不在 home 应抛 RuntimeError")

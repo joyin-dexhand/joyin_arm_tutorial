@@ -16,7 +16,7 @@
 3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族，多电机末端如灵巧手通用）。
 4. **软化仅限工厂入口**：工厂创建时 config 缺失、命名链不符（`basic.name` ≠ 型号名）或初始化异常则**返回 `None` 并输出创建失败信息**（不抛异常）；`JoyArm` 直用为**硬失败**——config 必需（缺失/自检不通过即抛）、backend 必配、robotics 配置的成员必须全部创建成功（约束2）。
 5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `target`/`frame`/`q0`），**特有参数 keyword-only 在后**（仅特定算法需要，如数值法的 `tol`/`iters`，解析法可忽略）——各章实现求解器时遵守。
-6. **功能全面性 + 字典化**：常见功能（读/设配置、配置自检、连接、硬件自检、使能/失能、单关节控制、末端控制、紧急阻尼……）在 `JoyArm` 完成定义。六域策略成员**统一字典化**：config 可指定单个或列表规格（全部加载进 `dict[注册名→实例]`，首个为激活、有且仅有一个），运行期 `set_solver` 切换。
+6. **功能全面性 + 字典化**：常见功能（读配置、配置自检、连接、硬件自检、使能/失能、单关节控制、末端控制、紧急阻尼……）在 `JoyArm` 完成定义。六域策略成员**统一字典化**：config 可指定单个或列表规格（全部加载进 `dict[注册名→实例]`，首个为激活、有且仅有一个），运行期 `set_solver` 切换。
 7. **robotics 独立运行**：robotics 子模块不得 import `joyarm`（鸭子类型消费 `arm`）；各章算法实现须可脱离 JoyArm 独立运行与测试（直接实例化，构造参数自足）。
 8. **教学数据读取路径**：config 在 `JoyArm.__init__` **一次性深拷贝**存入 `self._config`（隔离外部引用，`get_config()` 另返回深拷贝）；教学数据（如 MDH 参数 `joyarm.arm_mdh_and_limits`）由教学算法经 `arm.get_config()` 从**类内已加载数据**读取，**不重新加载 yaml 文件**；MDH 校验（yaml 可不含该字段）在算法层使用时做，不在 `check_config`。
 9. **开闭原则**：常见变更（新型号、换电机、结构更新、升级算法）以最小改动完成（新型号三件套 / 换算法 = 改 config 注册名 + 注册表一行），对扩展开放、对修改关闭；新增实现不得改动 `JoyArm` 接口签名。
@@ -63,7 +63,7 @@ joyarm_code/
 │   ├── test_backend_dm.py           #   DM 协议层离线单测（打包/解包/帧分发/错误码语义）
 │   ├── test_backend_dm_full.py      #   DM 真机全覆盖（42 项，风险递增、逐项确认）
 │   ├── test_backend_base.py         #   Backend 基类限位守卫离线单测（arm/end 两族，哑后端）
-│   ├── test_limits.py               #   utils/limits.py 离线单测（软限位四键 margin + 裁剪）
+│   ├── test_limits.py               #   utils/limits.py 离线单测（限位构建/直配软限位 + 裁剪）
 │   ├── test_joyarm_full.py          #   JoyArm 真机分层测试（29 项九层风险递增；回放/求解器类随各章实现补回）
 │   └── test_joyarm_factory.py       #   工厂软化+直用硬失败/六域字典机制/静态自检/配置 API/前置校验族
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
@@ -80,16 +80,16 @@ joyarm_code/
 
 ### 1.3 配置（yaml 分段）
 
-`configs/<model>.yaml` 四段：`basic`（基本信息 + robot_model URDF 索引）/ `joyarm`（设备模型 + 软限位 margin）/ `robotics`（六域算法选型）/ `backend`（通信层 + 硬限位四键）。**命名链**：工厂入参 = 文件名 = `basic.name` 字段，任一环节不符即工厂返回 `None`（约束4）；backend 与机械臂型号 1:1（`backend_dm`）：
+`configs/<model>.yaml` 四段：`basic`（基本信息 + robot_model URDF 索引）/ `joyarm`（设备模型 + 直配软限位）/ `robotics`（六域算法选型）/ `backend`（通信层 + 硬限位四键）。**命名链**：工厂入参 = 文件名 = `basic.name` 字段，任一环节不符即工厂返回 `None`（约束4）；backend 与机械臂型号 1:1（`backend_dm`）：
 
 ```yaml
 basic: {name, robot, ee_frame}
-joyarm: {arm_mdh_and_limits, T_linkn_end, arm_soft_margins, end_soft_margins, tcp_limits, arm_home, end_home}   # margin 四键 {q_upper, q_lower, dq, tau} 绝对余量（rad/rad/s/N·m，标量或 n/n_end 元列表）；zero/neutral 按自由度全零（代码固定，不经 config）；MDH/T_linkn_end 为教学数据（约束8）；workspace_box 兼容 (2,3)/(3,2)
+joyarm: {arm_mdh_and_limits, T_linkn_end, arm_soft_limits, end_soft_limits, tcp_limits, arm_home, end_home}   # 软限位四键直值 {q_min, q_max, dq_max, tau_max}（arm/end 分开，标量或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero/neutral 按自由度全零（代码固定，不经 config）；MDH/T_linkn_end 为教学数据（约束8）；workspace_box 兼容 (2,3)/(3,2)
 robotics: {六域契约规格}   # 六域选型（注册名 / {name, **参数} / 规格列表，全部加载、首个激活）；当前整段注释过渡——注册名实现并注册后取消注释接入（硬失败语义）
 backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {同构, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源；arm 数值须与 URDF limit 标定保持一致）
 ```
 
-运行期可设参数走 `arm.set_config(path, value)` 白名单（`joyarm.arm_soft_margins` / `joyarm.end_soft_margins`；经公开成员方法 `set_arm_soft_margins`/`set_end_soft_margins` 更新并透传 backend），**不回写 yaml**（文件为单一事实来源，重启以 yaml 为准）。
+限位语义：**backend 下发指令只裁硬限位**（`Backend.send_*` 守卫模板，唯一执行点）；软限位由 JoyArm 直配加载（`arm_limits_soft`/`end_limits_soft`，缺省软=硬）仅作上层状态判断依据（超软限位→状态异常→急停恢复，后续实现）；config 改动重启生效，**不回写 yaml**。
 
 ### 1.4 ROS2 工作空间（`joyarm_ros2_ws/`，**规划——Ch10 落地时创建，当前未建**）
 
@@ -108,7 +108,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 - **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
 - **设备模型**（`joyarm/`）：`JoyArm` = 组合根单类（无型号子类）；`joyarm_factory(model)` 外部推荐入口（失败 → `None` + 失败信息）。文件 `joyarm.py` / `__init__.py`。
 - **Backend 整机两层**（`backend/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendDM`（1:1：`backend_dm` ↔ `joyarm_dm`）。`REGISTRY` + `get_backend(name)` 供 config 选型。
-- **属性约定**：型号名 = `model`（str，product model）；pinocchio 构型产物 = `pin_model`/`pin_data`（**勿与型号名混淆**）；关节数 = `n_arm`/`n_end`；硬/软限位 = `arm_limits(_soft)`/`end_limits(_soft)`（config `backend.*.joints` 四键 + `joyarm.*_soft_margins` 来源，初始化后硬限位固定）；整机后端 = `_backend`（私有，必配）；**六域策略成员字典** = `_fkine_solvers`/`_ikine_solvers`/`_jacobian_solvers`/`_dynamics_solvers`/`_traj_planners`/`_controllers`（`dict[注册名→实例]`）+ `_active_name`（域→激活注册名）；config = `self._config`（构造时深拷贝，`get_config()` 深拷贝读取）。求解器形参用 `arm`（鸭子类型）。
+- **属性约定**：型号名 = `model`（str，product model）；pinocchio 构型产物 = `pin_model`/`pin_data`（**勿与型号名混淆**）；关节数 = `n_arm`/`n_end`；硬限位 = `arm_limits`/`end_limits`（config `backend.*.joints` 四键，初始化后固定，下发守卫唯一依据）；软限位 = `arm_limits_soft`/`end_limits_soft`（config `joyarm.*_soft_limits` 直配，缺省软=硬，仅上层状态判断用）；整机后端 = `_backend`（私有，必配）；**六域策略成员字典** = `_fkine_solvers`/`_ikine_solvers`/`_jacobian_solvers`/`_dynamics_solvers`/`_traj_planners`/`_controllers`（`dict[注册名→实例]`）+ `_active_name`（域→激活注册名）；config = `self._config`（构造时深拷贝，`get_config()` 深拷贝读取）。求解器形参用 `arm`（鸭子类型）。
 - **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…，末端动作 `set_end_open/close/zero`）；执行类统一 `joint` 形参（None=全部）；`set_mode_*` 默认 POSITION；参数读写 `read/write_param_{arm,end}`（joint=None 读返列表、写标量广播或等长列表）；求解切换 `set_solver(domain, name)`、查询 `list_solvers(domain)`（每域有且仅一个激活）。
 - **算法可换（成员即策略）**：每域 = ABC + `REGISTRY`（实现一节点一文件，各章新增）。
 
@@ -126,7 +126,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 | **核心轻依赖** | 核心仅 `numpy`/`pin`/`pyyaml`；`rclpy` 仅 ws |
 | **开闭原则** | 新型号 = config yaml + robot_model 资产 + backend 文件（REGISTRY 一行）；换算法 = 改 config 注册名（约束9） |
 
-编码约定：`q=(n,)` 或 `(N,n)`、`T=(4,4)`、角度弧度；FK `rep` 三态、雅可比 `ref` 两态（local/base）；软/硬限位分级（`clamp_to_limits`）与**限位单点守卫**（裁剪唯一执行点 = `Backend.send_*_{arm,end}` 基类守卫模板，`Controller.step` 等上游一律原样透传不重复裁剪；硬限位自 config `backend.*.joints` 四键解析（arm 数值与 URDF limit 标定一致），软限位 = 硬限位 − `joyarm.*_soft_margins` margin，`set_*_soft_margins` 更新后透传 backend；越限告警节流每 0.5s 至多一条）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数**通用在前、特有 keyword-only 在后**（约束5）；可视化不在核心包；异常消息统一格式**『文件名 - 故障的功能：具体原因』**（含 NotImplementedError 教学桩，新代码一律遵守）。
+编码约定：`q=(n,)` 或 `(N,n)`、`T=(4,4)`、角度弧度；FK `rep` 三态、雅可比 `ref` 两态（local/base）；**限位单点守卫**（backend 下发只裁硬限位；裁剪唯一执行点 = `Backend.send_*_{arm,end}` 基类守卫模板，`Controller.step` 等上游一律原样透传不重复裁剪；硬限位自 config `backend.*.joints` 四键解析（arm 数值与 URDF limit 标定一致）；软限位 config 直配仅加载、不参与指令裁剪；越限告警节流每 0.5s 至多一条）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数**通用在前、特有 keyword-only 在后**（约束5）；可视化不在核心包；异常消息统一格式**『文件名 - 故障的功能：具体原因』**（含 NotImplementedError 教学桩，新代码一律遵守）。
 
 ### 2.3 库边界
 
@@ -140,7 +140,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 |:---|:---|:---:|:---:|
 | `utils/types.py` | 枚举 + 数据类（Pose/TrajFrame/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
-| `utils/limits.py` | `clamp_to_limits` + `joint_limits_from_model`/`limits_from_joint_cfgs`/`soft_limits`（绝对余量）+ `rand_within_limits`（限位内采样） | Ch11 | ✅ |
+| `utils/limits.py` | `clamp_to_limits` + `joint_limits_from_model`/`limits_from_joint_cfgs`/`soft_limits_from_cfg`（直配软限位）+ `rand_within_limits`（限位内采样） | Ch11 | ✅ |
 | `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写 + 限位构建 + send_* 两族守卫模板） | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus） | Ch6/13 | ✅ |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
@@ -175,7 +175,6 @@ Backend(ABC) ──▶ BackendDM ✅
 ```python
 # 配置
 JoyArm.get_config() → dict                                  # 深拷贝快照（教学数据读取口）✅
-JoyArm.set_config(path, value)                              # 运行期白名单（joyarm.arm_soft_margins / end_soft_margins）✅
 JoyArm.check_config(model, config) → None（异常 ValueError）   # **静态**自检（basic/命名链/URDF/backend 必配/限位四键/位形长度；init 第一步自动调用）✅
 JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件自检（自包含：临时连接失能状态检查→断开，手动调用；温度等运行期监控归 ROS2）✅
 # 成员字典
@@ -191,10 +190,9 @@ JoyArm.set_end_open/close/zero(joint=None) · set_end_position / set_end_force /
 JoyArm.damping_mode(kd=10.0)                    # 紧急阻尼：任何状态全电机（含末端）MIT 纯阻尼 ✅
 # 运动便利与安全层 ✅（move_j 为独立功能、与规划管线并行、仅直接调用；常规运动走轨迹桥→规划器→控制器）
 JoyArm.hold_position(kp,kd,tau)（MIT 阻抗保持当前姿态，tau 缺省重力前馈）· lock_position()（急停锁定：切位置模式锁当前 q）
-JoyArm.move_j(q, t=None, rate/tol/timeout kw)（三次多项式阻塞运动，精确定时器逐帧下发+到位等待；q 入口裁软限位，判定以裁剪后为准）· move_l(pose, t)（占位）· teach_mode(on=True)（占位：拖动示教，待重力补偿）
+JoyArm.move_j(q, t=None, rate/tol/timeout kw)（三次多项式阻塞运动，精确定时器逐帧下发+到位等待；q 入口裁硬限位，判定以裁剪后为准）· move_l(pose, t)（占位）· teach_mode(on=True)（占位：拖动示教，待重力补偿）
 JoyArm.safe_home(t) · home_to_zero(t)（先校验位于 home）· safe_zero()（安全起停组合：home→zero；arm+end 均执行，本体 MIT 阻抗+末端位置模式）· is_in_position(q 或 pose, 容差) → bool（单入口双判断）
-JoyArm.rand_q_arm(size, rng)（本体软限位内采样，委托 utils.rand_within_limits）· joint_names_arm/end · joint_index_arm/end(name)
-JoyArm.set_arm_soft_margins(margins) · set_end_soft_margins(margins)   # 软限位更新并透传 backend（set_config 白名单入口同款）✅
+JoyArm.rand_q_arm(size, rng)（本体硬限位内采样，委托 utils.rand_within_limits）· joint_names_arm/end · joint_index_arm/end(name)
 JoyArm.set/get_target_traj(targets) · set/get_current_frame(frame)   # 轨迹桥：应用→规划→控制（TrajFrame；发布即不可变+原子交换，写入口深拷贝隔离）✅
 # 关键属性：model / pin_model / pin_data / n_arm / n_end / ee_frame_* / arm_limits(_soft) / end_limits(_soft) / arm_zero/home/neutral / end_zero/home/neutral / joint_names_arm/end / tcp_limits / _backend / connected
 #   六域字典：_fkine_solvers/_ikine_solvers/_jacobian_solvers/_dynamics_solvers/_traj_planners/_controllers + _active_name
@@ -216,11 +214,11 @@ AutoController（type 五类型）/ ForceController（impedance/hybrid）   # �
 #### Backend / 限位 / 数学 / 类型 API
 
 ```python
-Backend(ABC, cfg, arm_limits=None, arm_soft_margins=None, end_soft_margins=None) ✅   # 限位 __init__ 自建（本体=传入 config 四键硬限位−margin；末端=自解析 end.joints 四键−margin，缺键 ±∞）；属性 arm_limits_soft / end_limits(_soft)；standalone 构造同样自带守卫
+Backend(ABC, cfg, arm_limits=None) ✅   # 只存硬限位（本体=入参 config 四键解析；末端=自解析 end.joints 四键，缺键 ±∞）；属性 arm_limits / end_limits；下发守卫只裁硬限位
 send_position/velocity/mit_{arm,end} 守卫模板→抽象内核 _send_*_{arm,end}（限位裁剪唯一执行点；末端标量广播逐电机裁剪、力度按 ±tau_max 数值裁剪；越限告警节流每 0.5s 至多一条；send_action_end 离散不模板化）；set_arm/end_limits_soft 运行期替换 ✅
 get_backend(name) · REGISTRY     # config backend.name 选型 ✅
 BackendDMMujoco（DM 机械臂 MuJoCo 仿真后端桩，待实现、未注册 REGISTRY）🟡
-clamp_to_limits(targets, limits) · joint_limits_from_model(model) · limits_from_joint_cfgs(joint_cfgs) · soft_limits(hard, margins 四键字典) · rand_within_limits(limits, size, rng)   # ✅
+clamp_to_limits(targets, limits) · joint_limits_from_model(model) · limits_from_joint_cfgs(joint_cfgs) · soft_limits_from_cfg(cfg, n) · rand_within_limits(limits, size, rng)   # ✅
 transforms.py 23 函数（rpy/rodrigues/quat/T/adT/slerp，纯 numpy）✅ · types.py 枚举+数据类 ✅
 ```
 

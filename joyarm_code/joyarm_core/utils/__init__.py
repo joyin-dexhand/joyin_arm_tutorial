@@ -51,7 +51,7 @@ from .transforms import (
     adT,
     slerp,
 )
-from .limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, rand_within_limits, soft_limits
+from .limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
 
 __all__ = [
     # types
@@ -96,5 +96,5 @@ __all__ = [
     "joint_limits_from_model",
     "limits_from_joint_cfgs",
     "rand_within_limits",
-    "soft_limits",
+    "soft_limits_from_cfg",
 ]

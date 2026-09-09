@@ -117,18 +117,17 @@ class JoyArmFullTest:
     # ----------------------------------------------------------
     @staticmethod
     def _safeguard(cfg: dict) -> list[tuple[str, str, float, float]]:
+        """真机安全化：直接收窄 backend.*.joints 四键硬限位（backend 下发只裁
+        硬限位，故收紧硬限位即收紧全部指令守卫）+ 限速/限矩/增益封顶。"""
         diff: list[tuple[str, str, float, float]] = []
-        j = cfg.setdefault("joyarm", {})
-        n = len(cfg["backend"]["arm"]["joints"])
-        old = j.get("arm_soft_margins")
-        j["arm_soft_margins"] = {k: [SOFT_MARGIN] * n
-                                   for k in ("q_upper", "q_lower", "dq", "tau")}
-        diff.append(("joyarm", "arm_soft_margins", old, j["arm_soft_margins"]))
-        ne = len(cfg["backend"]["end"]["joints"])
-        old_e = j.get("end_soft_margins")
-        j["end_soft_margins"] = {k: [SOFT_MARGIN] * ne
-                                 for k in ("q_upper", "q_lower", "dq", "tau")}
-        diff.append(("joyarm", "end_soft_margins", old_e, j["end_soft_margins"]))
+        for part in ("arm", "end"):
+            for j in cfg["backend"].get(part, {}).get("joints", []):
+                q_lo, q_hi = float(j["q_min"]), float(j["q_max"])
+                new_lo, new_hi = q_lo + SOFT_MARGIN, q_hi - SOFT_MARGIN
+                if new_lo < new_hi:                      # 防过收窄交叉
+                    j["q_min"], j["q_max"] = new_lo, new_hi
+                    diff.append((j["name"], "q_min", q_lo, new_lo))
+                    diff.append((j["name"], "q_max", q_hi, new_hi))
         for j in cfg["backend"]["arm"]["joints"]:
             pv = j.setdefault("POS_VEL", {})
             old, pv["vlim"] = float(pv.get("vlim", 0.0)), min(float(pv.get("vlim", SAFE_ARM_VLIM)), SAFE_ARM_VLIM)
@@ -215,8 +214,8 @@ class JoyArmFullTest:
     def _safe_dir(self, i: int) -> int:
         """第 i 关节的安全运动方向：朝限位区间较宽一侧；**该侧余量不足
         MOVE_AMP 时换向**（q 贴边时"宽侧"可能是零余量方向）。"""
-        q, lo, hi = (self.q_base[i], self.arm.arm_limits_soft.q_min[i],
-                        self.arm.arm_limits_soft.q_max[i])
+        q, lo, hi = (self.q_base[i], self.arm.arm_limits.q_min[i],
+                        self.arm.arm_limits.q_max[i])
         d = 1 if (q - lo) >= (hi - q) else -1
         if d > 0 and (hi - q) < MOVE_AMP:
             d = -1
@@ -238,11 +237,11 @@ class JoyArmFullTest:
     def _steps(self) -> list[tuple[str, str, str, object]]:
         return [
             # ---- L0 离线计算层（无连接、无运动）----
-            ("L0-构造与安全化对照", "低", "打印 margin/限速/限矩/增益收紧对照表；repr 与教学数据读取", self.step_construct),
+            ("L0-构造与安全化对照", "低", "打印硬限位收窄/限速/限矩/增益收紧对照表；repr 与教学数据读取", self.step_construct),
             ("L0-工厂与软失败", "低", "joyarm_factory 正常创建 + 未知型号返回 None（离线第二实例，不连接）", self.step_factory),
-            ("L0-配置 API", "低", "get_config 深拷贝 / set_config 白名单与越界拒绝", self.step_config_api),
+            ("L0-配置 API", "低", "get_config 深拷贝快照（set_config 已随 margin 机制移除）", self.step_config_api),
             ("L0-六域空表与门面守卫", "低", "各域默认空表（教学过渡态）、未加载域门面 RuntimeError", self.step_domains),
-            ("L0-采样与限位", "低", "rand_q_arm + utils clamp_to_limits 裁剪；margin=0 下软限位==硬限位（config 四键）", self.step_sampling),
+            ("L0-采样与限位", "低", "rand_q_arm + utils clamp_to_limits 裁剪；硬限位内采样（config 四键）", self.step_sampling),
             ("L0-配置自检", "低", "check_config 正常静默通过（异常则 ValueError）", self.step_check_config),
             # ---- L1 连接只读层（不使能）----
             ("L1-connect", "低", "建立通信（共享总线，电机保持失能）；离线守卫抽查", self.step_connect),
@@ -296,9 +295,11 @@ class JoyArmFullTest:
         mdh = arm.get_config()["joyarm"]["arm_mdh_and_limits"]   # 类内 config 读取教学数据
         print(f"✓ 教学数据（config 内读取）：arm_mdh_and_limits {len(mdh)}×{len(mdh[0])}"
               f"（MDH 白盒链路，Ch2 教学算法使用）")
-        print(f"✓ 软限位 margin={SOFT_MARGIN}："
-              f"q_min={_fmt(arm.arm_limits_soft.q_min, 2)} "
-              f"q_max={_fmt(arm.arm_limits_soft.q_max, 2)}")
+        print(f"✓ 硬限位收窄 {SOFT_MARGIN}："
+              f"q_min={_fmt(arm.arm_limits.q_min, 2)} "
+              f"q_max={_fmt(arm.arm_limits.q_max, 2)}（backend 下发只裁硬限位）")
+        print(f"✓ 软限位（直配仅加载，上层状态判断用）："
+              f"q_max={_fmt(arm.arm_limits.q_max, 2)}")
         self._expect(RuntimeError, lambda: arm.damping_mode(), "未连接调用 damping_mode")
 
     def step_factory(self) -> None:
@@ -312,10 +313,7 @@ class JoyArmFullTest:
         cfg = arm.get_config()
         cfg["basic"]["name"] = "hacked"
         assert arm.get_config()["basic"]["name"] == "joyarm_dm"   # 深拷贝
-        assert np.allclose(arm.arm_limits_soft.q_min, arm.arm_limits.q_min)  # margin=0 → 软=硬
-        self._expect(ValueError, lambda: arm.set_config("backend.name", "x"),
-                     "set_config 白名单外路径")
-        print("✓ 配置 API：深拷贝快照 / 越界拒绝")
+        print("✓ 配置 API：深拷贝快照（set_config 已随 margin 机制移除）")
 
     def step_domains(self) -> None:
         arm = self.arm
@@ -329,10 +327,10 @@ class JoyArmFullTest:
         arm = self.arm
         rng = np.random.default_rng(0)
         q = arm.rand_q_arm(rng=rng)
-        clipped = clamp_to_limits(q + 10.0, arm.arm_limits_soft)
-        assert np.allclose(q, clamp_to_limits(q, arm.arm_limits_soft))  # 采样在限位内
+        clipped = clamp_to_limits(q + 10.0, arm.arm_limits)
+        assert np.allclose(q, clamp_to_limits(q, arm.arm_limits))  # 采样在限位内
         assert not np.allclose(q + 10.0, clipped)                        # 越限被裁
-        print(f"✓ 采样/裁剪：rand_q_arm {q.round(2)}（软=硬限位内，经 utils.clamp_to_limits）")
+        print(f"✓ 采样/裁剪：rand_q_arm {q.round(2)}（硬限位内，经 utils.clamp_to_limits）")
 
     def step_check_config(self) -> None:
         JoyArm.check_config(self.arm.model, self.arm.get_config())    # 正常 → 静默通过；异常 → ValueError 列出全部问题
@@ -364,11 +362,11 @@ class JoyArmFullTest:
 
     def step_qbase(self) -> None:
         q = self._q_now()
-        self.q_base = clamp_to_limits(q, self.arm.arm_limits_soft)
+        self.q_base = clamp_to_limits(q, self.arm.arm_limits)
         print(f"  当前 q：{_fmt(q)}")
         print(f"  q_base（夹紧后，后续小幅运动基准）：{_fmt(self.q_base)}")
-        assert np.all(self.q_base >= self.arm.arm_limits_soft.q_min - 1e-9)
-        assert np.all(self.q_base <= self.arm.arm_limits_soft.q_max + 1e-9)
+        assert np.all(self.q_base >= self.arm.arm_limits.q_min - 1e-9)
+        assert np.all(self.q_base <= self.arm.arm_limits.q_max + 1e-9)
         print("✓ 安全基准位形已建立")
 
     # ================= L2 使能层 =================
@@ -553,8 +551,8 @@ class JoyArmFullTest:
         worst = 0.0
         for j, nm in enumerate(self.arm_names):
             target = float(np.clip(self.q_base[j] + self._safe_dir(j) * MOVE_AMP,
-                                   self.arm.arm_limits_soft.q_min[j],
-                                   self.arm.arm_limits_soft.q_max[j]))
+                                   self.arm.arm_limits.q_min[j],
+                                   self.arm.arm_limits.q_max[j]))
             self.arm.set_arm_command(ControlMode.POSITION, q=[target], joint=j)
             ok1 = self._wait_arm_q(j, target)
             self.arm.set_arm_command(ControlMode.POSITION, q=[float(self.q_base[j])], joint=j)
@@ -627,8 +625,8 @@ class JoyArmFullTest:
         arm = self.arm
         j = 0
         target = float(np.clip(self.q_base[j] + self._safe_dir(j) * 0.05,
-                               arm.arm_limits_soft.q_min[j],
-                               arm.arm_limits_soft.q_max[j]))
+                               arm.arm_limits.q_min[j],
+                               arm.arm_limits.q_max[j]))
         q_t = np.asarray(self.q_base, dtype=float).copy()
         q_t[j] = target
         arm.move_j(q_t, t=0.6, wait_timeout=5.0)

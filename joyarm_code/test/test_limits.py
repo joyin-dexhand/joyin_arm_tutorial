@@ -1,9 +1,9 @@
-"""utils/limits.py 离线单测：软限位四键 margin 构建 + 指令裁剪。
+"""utils/limits.py 离线单测：限位构建（模型/config 直配软限位）+ 指令裁剪。
 
 覆盖：①``joint_limits_from_model`` 硬限位解析（velocity/effort 缺失或 ``nv != n``
-时上限退化 ∞）；②``soft_limits`` 四键绝对余量语义（逐关节列表 / 标量广播 /
-缺省键 = 0 / inf 上限不减）与非法输入报错（非字典、未知键、负值、长度错、
-限位交叉、margin 不小于上限）；③``clamp_to_limits`` 裁剪与结构错误。
+时上限退化 ∞）；②``soft_limits_from_cfg`` 四键直值语义（逐关节列表 / 标量广播 /
+缺省键 = ±∞）与非法输入报错（非字典、未知键、负幅值、长度错、限位交叉）；
+③``clamp_to_limits`` 裁剪与结构错误。
 
 运行：``python test/test_limits.py`` 或 pytest。
 """
@@ -18,7 +18,7 @@ import numpy as np
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core import JointLimits, clamp_to_limits, joint_limits_from_model, soft_limits  # noqa: E402
+from joyarm_core import JointLimits, clamp_to_limits, joint_limits_from_model, soft_limits_from_cfg  # noqa: E402
 
 
 def _hard(n: int = 3) -> JointLimits:
@@ -57,58 +57,39 @@ def test_joint_limits_from_model():
     assert np.all(np.isinf(hard3.dq_max)) and np.all(np.isinf(hard3.tau_max))
 
 
-def test_soft_limits_four_margins():
-    """四键逐关节绝对余量：位置上下各自内缩、速度/力矩上限各自下调。"""
-    soft = soft_limits(_hard(3), {
-        "q_upper": [0.1, 0.2, 0.3], "q_lower": [0.3, 0.2, 0.1],
-        "dq": [1.0, 2.0, 3.0], "tau": [0.5, 1.0, 1.5],
-    })
-    hard = _hard(3)
-    assert np.allclose(soft.q_max, hard.q_max - np.array([0.1, 0.2, 0.3]))
-    assert np.allclose(soft.q_min, hard.q_min + np.array([0.3, 0.2, 0.1]))
-    assert np.allclose(soft.dq_max, hard.dq_max - np.array([1.0, 2.0, 3.0]))
-    assert np.allclose(soft.tau_max, hard.tau_max - np.array([0.5, 1.0, 1.5]))
+def test_soft_limits_from_cfg_direct_values():
+    """四键直值（不经 margin 换算）：逐关节列表原样生效。"""
+    soft = soft_limits_from_cfg({
+        "q_min": [-1.3, -2.2, -0.6], "q_max": [0.9, -0.1, 1.4],
+        "dq_max": [9.0, 18.0, 27.0], "tau_max": [4.5, 5.0, 5.5],
+    }, n=3)
+    assert np.allclose(soft.q_min, [-1.3, -2.2, -0.6])
+    assert np.allclose(soft.q_max, [0.9, -0.1, 1.4])
+    assert np.allclose(soft.dq_max, [9.0, 18.0, 27.0])
+    assert np.allclose(soft.tau_max, [4.5, 5.0, 5.5])
 
 
-def test_soft_limits_scalar_broadcast_and_defaults():
-    hard = _hard(3)
+def test_soft_limits_from_cfg_scalar_broadcast_and_defaults():
     # 标量：全关节统一
-    soft = soft_limits(hard, {"q_upper": 0.1})
-    assert np.allclose(soft.q_max, hard.q_max - 0.1)
-    assert np.array_equal(soft.q_min, hard.q_min)          # 缺省键 = 0 → 不动
-    assert np.array_equal(soft.dq_max, hard.dq_max)
-    assert np.array_equal(soft.tau_max, hard.tau_max)
-    # 空字典 / 缺段：软 = 硬
-    soft0 = soft_limits(hard, {})
-    assert np.array_equal(soft0.q_min, hard.q_min) and np.array_equal(soft0.q_max, hard.q_max)
-    assert np.array_equal(soft0.dq_max, hard.dq_max) and np.array_equal(soft0.tau_max, hard.tau_max)
-
-
-def test_soft_limits_inf_untouched():
-    """硬上限 ∞（URDF 缺 velocity/effort）减 margin 仍 ∞。"""
-    hard = JointLimits(q_min=np.full(2, -1.0), q_max=np.full(2, 1.0),
-                       dq_max=np.full(2, np.inf), tau_max=np.full(2, np.inf))
-    soft = soft_limits(hard, {"dq": 5.0, "tau": 1.0})
+    soft = soft_limits_from_cfg({"q_max": 0.5}, n=3)
+    assert np.allclose(soft.q_max, 0.5)
+    assert np.all(np.isneginf(soft.q_min))              # 缺省键 = ±∞（该量不设软限）
     assert np.all(np.isinf(soft.dq_max)) and np.all(np.isinf(soft.tau_max))
 
 
-def test_soft_limits_invalid_inputs():
-    hard = _hard(3)
-
-    def _expect_error(margins, keyword):
+def test_soft_limits_from_cfg_invalid_inputs():
+    def _expect_error(cfg, n, keyword):
         try:
-            soft_limits(hard, margins)
-            raise AssertionError(f"margin={margins!r} 应抛 ValueError（{keyword}）")
+            soft_limits_from_cfg(cfg, n)
+            raise AssertionError(f"cfg={cfg!r} 应抛 ValueError（{keyword}）")
         except ValueError as e:
             assert keyword in str(e)
 
-    _expect_error(0.05, "四键字典")                              # 非字典（旧标量写法）
-    _expect_error({"bogus": 0.1}, "未知键")                     # 未知键
-    _expect_error({"q_upper": -0.1}, "负值")                    # 负 margin
-    _expect_error({"q_upper": [0.1, 0.2]}, "长度")              # 列表长度 ≠ n
-    _expect_error({"q_upper": 2.5}, "交叉")                     # 位置 margin 过大 → 交叉
-    _expect_error({"dq": 100.0}, "dq/tau margin")               # dq margin ≥ 硬上限
-    _expect_error({"tau": 100.0}, "dq/tau margin")              # tau margin ≥ 硬上限
+    _expect_error(0.05, 3, "四键字典")                          # 非字典
+    _expect_error({"bogus": 0.1}, 3, "未知键")                  # 未知键
+    _expect_error({"q_max": [0.1, 0.2]}, 3, "长度")             # 列表长度 ≠ n
+    _expect_error({"q_min": 1.0, "q_max": -1.0}, 3, "q_min > q_max")   # 限位交叉
+    _expect_error({"dq_max": -1.0}, 3, "负值")                  # 负的幅值上限
 
 
 def test_clamp_to_limits():

@@ -14,7 +14,7 @@ from typing import List, Optional, Union
 import numpy as np
 import pinocchio as pin
 
-from ..utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_limits, soft_limits
+from ..utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
 from ..utils.transforms import quat_conj, quat_mul, quat_to_axis_angle
 from ..utils.types import ArmState, ControlMode, JointLimits, Pose, TcpLimits, TrajFrame
 
@@ -91,13 +91,6 @@ _DOMAIN_REGISTRIES = {
     "control": _CONTROL_REGISTRY,
 }
 
-# 运行期可设参数白名单（set_config 点路径 → 应用函数；config 文件不回写）
-_CONFIG_SETTABLE = {
-    "joyarm.arm_soft_margins": "set_arm_soft_margins",
-    "joyarm.end_soft_margins": "set_end_soft_margins",
-}
-
-
 def _build_domain(domain: str, registry: dict, spec) -> dict:
     """按 config 规格实例化一域策略成员（硬失败语义）。
 
@@ -162,8 +155,6 @@ class JoyArm:
         basic = cfg.get("basic") or {}
         jcfg = cfg.get("joyarm") or {}
         backend_cfg = cfg.get("backend") or {}
-        arm_margins = jcfg.get("arm_soft_margins") or {}
-        end_margins = jcfg.get("end_soft_margins") or {}
         arm_joint_cfgs = (backend_cfg.get("arm") or {}).get("joints") or []
         end_joint_cfgs = (backend_cfg.get("end") or {}).get("joints") or []
 
@@ -183,7 +174,7 @@ class JoyArm:
         # ---- 本体（arm）----
         self.n_arm: int = 0                              # 本体关节数（config arm.joints 数）
         self.arm_limits: Optional[JointLimits] = None    # 本体硬限位（config arm.joints 四键；初始化后固定）
-        self.arm_limits_soft: Optional[JointLimits] = None   # 本体软限位（硬限位 + margin 内缩）
+        self.arm_limits_soft: Optional[JointLimits] = None   # 本体软限位（config joyarm.arm_soft_limits 直配，上层状态判断用）
         self._arm_joint_names: List[str] = []            # 本体关节名（config backend.arm.joints 顺序）
         self._arm_zero: np.ndarray = np.zeros(0)         # 本体零位（按自由度全零）
         self._arm_home: np.ndarray = np.zeros(0)         # 本体上电初始位形（config joyarm.arm_home）
@@ -191,7 +182,7 @@ class JoyArm:
         # ---- 末端（end）----
         self.n_end: int = 0                              # 末端电机数（config end.joints 数；无末端 0）
         self.end_limits: Optional[JointLimits] = None    # 末端硬限位（config end.joints 四键，电机行程）
-        self.end_limits_soft: Optional[JointLimits] = None   # 末端软限位（硬限位 + margin 内缩）
+        self.end_limits_soft: Optional[JointLimits] = None   # 末端软限位（config joyarm.end_soft_limits 直配，上层状态判断用）
         self._end_joint_names: List[str] = []            # 末端电机名（config backend.end.joints 顺序）
         self._end_zero: np.ndarray = np.zeros(0)         # 末端零位（按自由度全零）
         self._end_home: np.ndarray = np.zeros(0)         # 末端初始位形（config joyarm.end_home，电机空间）
@@ -247,15 +238,34 @@ class JoyArm:
 
         # ---- 硬限位（config backend.*.joints 四键；初始化后即固定）----
         # arm 四键数值须与 URDF limit 标定保持一致（维护约定）；末端为电机空间行程；
-        # 无末端段（end.joints 为空）则末端限位为 None
+        # 无末端段（end.joints 为空）则末端限位为 None。backend 下发指令只裁硬限位
         self.arm_limits = limits_from_joint_cfgs(arm_joint_cfgs)
         self.end_limits = limits_from_joint_cfgs(end_joint_cfgs)
 
-        # ---- 软限位（硬限位按 config margin 四键绝对余量内缩；缺省全零软=硬）----
-        # 运行期可经 set_arm_soft_margins / set_end_soft_margins 更新并透传 backend
-        self.arm_limits_soft = soft_limits(self.arm_limits, margins=arm_margins)
-        self.end_limits_soft = (soft_limits(self.end_limits, margins=end_margins)
-                                if self.end_limits is not None else None)
+        # ---- 软限位（config joyarm.arm_soft_limits / end_soft_limits 四键直值，
+        # arm/end 分开配置；未配置时软=硬）。仅加载备用：上层"超软限位→状态异常
+        # →急停恢复"后续实现，不参与指令裁剪（下发只裁硬限位）----
+        self.arm_limits_soft = (
+            soft_limits_from_cfg(jcfg["arm_soft_limits"], self.n_arm)
+            if jcfg.get("arm_soft_limits") is not None
+            else copy.deepcopy(self.arm_limits))
+        self.end_limits_soft = (
+            soft_limits_from_cfg(jcfg["end_soft_limits"], self.n_end)
+            if (self.end_limits is not None and jcfg.get("end_soft_limits") is not None)
+            else copy.deepcopy(self.end_limits))
+        # 软限位须位于对应硬限位内（越界为配置错误，硬失败）
+        for tag, soft, hard in (("arm", self.arm_limits_soft, self.arm_limits),
+                                ("end", self.end_limits_soft, self.end_limits)):
+            if soft is None or hard is None:
+                continue
+            beyond = ((np.asarray(soft.q_min) < np.asarray(hard.q_min) - 1e-9).any()
+                      or (np.asarray(soft.q_max) > np.asarray(hard.q_max) + 1e-9).any()
+                      or (np.asarray(soft.dq_max) > np.asarray(hard.dq_max) + 1e-9).any()
+                      or (np.asarray(soft.tau_max) > np.asarray(hard.tau_max) + 1e-9).any())
+            if beyond:
+                raise ValueError(
+                    f"joyarm.py - JoyArm.__init__：joyarm.{tag}_soft_limits 超出对应"
+                    f"硬限位（软限位须位于硬限位内，供上层状态判断）")
 
         # ---- 特征位形（zero/neutral 按自由度全零；home 自 config，越限裁剪并告警）----
 
@@ -285,16 +295,14 @@ class JoyArm:
             self._apply_tcp_limits(jcfg["tcp_limits"])
 
         # ---- 整机通信后端（config backend 段 name 选型；必须成功，失败即构造失败）----
-        # 限位参数传递（组合根职责）：硬限位（深拷贝隔离）+ 两份 margin；
-        # 软限位由后端基类 __init__ 自建（限位裁剪唯一执行点，独立使用后端同样生效）
+        # 硬限位传递（组合根职责，深拷贝隔离）；backend 守卫只裁硬限位
+        # （限位裁剪唯一执行点，独立使用后端同样生效）
         backend_name = str(backend_cfg["name"])          # check_config 已确保存在
         bcfg_rest = dict(backend_cfg)
         bcfg_rest.pop("name", None)
         self._backend = get_backend(backend_name)(
             bcfg_rest,
-            arm_limits=copy.deepcopy(self.arm_limits),
-            arm_soft_margins=arm_margins,
-            end_soft_margins=end_margins)
+            arm_limits=copy.deepcopy(self.arm_limits))
 
         # ---- 六域策略成员字典（config 选型；任一成员创建失败即构造失败；首个激活）----
         robotics_cfg = cfg.get("robotics") or {}
@@ -410,13 +418,13 @@ class JoyArm:
                 f"joyarm.py - joint_index_end：电机名 {name!r} 未找到；"
                 f"可用：{self._end_joint_names}") from None
 
-    # ---- 关节角采样（arm 软限位内；采样实现在 utils.rand_within_limits）----
+    # ---- 关节角采样（arm 硬限位内；采样实现在 utils.rand_within_limits）----
     def rand_q_arm(self,
         size: Optional[int] = None,
         rng: Optional[np.random.Generator] = None,
     ) -> np.ndarray:
-        """在**本体软限位**内均匀采样关节角（``(n_arm,)``；``size`` 给 ``(size, n_arm)``）。"""
-        return rand_within_limits(self.arm_limits_soft, size=size, rng=rng)
+        """在**本体硬限位**内均匀采样关节角（``(n_arm,)``；``size`` 给 ``(size, n_arm)``）。"""
+        return rand_within_limits(self.arm_limits, size=size, rng=rng)
 
     # ---- 打印表示 ----
     def __repr__(self) -> str:
@@ -429,7 +437,7 @@ class JoyArm:
         )
 
     # ----------------------------------------------------------
-    # config 配置管理（读取 / 运行期设置 / 自检；架构约束：配置功能全集）
+    # config 配置管理（读取 / 自检；架构约束：配置功能全集）
     # ----------------------------------------------------------
     # ---- 配置读取 ----
     def get_config(self) -> dict:
@@ -439,54 +447,6 @@ class JoyArm:
         经此接口从**类内已加载的 config**获取，不重新加载 yaml 文件。
         """
         return copy.deepcopy(self._config)
-
-    # ---- 运行期设置（白名单内即时生效；config 文件不回写）----
-    def set_config(self, path: str, value) -> None:
-        """运行期设置参数（白名单内即时生效；config 文件不回写，重启以 yaml 为准）。
-
-        :param path: 点路径，如 ``"joyarm.arm_soft_margins"``。
-        :raises ValueError: 路径不在白名单内（其余项请手改 configs yaml，保留注释）。
-        """
-        handler = _CONFIG_SETTABLE.get(path)
-        if handler is None:
-            raise ValueError(
-                f"joyarm.py - set_config：path={path!r} 不在运行期可设白名单内："
-                f"{sorted(_CONFIG_SETTABLE)}（其余配置请直接编辑 configs yaml）"
-            )
-        getattr(self, handler)(value)
-        # 写回内存 config 快照（深拷贝 value 隔离外部引用；尽力而为：路径中遇
-        # 列表段（如多载规格）则跳过，运行时值已由 handler 生效，快照以 yaml 结构为准）
-        node = self._config
-        keys = path.split(".")
-        for k in keys[:-1]:
-            node = node.get(k) if isinstance(node, dict) else None
-            if not isinstance(node, dict):
-                node = None
-                break
-        if isinstance(node, dict):
-            node[keys[-1]] = copy.deepcopy(value)
-
-    def set_arm_soft_margins(self, margins: dict) -> None:
-        """按四键 margin 重算**本体软限位**（硬限位固定），并透传更新到 backend 守卫。
-
-        :param margins: 四键字典 ``{"q_upper","q_lower","dq","tau"}``，每键标量
-            （全关节统一）或 ``n_arm`` 元列表（逐关节）；对应 config
-            ``joyarm.arm_soft_margins`` 段。
-        """
-        self.arm_limits_soft = soft_limits(self.arm_limits, margins=margins or {})
-        self._backend.set_arm_limits_soft(copy.deepcopy(self.arm_limits_soft))
-
-    def set_end_soft_margins(self, margins: dict) -> None:
-        """按四键 margin 重算**末端软限位**（电机空间）并透传更新到 backend 守卫。
-
-        :raises ValueError: 无末端执行器（config backend.end.joints）时不可设。
-        """
-        if self.end_limits is None:
-            raise ValueError(
-                "joyarm.py - set_end_soft_margins：无末端执行器（config backend.end.joints），"
-                "joyarm.end_soft_margins 不可设置")
-        self.end_limits_soft = soft_limits(self.end_limits, margins=margins or {})
-        self._backend.set_end_limits_soft(copy.deepcopy(self.end_limits_soft))
 
     # ---- 自检（check_config 离线静态 / check_hardware 临时连接硬件）----
     @staticmethod
@@ -549,6 +509,20 @@ class JoyArm:
             size = np.asarray(v, dtype=float).size
             if size != n_ref:
                 problems.append(f"joyarm.{key} 长度 {size} ≠ 关节数 {n_ref}")
+        for key, n_ref in (("arm_soft_limits", n_arm_cfg), ("end_soft_limits", n_end_cfg)):
+            soft = jcfg.get(key)
+            if soft is None:
+                continue
+            if not isinstance(soft, dict):
+                problems.append(f"joyarm.{key} 需为四键字典（q_min/q_max/dq_max/tau_max）")
+                continue
+            for k, v in soft.items():
+                if k in ("q_min", "q_max", "dq_max", "tau_max"):
+                    if np.asarray(v, dtype=float).ndim > 0 and \
+                            np.asarray(v, dtype=float).reshape(-1).shape[0] != n_ref:
+                        problems.append(
+                            f"joyarm.{key}.{k} 长度 "
+                            f"{np.asarray(v, dtype=float).reshape(-1).shape[0]} ≠ 关节数 {n_ref}")
         robotics_cfg = cfg.get("robotics") or {}
         for domain in _DOMAIN_REGISTRIES:
             spec = robotics_cfg.get(domain)
@@ -953,10 +927,10 @@ class JoyArm:
         MIT 模式 ``kp/kd`` 可缺省（``None`` 透传后端回退 config 增益）；
         纯力矩不设独立模式，经 MIT（``kp=kd=0``）实现。
 
-        限位守卫在后端基类 ``Backend.send_*_arm`` 模板内（指令路径唯一裁剪点）：
-        ``q`` 裁剪到软限位、``dq``/``tau`` 裁剪到幅值上限，越限告警（节流每
+        限位守卫在后端基类 ``Backend.send_*_arm`` 模板内（硬限位裁剪唯一执行点）：
+        ``q`` 裁剪到硬限位、``dq``/``tau`` 裁剪到幅值上限，越限告警（节流每
         0.5s 至多一条）就近裁剪（``kp``/``kd`` 为标定增益，不裁剪）；软限位
-        由后端构造时自建。
+        不参与指令裁剪（JoyArm 直配加载，供上层状态判断）。
 
         :raises RuntimeError: 未连接真机 / 当前控制模式与 ``mode`` 不符
             （需先 :meth:`set_mode_arm`）。
@@ -1135,7 +1109,7 @@ class JoyArm:
         ``POS_VEL.vlim`` 约束，超出时实际时长 > ``t``（由末段到位等待兜底）；
         真机使用前请先安全化 config（vlim/kp/kd 封顶）。
 
-        :param q: 目标关节角 ``(n_arm,)``，弧度（入口裁剪到软限位——规划与
+        :param q: 目标关节角 ``(n_arm,)``，弧度（入口裁剪到硬限位——规划与
             到位判定均以裁剪后目标为准，后端守卫再裁为幂等空操作）。
         :param t: 总时长（秒）；缺省 ``max|q−q_cur|``（隐含峰值 1.5 rad/s）；
             ``t ≤ 0`` 直发目标。
@@ -1152,11 +1126,11 @@ class JoyArm:
         if q.shape[0] != self.n_arm:
             raise ValueError(
                 f"joyarm.py - move_j：目标维度 {q.shape[0]} 与关节数 {self.n_arm} 不符")
-        # 入口裁软限位：规划、下发、到位判定统一用裁剪后目标，消除
+        # 入口裁硬限位：规划、下发、到位判定统一用裁剪后目标，消除
         # 「后端裁剪到位 ≠ 判定目标」的失配超时（后端守卫再裁为幂等空操作）
-        q_c = clamp_to_limits(q, self.arm_limits_soft)
+        q_c = clamp_to_limits(q, self.arm_limits)
         if not np.array_equal(q, q_c):
-            logger.warning("move_j：目标关节角越软限位，已裁剪 %s → %s"
+            logger.warning("move_j：目标关节角越硬限位，已裁剪 %s → %s"
                            "（规划与到位判定以裁剪后为准）",
                            np.round(q, 4).tolist(), np.round(q_c, 4).tolist())
         q = q_c
@@ -1220,7 +1194,7 @@ class JoyArm:
     def home_to_zero(self, t=None, *, wait_tol: float = 0.05,
                      wait_timeout: float = 10.0) -> None:
         """home → zero（arm + end）：**先检查当前位于 home**（arm 于 ``arm_home``
-        且 end 于 ``end_home``，软限位投影后容差 ``wait_tol``），再运动到零位
+        且 end 于 ``end_home``，硬限位投影后容差 ``wait_tol``），再运动到零位
         （MIT 阻抗，同 :meth:`safe_home`）。
 
         :raises RuntimeError: 当前不在 home 位形（请先 :meth:`safe_home` /
@@ -1228,9 +1202,9 @@ class JoyArm:
         """
         self._require_connected()
         arm_ok = self.is_in_position(
-            q=clamp_to_limits(self.arm_home, self.arm_limits_soft), tol_q=wait_tol)
+            q=clamp_to_limits(self.arm_home, self.arm_limits), tol_q=wait_tol)
         end_ok = self._is_end_in_position(
-            clamp_to_limits(self.end_home, self.end_limits_soft), tol_q=wait_tol) \
+            clamp_to_limits(self.end_home, self.end_limits), tol_q=wait_tol) \
             if self.n_end else True
         if not (arm_ok and end_ok):
             raise RuntimeError(
@@ -1256,9 +1230,9 @@ class JoyArm:
         末端不适用 MIT 阻抗（config 末端 MIT 增益标定为 0），故经位置模式
         运动到目标（电机空间）。
         """
-        # 入口裁软限位（与 move_j 判定基准一致）
+        # 入口裁硬限位（与 move_j 判定基准一致；软限位归上层状态判断）
         q_arm = clamp_to_limits(np.asarray(q_arm, dtype=float).reshape(-1),
-                                self.arm_limits_soft)
+                                self.arm_limits)
         q0 = np.asarray(self.get_arm_state().joint.q, dtype=float).reshape(-1)
         if rate is None:
             rate = float(((self._config.get("backend") or {}).get("arm") or {})
@@ -1270,7 +1244,7 @@ class JoyArm:
         # 末端：位置模式单目标（电机空间）
         if self.n_end:
             q_end = clamp_to_limits(np.asarray(q_end, dtype=float).reshape(-1),
-                                    self.end_limits_soft)
+                                    self.end_limits)
             self._backend.set_mode_end(ControlMode.POSITION)
             self._backend.send_position_end(q_end)
         # 本体：MIT 阻抗流（kp/kd 透传 None → 后端回退 config MIT 增益；

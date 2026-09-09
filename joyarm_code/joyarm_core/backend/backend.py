@@ -23,7 +23,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..utils.limits import limits_from_joint_cfgs, soft_limits
+from ..utils.limits import limits_from_joint_cfgs
 from ..utils.types import ArmState, ControlMode, JointLimits
 
 __all__ = ["Backend"]
@@ -40,72 +40,33 @@ class Backend(ABC):
 
     ``joint`` 形参：电机索引，``None`` 表示全部电机。
 
-    **限位构建（构造时，arm/end 统一）**：软限位在 ``__init__`` 内构建，独立
-    使用后端（不经 JoyArm）同样自带守卫——
-
-    - 本体：硬限位经 ``arm_limits`` 传入（config ``backend.arm.joints`` 四键
-      解析，数值与 URDF limit 标定保持一致），按 ``arm_soft_margins``
-      四键绝对余量内缩；未传硬限位则本体守卫不启用（放行）；
-    - 末端：硬限位自解析 cfg ``end.joints`` 条目的 ``q_min``/``q_max``/``dq_max``/
-      ``tau_max``（**ABC 契约标准键**，缺键量纲置 ±∞；多执行器末端逐条对应），
-      按 ``end_soft_margins`` 内缩；无 ``end`` 段则末端守卫不启用。
-
-    **指令限位守卫（基类模板，限位裁剪的唯一执行点）**：``send_position/velocity/mit``
-    三法 × arm/end 两族在基类内为具体模板——先守卫（``q`` 裁剪到软限位、
-    ``dq``/``tau`` 裁剪到幅值上限，越限就近裁剪并告警，告警节流每 0.5s 至多一条；
-    末端标量指令按逐电机限位广播裁剪），再委托子类抽象内核 ``_send_*`` 下发；
-    ``kp``/``kd`` 增益不裁剪；``send_action_end`` 为离散动作，不模板化。
-
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 两个子段，各含 ``channel`` / ``protocol`` /
         ``baud_rate`` / ``control_rate`` / ``joints``（电机配置列表）。
     :param arm_limits: 本体硬限位（``JointLimits``，config ``backend.arm.joints``
         四键解析后由组合根传入）；``None``（独立使用）则本体守卫不启用。
-    :param arm_soft_margins: 本体软限位 margin（四键字典，语义见
-        ``utils/limits.soft_limits``）；缺省全零（软=硬）。
-    :param end_soft_margins: 末端软限位 margin（四键字典，逐电机）；缺省全零。
     """
 
     def __init__(self, cfg: dict,
-                 arm_limits: Optional[JointLimits] = None,
-                 arm_soft_margins: Optional[dict] = None,
-                 end_soft_margins: Optional[dict] = None) -> None:
+                 arm_limits: Optional[JointLimits] = None) -> None:
         self.cfg = cfg
         self._warn_last = 0.0          # 越限告警节流：上次告警的 time.monotonic 时刻
-        # ---- 限位构建（守卫依据；构造即生效，无需另行注入）----
-        self._arm_limits_soft: Optional[JointLimits] = (
-            soft_limits(arm_limits, arm_soft_margins or {})
-            if arm_limits is not None else None)
+        # ---- 硬限位构建（守卫依据；构造即生效，无需另行注入）----
+        self._arm_limits: Optional[JointLimits] = arm_limits
         self._end_limits: Optional[JointLimits] = self.end_limits_from_cfg(cfg)
-        self._end_limits_soft: Optional[JointLimits] = (
-            soft_limits(self._end_limits, end_soft_margins or {})
-            if self._end_limits is not None else None)
 
     # ----------------------------------------------------------
-    # 限位属性与运行期替换（arm_limits_soft / end_limits(_soft)）
+    # 硬限位属性（arm_limits / end_limits；下发守卫唯一依据）
     # ----------------------------------------------------------
     @property
-    def arm_limits_soft(self) -> Optional[JointLimits]:
-        """本体软限位（未构建为 ``None``，本体守卫放行）。"""
-        return self._arm_limits_soft
+    def arm_limits(self) -> Optional[JointLimits]:
+        """本体硬限位（未传入为 ``None``，本体守卫放行）。"""
+        return self._arm_limits
 
     @property
     def end_limits(self) -> Optional[JointLimits]:
         """末端硬限位（自 cfg ``end.joints`` 解析；无末端段为 ``None``）。"""
         return self._end_limits
-
-    @property
-    def end_limits_soft(self) -> Optional[JointLimits]:
-        """末端软限位（硬限位按 ``end_soft_margins`` 内缩；无末端段为 ``None``）。"""
-        return self._end_limits_soft
-
-    def set_arm_limits_soft(self, limits: JointLimits) -> None:
-        """运行期替换本体软限位（构造时已由入参构建；运行期改 margin 后同步）。"""
-        self._arm_limits_soft = limits
-
-    def set_end_limits_soft(self, limits: JointLimits) -> None:
-        """运行期替换末端软限位（末端硬限位仍以 config 解析为准）。"""
-        self._end_limits_soft = limits
 
     @staticmethod
     def end_limits_from_cfg(cfg: dict) -> Optional[JointLimits]:
@@ -192,23 +153,23 @@ class Backend(ABC):
         """
 
     # ----------------------------------------------------------
-    # 指令限位守卫（arm/end 两族共用裁剪核；send_* 模板前置）
+    # 指令限位守卫（arm/end 两族共用裁剪核；send_* 模板前置；只裁硬限位）
     # ----------------------------------------------------------
     def _guard_arm(self, name: str, arr: np.ndarray,
                    joint: Optional[int]) -> np.ndarray:
-        """本体指令守卫：``q`` 软限位裁剪、``dq``/``tau`` 幅值裁剪。
+        """本体指令守卫：``q`` 硬限位裁剪、``dq``/``tau`` 幅值裁剪。
 
         纵深防御（与 :meth:`joyarm_core.robotics.control.Controller.step` 的
-        守卫各自独立实现）；未构建软限位 / 维度不符时原样放行（后者由子类
+        守卫各自独立实现）；未传入硬限位 / 维度不符时原样放行（后者由子类
         内核报清晰的维度错误）。
         """
-        return self._clip_within(self._arm_limits_soft, name, arr, joint,
+        return self._clip_within(self._arm_limits, name, arr, joint,
                                  family="arm", broadcast=False)
 
     def _guard_end(self, name: str, arr: np.ndarray,
                    joint: Optional[int]) -> np.ndarray:
-        """末端指令守卫（逐电机限位；多执行器末端支持标量广播裁剪）。"""
-        return self._clip_within(self._end_limits_soft, name, arr, joint,
+        """末端指令守卫（逐电机硬限位；多执行器末端支持标量广播裁剪）。"""
+        return self._clip_within(self._end_limits, name, arr, joint,
                                  family="end", broadcast=True)
 
     def _clip_within(self, limits: Optional[JointLimits], name: str,
@@ -258,9 +219,9 @@ class Backend(ABC):
     # 本体指令下发（send_*_arm 基类守卫模板 → 子类抽象内核 _send_*_arm）
     # ----------------------------------------------------------
     def send_position_arm(self, q: np.ndarray, joint: Optional[int] = None) -> None:
-        """本体位置指令（守卫模板：``q`` 软限位裁剪 → 内核限速下发）。
+        """本体位置指令（守卫模板：``q`` 硬限位裁剪 → 内核限速下发）。
 
-        :param q: 关节角目标 ``(n,)``，弧度；越限时就近裁剪到软限位并告警。
+        :param q: 关节角目标 ``(n,)``，弧度；越限时就近裁剪到硬限位并告警。
         """
         self._send_position_arm(self._guard_arm("q", self._vec(q), joint), joint)
 
@@ -274,7 +235,7 @@ class Backend(ABC):
     def send_velocity_arm(self, dq: np.ndarray, joint: Optional[int] = None) -> None:
         """本体速度指令（守卫模板：``dq`` 幅值裁剪 → 内核下发）。
 
-        :param dq: 关节速度目标 ``(n,)``，rad/s；越限时裁剪到软限位幅值并告警。
+        :param dq: 关节速度目标 ``(n,)``，rad/s；越限时裁剪到硬限位幅值并告警。
         """
         self._send_velocity_arm(self._guard_arm("dq", self._vec(dq), joint), joint)
 

@@ -81,7 +81,7 @@ from .robotics.trajectory import (TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
 from .robotics.control import Controller, AutoController, ForceController
 
 # ---- 指令路径守卫（clamp_to_limits）----
-from .utils.limits import clamp_to_limits, joint_limits_from_model, soft_limits
+from .utils.limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, soft_limits_from_cfg
 
 # ---- 通信层（整机后端，两层继承 + name 选型注册表）----
 from . import backend
@@ -152,7 +152,8 @@ __all__ = [
     # 指令路径守卫 + 限位构建辅助
     "clamp_to_limits",
     "joint_limits_from_model",
-    "soft_limits",
+    "limits_from_joint_cfgs",
+    "soft_limits_from_cfg",
     # 通信层（整机后端）
     "backend",
     "Backend",

@@ -61,7 +61,7 @@ from joyarm_core import joyarm_factory, JoyArm
 arm = joyarm_factory("joyarm_dm")  # 推荐：型号名唯一参数；默认未连接（离线），
                                    # 自动加载 configs/joyarm_dm.yaml + URDF（config 必需、
                                    # 自检通过才初始化）；型号不存在时返回 None 并输出失败信息
-Q = arm.rand_q_arm(size=100_000)   # 本体软限位内采样 (N, 6)
+Q = arm.rand_q_arm(size=100_000)   # 本体硬限位内采样 (N, 6)
 JoyArm.check_config("joyarm_dm", arm.get_config())   # 配置静态自检：正常静默通过，异常 ValueError
 mdh = arm.get_config()["joyarm"]["arm_mdh_and_limits"]   # 教学数据从类内 config 读取
 # arm.fkine(Q, arm.ee_frame_name) / arm.ikine(...)  # 求解器门面：各域 REGISTRY 当前为空，

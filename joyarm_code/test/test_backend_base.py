@@ -1,10 +1,10 @@
-"""Backend 基类限位守卫离线单测（限位裁剪唯一执行点：send_* 模板前置，arm/end 两族）。
+"""Backend 基类限位守卫离线单测（硬限位裁剪唯一执行点：send_* 模板前置，arm/end 两族）。
 
-覆盖：①限位构建（构造参数：本体 URDF 硬限位 + 四键 margin；cfg 自解析：末端
-逐电机硬限位 + margin，缺键量纲 ±∞，无 end 段不启用）；②本体守卫（q 软限位 /
-dq、tau 幅值 / kp、kd 透传 / 单关节切片 / 维度不符放行）；③末端守卫（逐电机
-裁剪 / 标量广播裁剪（多执行器）/ force 按 ±tau_max 数值守卫 / MIT 末端）；
-④运行期替换（set_*_limits_soft）与越限告警。
+覆盖：①限位构建（构造参数：本体硬限位；cfg 自解析：末端逐电机硬限位，
+缺键量纲 ±∞，无 end 段不启用；只存硬限位、无软限位属性）；②本体守卫
+（q 硬限位 / dq、tau 幅值 / kp、kd 透传 / 单关节切片 / 维度不符放行）；
+③末端守卫（逐电机裁剪 / 标量广播裁剪（多执行器）/ force 按 ±tau_max 数值
+守卫 / MIT 末端）；④越限告警节流。
 
 运行：``python test/test_backend_base.py`` 或 pytest。
 """
@@ -37,11 +37,8 @@ _STUB_NAMES = (
 def _dummy_backend(cfg: dict | None = None, **ctor_kw) -> Backend:
     """离线哑后端：仅记录六个指令内核收到的参数；构造参数原样透传基类。"""
 
-    def _init(self, cfg=None, arm_limits=None, arm_soft_margins=None,
-              end_soft_margins=None):
-        Backend.__init__(self, cfg or {}, arm_limits=arm_limits,
-                         arm_soft_margins=arm_soft_margins,
-                         end_soft_margins=end_soft_margins)
+    def _init(self, cfg=None, arm_limits=None):
+        Backend.__init__(self, cfg or {}, arm_limits=arm_limits)
         self.kernel = []          # [(方法名, 收到的参数元组)]
 
     def _noop(self, *a, **k):
@@ -91,12 +88,14 @@ _END_CFG = {"end": {"joints": [
 # 限位构建（构造参数 + cfg 自解析）
 # ----------------------------------------------------------
 def test_limits_build_from_constructor():
-    """本体：URDF 硬限位 + margin 随构造传入 → 基类自建软限位。"""
-    be = _dummy_backend(arm_limits=_hard(3),
-                        arm_soft_margins={"q_upper": 0.1, "dq": 0.5})
-    s = be.arm_limits_soft
-    assert np.allclose(s.q_max, 0.9) and np.allclose(s.q_min, -1.0)   # 缺省键不内缩
-    assert np.allclose(s.dq_max, 1.5) and np.allclose(s.tau_max, 10.0)
+    """本体硬限位随构造传入原样保存；backend 只存硬限位（无软限位属性）。"""
+    be = _dummy_backend(arm_limits=_hard(3))
+    s = be.arm_limits
+    assert np.allclose(s.q_min, -1.0) and np.allclose(s.q_max, 1.0)
+    assert np.allclose(s.dq_max, 2.0) and np.allclose(s.tau_max, 10.0)
+    for gone in ("arm_limits_soft", "end_limits_soft",
+                 "set_arm_limits_soft", "set_end_limits_soft"):
+        assert not hasattr(be, gone), f"{gone} 应已随软限位机制移除"
 
 
 def test_end_limits_from_cfg():
@@ -106,9 +105,8 @@ def test_end_limits_from_cfg():
     assert np.allclose(e.q_min, [-1.0, -0.5]) and np.allclose(e.q_max, [1.0, 0.5])
     assert np.allclose(e.dq_max, [2.0, 3.0])
     assert np.isfinite(e.tau_max[0]) and np.isinf(e.tau_max[1])
-    assert np.allclose(be.end_limits_soft.q_max, e.q_max)             # margin 0 → 软=硬
     be2 = _dummy_backend(cfg={"arm": {}})
-    assert be2.end_limits is None and be2.end_limits_soft is None
+    assert be2.end_limits is None
 
 
 # ----------------------------------------------------------
@@ -117,30 +115,29 @@ def test_end_limits_from_cfg():
 def test_guard_passthrough_without_limits():
     """未传本体硬限位（独立使用）：本体守卫放行。"""
     be = _dummy_backend()
-    assert be.arm_limits_soft is None
+    assert be.arm_limits is None
     be.send_position_arm(np.full(3, 99.0))
     assert np.allclose(be.kernel[0][1], 99.0)
 
 
 def test_guard_clips_q_dq_tau():
-    """本体：q 软限位裁剪、dq/tau 幅值裁剪、kp/kd 透传。"""
-    be = _dummy_backend(arm_limits=_hard(3),
-                        arm_soft_margins={"q_upper": 0.1, "q_lower": 0.1})
-    be.send_position_arm(np.full(3, 5.0))                       # q → 0.9
-    assert be.kernel[-1][0] == "pos_arm" and np.allclose(be.kernel[-1][1], 0.9)
+    """本体：q 硬限位裁剪、dq/tau 幅值裁剪、kp/kd 透传。"""
+    be = _dummy_backend(arm_limits=_hard(3))
+    be.send_position_arm(np.full(3, 5.0))                       # q → 1.0（硬上限）
+    assert be.kernel[-1][0] == "pos_arm" and np.allclose(be.kernel[-1][1], 1.0)
     be.send_velocity_arm(np.full(3, -9.0))                      # dq → -2.0
     assert np.allclose(be.kernel[-1][1], -2.0)
     be.send_mit_arm(np.full(3, -5.0), np.full(3, 9.0), np.full(3, 50.0),
                     kp=np.full(3, 7.0), kd=np.full(3, 8.0))
     _, q, dq, tau, kp, kd, _ = be.kernel[-1]
-    assert np.allclose(q, -0.9) and np.allclose(dq, 2.0) and np.allclose(tau, 10.0)
+    assert np.allclose(q, -1.0) and np.allclose(dq, 2.0) and np.allclose(tau, 10.0)
     assert np.allclose(kp, 7.0) and np.allclose(kd, 8.0)
 
 
 def test_guard_single_joint_slice():
     """单关节指令：取该关节限位切片（其余关节限位不参与）。"""
     be = _dummy_backend(arm_limits=_hard(3))
-    be._arm_limits_soft.q_max[1] = 0.5                    # joint2 上限更紧
+    be._arm_limits.q_max[1] = 0.5                       # joint2 上限更紧
     be.send_position_arm(np.array([99.0]), joint=1)
     assert be.kernel[-1][0] == "pos_arm" and np.allclose(be.kernel[-1][1], 0.5)
     assert be.kernel[-1][2] == 1
@@ -218,19 +215,8 @@ def test_end_guard_without_end_section():
 
 
 # ----------------------------------------------------------
-# 运行期替换与告警
+# 越限告警
 # ----------------------------------------------------------
-def test_set_limits_soft_runtime():
-    """set_*_limits_soft 运行期替换（JoyArm.set_config 同步路径）。"""
-    be = _dummy_backend(cfg=_END_CFG)
-    be.set_end_limits_soft(JointLimits(
-        q_min=np.full(2, -0.2), q_max=np.full(2, 0.2),
-        dq_max=np.full(2, 1.0), tau_max=np.full(2, 5.0)))
-    be.send_position_end(np.array([9.0, 9.0]))
-    assert np.allclose(be.kernel[-1][1], 0.2)
-    be.set_arm_limits_soft(_hard(2))
-    be.send_position_arm(np.full(2, 9.0))
-    assert np.allclose(be.kernel[-1][1], 1.0)
 
 
 class _Cap(logging.Handler):
