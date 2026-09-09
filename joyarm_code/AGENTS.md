@@ -86,7 +86,7 @@ joyarm_code/
 basic: {name, robot, ee_frame}
 joyarm: {arm_mdh_and_limits, T_linkn_end, arm_soft_limits, end_soft_limits, tcp_limits, arm_home, end_home}   # 软限位四键直值 {q_min, q_max, dq_max, tau_max}（arm/end 分开，标量或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero/neutral 按自由度全零（代码固定，不经 config）；MDH/T_linkn_end 为教学数据（约束8）；workspace_box 兼容 (2,3)/(3,2)
 robotics: {六域契约规格}   # 六域选型（注册名 / {name, **参数} / 规格列表，全部加载、首个激活）；当前整段注释过渡——注册名实现并注册后取消注释接入（硬失败语义）
-backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {同构, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源；arm 数值须与 URDF limit 标定保持一致）
+backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {channel, protocol, baud_rate, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源；arm 数值须与 URDF limit 标定保持一致）；
 ```
 
 限位语义：**backend 下发指令只裁硬限位**（`Backend.send_*` 守卫模板，唯一执行点）；软限位由 JoyArm 直配加载（`arm_limits_soft`/`end_limits_soft`，缺省软=硬）仅作上层状态判断依据（超软限位→状态异常→急停恢复，后续实现）；config 改动重启生效，**不回写 yaml**。
@@ -186,7 +186,7 @@ JoyArm.idyn / mass_matrix / coriolis / gravity · cartesian_inertia(q, frame)
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
 JoyArm.connect() / disconnect()（支持 with 上下文：enter 自动 connect，exit 尽力 disable→disconnect）· enable/disable_{arm,end} · set_zero_{arm,end} · clear_fault_{arm,end}（验证式清错复位） · set_mode_{arm,end}(mode=POSITION, joint=None) · read_mode_{arm,end}
 JoyArm.get_arm_state() → ArmState（fkine 已配置时填 tcp.pose）· set_arm_command(mode, q/dq/tau/kp/kd, joint=None)（前置校验 connected+mode 后委托后端；限位守卫在 Backend 基类模板） · read/write_param_{arm,end}
-JoyArm.set_end_open/close/zero(joint=None) · set_end_position / set_end_force / get_end_state   # 末端守卫同在后端模板（力度按 ±tau_max 数值裁剪）
+JoyArm.set_end_open/close/zero(joint=None) · set_end_position / set_end_tau / get_end_state   # 末端守卫同在后端模板（tau 按 ±tau_max 数值裁剪）
 JoyArm.damping_mode(kd=10.0)                    # 紧急阻尼：任何状态全电机（含末端）MIT 纯阻尼 ✅
 # 运动便利与安全层 ✅（move_j 为独立功能、与规划管线并行、仅直接调用；常规运动走轨迹桥→规划器→控制器）
 JoyArm.hold_position(kp,kd,tau)（MIT 阻抗保持当前姿态，tau 缺省重力前馈）· lock_position()（急停锁定：切位置模式锁当前 q）

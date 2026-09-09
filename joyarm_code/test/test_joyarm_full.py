@@ -72,7 +72,7 @@ MIT_KP_TEST = 5.0         # MIT 小阻抗保持增益
 MIT_KD_TEST = 1.0
 DAMP_KD = 1.5             # 使能后阻尼保持（kp=0，防坠落冲击）
 END_AMP = 0.2             # 末端位置往返幅度 rad
-END_FORCE = 0.5           # 末端力度测试 N
+END_TAU = 0.5             # 末端力矩测试 N·m
 
 _BANNER = """
 ╔══════════════════════════════════════════════════════════╗
@@ -262,7 +262,7 @@ class JoyArmFullTest:
             # ---- L4 末端层 ----
             ("L4-末端位置往返", "中", "POSITION 使能+保持+±0.2 rad 往返（标量/序列两种形式）", self.step_end_pos),
             ("L4-末端动作与裁剪", "中", "set_end_open/close/zero + 越行程裁剪（99 rad→q_max）+ 非法动作拒绝", self.step_end_actions),
-            ("L4-末端力度控制", "中", "set_end_force 0.5 N（MIT 近似闭合，前馈封顶 0.5 N·m）；⚠ 勿放手指", self.step_end_force),
+            ("L4-末端力矩控制", "中", "set_end_tau 0.5 N·m（MIT 近似闭合，前馈封顶 0.5 N·m）；⚠ 勿放手指", self.step_end_tau),
             ("L4-末端标零（自动恢复）", "高", "set_zero_end → 回原零位 → 恢复标零 → 回原位置 → 验证", self.step_set_zero_end),
             # ---- L5 本体位置层 ----
             ("L5-位置保持", "中", "POSITION 使能并保持 q_base（首次指令会把 joint2/3 夹回限位内）", self.step_pos_hold),
@@ -497,16 +497,16 @@ class JoyArmFullTest:
                      "非法末端动作拒绝")
         print(f"✓ 越行程裁剪：99 rad → 实际 {q:+.4f}（q_max={self.end_qmax}）")
 
-    def step_end_force(self) -> None:
+    def step_end_tau(self) -> None:
         arm = self.arm
         arm.set_mode_end(ControlMode.MIT)
         assert arm.read_mode_end() is ControlMode.MIT
         arm.enable_end()
-        arm.set_end_force(END_FORCE)
+        arm.set_end_tau(END_TAU)
         self._wait_end_q(self.end_qmax, tol=0.2, timeout=6.0)
         e = arm.get_end_state()
         arm.disable_end()
-        print(f"✓ 力度 {END_FORCE} N：闭合 tau={e['tau'][0]:+.3f} N·m（封顶 {SAFE_END_TAU}），已失能")
+        print(f"✓ 力矩 {END_TAU} N·m：闭合 tau={e['tau'][0]:+.3f} N·m（封顶 {SAFE_END_TAU}），已失能")
 
     def step_set_zero_end(self) -> None:
         arm = self.arm

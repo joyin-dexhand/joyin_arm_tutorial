@@ -74,7 +74,7 @@ MIT_KP_TEST = 5.0        # MIT 小阻抗保持增益
 MIT_KD_TEST = 1.0
 DAMP_KD = 1.5            # 使能后阻尼保持（kp=0，防坠落冲击）
 END_AMP = 0.2            # 末端位置往返幅度 rad
-END_FORCE = 0.5          # 末端力度测试 N
+END_TAU = 0.5             # 末端力矩测试 N·m
 
 _BANNER = """
 ╔══════════════════════════════════════════════════════════╗
@@ -245,7 +245,7 @@ class BackendDMFullTest:
             ("send_position_end 越行程裁剪", "中", "发送超出行程的目标 99 rad，验证被裁剪到 q_max（自动限速）", self.step_end_clamp),
             ("send_action_end 离散动作", "中", "open→close→zero（行程内限幅、限速）+ 非法动作拒绝", self.step_end_action),
             ("disable_end", "低", "末端失能", self.step_end_disable),
-            ("末端：MIT 力度控制", "中", "0.5 N 经 MIT 近似闭合（前馈 0.5 N·m 封顶）；⚠ 夹爪内勿放手指", self.step_end_force),
+            ("末端：MIT 力矩控制", "中", "0.5 N·m 经 MIT 近似闭合（前馈封顶 0.5 N·m）；⚠ 夹爪内勿放手指", self.step_end_tau),
             ("disable_end", "低", "力度测试后失能", self.step_end_disable),
             ("write_param_arm persist 存闪存", "高", "acc 原值写入并存闪存（自动失能并保持）；掉电不丢，验证读回", self.step_persist_arm),
             ("write_param_end persist 存闪存", "高", "末端 acc 原值存闪存（自动失能并保持），验证读回", self.step_persist_end),
@@ -553,14 +553,14 @@ class BackendDMFullTest:
         self.be.disable_end()
         print("✓ 末端已失能")
 
-    def step_end_force(self) -> None:
+    def step_end_tau(self) -> None:
         self.be.set_mode_end(ControlMode.MIT)
         assert self.be.read_mode_end() == ControlMode.MIT
         self.be.enable_end()
-        self.be.send_force_end(END_FORCE)
+        self.be.send_tau_end(END_TAU)
         ok = self._wait_end_q(self.end_qmax, tol=0.2, timeout=6.0)
         e = self.be.read_state_end()
-        print(f"✓ 力度 {END_FORCE} N（前馈 {END_FORCE} N·m 封顶 {SAFE_END_TAU}）："
+        print(f"✓ 力矩 {END_TAU} N·m（前馈封顶 {SAFE_END_TAU}）："
               f"闭合{'到位' if ok else '未完全到位'}，tau={e['tau'][0]:+.3f} N·m")
 
     # ---- 高风险可选项 ----

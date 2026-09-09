@@ -276,8 +276,7 @@ def test_backenddm_offline_construction():
     assert len(be._end_motors) == 1
     em = be._end_motors[0]
     assert em.model == "4310"
-    assert (em.q_min, em.q_max, em.dq_max, em.tau_max, em.force_to_tau) == (
-        -1.8, 3.8, 2.0, 1.0, 1.0)
+    assert (em.q_min, em.q_max, em.dq_max, em.tau_max) == (-1.8, 3.8, 2.0, 1.0)
     assert _PARAM_RIDS == {
         # 控制与闭环增益（可写）
         "ctrl_mode": 10, "vel_kp": 25, "vel_ki": 26, "pos_kp": 27, "pos_ki": 28,

@@ -8,7 +8,7 @@
     backend:
       name: backend_dm          # 选型键（JoyArm 弹出后按 REGISTRY 构建子类）
       arm: {channel, protocol, baud_rate, control_rate, joints}   # 本体子段
-      end: {channel, protocol, baud_rate, control_rate, joints}   # 末端子段
+      end: {channel, protocol, baud_rate, joints}   # 末端子段（单帧锁存，无控制率）
 
 接口按功能分类：生命周期（connect/disconnect）、使能失能（enable/disable/set_zero）、状态读取（read_state）、
 模式切换（set_mode）、指令下发（send_*，「限位守卫模板 + 子类内核」）、电机参数读写（read_param/write_param）。
@@ -42,7 +42,7 @@ class Backend(ABC):
 
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 两个子段，各含 ``channel`` / ``protocol`` /
-        ``baud_rate`` / ``control_rate`` / ``joints``（电机配置列表）。
+        ``baud_rate`` / ``joints``（电机配置列表）。
     :param arm_limits: 本体硬限位（``JointLimits``，config ``backend.arm.joints``
         四键解析后由组合根传入）；``None``（独立使用）则本体守卫不启用。
     """
@@ -374,22 +374,19 @@ class Backend(ABC):
     def _send_position_end(self, position, joint: Optional[int] = None) -> None:
         """末端位置指令内核（position 已经守卫裁剪）。"""
 
-    def send_force_end(self, force, joint: Optional[int] = None) -> None:
-        """末端力度控制（守卫模板：force **数值**裁剪到逐电机 ±tau_max → 内核）。
+    def send_tau_end(self, tau, joint: Optional[int] = None) -> None:
+        """末端力矩控制（守卫模板：tau 裁剪到逐电机 ±tau_max → 内核）。
 
-        守卫不做力—力矩换算（换算系数如 ``force_to_tau`` 为子类语义，由内核
-        处理）；``force_to_tau = 1`` 的末端（如 DM 夹爪）守卫即精确。
-
-        :param force: 力度目标，标量（作用于所选全部电机）或与所选电机数一致
-            的序列；语义由子类约定（如夹持力 N）。
+        :param tau: 力矩目标，标量（作用于所选全部电机，越限时按逐电机
+            限位**广播就近裁剪**）或与所选电机数一致的序列（N·m）。
         :param joint: 末端电机索引，``None`` 表示全部。
         """
-        self._send_force_end(self._guard_end("tau", self._vec(force), joint),
-                             joint)
+        self._send_tau_end(self._guard_end("tau", self._vec(tau), joint),
+                           joint)
 
     @abstractmethod
-    def _send_force_end(self, force, joint: Optional[int] = None) -> None:
-        """末端力度指令内核（force 数值已经 ±tau_max 守卫裁剪）。"""
+    def _send_tau_end(self, tau, joint: Optional[int] = None) -> None:
+        """末端力矩指令内核（tau 已经 ±tau_max 守卫裁剪）。"""
 
     def send_mit_end(
         self,

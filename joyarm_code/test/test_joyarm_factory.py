@@ -491,7 +491,7 @@ def _fake_backend(q0=None, converge: float = 0.5, n: int = 6, enabled: bool = Tr
                  "read_param_arm", "write_param_arm",
                  "_send_velocity_arm",
                  "enable_end", "disable_end", "set_zero_end", "clear_fault_end",
-                 "_send_force_end", "_send_mit_end",
+                 "_send_tau_end", "_send_mit_end",
                  "send_action_end", "read_param_end", "write_param_end"):
         ns[name] = _rec(name)
     return type("FakeBackend", (Backend,), ns)()

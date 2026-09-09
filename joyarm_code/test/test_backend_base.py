@@ -54,7 +54,7 @@ def _dummy_backend(cfg: dict | None = None, **ctor_kw) -> Backend:
         "__init__": _init,
         "connected": property(lambda self: True),
         "_send_position_arm": _rec("pos_arm"), "_send_velocity_arm": _rec("vel_arm"),
-        "_send_position_end": _rec("pos_end"), "_send_force_end": _rec("force_end"),
+        "_send_position_end": _rec("pos_end"), "_send_tau_end": _rec("tau_end"),
     }
 
     def _mit_arm(self, q, dq, tau_ff, kp=None, kd=None, joint=None):
@@ -187,11 +187,11 @@ def test_end_guard_single_motor_slice():
     assert be.kernel[-1][2] == 1
 
 
-def test_end_guard_force_numeric_tau_clip():
-    """末端力度：force 数值按逐电机 ±tau_max 裁剪（不做换算；缺 tau_max 不裁）。"""
+def test_end_guard_tau_clip():
+    """末端力矩：tau 按逐电机 ±tau_max 裁剪（缺 tau_max 不裁）。"""
     be = _dummy_backend(cfg=_END_CFG)
-    be.send_force_end(50.0)                                # 标量广播：g1→10，g2→∞不裁
-    assert be.kernel[-1][0] == "force_end"
+    be.send_tau_end(50.0)                                  # 标量广播：g1→10，g2→∞不裁
+    assert be.kernel[-1][0] == "tau_end"
     assert np.allclose(be.kernel[-1][1], [10.0, 50.0])
 
 

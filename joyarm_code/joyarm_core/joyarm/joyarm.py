@@ -1008,10 +1008,10 @@ class JoyArm:
         self._require_connected()
         self._backend.send_position_end(position, joint)
 
-    def set_end_force(self, force, joint: Optional[int] = None) -> None:
-        """末端力度控制（如夹持力 N；``joint=None`` 全部末端电机）。"""
+    def set_end_tau(self, tau, joint: Optional[int] = None) -> None:
+        """末端力矩控制（直接前馈电机力矩 N·m；``joint=None`` 全部末端电机）。"""
         self._require_connected()
-        self._backend.send_force_end(force, joint)
+        self._backend.send_tau_end(tau, joint)
 
     def get_end_state(self, joint: Optional[int] = None) -> dict:
         """读取末端状态（字段由后端定义；值为所选电机的逐电机序列）。

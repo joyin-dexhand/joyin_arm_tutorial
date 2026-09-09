@@ -91,9 +91,9 @@ joyarm:
 
 # -------------------------------------------------------------------
 # 通信层（backend）：arm 与 end 的硬件通讯（字段以 DM 实现为参照）
-# 契约通用键：channel / protocol / baud_rate / control_rate / joints；
+# 契约通用键：channel / protocol / baud_rate / joints；control_rate 仅 arm ；
 # joints 条目内各键由后端子类定义（model 型号枚举、MIT/POS_VEL 增益回退、
-# 末端行程/力度换算为 DM 特有）。
+# 末端行程为 DM 特有）。
 # -------------------------------------------------------------------
 backend:
   name: backend_dm # 选型键（backend/__init__.py REGISTRY 中的注册名）
@@ -102,7 +102,7 @@ backend:
     channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）
     protocol: serial_can # 协议标识（信息性；DM 固定 USB-CAN 串口桥）
     baud_rate: 921600 # 波特率
-    control_rate: 200 # 控制频率（Hz，信息性）
+    control_rate: 200 # Hz
     joints:
       - name: joint1 # 关节名（状态报告 / 模式缓存的键）
         motor_id: 0x01 # CAN 指令 ID（MIT 帧 ID = motor_id）
@@ -128,18 +128,16 @@ backend:
     channel: /dev/ttyACM0 # 与 arm 相同 → 共享总线；不同 → 独立总线（互不干扰）
     protocol: serial_can
     baud_rate: 921600
-    control_rate: 200
     joints:
       - name: gripper # 末端电机名
         motor_id: 0x07
         feedback_id: 0x17
         model: "4310"
-        # —— 限位四键（与 arm 关节同构）+ 末端特有力度换算 ——
+        # —— 限位四键（与 arm 关节同构）——
         q_min: -1.8 # 行程下限（rad，张开位）
         q_max: 3.8 # 行程上限（rad，闭合位）
         dq_max: 2.0 # 速度上限（rad/s）
         tau_max: 1.0 # 力矩上限（N·m）
-        force_to_tau: 1 # 力度→前馈力矩近似换算系数（N→N·m，标定后修改）
         MIT: # 末端默认纯力矩风格（需要位控刚度时自行调 kp/kd）
           kp: 0.0
           kd: 0.0

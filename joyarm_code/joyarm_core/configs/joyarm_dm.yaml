@@ -200,7 +200,6 @@ backend:
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
     protocol: serial_can
     baud_rate: 921600
-    control_rate: 200
     joints:
       - name: gripper
         motor_id: 0x07
@@ -210,7 +209,6 @@ backend:
         q_max: 3.8 # 行程上限（rad，闭合位）
         dq_max: 2.0 # 速度上限（rad/s）
         tau_max: 1.0 # 力矩上限（N·m）
-        force_to_tau: 1 # 力度→前馈力矩近似换算系数（N→N·m，标定后修改）
         MIT:
           # kp: 8.0
           # kd: 1.0

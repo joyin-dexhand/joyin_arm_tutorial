@@ -162,10 +162,10 @@ class BackendDMMujoco(Backend):
         raise NotImplementedError(
             "backend_dm_mujoco.py - BackendDMMujoco._send_position_end：仿真后端待实现")
 
-    def _send_force_end(self, force, joint: Optional[int] = None) -> None:
-        """实现要点：力度→力矩换算系数沿用 config ``force_to_tau``（或 1）。"""
+    def _send_tau_end(self, tau, joint: Optional[int] = None) -> None:
+        """实现要点：传入值即末端电机力矩（N·m，已守卫裁剪），直接作前馈。"""
         raise NotImplementedError(
-            "backend_dm_mujoco.py - BackendDMMujoco._send_force_end：仿真后端待实现")
+            "backend_dm_mujoco.py - BackendDMMujoco._send_tau_end：仿真后端待实现")
 
     def _send_mit_end(
         self,

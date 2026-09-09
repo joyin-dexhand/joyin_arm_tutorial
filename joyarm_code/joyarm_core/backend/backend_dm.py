@@ -229,7 +229,7 @@ class DmMotor:
 
     持有通讯参数（``motor_id``/``feedback_id``/型号限值）、控制增益（config
     ``MIT`` / ``POS_VEL`` 段回退源）、末端限位语义（``q_min``/``q_max``/
-    ``dq_max``/``tau_max``/``force_to_tau``，仅 end 关节配置），以及 RX 线程
+    ``dq_max``/``tau_max``，仅 end 关节配置），以及 RX 线程
     回填的状态槽与参数槽（配到达 Event，供"发请求 → 等应答"同步）。
     """
 
@@ -263,7 +263,6 @@ class DmMotor:
         self.q_max = None if jcfg.get("q_max") is None else float(jcfg["q_max"])
         self.dq_max = None if jcfg.get("dq_max") is None else float(jcfg["dq_max"])
         self.tau_max = None if jcfg.get("tau_max") is None else float(jcfg["tau_max"])
-        self.force_to_tau = float(jcfg.get("force_to_tau", 0.1))
 
         # 状态槽 + 参数槽（RX 线程写、指令线程读，Event 通知应答到达）
         self.q, self.dq, self.tau, self.err = 0.0, 0.0, 0.0, _ERR_DISABLED
@@ -501,7 +500,7 @@ class BackendDM(Backend):
         ``arm:`` / ``end:`` 子段（``channel`` / ``baud_rate`` / ``joints``，
         joints 各含 ``motor_id`` / ``feedback_id`` / ``model`` / ``MIT`` /
         ``POS_VEL``，end 关节另含 ``q_min`` / ``q_max`` / ``dq_max`` /
-        ``tau_max`` / ``force_to_tau``）。
+        ``tau_max``）。
     """
 
     def __init__(self, cfg: dict, arm_limits: Optional[JointLimits] = None) -> None:
@@ -940,22 +939,20 @@ class BackendDM(Backend):
                     f"缺少 q_min/q_max 行程配置（config backend.end.joints）")
             m.bus.send_pos_vel(m, float(p), self._end_speed(m))
 
-    def _send_force_end(self, force, joint: Optional[int] = None) -> None:
-        """语义见 :meth:`Backend._send_force_end`；DM 实现：MIT 闭合至 ``q_max``，前馈 ``force×force_to_tau``。
+    def _send_tau_end(self, tau, joint: Optional[int] = None) -> None:
+        """语义见 :meth:`Backend._send_tau_end`；DM 实现：MIT 闭合至 ``q_max``，前馈即传入 ``tau``。
 
-        DM 夹爪无力控通道与力反馈，``force_to_tau`` 为 N→N·m 近似换算系数
-        （config 逐电机标定，默认 1：基类守卫的 ±tau_max 数值裁剪即精确）；
-        本方法须先 ``set_mode_end(MIT)``。
+        DM 夹爪无力控通道与力反馈，以 MIT 帧（``q=q_max`` 闭合目标 + 前馈
+        tau）近似力矩控制；值已守卫裁剪到 ±tau_max（N·m）；本方法须先 ``set_mode_end(MIT)``。
         """
         motors = self._end_motors_for(joint)
         self._require_mode_end(ControlMode.MIT, motors)
-        for m, f in zip(motors, self._values_for(force, "force", motors)):
+        for m, ti in zip(motors, self._values_for(tau, "tau", motors)):
             if m.q_max is None:
                 raise ValueError(
-                    f"backend_dm.py - _send_force_end：末端关节 {m.name} "
+                    f"backend_dm.py - _send_tau_end：末端关节 {m.name} "
                     f"缺少 q_max 行程配置（config backend.end.joints）")
-            tau = float(f) * m.force_to_tau
-            m.bus.send_mit(m, m.q_max, 0.0, tau, m.mit_kp, m.mit_kd)
+            m.bus.send_mit(m, m.q_max, 0.0, float(ti), m.mit_kp, m.mit_kd)
 
     def _send_mit_end(
         self,
