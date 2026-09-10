@@ -76,8 +76,8 @@ from .robotics.fkine import FkineSolver
 from .robotics.ikine import IkineSolver
 from .robotics.jacobian import JacobianSolver
 from .robotics.dynamics import DynamicsSolver
-from .robotics.trajectory import TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
-from .robotics.control import Controller, AutoController, ForceController
+from .robotics.trajectory import TrajPlanner
+from .robotics.control import Controller
 
 # ---- 指令路径守卫（clamp_to_limits）+ 关节空间插值原语（cubic）----
 from .utils.limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, soft_limits_from_cfg
@@ -142,13 +142,9 @@ __all__ = [
     "JacobianSolver",
     "DynamicsSolver",
     "TrajPlanner",
-    "AutoTrajPlanner",
-    "ForceTrajPlanner",
     "cubic_q",
     "cubic_traj",
     "Controller",
-    "AutoController",
-    "ForceController",
     # 指令路径守卫 + 限位构建辅助
     "clamp_to_limits",
     "joint_limits_from_model",

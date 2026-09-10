@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import logging
 import os
+import threading
 import time
 from typing import List, Optional, Union
 
@@ -205,6 +206,10 @@ class JoyArm:
         # ---- 轨迹桥（发布即不可变；写入口深拷贝隔离）----
         self._target_traj: Optional[List[TrajFrame]] = None    # 目标序列（应用任务写）
         self._current_frame: Optional[TrajFrame] = None        # 当前帧（规划线程写）
+        # ---- 运行状态与状态保活 ----
+        self.is_normal: bool = True                     # 运行状态标志（True=正常运行；False=异常，控制器循环跳过 cmd 下发；由应用/后续监控置位）
+        self._state_stop = threading.Event()            # 状态保活线程停止位
+        self._state_thread: Optional[threading.Thread] = None   # 空闲保活线程句柄（connect 启动）
 
         # ----------------------------------------------------------
         # init 逐步赋真实值（robot_model URDF → 关节数/名称 → 限位（硬/软）→
@@ -822,7 +827,8 @@ class JoyArm:
         修改不影响桥内数据）。
 
         :param targets: :class:`TrajFrame` 单帧或列表（单帧自动归一为列表）。
-            目标有效性判别在规划求解时由 ``TrajPlanner._check_targets`` 执行。
+            目标有效性/超时判别在规划时由 ``TrajPlanner.plan_once`` 执行
+            （无效/超时帧剔除，目标序列为空时回退 q_home）。
         """
         frames = [targets] if isinstance(targets, TrajFrame) else list(targets)
         self._target_traj = copy.deepcopy(frames)
@@ -849,14 +855,68 @@ class JoyArm:
     # ----------------------------------------------------------
     # ---- 连接管理与前置校验（connected / enabled / mode 三级前置）----
     def connect(self) -> None:
-        """连接真机（整机后端：本体 + 末端；连接**不使能**电机）。"""
+        """连接真机（整机后端：本体 + 末端；连接**不使能**）。
+
+        连接后自动启动**状态保活线程**（空闲期低频主动刷新后端缓存槽；
+        控制流期间状态随指令帧同频刷新，保活线程不动作）。
+        """
         self._backend.connect()
         self.connected = bool(self._backend.connected)
+        self._start_state_keepalive()
 
     def disconnect(self) -> None:
-        """断开真机（整机后端先失能全部电机再断开总线）。"""
+        """断开真机（先停止状态保活线程；整机后端先失能全部电机再断开总线）。"""
+        self._stop_state_keepalive()
         self._backend.disconnect()
         self.connected = False
+
+    # ---- 状态保活线程（空闲期维持后端缓存槽新鲜；控制流期间零总线开销）----
+    _STATE_KEEPALIVE_HZ: float = 10.0   # 保活巡检频率（Hz）
+    _STATE_STALE_AFTER: float = 0.15    # 缓存陈旧阈值（秒）：超过即主动刷新
+
+    def _start_state_keepalive(self) -> None:
+        """启动状态保活线程（connect 自动调用；幂等）。"""
+        if self._state_thread is not None and self._state_thread.is_alive():
+            return
+        self._state_stop.clear()
+        self._state_thread = threading.Thread(
+            target=self._state_keepalive_loop, daemon=True, name="joyarm-state")
+        self._state_thread.start()
+
+    def _stop_state_keepalive(self) -> None:
+        """停止状态保活线程（disconnect 自动调用；幂等）。"""
+        self._state_stop.set()
+        if self._state_thread is not None:
+            self._state_thread.join(timeout=1.0)
+        self._state_thread = None
+
+    def _state_keepalive_loop(self) -> None:
+        """保活线程体：缓存槽数据陈旧（无控制流量）时主动同步刷新（请求-应答）。
+
+        控制流期间状态随指令帧同频刷新（age≈指令周期），本线程不动作、
+        零总线开销；巡检发现后端无陈旧度查询能力时静默跳过。
+        """
+        period = 1.0 / self._STATE_KEEPALIVE_HZ
+        deadline = time.perf_counter()
+        while not self._state_stop.is_set():
+            deadline += period
+            now = time.perf_counter()
+            if deadline > now:
+                self._state_stop.wait(deadline - now)
+            else:                              # 单步超时错过节拍：重新对齐，不追赶
+                deadline = now
+            try:
+                if not self.connected:
+                    continue
+                if self._backend.state_age_arm() > self._STATE_STALE_AFTER:
+                    self._backend.read_state_arm()
+                if self._backend.state_age_end() > self._STATE_STALE_AFTER:
+                    self._backend.read_state_end()
+            except NotImplementedError:        # 后端未实现陈旧度查询 → 无保活能力
+                pass
+            except Exception:
+                logger.exception("joyarm.py - JoyArm._state_keepalive_loop："
+                                 "状态保活刷新失败，下周期重试")
 
     def __enter__(self) -> "JoyArm":
         """上下文管理入口：未连接时自动 ``connect()``；退出时安全收尾。"""
@@ -1004,18 +1064,36 @@ class JoyArm:
         return self._backend.read_mode_arm(joint)
 
     def get_arm_state(self) -> ArmState:
-        """读取本体状态快照（委托 ``_backend.read_state_arm()``；与 ``get_end_state`` 对应）。
+        """读取本体状态快照（与 ``get_end_state`` 对应；恒返回**新鲜**数据）。
 
-        fkine 域已配置激活成员时同步填充 ``tcp.pose``（末端位姿）；未配置时
-        跳过填充，仅返回关节原始状态。
+        新鲜度感知两级读取：
+        缓存槽数据新鲜（距最近状态应答 ≤ ``_STATE_STALE_AFTER``，控制流期间随指令帧同频刷新）→ **零总线帧**按需组装；陈旧（空闲初期/后端刚连接）→ 请求-应答同步刷新后返回。
+        空闲期由状态保活线程（connect 自动启动）低频刷新维持新鲜。
+        fkine 域已配置激活成员时同步填充 ``tcp.pose``（末端位姿）；未配置时跳过填充，仅返回关节原始状态。
 
         :raises RuntimeError: 未连接真机（``connected=False``）时抛出。
         """
         self._require_connected()
-        state = self._backend.read_state_arm()
+        try:
+            if self._backend.state_age_arm() <= self._STATE_STALE_AFTER:
+                state = self._backend.read_state_cache_arm()
+            else:
+                state = self._backend.read_state_arm()   # 陈旧 → 同步刷新
+        except NotImplementedError:
+            state = self._backend.read_state_arm()
         if self._active_name.get("fkine") is not None:
             state.tcp.pose = self.fkine(state.joint.q, self.ee_frame_name)   # 默认 rep="pose" → Pose
         return state
+
+    def refresh_state(self) -> None:
+        """强制同步刷新本体/末端状态（请求-应答，直接更新后端缓存槽）。
+
+        ``get_arm_state``/``get_end_state`` 已做新鲜度感知（陈旧自动同步刷新），
+        本方法供需要**确保**最新数据（如静止后的起步位姿）时显式调用。
+        """
+        self._require_connected()
+        self._backend.read_state_arm()
+        self._backend.read_state_end()
 
     def set_arm_command(self,
         mode: ControlMode = ControlMode.POSITION,
@@ -1119,13 +1197,19 @@ class JoyArm:
         self._backend.send_tau_end(tau, joint)
 
     def get_end_state(self, joint: Optional[int] = None) -> dict:
-        """读取末端状态（字段由后端定义；值为所选电机的逐电机序列）。
+        """读取末端状态（恒返回**新鲜**数据；字段由后端定义，值为所选电机的
+        逐电机序列；新鲜度感知两级读取，语义同 :meth:`get_arm_state`）。
 
         :param joint: 末端电机索引，``None`` 表示全部。
         :raises RuntimeError: 未连接真机时抛出。
         """
         self._require_connected()
-        return self._backend.read_state_end(joint)
+        try:
+            if self._backend.state_age_end(joint) <= self._STATE_STALE_AFTER:
+                return self._backend.read_state_cache_end(joint)
+            return self._backend.read_state_end(joint)     # 陈旧 → 同步刷新
+        except NotImplementedError:
+            return self._backend.read_state_end(joint)
 
     # ---- 电机参数读写（read/write_param_{arm,end}；未连接 raise）----
     def read_param_arm(self, key: str, joint: Optional[int] = None):

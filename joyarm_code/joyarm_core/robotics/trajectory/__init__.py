@@ -5,9 +5,7 @@
 
 """
 from .traj_planner import TrajPlanner
-from .auto_planner import AutoTrajPlanner
-from .force_planner import ForceTrajPlanner
 
 REGISTRY: dict = {}
 
-__all__ = ["TrajPlanner", "AutoTrajPlanner", "ForceTrajPlanner", "REGISTRY"]
+__all__ = ["TrajPlanner", "REGISTRY"]

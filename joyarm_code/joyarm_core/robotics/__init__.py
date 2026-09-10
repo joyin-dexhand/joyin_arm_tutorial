@@ -19,8 +19,8 @@ from .fkine import FkineSolver
 from .ikine import IkineSolver
 from .jacobian import JacobianSolver
 from .dynamics import DynamicsSolver
-from .trajectory import TrajPlanner, AutoTrajPlanner, ForceTrajPlanner
-from .control import Controller, AutoController, ForceController
+from .trajectory import TrajPlanner
+from .control import Controller
 
 __all__ = [
     "FkineSolver",
@@ -28,9 +28,5 @@ __all__ = [
     "JacobianSolver",
     "DynamicsSolver",
     "TrajPlanner",
-    "AutoTrajPlanner",
-    "ForceTrajPlanner",
     "Controller",
-    "AutoController",
-    "ForceController",
 ]

@@ -66,7 +66,7 @@ joyarm:
 #   dynamics:
 #     - { name: lagrangian }
 #   traj:
-#     - { name: auto, plan_hz: 1.0, sample_hz: 200.0 }
+#     - { name: auto, plan_hz: 5.0, sample_hz: 200.0, dt_min_required: 1.0 }
 #   control:
 #     - {
 #         name: auto,

@@ -313,48 +313,107 @@ def test_ikine_contracts():
 
 
 def test_traj_frame_and_planner():
-    """TrajFrame 纯数据 + TrajPlanner 目标判别模板 + JoyArm 轨迹桥访问器。"""
+    """TrajFrame 纯数据 + TrajPlanner 单步管线（规则/超时剔除 + q_home 回退 + 采样
+    门控）+ start/stop 双线程 + JoyArm 轨迹桥访问器。"""
+    import time as _time
+
     # TrajFrame：纯数据（公开名仅为七个字段，无任何方法）
     public = [n for n in dir(TrajFrame) if not n.startswith("_")]
     assert public == ["dq", "pose", "q", "tau", "time", "twist", "wrench"], public
     assert TrajFrame(time=1.0, q=np.zeros(6)) == TrajFrame(time=1.0, q=np.zeros(6))
     assert TrajFrame(time=1.0, q=np.zeros(6)) != TrajFrame(time=2.0, q=np.zeros(6))
 
-    # _check_targets：合法分支（关节型 / 位姿型含 wrench）
-    TrajPlanner._check_targets([TrajFrame(time=10.0, q=np.zeros(6))])
-    TrajPlanner._check_targets(
-        [TrajFrame(time=10.0, pose=Pose()),
-         TrajFrame(time=11.0, pose=Pose(), wrench=Wrench())])
-    # 非法分支：time 缺失 / pose、q 双空 / 双非空 / dq 非空
-    bad = [TrajFrame(q=np.zeros(6)),
-           TrajFrame(time=10.0),
-           TrajFrame(time=10.0, pose=Pose(), q=np.zeros(6)),
-           TrajFrame(time=10.0, q=np.zeros(6), dq=np.zeros(6))]
-    try:
-        TrajPlanner._check_targets(bad)
-        raise AssertionError("无效目标序列应抛 ValueError")
-    except ValueError as e:
-        assert "time" in str(e) and "dq" in str(e)
+    # _check_frame：合法（关节型 / 位姿型含 wrench）返回 None；非法返回问题描述
+    assert TrajPlanner._check_frame(TrajFrame(time=10.0, q=np.zeros(6))) is None
+    assert TrajPlanner._check_frame(TrajFrame(time=10.0, pose=Pose())) is None
+    assert TrajPlanner._check_frame(
+        TrajFrame(time=10.0, pose=Pose(), wrench=Wrench())) is None
+    assert "time" in TrajPlanner._check_frame(TrajFrame(q=np.zeros(6)))
+    assert "pose/q" in TrajPlanner._check_frame(TrajFrame(time=10.0))
+    assert "pose/q" in TrajPlanner._check_frame(
+        TrajFrame(time=10.0, pose=Pose(), q=np.zeros(6)))
+    assert "dq" in TrajPlanner._check_frame(
+        TrajFrame(time=10.0, q=np.zeros(6), dq=np.zeros(6)))
 
-    # plan 模板：单帧归一 + 判别 + 委托内核
+    # plan_once 管线（FakeArm 鸭子契约：桥目标 / 状态 / arm_home / 当前帧写口）
+    class FakeArm:
+        def __init__(self, targets=None, q=None, arm_home=None):
+            self._target = targets
+            self.state = ArmState(joint=JointState(
+                q=np.zeros(6) if q is None else np.asarray(q, dtype=float)))
+            self.arm_home = np.zeros(6) if arm_home is None else np.asarray(arm_home)
+            self.frames = []
+
+        def get_target_traj(self):
+            return self._target
+
+        def get_arm_state(self):
+            return self.state
+
+        def set_current_frame(self, frame):
+            self.frames.append(frame)
+
     calls = []
 
     class DummyPlanner(TrajPlanner):
-        def _plan(self, arm, targets, **kw):
+        def _plan(self, arm, targets):
             calls.append(list(targets))
 
         def sample_frame(self, t_abs):
-            return TrajFrame(time=t_abs, q=np.zeros(6))
+            return TrajFrame(time=t_abs, q=np.full(6, 7.0))
 
+    # ① 无效/超时帧剔除：_plan 只收到有效且提前量足够的目标
+    now = _time.time()
+    fa = FakeArm(targets=[
+        TrajFrame(q=np.zeros(6)),                          # time 缺失 → 规则剔除
+        TrajFrame(time=now + 0.5, q=np.zeros(6)),          # 早于 now+1.0 → 超时剔除
+        TrajFrame(time=10.0, pose=Pose(), q=np.zeros(6)),  # pose/q 双非空 → 规则剔除
+        TrajFrame(time=now + 2.0, q=np.full(6, 0.3)),      # 有效且未超时 → 保留
+    ])
     dp = DummyPlanner(plan_hz=2.0, sample_hz=100.0)
-    assert dp.plan_hz == 2.0 and dp.sample_hz == 100.0
-    dp.plan(None, TrajFrame(time=10.0, q=np.zeros(6)))   # 单帧归一为列表
+    assert dp.plan_hz == 2.0 and dp.sample_hz == 100.0 and dp.dt_min_required == 1.0
+    dp.plan_once(fa)
     assert len(calls) == 1 and len(calls[0]) == 1
+    assert calls[0][0].time == now + 2.0 and np.allclose(calls[0][0].q, 0.3)
+
+    # ② 空目标回退：q=arm_home，time = now + max|q_home−q0|（此处 max=0.2）
+    q0 = np.array([0.1, -0.2, 0.3, 0.0, 0.0, 0.0])
+    q_home = np.array([0.0, 0.0, 0.5, 0.0, 0.0, 0.0])
+    dp.plan_once(FakeArm(targets=None, q=q0, arm_home=q_home))
+    assert len(calls) == 2 and len(calls[1]) == 1
+    fb = calls[1][0]
+    assert np.allclose(fb.q, q_home)
+    assert abs(fb.time - (_time.time() + 0.2)) < 0.5      # 容忍执行期 now 漂移
+
+    # ③ 采样门控：首帧规划前不发布；规划后发布采样帧
+    fa2 = FakeArm(targets=None, q=q0, arm_home=q_home)
+    dp2 = DummyPlanner()
+    dp2.sample_once(fa2)
+    assert fa2.frames == []                               # 首帧规划前不发布
+    dp2.plan_once(fa2)
+    dp2.sample_once(fa2)
+    assert len(fa2.frames) == 1 and np.allclose(fa2.frames[0].q, 7.0)
+
+    # ④ start/stop 冒烟：双线程周期运行（plan_hz=50 加速），~0.3s 后干净停止可重启
+    fa3 = FakeArm(targets=None, q=q0, arm_home=q_home)
+    n_before = len(calls)
+    dp3 = DummyPlanner(plan_hz=50.0, sample_hz=200.0)
+    dp3.start(fa3)
     try:
-        dp.plan(None, [TrajFrame(time=10.0)])            # 无效 → 不触内核
-        raise AssertionError("无效目标应抛 ValueError")
-    except ValueError:
-        assert len(calls) == 1
+        assert len(dp3._threads) == 2
+        try:
+            dp3.start(fa3)
+            raise AssertionError("重复 start 应抛 RuntimeError")
+        except RuntimeError:
+            pass
+        _time.sleep(0.3)
+        assert len(calls) - n_before >= 10                # 50Hz → ≥10 次重规划
+        assert len(fa3.frames) > 10                       # 200Hz 采样持续发布
+    finally:
+        dp3.stop()
+    assert dp3._threads == []
+    dp3.start(fa3)
+    dp3.stop()                                            # 停止后可重启
 
     # JoyArm 轨迹桥：默认 None 初始态；set/get 对应；连续 set 取最新（深拷贝隔离）
     arm = _arm()
@@ -375,12 +434,21 @@ def test_traj_frame_and_planner():
 
 
 def test_controller_step():
-    """Controller.step 模板：状态缺省现读、指令原样下发（限位守卫统一在后端基类）。"""
-    class FakeArm:                       # 鸭子契约放宽：无需 arm_limits_soft
+    """Controller.step_once：is_normal 门控（异常跳过不下发）、首帧前跳过、
+    正常路径指令原样透传（限位守卫归后端基类）；start/stop 线程冒烟。"""
+    import time as _time
+
+    class FakeArm:                       # 鸭子契约：is_normal/当前帧/状态/指令写口
         def __init__(self):
+            self.is_normal = True
+            self.frame = None
             self.state = ArmState()
             self.reads = 0
+            self.computed = 0
             self.sent = []
+
+        def get_current_frame(self):
+            return self.frame
 
         def get_arm_state(self):
             self.reads += 1
@@ -390,7 +458,8 @@ def test_controller_step():
             self.sent.append((mode, cmd))
 
     class DummyCtrl(Controller):
-        def _compute(self, arm, frame, state, **kw):
+        def _compute(self, arm, frame, state):
+            arm.computed += 1
             return ControlMode.MIT, {"q": np.full(6, 5.0),   # 越限值原样下发
                                      "dq": np.full(6, 9.0),  # （裁剪归后端基类模板）
                                      "tau": np.zeros(6)}
@@ -398,14 +467,104 @@ def test_controller_step():
     arm = FakeArm()
     c = DummyCtrl(ctrl_hz=100.0)
     assert c.ctrl_hz == 100.0
-    c.step(arm, TrajFrame(time=1.0, q=np.zeros(6)))          # state 缺省 → 现读一次
-    assert arm.reads == 1 and len(arm.sent) == 1
+    c.step_once(arm)                     # ① 首帧发布前：不读状态、不计算、不下发
+    assert arm.reads == 0 and arm.computed == 0 and arm.sent == []
+    arm.is_normal = False                # ② 异常态：跳过一切（急停归直连 safe_*）
+    arm.frame = TrajFrame(time=1.0, q=np.zeros(6))
+    c.step_once(arm)
+    assert arm.reads == 0 and arm.computed == 0 and arm.sent == []
+    arm.is_normal = True                 # ③ 正常 + 有帧：现读一次状态、指令原样透传
+    c.step_once(arm)
+    assert arm.reads == 1 and arm.computed == 1 and len(arm.sent) == 1
     mode, cmd = arm.sent[0]
     assert mode is ControlMode.MIT
     assert np.allclose(cmd["q"], 5.0) and np.allclose(cmd["dq"], 9.0)   # 未裁剪
     assert np.allclose(cmd["tau"], 0.0)
-    c.step(arm, TrajFrame(time=1.0, q=np.zeros(6)), state=arm.state)   # 传 state → 不再读
-    assert arm.reads == 1 and len(arm.sent) == 2
+    # ④ start/stop 冒烟：ctrl_hz=100 加速；is_normal 翻转即时停止下发
+    c2 = DummyCtrl(ctrl_hz=100.0)
+    c2.start(arm)
+    try:
+        assert c2._thread is not None and c2._thread.is_alive()
+        try:
+            c2.start(arm)
+            raise AssertionError("重复 start 应抛 RuntimeError")
+        except RuntimeError:
+            pass
+        _time.sleep(0.2)
+        n1 = len(arm.sent)
+        assert n1 >= 20                              # 100Hz × 0.2s
+        arm.is_normal = False                        # 异常 → 立即停止下发
+        _time.sleep(0.2)
+        assert len(arm.sent) == n1
+        arm.is_normal = True
+    finally:
+        c2.stop()
+    assert c2._thread is None
+    c2.start(arm)
+    c2.stop()                                        # 停止后可重启
+
+
+def test_state_cache_and_keepalive():
+    """get_arm_state/get_end_state 新鲜度感知两级读取 + 保活线程起停与触发。"""
+    import time as _time
+
+    arm = _arm()
+    saved = (arm._backend, arm.connected)
+    try:
+        be = _fake_backend()
+        age = {"arm": 0.0, "end": 0.0}               # 可控陈旧度（0=新鲜）
+        sync = {"arm": 0, "end": 0}
+        orig_arm, orig_end = be.read_state_arm, be.read_state_end
+
+        def _sync_arm(joint=None):
+            sync["arm"] += 1
+            age["arm"] = 0.0                          # 同步刷新后变新鲜
+            return orig_arm(joint)
+
+        def _sync_end(joint=None):
+            sync["end"] += 1
+            age["end"] = 0.0
+            return orig_end(joint)
+
+        be.read_state_cache_arm = lambda joint=None: ArmState(
+            joint=JointState(q=np.full(6, 1.5)))
+        be.read_state_cache_end = lambda joint=None: {"q": [0.25]}
+        be.state_age_arm = lambda joint=None: age["arm"]
+        be.state_age_end = lambda joint=None: age["end"]
+        be.read_state_arm = _sync_arm
+        be.read_state_end = _sync_end
+        arm._backend = be
+        arm.connected = True
+        # ① 数据新鲜 → 零总线帧缓存读（不触发同步刷新）
+        st = arm.get_arm_state()
+        assert sync["arm"] == 0 and np.allclose(st.joint.q, 1.5)
+        assert arm.get_end_state()["q"] == [0.25] and sync["end"] == 0
+        # ② 数据陈旧 → get_arm_state 内联同步刷新（如 check_hardware 刚连接场景）
+        age["arm"] = 1.0
+        st = arm.get_arm_state()
+        assert sync["arm"] == 1                       # 同步刷新一次
+        # ③ connect 启动保活线程；新鲜期不刷新、陈旧后 10Hz 巡检触发保活
+        arm.connected = False
+        arm.connect()                                 # fake connect + 启动保活
+        assert arm._state_thread is not None and arm._state_thread.is_alive()
+        sync["arm"] = sync["end"] = 0
+        age["arm"] = age["end"] = 0.0
+        _time.sleep(0.3)
+        assert sync["arm"] == 0 and sync["end"] == 0  # 新鲜 → 保活不动作
+        age["arm"] = age["end"] = 1.0                 # 置陈旧 → 保活刷新
+        _time.sleep(0.3)
+        assert sync["arm"] >= 1 and sync["end"] >= 1
+        # ④ disconnect 停止线程
+        arm.disconnect()
+        assert arm._state_thread is None
+        # ⑤ 后端无缓存读/陈旧度（基类默认 NotImplementedError）→ 回退同步路径
+        be2 = _fake_backend()
+        arm._backend = be2
+        arm.connected = True
+        st2 = arm.get_arm_state()
+        assert st2.joint.q.shape == (6,)
+    finally:
+        arm._backend, arm.connected = saved
 
 
 def test_repr_contains_state():

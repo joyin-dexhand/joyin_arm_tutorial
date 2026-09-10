@@ -267,6 +267,7 @@ class DmMotor:
         # 状态槽 + 参数槽（RX 线程写、指令线程读，Event 通知应答到达）
         self.q, self.dq, self.tau, self.err = 0.0, 0.0, 0.0, _ERR_DISABLED
         self.t_mos, self.t_rotor = 0, 0  # ℃，旧固件不反馈（恒 0）
+        self.t_state = 0.0              # 最近状态应答时刻（monotonic；0=从未收到）
         self._state_event = threading.Event()
         self.params: dict[int, float | int] = {}
         self._param_events: dict[int, threading.Event] = {}
@@ -278,6 +279,7 @@ class DmMotor:
         """回填状态槽并置位应答事件（RX 线程调用）。"""
         self.q, self.dq, self.tau, self.err = q, dq, tau, err
         self.t_mos, self.t_rotor = t_mos, t_rotor
+        self.t_state = time.monotonic()
         self._state_event.set()
 
     def clear_state(self) -> None:
@@ -808,6 +810,22 @@ class BackendDM(Backend):
         self._check_open()
         motors = self._motors_for(joint)
         arrived = self._read_group_state(motors)
+        return self._assemble_arm_state(motors, arrived, joint)
+
+    def read_state_cache_arm(self, joint: Optional[int] = None) -> ArmState:
+        """语义见 :meth:`Backend.read_state_cache_arm`；DM 实现：直接组装电机
+        状态槽（零总线帧、零等待，不发刷新请求）。"""
+        self._check_open()
+        motors = self._motors_for(joint)
+        return self._assemble_arm_state(motors, [m.t_state > 0.0 for m in motors], joint)
+
+    def state_age_arm(self, joint: Optional[int] = None) -> float:
+        """语义见 :meth:`Backend.state_age_arm`；DM 实现：取最旧电机槽的陈旧度。"""
+        return max(time.monotonic() - m.t_state for m in self._motors_for(joint))
+
+    def _assemble_arm_state(self, motors: list[DmMotor],
+                            arrived: list[bool], joint: Optional[int] = None) -> ArmState:
+        """由电机状态槽组装 ``ArmState``（read_state_arm 与缓存读共用；不碰总线）。"""
         errs = [m.err for m in motors]
         errors = [
             f"{m.name}: {_ERR_FAULT_NAMES.get(e, '故障')}({e:#x})"
@@ -917,6 +935,22 @@ class BackendDM(Backend):
         self._check_open()
         motors = self._end_motors_for(joint)
         arrived = self._read_group_state(motors)
+        return self._assemble_end_state(motors, arrived)
+
+    def read_state_cache_end(self, joint: Optional[int] = None) -> dict:
+        """语义见 :meth:`Backend.read_state_cache_end`；DM 实现：直接组装电机
+        状态槽（零总线帧、零等待，不发刷新请求）。"""
+        self._check_open()
+        motors = self._end_motors_for(joint)
+        return self._assemble_end_state(motors, [m.t_state > 0.0 for m in motors])
+
+    def state_age_end(self, joint: Optional[int] = None) -> float:
+        """语义见 :meth:`Backend.state_age_end`；DM 实现：取最旧电机槽的陈旧度。"""
+        return max(time.monotonic() - m.t_state for m in self._end_motors_for(joint))
+
+    @staticmethod
+    def _assemble_end_state(motors: list[DmMotor], arrived: list[bool]) -> dict:
+        """由电机状态槽组装末端状态字典（read_state_end 与缓存读共用；不碰总线）。"""
         return {
             "q": [m.q for m in motors],
             "dq": [m.dq for m in motors],

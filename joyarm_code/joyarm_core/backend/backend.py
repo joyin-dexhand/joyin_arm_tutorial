@@ -368,6 +368,48 @@ class Backend(ABC):
             "temp_rotor": [...]}``。
         """
 
+    def read_state_cache_arm(self, joint: Optional[int] = None) -> ArmState:
+        """读取本体状态快照的**缓存视图**。
+
+        数据来自最近一次状态应答写入的缓存槽——控制流期间随指令帧同频刷新（一发一收），
+        空闲期由上层保活刷新维持新鲜（见:meth:`state_age_arm`）。
+        上层 :meth:`read_state_arm`。
+
+        :param joint: 关节索引，``None`` 表示全部。
+        :raises NotImplementedError: 子类未实现缓存读。
+        """
+        raise NotImplementedError(
+            "backend.py - Backend.read_state_cache_arm：本后端未实现缓存读，"
+            "请回退 read_state_arm（请求-应答式同步刷新）")
+
+    def read_state_cache_end(self, joint: Optional[int] = None) -> dict:
+        """读取末端状态快照的**缓存视图**（同 :meth:`read_state_cache_arm`）。
+
+        :param joint: 末端电机索引，``None`` 表示全部。
+        :raises NotImplementedError: 子类未实现缓存读。
+        """
+        raise NotImplementedError(
+            "backend.py - Backend.read_state_cache_end：本后端未实现缓存读，"
+            "请回退 read_state_end（请求-应答式同步刷新）")
+
+    def state_age_arm(self, joint: Optional[int] = None) -> float:
+        """本体缓存状态的陈旧度（秒）：距最近一次状态应答的时间，取最旧电机。
+
+        :param joint: 关节索引，``None`` 表示全部。
+        :raises NotImplementedError: 子类未实现。
+        """
+        raise NotImplementedError(
+            "backend.py - Backend.state_age_arm：本后端未实现陈旧度查询")
+
+    def state_age_end(self, joint: Optional[int] = None) -> float:
+        """末端缓存状态的陈旧度（秒；语义同 :meth:`state_age_arm`）。
+
+        :param joint: 末端电机索引，``None`` 表示全部。
+        :raises NotImplementedError: 子类未实现。
+        """
+        raise NotImplementedError(
+            "backend.py - Backend.state_age_end：本后端未实现陈旧度查询")
+
     def send_position_end(self, position, joint: Optional[int] = None) -> None:
         """末端位置控制（守卫模板：``q`` 逐电机行程裁剪 → 内核下发）。
 
