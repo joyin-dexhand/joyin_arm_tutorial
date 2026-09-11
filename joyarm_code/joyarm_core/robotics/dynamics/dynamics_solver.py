@@ -62,6 +62,10 @@ class DynamicsSolver(ABC):
 
     def cartesian_inertia(self, arm, q: np.ndarray,
             frame: Union[str, int], ref: str = "base") -> np.ndarray:
-        """笛卡尔惯量 ``Λ = J⁺ᵀ M J⁺``，返回 ``(6,6)``（J 经 ``arm.jac``）。"""
+        """笛卡尔惯量 ``Λ = J⁺ᵀ M J⁺``，返回 ``(6,6)``（J 经 ``arm.jac``）。
+
+        ``J⁺`` 为截断 SVD 伪逆（``pinv``）：奇异附近按低秩截断，Λ 有限有界
+        （精确奇异方向被丢弃，与速度逆解的阻尼正则化含义不同）。
+        """
         J_pinv = np.linalg.pinv(arm.jac(q, frame, ref=ref))
         return J_pinv.T @ self.mass_matrix(arm, q) @ J_pinv

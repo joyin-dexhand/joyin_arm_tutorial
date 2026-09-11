@@ -1,26 +1,27 @@
-"""``joyarm_core`` —— JoyArm 机械臂教程核心 SDK 库。
+"""``joyarm_core`` —— JoyArm 机械臂核心 SDK 库。
 
-组合根架构（仅向下依赖；robotics 一域一子包，REGISTRY 选型）::
+分层结构（依赖只允许自上而下，下层不知道上层存在）::
 
-    joyarm/     组合根：JoyArm(单类，门面+成员组装) · JoyArmFactory(型号名选型)
+    joyarm/     JoyArm：唯一组装入口（读config配置，把算法、通信各部分装配成一个
+                可用的机械臂对象）；JoyArmFactory：按型号名创建joyarm对象
     ─────────────────────────────────────────────
-    robotics/    算法层（一域一子包：ABC+REGISTRY，具体算法为教程各章教学内容）：
-                 fkine · ikine · jacobian · trajectory · dynamics · control
-                                                              ← 鸭子类型消费 arm
-    backend/    通信层：Backend(整机) → BackendDM（name 选型：REGISTRY + get_backend）
+    robotics/   算法层：六个子域（正运动学 fkine · 逆运动学 ikine · 雅可比 jacobian · 
+                轨迹 trajectory · 动力学 dynamics · 控制 control），每域 = 接口 + 注册表；
+                加 ``@register`` 自动注册（只调用 ``arm`` 公开属性/方法，不反向依赖 joyarm）
+    backend/    通信层：Backend（整机接口）→ Backend*（具体后端实现）
     ─────────────────────────────────────────────
-    utils/       transforms(数学) · types(共享类型) · limits(限位守卫)
-    robot_model/ configs/   URDF+meshes 资产 / per-model YAML（basic/joyarm/robotics/backend 等段）
+    utils/      数学 / 共享数据类型 / 限位裁剪 / 关节插值 / 周期线程等
+    robot_model/ configs/   URDF+网格资产 / 每型号一份 YAML 配置
 
-新型号 = ``configs/<型号>.yaml`` + ``robot_model/`` 资产 + ``backend/backend_*.py``
-（型号与整机后端 1:1）；无型号子类。
-ROS2 封装（节点/launch/rviz2等）在 ``joyarm_ros2_ws/src/joyarm_node``（详见 AGENTS.md）；
-监测已裁撤：指令守卫在 utils/limits.py，状态监测归 ROS2 节点（Ch11）。
-命名约定：类名驼峰，文件名小写 snake_case。用法::
+接入新型号：复制 ``configs/joyarm_template.yaml`` 填写 + 放入
+``robot_model/<robot>/`` 资产 + 新写 ``backend/backend_<型号>.py``（注册表加
+一行）即可，无需改动 JoyArm 本身（型号与整机后端一一对应）。
+ROS2 封装（节点/launch/rviz2 等）在 ``joyarm_ros2_ws/``（详见 AGENTS.md）；
+状态监测归 ROS2 节点（Ch11）。命名约定：类名驼峰，文件名小写 snake_case。用法::
 
-    from joyarm_core import joyarm_factory   # 推荐：型号名唯一参数
+    from joyarm_core import joyarm_factory   # 推荐入口：型号名唯一参数
 
-    arm = joyarm_factory("joyarm_dm")  # 离线组合根：加载 configs+URDF，按 robotics: 组装成员
+    arm = joyarm_factory("joyarm_dm")  # 读配置+URDF 完成组装（默认不连接真机）
     # 等价直用：from joyarm_core import JoyArm; arm = JoyArm("joyarm_dm")
 """
 from __future__ import annotations
@@ -70,18 +71,19 @@ from .utils.transforms import (
 from .joyarm.joyarm import JoyArm
 from .joyarm import JoyArmFactory, joyarm_factory
 
-# ---- 算法层（robotics；鸭子类型消费 arm，不 import joyarm）----
-# 求解器策略接口（JoyArm 六域成员字典的契约；具体实现为教程各章教学内容）
+# ---- 算法层（robotics；只按属性约定调用 arm，不 import joyarm）----
 from .robotics.fkine import FkineSolver
 from .robotics.ikine import IkineSolver
 from .robotics.jacobian import JacobianSolver
 from .robotics.dynamics import DynamicsSolver
 from .robotics.trajectory import TrajPlanner
 from .robotics.control import Controller
+from .robotics._registry import register
 
-# ---- 指令路径守卫（clamp_to_limits）+ 关节空间插值原语（cubic）----
+# ---- 指令路径守卫（clamp_to_limits）+ 关节空间插值原语（cubic）+ 周期线程 ----
 from .utils.limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, soft_limits_from_cfg
 from .utils.interpolation import cubic_q, cubic_traj
+from .utils.loops import run_periodic, PeriodicThread
 
 # ---- 通信层（整机后端，两层继承 + name 选型注册表）----
 from . import backend
@@ -136,20 +138,23 @@ __all__ = [
     "JoyArm",
     "JoyArmFactory",
     "joyarm_factory",
-    # 求解器策略接口（各章实现注册后接入）
+    # 求解器策略接口（各章实现注册后接入）+ 注册装饰器
     "FkineSolver",
     "IkineSolver",
     "JacobianSolver",
     "DynamicsSolver",
     "TrajPlanner",
+    "Controller",
+    "register",
     "cubic_q",
     "cubic_traj",
-    "Controller",
-    # 指令路径守卫 + 限位构建辅助
+    # 指令路径守卫 + 限位构建辅助 + 周期线程
     "clamp_to_limits",
     "joint_limits_from_model",
     "limits_from_joint_cfgs",
     "soft_limits_from_cfg",
+    "run_periodic",
+    "PeriodicThread",
     # 通信层（整机后端）
     "backend",
     "Backend",

@@ -14,8 +14,6 @@ import numpy as np
 
 from ...utils.types import Pose
 
-import pinocchio as pin
-
 __all__ = ["FkineSolver"]
 
 
@@ -38,7 +36,9 @@ class FkineSolver(ABC):
         frame: Union[str, int],
         rep: str = "pose",
     ):
-        """模板：``frame`` 为目标帧；``q`` 为 ``(n,)`` 单点 / ``(N,n)`` 批量；``rep`` 取 ``"pose"``（默认，xyz+四元数）/``"T"``(4×4)/``"se3"``。"""
+        """模板：``frame`` 为目标帧；``q`` 为 ``(n,)`` 单点 / ``(N,n)`` 批量；``rep``
+        取 ``"pose"``（默认，xyz+四元数）/``"T"``(4×4)/``"se3"``（pinocchio 对象）。
+        批量时 ``"pose"``/``"se3"`` 返回长度 N 的 list，``"T"`` 返回 ``(N,4,4)`` ndarray。"""
         if rep not in ("pose", "T", "se3"):
             raise ValueError(
                 f"fkine_solver.py - FkineSolver.solve：未知 rep={rep!r}（仅支持 'pose'/'T'/'se3'）")
@@ -63,7 +63,8 @@ class FkineSolver(ABC):
             return pose
         elif rep == "T":
             return pose.T
-        else:  # se3
+        else:  
+            import pinocchio as pin
             T = pose.T
             return pin.SE3(T[:3, :3], T[:3, 3])
 

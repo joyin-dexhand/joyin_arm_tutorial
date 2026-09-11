@@ -66,7 +66,9 @@ class JacobianSolver(ABC):
         return bool(self.singular_values(arm, q, frame, ref=ref)[-1] < tol)
 
     def manipulability(self, arm, q: np.ndarray, frame: Union[str, int], ref: str = "base") -> float:
-        """Yoshikawa 可操作度 ``w = sqrt(det(J Jᵀ)) = Πσᵢ``（椭球体积度量）。"""
+        """Yoshikawa 可操作度 ``w = Πσᵢ``——全部 ``min(6,n)`` 个奇异值之积（速度椭球体积度量）。
+                仅 ``n=6`` 满秩时才等于 ``sqrt(det(JJᵀ))``；``n<6`` 时恒为 0、失去意义。
+        """
         return float(np.prod(np.linalg.svd(self.jac(arm, q, frame, ref=ref), compute_uv=False)))
 
     def manipulability_gradient(self, arm, q: np.ndarray,
@@ -89,11 +91,13 @@ class JacobianSolver(ABC):
                     ref: str = "base", damping: float = 1e-3) -> np.ndarray:
         """阻尼最小二乘（DLS）广义逆 ``J* = Jᵀ(JJᵀ + λ²I)⁻¹``，返回 ``(n,6)``。
 
-        ``λ→0`` 退化为最小范数伪逆 ``J⁺``
+        ``λ→0`` 退化为最小范数伪逆 ``J⁺``；``σ=0`` 且 ``λ=0`` 时该方向完全不可控，系数取 0。
         """
         J = self.jac(arm, q, frame, ref=ref)
         U, sv, Vt = np.linalg.svd(J, full_matrices=False)
-        return (Vt.T * (sv / (sv ** 2 + damping ** 2))) @ U.T
+        denom = sv ** 2 + damping ** 2
+        scale = np.divide(sv, denom, out=np.zeros_like(sv), where=denom > 0.0)
+        return (Vt.T * scale) @ U.T
 
     def nullspace_projector(self, arm, q: np.ndarray, frame: Union[str, int],
                             ref: str = "base", damping: float = 1e-3) -> np.ndarray:

@@ -23,10 +23,12 @@ joyarm_code/
    │  joyarm/   组合根：JoyArm（单类） · JoyArmFactory(按型号选型)    │
    ├──────────────────────────────────────────────────────────────┤
    │  robotics/  算法接口（一域一子包：ABC + 空 REGISTRY，            │
-   │             实现为教程各章教学内容）← 仅依赖 utils（鸭子类型）     │
+   │             实现为教程各章教学内容）← 仅依赖 utils（按属性约定     │
+   │             调用 arm，不反向依赖 joyarm）                        │
    │  backend/  通信（整机 Backend + name 选型）                     │
    ├──────────────────────────────────────────────────────────────┤
    │  utils/  types（共享类型） · transforms（数学） · limits（限位守卫）│
+   │         · interpolation（插值） · loops（周期线程）              │
    └──────────────────────────────────────────────────────────────┘
       robot_model/（URDF + meshes）  configs/（per-model YAML）   ← 资产，由 joyarm 运行期加载
 ```
@@ -34,7 +36,7 @@ joyarm_code/
 核心概念：
 
 - **组合根 `JoyArm`（单类，无型号子类）**：完整机械臂 = arm 本体 + end 执行器。**型号差异全部由配置表达**——新型号 = `configs/<型号>.yaml` + `robot_model/` URDF 资产 + `backend/backend_*.py`（型号与整机后端 1:1）。持有一个**整机通信后端** `_backend`（私有，yaml `backend.name` 选型构建、必配）与**六域策略成员字典**（`_fkine_solvers` / `_ikine_solvers` / …，config 可指定加载多个、首个为激活）；公开门面（`arm.fkine()` / `arm.set_end_open()`…）全部委托激活成员，`connect()` 后才可执行硬件操作。config 必需且构造前经 `JoyArm.check_config` 静态自检（通过才初始化）；构造时一次性深拷贝存为类内成员，教学数据（如 MDH 参数）经 `arm.get_config()` 读取、不重读 yaml。
-- **成员即策略（config 可换、字典化加载）**：`configs/<model>.yaml` 的 `robotics:` 段按各域注册名选型（值可为单个规格或列表，全部加载、首个激活；注册名 = 求解器类名小写+下划线）；运行期 `arm.set_solver(域, 名)` 切换（有且仅一个激活）。各域 `REGISTRY` 默认仅有 ABC 接口（空表）——域未配置即无成员（门面调用显性报错）；**配置的注册名必须已实现且实例化成功，否则构造失败（硬失败）**。
+- **成员即策略（config 可换、字典化加载）**：`configs/<model>.yaml` 的 `robotics:` 段按各域注册名选型（值可为单个规格或列表，全部加载、首个激活；实现类名 = 算法前缀 + 域基类名（如 `PinFkineSolver`），注册名 = 类名小写+下划线（`pin_fkine_solver`），加 `@register` 装饰器自动注册）；运行期 `arm.set_solver(域, 名)` 切换（有且仅一个激活）。各域 `REGISTRY` 默认仅有 ABC 接口（空表）——域未配置即无成员（门面调用显性报错）；**配置的注册名必须已实现且实例化成功，否则构造失败（硬失败）**。
 - **型号工厂 `joyarm_factory`**：按型号名（唯一参数）创建机械臂——自动加载 `configs/<型号>.yaml` 并校验命名链（入参 = 文件名 = `basic.name`）；**型号不存在或初始化失败时返回 `None` 并输出失败信息**（不抛异常；仅工厂入口软化，`JoyArm` 直用为硬失败）。
 - **Backend 整机两层**：`Backend`（整机根，方法以 `*_arm` / `*_end` 后缀区分本体与末端）→ `BackendDM`（与机械臂型号 **1:1** 派生：`backend_dm` ↔ `joyarm_dm`）；yaml `backend:` 段 `name` 选型，arm/end 同 channel 共享总线、异 channel 独立。
 

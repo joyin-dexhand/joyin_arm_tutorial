@@ -56,7 +56,7 @@ def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
 # 限位构建（joint_limits_from_model 硬限位解析 / soft_limits 软限位派生）
 # ============================================================
 def joint_limits_from_model(model) -> JointLimits:
-    """从模型对象解析**硬限位**（鸭子类型，仅访问属性，不依赖 pinocchio）。
+    """从模型对象解析**硬限位**（只按属性名访问，不依赖 pinocchio 本身）。
 
     位置限位 ``q_min/q_max`` 与速度/力矩上限（``velocityLimit``/``effortLimit``
     缺失时置 ∞）。

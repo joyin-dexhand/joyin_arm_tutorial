@@ -19,6 +19,7 @@ from ..utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_
 from ..utils.transforms import quat_conj, quat_mul, quat_to_axis_angle
 from ..utils.types import ArmState, ControlMode, JointLimits, Pose, TcpLimits, TrajFrame
 from ..utils.interpolation import cubic_traj as _cubic_traj
+from ..utils.loops import PeriodicThread
 
 from ..backend import Backend, get_backend
 from ..robotics.fkine import REGISTRY as _FKINE_REGISTRY
@@ -35,10 +36,9 @@ logger = logging.getLogger("joyarm_core.joyarm")
 
 # ============================================================
 # 模块级：路径常量与配置加载（load_config 为公开 API）
-# 工厂生产流程：① 传入型号 → ② 加载对应 config 文件
-# （configs/<型号>.yaml）→ ③ 按 config 的 robot_model（URDF）、
-# robotics（求解器）、backend（通信）等配置参数初始化并创建
-# JoyArm 对象（初始化后默认不连接 backend）
+# 工厂生产流程：
+#    ① 传入型号 → ② 加载对应 config 文件（configs/<型号>.yaml）
+#    → ③ 按 config 配置初始化并创建 JoyArm 对象（默认不连接 backend）
 # ============================================================
 # configs/ 目录（joyarm.py 位于 joyarm_core/joyarm/，上溯一级即包根）
 _CONFIGS_DIR = os.path.join(
@@ -58,8 +58,8 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
     """加载 ``configs/<model>.yaml`` 型号配置。
 
     :param model: 型号名（与 yaml 文件名、yaml ``basic.name`` 字段一致）。
-    :param strict: 严格模式（``JoyArmFactory`` 路径）：文件缺失/解析失败抛
-        ``ValueError``（列出可用型号）；缺省容错返回 ``None``。
+    :param strict: 严格模式（``JoyArm`` 直接构建路径）：文件缺失/解析失败抛 ``ValueError``（列出可用型号）；
+            缺省容错返回 ``None``（工厂路径 ``JoyArmFactory.create`` 内部即用容错模式、自行兜底转失败消息）。
     """
     try:
         import yaml
@@ -85,7 +85,7 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
 # 模块级：六域规格常量与域构建（硬失败语义：配置的成员必须全部创建成功）
 # ============================================================
 # 域 → 注册表（六域统一字典化；config 规格可为单值或列表，全部加载、首个激活）
-# 注册名约定：与求解器类名对应（类名小写 + 下划线，如 FkinePin → "fkine_pin"）
+# 注册名约定：实现类名小写 + 下划线（类名 = 算法前缀 + 域基类名，如 PinFkineSolver → "pin_fkine_solver"）
 _DOMAIN_REGISTRIES = {
     "fkine": _FKINE_REGISTRY,
     "ikine": _IKINE_REGISTRY,
@@ -95,31 +95,43 @@ _DOMAIN_REGISTRIES = {
     "control": _CONTROL_REGISTRY,
 }
 
-def _build_domain(domain: str, registry: dict, spec) -> dict:
-    """按 config 规格实例化一域策略成员（硬失败语义）。
+def _parse_domain_specs(domain: str, spec) -> List[tuple]:
+    """把 config ``robotics.<domain>`` 段的规格解析为 ``(注册名, 参数字典)`` 列表。
 
-    :param spec: 注册名字符串 / ``{name:..., **参数}`` / 上述的**列表**（全部加载）。
-    :return: 成员字典 ``{注册名: 实例}``——域未配置返回空；**任一成员规格非法、
-        注册名不存在或实例化失败即抛 ``ValueError``**（全部创建成功 + 首个激活
-        才通过）。
+    规格（与 :func:`_build_domain` 共用同一解析）：单值或列表；单项为注册名字符串或 ``{name: ..., **参数}`` 字典。
+    域未配置 → 空列表；结构非法（缺 ``name`` 键 / 类型不支持）抛 ``ValueError``。
+    注册名是否存在不在此处查（归 ``_build_domain`` 对照注册表硬失败）。
     """
     if not spec:
-        return {}
-    specs = list(spec) if isinstance(spec, (list, tuple)) else [spec]
-    members: dict = {}
+        return []
+    specs = spec if isinstance(spec, (list, tuple)) else [spec]
+    parsed: List[tuple] = []
     for s in specs:
         if isinstance(s, str):
-            name, params = s, {}
+            parsed.append((s, {}))
         elif isinstance(s, dict):
             params = dict(s)
             name = params.pop("name", None)
             if name is None:
                 raise ValueError(
-                    f"joyarm.py - _build_domain：robotics.{domain} 规格缺 name 键：{s!r}")
+                    f"joyarm.py - _parse_domain_specs：robotics.{domain} 规格缺 name 键：{s!r}")
+            parsed.append((name, params))
         else:
             raise ValueError(
-                f"joyarm.py - _build_domain：robotics.{domain} 规格类型非法"
+                f"joyarm.py - _parse_domain_specs：robotics.{domain} 规格类型非法"
                 f"（{type(s).__name__}），需为注册名字符串或 {{name:..., **参数}} 字典")
+    return parsed
+
+
+def _build_domain(domain: str, registry: dict, spec) -> dict:
+    """按 config 规格实例化一域策略成员（硬失败语义）。
+
+    :param spec: 注册名字符串 / ``{name:..., **参数}`` / 上述的**列表**（全部加载）。
+    :return: 成员字典 ``{注册名: 实例}``——域未配置返回空；**任一成员规格非法、
+        注册名不存在或实例化失败即抛 ``ValueError``**（全部创建成功 + 首个激活才通过）。
+    """
+    members: dict = {}
+    for name, params in _parse_domain_specs(domain, spec):
         if name not in registry:
             raise ValueError(
                 f"joyarm.py - _build_domain：注册名『{name}』在 robotics.{domain} 中"
@@ -134,14 +146,12 @@ def _build_domain(domain: str, registry: dict, spec) -> dict:
 
 
 class JoyArm:
-    """完整机械臂类（组合根，兼容带末端执行器的 6R/7R 臂，单类）。
+    """完整机械臂类（集中装配点：按配置把算法与通信组合成一台可用的臂）。
 
     :param model: 型号名（product model，区别于构型模型 ``pin_model``；与
         ``configs/<model>.yaml`` 文件名、yaml ``basic.name`` 字段一致）。
-    :param config: 型号 YAML 字典（``basic``/``joyarm``/``robotics``/``backend``
-        四段——内部指定 robot_model（URDF 资产）、robotics 求解器、backend
-        通信等配置）；缺省自动加载 ``configs/<model>.yaml``。**config 必需**：
-        无法加载或 :meth:`check_config` 自检不通过即构造失败。
+    :param config: 型号 YAML 字典（``basic``/``joyarm``/``robotics``/``backend``四段。
+    **config 必需**：无法加载或 :meth:`check_config` 自检不通过即构造失败。
     """
 
     # ----------------------------------------------------------
@@ -208,8 +218,11 @@ class JoyArm:
         self._current_frame: Optional[TrajFrame] = None        # 当前帧（规划线程写）
         # ---- 运行状态与状态保活 ----
         self.is_normal: bool = True                     # 运行状态标志（True=正常运行；False=异常，控制器循环跳过 cmd 下发；由应用/后续监控置位）
-        self._state_stop = threading.Event()            # 状态保活线程停止位
-        self._state_thread: Optional[threading.Thread] = None   # 空闲保活线程句柄（connect 启动）
+        self._state_thread: Optional[PeriodicThread] = None    # 空闲保活线程（connect 启动）
+        # ---- 运动管线（start_motion/stop_motion 启停规划器+控制器线程）----
+        self._motion_running: bool = False              # 管线运行标志（防重复启停）
+        self._motion_members: Optional[tuple] = None    # 启动时捕获的 (规划器, 控制器)——stop 停这对，运行期 set_solver 切换不影响
+        self._solver_lock = threading.RLock()           # 求解器串行化（内核不保证线程安全，如 pinocchio pin_data 共享；可重入：ikine 内核回调 arm.fkine/jac）
 
         # ----------------------------------------------------------
         # init 逐步赋真实值（robot_model URDF → 关节数/名称 → 限位（硬/软）→
@@ -626,19 +639,10 @@ class JoyArm:
                             f"{np.asarray(v, dtype=float).reshape(-1).shape[0]} ≠ 关节数 {n_ref}")
         robotics_cfg = cfg.get("robotics") or {}
         for domain in _DOMAIN_REGISTRIES:
-            spec = robotics_cfg.get(domain)
-            if spec is None:
-                continue
-            specs = spec if isinstance(spec, (list, tuple)) else [spec]
-            for s in specs:
-                if isinstance(s, str):
-                    continue
-                if isinstance(s, dict):
-                    if not s.get("name"):
-                        problems.append(f"robotics.{domain} 规格缺 name 键：{s!r}")
-                else:
-                    problems.append(
-                        f"robotics.{domain} 规格类型非法（{type(s).__name__}）")
+            try:
+                _parse_domain_specs(domain, robotics_cfg.get(domain))
+            except ValueError as e:
+                problems.append(str(e).split("：", 1)[1] if "：" in str(e) else str(e))
         if problems:
             raise ValueError(
                 "joyarm.py - check_config：配置自检未通过：\n"
@@ -729,6 +733,18 @@ class JoyArm:
             )
         return d[name]
 
+    def _solve(self, domain: str, method: str, *args, **kw):
+        """统一求解入口：取激活成员并加锁调用（六域门面共用）。
+
+        求解器内核不保证线程安全（如 fkine 实现可能共享 pinocchio
+        ``pin_data``，而控制器/保活/应用线程会并发调用门面），故全部经
+        本方法串行化；用可重入锁是因 ikine/jacobian 内核会回调
+        ``arm.fkine``/``arm.jac`` 门面（同线程嵌套加锁）。
+        """
+        solver = self._active(domain)
+        with self._solver_lock:
+            return getattr(solver, method)(*args, **kw)
+
     def set_solver(self, domain: str, name: str):
         """运行期切换激活成员（按注册名；域 ∈ fkine/ikine/jacobian/dynamics/traj/control）。
 
@@ -748,23 +764,28 @@ class JoyArm:
     # ---- fkine 正运动学（参数排序：通用在前、特有 keyword-only 在后）----
     def fkine(self, q: np.ndarray, frame: Union[str, int], rep: str = "pose"):
         """正运动学（``frame`` 目标帧名/索引，必填；``rep`` 取 ``pose``（默认，xyz+四元数）/``T``（4×4 矩阵）/``se3``（pin.SE3））。"""
-        return self._active("fkine").solve(self, q, frame=frame, rep=rep)
+        return self._solve("fkine", "solve", self, q, frame=frame, rep=rep)
 
     # ---- ikine 逆运动学 ----
     def ikine(self, target: Pose, frame: Union[str, int], q0: np.ndarray, **kw):
         """逆运动学单解（``q0`` ``(n_arm,)`` 必填：数值法迭代起点 / 解析法限位
         剔除后选最近解的参考；``tol``/``iters`` 等为求解器特有参数）。"""
-        return self._active("ikine").solve(self, target, frame, q0, **kw)
+        return self._solve("ikine", "solve", self, target, frame, q0, **kw)
 
     def ikine_all(self, target: Pose, frame: Union[str, int], **kw):
         """逆运动学全部解析解（``q`` 为 ``(K, n_arm)``，经 ±2π 平移尽量落入限位；
-        数值法实现不支持）。"""
-        return self._active("ikine").solve_all(self, target, frame, **kw)
+        数值法实现不支持时抛 ``RuntimeError``）。"""
+        try:
+            return self._solve("ikine", "solve_all", self, target, frame, **kw)
+        except NotImplementedError as e:
+            raise RuntimeError(
+                f"joyarm.py - ikine_all：当前激活的 ikine 成员不支持求全部解"
+                f"（数值法/未实现 solve_all）：{e}") from e
 
     # ---- jacobian 雅可比及衍生量 ----
     def jac(self, q: np.ndarray, frame: Union[str, int], ref: str = "base"):
         """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端帧系 / 基座系）。"""
-        return self._active("jacobian").jac(self, q, frame=frame, ref=ref)
+        return self._solve("jacobian", "jac", self, q, frame=frame, ref=ref)
 
     def fkine_vel(self, q: np.ndarray, dq: np.ndarray,
                   frame: Union[str, int], ref: str = "base"):
@@ -773,7 +794,7 @@ class JoyArm:
         :param q: 关节角 ``(n_arm,)``；``dq`` 关节速度 ``(n_arm,)``（rad/s）。
         :return: ``(6,)`` 末端速度旋量（线速度 m/s + 角速度 rad/s，参考系同 ``ref``）。
         """
-        return self._active("jacobian").fkine_vel(self, q, dq, frame, ref=ref)
+        return self._solve("jacobian", "fkine_vel", self, q, dq, frame, ref=ref)
 
     def ikine_vel(self, q: np.ndarray, V: np.ndarray,
                   frame: Union[str, int], ref: str = "base",
@@ -785,38 +806,39 @@ class JoyArm:
         :param damping: DLS 阻尼 λ（默认 ``1e-3``）。
         :return: ``(n_arm,)`` 关节速度（rad/s）。
         """
-        return self._active("jacobian").ikine_vel(
-            self, q, V, frame, ref=ref, damping=damping)
+        return self._solve("jacobian", "ikine_vel",
+                           self, q, V, frame, ref=ref, damping=damping)
 
     def manipulability(self, q: np.ndarray, frame: Union[str, int]) -> float:
         """Yoshikawa 可操作度（雅可比衍生量）。"""
-        return self._active("jacobian").manipulability(self, q, frame=frame)
+        return self._solve("jacobian", "manipulability", self, q, frame=frame)
 
     def statics(self, q: np.ndarray, F: np.ndarray, frame: Union[str, int]):
         """静力学 ``τ = JᵀF``：``F`` 为 ``(6,)`` 末端六维力旋量（力 N + 力矩
         N·m），返回 ``τ ∈ R^n_arm`` 关节力矩（雅可比衍生量）。"""
-        return self._active("jacobian").statics(self, q, F, frame=frame)
+        return self._solve("jacobian", "statics", self, q, F, frame=frame)
 
     # ---- dynamics 动力学 ----
     def idyn(self, q, dq, ddq, f_ext=None):
         """逆动力学（委托激活动力学成员）。"""
-        return self._active("dynamics").idyn(self, q, dq, ddq, f_ext=f_ext)
+        return self._solve("dynamics", "idyn", self, q, dq, ddq, f_ext=f_ext)
 
     def mass_matrix(self, q):
         """关节空间惯量矩阵 M(q)。"""
-        return self._active("dynamics").mass_matrix(self, q)
+        return self._solve("dynamics", "mass_matrix", self, q)
 
     def coriolis(self, q, dq):
         """科氏+向心项 C(q,q̇)q̇。"""
-        return self._active("dynamics").coriolis(self, q, dq)
+        return self._solve("dynamics", "coriolis", self, q, dq)
 
     def gravity(self, q):
         """重力项 G(q)。"""
-        return self._active("dynamics").gravity(self, q)
+        return self._solve("dynamics", "gravity", self, q)
 
     def cartesian_inertia(self, q, frame: Union[str, int]):
-        """笛卡尔惯量 Λ=J⁻ᵀMJ⁻¹（M ⊕ ``arm.jac`` 模板）。"""
-        return self._active("dynamics").cartesian_inertia(self, q, frame=frame)
+        """笛卡尔惯量 ``Λ = J⁺ᵀMJ⁺``（M ⊕ ``arm.jac`` 模板；``J⁺`` 为截断
+        SVD 伪逆，奇异附近有限有界）。"""
+        return self._solve("dynamics", "cartesian_inertia", self, q, frame=frame)
 
     # ----------------------------------------------------------
     # traj 轨迹桥（规划线程 ⇄ 控制线程的数据管道）
@@ -850,6 +872,62 @@ class JoyArm:
         """读取当前轨迹帧（读者：控制线程；首帧发布前为 ``None`` 初始态）。"""
         return self._current_frame
 
+    # ---- 运动管线启停（规划器 + 控制器线程的公共入口）----
+    def start_motion(self) -> None:
+        """启动常规运动管线（激活的规划器 + 控制器线程）。
+
+        管线：应用 :meth:`set_target_traj` 写目标 → 规划器（plan/sample 双
+        线程）产当前帧 → 控制器（ctrl 线程）读帧算指令 → :meth:`set_arm_command`
+        下发。已在运行时幂等返回。
+
+        注意：①规划器启动后若目标桥为空，首个周期即回退规划回 ``q_home``
+        （见 ``TrajPlanner.plan_once``）——请先写有效目标，或确认当前位形
+        向 home 运动是安全的；②控制器内核返回的控制模式须与已
+        :meth:`set_mode_arm` 切换的模式一致，否则 ``set_arm_command`` 每周期
+        抛 ``RuntimeError``（指令饥饿）——请启动前先切到对应模式。
+
+        :raises RuntimeError: 未连接真机，或 robotics.traj / robotics.control
+            域未配置成员（config ``robotics:`` 段）。
+        """
+        if self._motion_running:
+            return
+        self._require_connected()
+        planner = self._active("traj")
+        controller = self._active("control")
+        planner.start(self)
+        try:
+            controller.start(self)
+        except Exception:
+            planner.stop()                     # 控制器启动失败即回滚规划器
+            raise
+        self._motion_members = (planner, controller)
+        self._motion_running = True
+
+    def stop_motion(self) -> None:
+        """停止运动管线（先停控制器再停规划器——指令下发方先停）；幂等。
+
+        停的是 :meth:`start_motion` 时捕获的成员对——运行期 ``set_solver``
+        切换激活成员不影响停止对象。
+
+        :raises RuntimeError: 线程超时未退出（如单步阻塞在总线 IO 上）；
+            此时管线视为仍在运行（标志未清除），处理后可重试本方法。
+        """
+        if not self._motion_running:
+            return
+        planner, controller = self._motion_members
+        errors = []
+        for name, obj in (("control", controller), ("traj", planner)):
+            try:
+                obj.stop()
+            except RuntimeError as e:
+                errors.append(f"{name}: {e}")
+        if errors:
+            raise RuntimeError(
+                f"joyarm.py - stop_motion：部分线程未按时退出（{'；'.join(errors)}）；"
+                f"请排查阻塞原因后重试 stop_motion()")
+        self._motion_members = None
+        self._motion_running = False
+
     # ----------------------------------------------------------
     # backend 真机连接与执行（依赖 _backend；connect 后才可执行 arm_*/end_*）
     # ----------------------------------------------------------
@@ -865,7 +943,12 @@ class JoyArm:
         self._start_state_keepalive()
 
     def disconnect(self) -> None:
-        """断开真机（先停止状态保活线程；整机后端先失能全部电机再断开总线）。"""
+        """断开真机（先尽力停止运动管线与状态保活线程；整机后端先失能全部
+        电机再断开总线）。"""
+        try:
+            self.stop_motion()
+        except Exception as e:
+            logger.warning("joyarm.py - disconnect：停止运动管线失败（继续断开）：%s", e)
         self._stop_state_keepalive()
         self._backend.disconnect()
         self.connected = False
@@ -878,45 +961,34 @@ class JoyArm:
         """启动状态保活线程（connect 自动调用；幂等）。"""
         if self._state_thread is not None and self._state_thread.is_alive():
             return
-        self._state_stop.clear()
-        self._state_thread = threading.Thread(
-            target=self._state_keepalive_loop, daemon=True, name="joyarm-state")
-        self._state_thread.start()
+        worker = PeriodicThread(self._keepalive_step, self._STATE_KEEPALIVE_HZ,
+                                name="joyarm-state")
+        worker.start()
+        self._state_thread = worker
 
     def _stop_state_keepalive(self) -> None:
-        """停止状态保活线程（disconnect 自动调用；幂等）。"""
-        self._state_stop.set()
+        """停止状态保活线程（disconnect 自动调用；1s 内未退出抛 RuntimeError，
+        引用保留、再次 connect 不会重复启动）。"""
         if self._state_thread is not None:
-            self._state_thread.join(timeout=1.0)
-        self._state_thread = None
+            self._state_thread.stop()
+            self._state_thread = None
 
-    def _state_keepalive_loop(self) -> None:
-        """保活线程体：缓存槽数据陈旧（无控制流量）时主动同步刷新（请求-应答）。
+    def _keepalive_step(self) -> None:
+        """保活单步：缓存槽数据陈旧（无控制流量）时主动同步刷新（请求-应答）。
 
         控制流期间状态随指令帧同频刷新（age≈指令周期），本线程不动作、
-        零总线开销；巡检发现后端无陈旧度查询能力时静默跳过。
+        零总线开销；巡检发现后端无陈旧度查询能力时静默跳过（其余异常由
+        周期循环统一节流记日志、下周期重试）。
         """
-        period = 1.0 / self._STATE_KEEPALIVE_HZ
-        deadline = time.perf_counter()
-        while not self._state_stop.is_set():
-            deadline += period
-            now = time.perf_counter()
-            if deadline > now:
-                self._state_stop.wait(deadline - now)
-            else:                              # 单步超时错过节拍：重新对齐，不追赶
-                deadline = now
-            try:
-                if not self.connected:
-                    continue
-                if self._backend.state_age_arm() > self._STATE_STALE_AFTER:
-                    self._backend.read_state_arm()
-                if self._backend.state_age_end() > self._STATE_STALE_AFTER:
-                    self._backend.read_state_end()
-            except NotImplementedError:        # 后端未实现陈旧度查询 → 无保活能力
-                pass
-            except Exception:
-                logger.exception("joyarm.py - JoyArm._state_keepalive_loop："
-                                 "状态保活刷新失败，下周期重试")
+        if not self.connected:
+            return
+        try:
+            if self._backend.state_age_arm() > self._STATE_STALE_AFTER:
+                self._backend.read_state_arm()
+            if self._backend.state_age_end() > self._STATE_STALE_AFTER:
+                self._backend.read_state_end()
+        except NotImplementedError:        # 后端未实现陈旧度查询 → 无保活能力
+            pass
 
     def __enter__(self) -> "JoyArm":
         """上下文管理入口：未连接时自动 ``connect()``；退出时安全收尾。"""
@@ -925,8 +997,9 @@ class JoyArm:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        """退出收尾（尽力而为）：失能本体/末端 → 断开；各步失败仅告警不抛。"""
-        for name, fn in (("disable_arm", self.disable_arm),
+        """退出收尾（尽力而为）：停运动管线 → 失能本体/末端 → 断开；各步失败仅告警不抛。"""
+        for name, fn in (("stop_motion", self.stop_motion),
+                         ("disable_arm", self.disable_arm),
                          ("disable_end", self.disable_end),
                          ("disconnect", self.disconnect)):
             try:
@@ -1082,6 +1155,10 @@ class JoyArm:
         except NotImplementedError:
             state = self._backend.read_state_arm()
         if self._active_name.get("fkine") is not None:
+            # 填充前先浅拷贝外壳：后端缓存读取可能返回共享对象，原地改写会
+            # 污染缓存并在多线程调用间引入竞态（joint 不改动、保持共享）
+            state = copy.copy(state)
+            state.tcp = copy.copy(state.tcp)
             state.tcp.pose = self.fkine(state.joint.q, self.ee_frame_name)   # 默认 rep="pose" → Pose
         return state
 
@@ -1332,16 +1409,7 @@ class JoyArm:
             t = float(np.max(np.abs(q - q0)))
         ts, qs, _ = _cubic_traj(q0, q, float(t), rate)
         self.set_mode_arm(ControlMode.POSITION)          # 非位置模式先切
-        start = time.perf_counter()
-        spin_margin = 0.001                               # 先 sleep 到 deadline−margin 再自旋
-        for ti, qi in zip(ts, qs):
-            deadline = start + float(ti)
-            now = time.perf_counter()
-            if deadline - now > spin_margin:
-                time.sleep(deadline - now - spin_margin)
-            while time.perf_counter() < deadline:
-                pass
-            self._backend.send_position_arm(qi)
+        self._paced_send(ts, lambda i: self._backend.send_position_arm(qs[i]))
         if not self._wait_in_position(q, wait_tol, wait_timeout):
             raise RuntimeError(
                 f"joyarm.py - move_j：到位超时（{wait_timeout}s 内未达容差 "
@@ -1411,6 +1479,25 @@ class JoyArm:
         self.safe_home(t, wait_tol=wait_tol, wait_timeout=wait_timeout)
         self.home_to_zero(t, wait_tol=wait_tol, wait_timeout=wait_timeout)
 
+    # 精确调度余量（秒）：先 sleep 到 deadline−margin 再自旋，兼顾 CPU 占用与亚毫秒抖动
+    _SPIN_MARGIN: float = 0.001
+
+    def _paced_send(self, ts, send) -> None:
+        """按时间表逐帧下发（move_j/_safe_move 共用）。
+
+        第 ``i`` 帧在 ``起点 + ts[i]`` 时刻调用 ``send(i)``：绝对时间表 +
+        sleep/自旋混合等待，帧间隔亚毫秒抖动；单帧发送超时只错过不追赶。
+        """
+        start = time.perf_counter()
+        for i, ti in enumerate(ts):
+            deadline = start + float(ti)
+            now = time.perf_counter()
+            if deadline - now > self._SPIN_MARGIN:
+                time.sleep(deadline - now - self._SPIN_MARGIN)
+            while time.perf_counter() < deadline:
+                pass
+            send(i)
+
     def _safe_move(self, q_arm, q_end, t=None, *, rate=None,
                    wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
         """安全运动内核：本体 MIT 阻抗模式三次多项式流（q/dq 跟踪 + config
@@ -1443,16 +1530,8 @@ class JoyArm:
         except RuntimeError:
             tau_ff = np.zeros(self.n_arm)
         self.set_mode_arm(ControlMode.MIT)
-        start = time.perf_counter()
-        spin_margin = 0.001                               # 先 sleep 到 deadline−margin 再自旋
-        for ti, qi, dqi in zip(ts, qs, dqs):
-            deadline = start + float(ti)
-            now = time.perf_counter()
-            if deadline - now > spin_margin:
-                time.sleep(deadline - now - spin_margin)
-            while time.perf_counter() < deadline:
-                pass
-            self._backend.send_mit_arm(qi, dqi, tau_ff)
+        self._paced_send(ts, lambda i: self._backend.send_mit_arm(
+            qs[i], dqs[i], tau_ff))
         if not self._wait_in_position(q_arm, wait_tol, wait_timeout):
             raise RuntimeError(
                 f"joyarm.py - _safe_move：到位超时（{wait_timeout}s 内未达容差 "

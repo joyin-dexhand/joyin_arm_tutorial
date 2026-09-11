@@ -62,6 +62,11 @@ _MOTOR_LIMITS: dict[str, tuple[float, float, float]] = {
 # MIT 帧固定位宽：q 16bit / dq 12bit / tau 12bit（按型号极限缩放），kp/kd 12bit（固定量程）
 _KP_MAX, _KD_MAX = 500.0, 5.0
 
+# 接收残余缓冲上限（字节）与截断告警节流间隔（秒）：见 _extract_frames
+_RX_RESIDUAL_MAX = 4096
+_RX_CAP_WARN_INTERVAL = 5.0
+_RX_CAP_WARN_LAST = float("-inf")
+
 # 错误码：0=失能正常、1=使能正常、8~E=故障（依达妙协议：8 超压/9 欠压/A 过流/
 # B MOS超温/C 线圈超温/D 通信丢失/E 过载）
 _ERR_DISABLED, _ERR_ENABLED = 0, 1
@@ -198,6 +203,9 @@ def _extract_frames(buf: bytes) -> tuple[list[bytes], bytes]:
     """从缓冲中滑动扫描 16 字节应答帧（``0xAA ... 0x55``），返回 (帧列表, 残余)。
 
     残余为最后一个有效帧之后的字节（可能含跨读的半帧），由调用方与下次数据拼接。
+    残余超过 ``_RX_RESIDUAL_MAX`` 时丢弃更早的字节只留尾部——持续收到无有效
+    帧的乱码（如波特率不匹配）时防止缓冲无限增长；未提取的帧早已不可能在
+    被丢弃的字节里成帧，尾部足以接住跨读的半帧。
     """
     frames, i, last = [], 0, 0
     while i <= len(buf) - 16:
@@ -207,7 +215,17 @@ def _extract_frames(buf: bytes) -> tuple[list[bytes], bytes]:
             last = i
         else:
             i += 1
-    return frames, buf[last:]
+    residual = buf[last:]
+    global _RX_CAP_WARN_LAST
+    if len(residual) > _RX_RESIDUAL_MAX:
+        residual = residual[-_RX_RESIDUAL_MAX:]
+        now = time.monotonic()
+        if now - _RX_CAP_WARN_LAST >= _RX_CAP_WARN_INTERVAL:
+            _RX_CAP_WARN_LAST = now
+            logger.warning("backend_dm.py - _extract_frames：接收残余已超 "
+                           f"{_RX_RESIDUAL_MAX} 字节并截断保尾；总线持续收到无法"
+                           "解析的数据，请检查波特率/串口桥接是否匹配")
+    return frames, residual
 
 
 def _rid_is_uint(rid: int) -> bool:
@@ -257,6 +275,11 @@ class DmMotor:
             "pos_ki": float(pv.get("pos_ki", 0.0)),
         }
         self.vlim = float(pv.get("vlim", 0.0))
+        if self.vlim <= 0.0:
+            # POS_VEL/VEL 指令的限速上限为 0 → 电机收到指令也不会动
+            logger.warning("backend_dm.py - DmMotor.__init__：关节 %s 未配置 "
+                           "POS_VEL.vlim（速度上限），位置/速度指令将以速度 0 "
+                           "下发（电机不动作），请在 config 补该键", self.name)
 
         # 末端限位语义（可选；arm 关节不配置）
         self.q_min = None if jcfg.get("q_min") is None else float(jcfg["q_min"])
@@ -264,7 +287,9 @@ class DmMotor:
         self.dq_max = None if jcfg.get("dq_max") is None else float(jcfg["dq_max"])
         self.tau_max = None if jcfg.get("tau_max") is None else float(jcfg["tau_max"])
 
-        # 状态槽 + 参数槽（RX 线程写、指令线程读，Event 通知应答到达）
+        # 状态槽 + 参数槽（RX 线程写、指令线程读，Event 通知应答到达）。
+        # 槽字段无锁：GIL 下单字段读写原子，但读侧可能混到相邻两帧的数值（如 q 取第 N 帧、tau 取第 N+1 帧）；
+        # 需要精确一致性时走 read_state_* 请求-应答路径（Event 同步保证成帧完整）。
         self.q, self.dq, self.tau, self.err = 0.0, 0.0, 0.0, _ERR_DISABLED
         self.t_mos, self.t_rotor = 0, 0  # ℃，旧固件不反馈（恒 0）
         self.t_state = 0.0              # 最近状态应答时刻（monotonic；0=从未收到）
@@ -709,6 +734,27 @@ class BackendDM(Backend):
                     m.bus.write_param(m, _PARAM_RIDS[key], m.gains[key])
             m.bus.switch_mode(m, dm_mode)
 
+    def _set_group_mode(self, motors: list[DmMotor], cache: dict,
+                        mode: ControlMode) -> None:
+        """按模式缓存切电机组模式（arm/end 共用）：仅对未到位的电机写增益/模式。"""
+        need = [m for m in motors if cache.get(m.name) != mode]
+        if need:
+            self._switch_group_mode(need, mode)
+        cache.update({m.name: mode for m in motors})
+
+    @staticmethod
+    def _read_group_mode(motors: list[DmMotor], cache: dict) -> Optional[ControlMode]:
+        """查电机组当前模式（本地缓存，不发总线帧，离线可查；组内模式唯一才
+        返回该模式，否则 ``None``——arm/end 共用）。"""
+        modes = {cache.get(m.name) for m in motors}
+        return modes.pop() if len(modes) == 1 else None
+
+    @staticmethod
+    def _disable_motors(motors: list[DmMotor]) -> None:
+        """逐电机发失能帧（不等应答；arm/end 共用）。"""
+        for m in motors:
+            m.bus.disable(m)
+
     @staticmethod
     def _read_group_state(motors: list[DmMotor], timeout: float = 0.05) -> list[bool]:
         """两段式反馈：清事件 → 批量发刷新帧 → 逐电机等应答，返回应答到达标志。"""
@@ -722,34 +768,62 @@ class BackendDM(Backend):
     # 生命周期
     # ----------------------------------------------------------
     def connect(self) -> None:
-        """语义见 :meth:`Backend.connect`；DM 实现：逐段建总线（同 channel 共享）并注册电机。"""
-        for sec_name, sec, motors in (
-            ("arm", self._arm_cfg, self._arm_motors),
-            ("end", self._end_cfg, self._end_motors),
-        ):
-            if not sec:
-                continue
-            channel = sec.get("channel")
-            if not channel:
-                raise ValueError(
-                    f"backend_dm.py - connect：config backend.{sec_name}.channel 缺失"
-                    f"（串口设备路径，如 /dev/ttyACM0）")
-            bus = self._buses.get(channel)
-            if bus is None:
-                bus = DmCanBus(channel, sec.get("baud_rate", 921600))
-                bus.open()
-                self._buses[channel] = bus
-            for m in motors:
-                bus.add_motor(m)
+        """语义见 :meth:`Backend.connect`；DM 实现：逐段建总线（同 channel 共享）并注册电机。
+
+        任一段失败时回滚：关闭本次已打开的总线后再抛出原异常，避免半连接状态泄漏串口句柄
+            （调用方 connect 失败后往往不会再调 disconnect）。
+        """
+        opened: dict[str, DmCanBus] = {}
+        try:
+            for sec_name, sec, motors in (
+                ("arm", self._arm_cfg, self._arm_motors),
+                ("end", self._end_cfg, self._end_motors),
+            ):
+                if not sec:
+                    continue
+                channel = sec.get("channel")
+                if not channel:
+                    raise ValueError(
+                        f"backend_dm.py - connect：config backend.{sec_name}.channel 缺失"
+                        f"（串口设备路径，如 /dev/ttyACM0）")
+                bus = self._buses.get(channel)
+                if bus is None:
+                    bus = DmCanBus(channel, sec.get("baud_rate", 921600))
+                    bus.open()
+                    self._buses[channel] = bus
+                    opened[channel] = bus
+                for m in motors:
+                    bus.add_motor(m)
+        except Exception:
+            for channel, bus in opened.items():
+                try:
+                    bus.close()
+                except Exception as e:
+                    logger.warning("backend_dm.py - connect：回滚关闭总线 %s 失败：%s",
+                                   channel, e)
+                self._buses.pop(channel, None)
+            raise
 
     def disconnect(self) -> None:
-        """语义见 :meth:`Backend.disconnect`；DM 实现：失能电机 → 停 RX 关串口 → 清模式缓存。"""
+        """语义见 :meth:`Backend.disconnect`；DM 实现：失能电机 → 停 RX 关串口 → 清模式缓存。
+
+        失能/关闭单条总线失败只记告警不中断（如设备已被拔出时写帧必失败），
+        确保其余总线仍被关闭、串口句柄不泄漏。
+        """
         # 顺序：失能电机 → 停 RX 线程 → 关串口（共享总线只关一次）
         for m in self._arm_motors + self._end_motors:
             if m.bus is not None:
-                m.bus.disable(m)
-        for bus in self._buses.values():
-            bus.close()
+                try:
+                    m.bus.disable(m)
+                except Exception as e:
+                    logger.warning("backend_dm.py - disconnect：失能电机 %s 失败"
+                                   "（继续关闭总线）：%s", m.name, e)
+        for channel, bus in self._buses.items():
+            try:
+                bus.close()
+            except Exception as e:
+                logger.warning("backend_dm.py - disconnect：关闭总线 %s 失败：%s",
+                               channel, e)
         self._buses.clear()
         for m in self._arm_motors + self._end_motors:
             m.bus = None
@@ -772,8 +846,7 @@ class BackendDM(Backend):
     def disable_arm(self, joint: Optional[int] = None) -> None:
         """语义见 :meth:`Backend.disable_arm`；DM 实现：逐电机发失能帧（不等应答）。"""
         self._check_open()
-        for m in self._motors_for(joint):
-            m.bus.disable(m)
+        self._disable_motors(self._motors_for(joint))
 
     def set_zero_arm(self, joint: Optional[int] = None) -> None:
         """语义见 :meth:`Backend.set_zero_arm`；DM 实现：失能 → 轮询至无故障 → 标零并等应答。"""
@@ -789,11 +862,7 @@ class BackendDM(Backend):
                      joint: Optional[int] = None) -> None:
         """语义见 :meth:`Backend.set_mode_arm`；DM 实现：仅对需切换的电机写增益/模式并确认。"""
         self._check_open()
-        motors = self._motors_for(joint)
-        need = [m for m in motors if self._mode_arm.get(m.name) != mode]
-        if need:
-            self._switch_group_mode(need, mode)
-        self._mode_arm.update({m.name: mode for m in motors})
+        self._set_group_mode(self._motors_for(joint), self._mode_arm, mode)
 
     def read_mode_arm(self, joint: Optional[int] = None) -> Optional[ControlMode]:
         """查询本体关节当前控制模式（本地缓存，不发总线帧，离线可查）。
@@ -801,9 +870,7 @@ class BackendDM(Backend):
         指定 ``joint`` 返回该关节模式（未设置为 ``None``）；``joint=None`` 时
         整臂各关节模式唯一才返回该模式，否则 ``None``。
         """
-        motors = self._motors_for(joint)
-        modes = {self._mode_arm.get(m.name) for m in motors}
-        return modes.pop() if len(modes) == 1 else None
+        return self._read_group_mode(self._motors_for(joint), self._mode_arm)
 
     def read_state_arm(self, joint: Optional[int] = None) -> ArmState:
         """语义见 :meth:`Backend.read_state_arm`；DM 实现：两段式批量刷新产出完整 ``ArmState``。"""
@@ -901,8 +968,7 @@ class BackendDM(Backend):
     def disable_end(self, joint: Optional[int] = None) -> None:
         """语义见 :meth:`Backend.disable_end`；DM 实现：逐电机发失能帧（不等应答）。"""
         self._check_open()
-        for m in self._end_motors_for(joint):
-            m.bus.disable(m)
+        self._disable_motors(self._end_motors_for(joint))
 
     def set_zero_end(self, joint: Optional[int] = None) -> None:
         """语义见 :meth:`Backend.set_zero_end`；DM 实现：同 ``set_zero_arm``（共用标零流程）。"""
@@ -918,17 +984,11 @@ class BackendDM(Backend):
                      joint: Optional[int] = None) -> None:
         """语义见 :meth:`Backend.set_mode_end`；DM 实现：同 ``set_mode_arm``（写增益/模式确认）。"""
         self._check_open()
-        motors = self._end_motors_for(joint)
-        need = [m for m in motors if self._mode_end.get(m.name) != mode]
-        if need:
-            self._switch_group_mode(need, mode)
-        self._mode_end.update({m.name: mode for m in motors})
+        self._set_group_mode(self._end_motors_for(joint), self._mode_end, mode)
 
     def read_mode_end(self, joint: Optional[int] = None) -> Optional[ControlMode]:
         """查询末端电机当前控制模式（本地缓存，语义同 :meth:`read_mode_arm`）。"""
-        motors = self._end_motors_for(joint)
-        modes = {self._mode_end.get(m.name) for m in motors}
-        return modes.pop() if len(modes) == 1 else None
+        return self._read_group_mode(self._end_motors_for(joint), self._mode_end)
 
     def read_state_end(self, joint: Optional[int] = None) -> dict:
         """语义见 :meth:`Backend.read_state_end`；DM 实现：两段式刷新，返回逐电机字段字典。"""

@@ -12,7 +12,7 @@
 > 以下为 joyarm_core 架构的**持久化约束**：代码演进不得违背；如需变更须先更新本节并经人工确认。
 
 1. **组合根·单类**：`joyarm/` 的 `JoyArm` 是组合根，基于 config 型号配置对其他层功能（backend、robot 资产、robotics 各求解器）做**可更换式组合**——能力全部委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**无型号子类**：型号差异全部由配置表达（config yaml + URDF 资产 + backend 后端类），型号标识为 `model` 属性（= 工厂入参 = yaml 文件名 = `basic.name`）。**新型号 = `configs/<型号>.yaml` + `robot_model/` 资产 + `backend/backend_*.py`**（backend `REGISTRY` 一行；型号与整机后端 1:1，如 `joyarm_dm` ↔ `backend_dm`）。
-2. **接口先行·章节实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）**仅保留 ABC 接口 + 空 `REGISTRY`**——具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 / control Ch6/8/9 / dynamics Ch8），章节实现后经对应域 `REGISTRY` 注册即接入（**注册名 = 求解器类名小写+下划线**，换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`，过渡正常态），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。
+2. **接口先行·章节实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）**仅保留 ABC 接口 + 空 `REGISTRY`**——具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 / control Ch6/8/9 / dynamics Ch8），章节实现类加 `@register` 装饰器（`robotics/_registry.py`）即自动注册接入（**实现类名 = 算法前缀 + 域基类名，如 `PinFkineSolver`；注册名 = 类名小写+下划线，如 `pin_fkine_solver`**，换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`，过渡正常态），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。
 3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族，多电机末端如灵巧手通用）。
 4. **软化仅限工厂入口**：工厂创建时 config 缺失、命名链不符（`basic.name` ≠ 型号名）或初始化异常则**返回 `None` 并输出创建失败信息**（不抛异常）；`JoyArm` 直用为**硬失败**——config 必需（缺失/自检不通过即抛）、backend 必配、robotics 配置的成员必须全部创建成功（约束2）。
 5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `target`/`frame`/`q0`），**特有参数 keyword-only 在后**（仅特定算法需要，如数值法的 `tol`/`iters`，解析法可忽略）——各章实现求解器时遵守。
@@ -35,8 +35,9 @@ joyarm_code/
 │   │   ├── types.py                 #     数据类 / 枚举
 │   │   ├── transforms.py            #     SO(3)/SE(3) 纯 numpy 数学
 │   │   ├── interpolation.py         #     关节空间插值原语（cubic；move_j/急停复位直连）
-│   │   └── limits.py                #     clamp_to_limits + 限位构建辅助
-│   ├── robotics/                    #   算法层：一域一子包（ABC + 空 REGISTRY）
+│   │   ├── limits.py                #     clamp_to_limits + 限位构建辅助
+│   │   └── loops.py                 #     周期线程公共实现（run_periodic/PeriodicThread）
+│   ├── robotics/                    #   算法层：一域一子包（ABC + 空 REGISTRY + @register）
 │   │   ├── fkine/                   #     FkineSolver(ABC)——MDH 白盒 FK 为 Ch2 教学内容
 │   │   ├── ikine/                   #     IkineSolver(ABC)——数值/解析 IK 为 Ch3 教学内容
 │   │   ├── jacobian/                #     JacobianSolver(ABC，衍生量模板)——Ch4
@@ -141,15 +142,16 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举 + 数据类（Pose/TrajFrame/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | `clamp_to_limits` + `joint_limits_from_model`/`limits_from_joint_cfgs`/`soft_limits_from_cfg`（直配软限位）+ `rand_within_limits`（限位内采样） | Ch11 | ✅ |
-| `utils/interpolation.py` | 关节空间插值原语 `cubic_q`/`cubic_traj`（move_j/急停复位） | - |
+| `utils/interpolation.py` | 关节空间插值原语 `cubic_q`/`cubic_traj`（move_j/急停复位） | - | ✅ |
+| `utils/loops.py` | 周期线程公共实现 `run_periodic`（绝对节拍+异常日志节流）/`PeriodicThread`（start/stop 生命周期，stop 校验线程退出防双循环）；控制器/规划器/保活线程共用 | - | ✅ |
 | `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写 + 限位构建 + send_* 两族守卫模板 + `read_state_cache_*`/`state_age_*` 只读缓存契约，默认 NotImplementedError） | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus；`read_state_cache_*` 零总线帧组装缓存槽 + `state_age_*` 陈旧度，`DmMotor.t_state` 应答时间戳） | Ch6/13 | ✅ |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
 | `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）；MDH 白盒 FK 待 Ch2 实现 | Ch2 | 🟡 |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 + solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）；数值/解析实现待 Ch3 | Ch3 | 🟡 |
-| `robotics/jacobian/` | `JacobianSolver(ABC)`（`manipulability`/`cond_number`/`statics` 衍生量模板在 ABC） | Ch4 | 🟡 |
+| `robotics/jacobian/` | `JacobianSolver(ABC)`（速度正逆解/静力学/奇异值谱/可操作度/`damped_pinv` 衍生量模板在 ABC） | Ch4 | 🟡 |
 | `robotics/trajectory/` | `TrajPlanner(ABC)`（`plan_once`/`sample_once` 单步管线 + `start`/`stop` 双线程 + `_check_frame` 逐帧校验）；规划器实现待 Ch5/9 | Ch5/9 | 🟡 |
-| `robotics/dynamics/` | `DynamicsSolver(ABC)`（Λ=J⁻ᵀMJ⁻¹ 模板在 ABC）；实现待 Ch8 | Ch8 | 🟡 |
+| `robotics/dynamics/` | `DynamicsSolver(ABC)`（Λ=J⁺ᵀMJ⁺ 模板在 ABC）；实现待 Ch8 | Ch8 | 🟡 |
 | `robotics/control/` | `Controller(ABC)`（`step_once` 单步门控 + `start`/`stop` 单线程 + `_compute` 内核）；控制律实现待 Ch6/9 | Ch6/9 | 🟡 |
 | `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检）+ `load_config` + `_build_domain` | — | ✅ |
 | `joyarm/__init__.py` | `JoyArmFactory`（仅工厂入口软化；`list_models` 扫描 configs） | — | ✅ |
@@ -182,7 +184,7 @@ JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件自�
 JoyArm.set_solver(domain, name) · list_solvers(domain)   # 运行期切换/查询（有且仅一个激活） ✅
 # 计算门面（已配置域可用；参数排序：通用前/特有 keyword-only 后，约束5）
 JoyArm.fkine(q, frame, rep="pose") · ikine(target, frame, q0, **kw) → IKResult 单解（限位剔除+q0 最近） · ikine_all(target, frame) → 全解 (K,n)（±2π 归位）
-JoyArm.jac(q, frame, ref="base") · fkine_vel(q, dq, frame, ref)（V=J·q̇ 六维速度旋量） · ikine_vel(q, V, frame, ref, damping=1e-3)（q̇=J*·V 微分逆解） · manipulability / cond_number（κ=σ_max/σ_min，谱导出） / statics(q, F∈R^6, frame)（τ=JᵀF ∈ R^n_arm）
+JoyArm.jac(q, frame, ref="base") · fkine_vel(q, dq, frame, ref)（V=J·q̇ 六维速度旋量） · ikine_vel(q, V, frame, ref, damping=1e-3)（q̇=J*·V 微分逆解） · manipulability（w=Πσᵢ） / statics(q, F∈R^6, frame)（τ=JᵀF ∈ R^n_arm）；求解统一经 _solve（RLock 串行化，内核免线程安全）
 JoyArm.idyn / mass_matrix / coriolis / gravity · cartesian_inertia(q, frame)
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
 JoyArm.connect() / disconnect()（支持 with 上下文：enter 自动 connect，exit 尽力 disable→disconnect；connect 自动启动**状态保活线程** joyarm-state@10Hz——空闲期缓存陈旧（age>0.15s）时主动刷新，控制流期间随指令帧刷新零总线开销）· enable/disable_{arm,end} · set_zero_{arm,end} · clear_fault_{arm,end}（验证式清错复位） · set_mode_{arm,end}(mode=POSITION, joint=None) · read_mode_{arm,end}
@@ -195,6 +197,7 @@ JoyArm.move_j(q, t=None, rate/tol/timeout kw)（三次多项式阻塞运动，�
 JoyArm.safe_home(t) · home_to_zero(t)（先校验位于 home）· safe_zero()（安全起停组合：home→zero；arm+end 均执行，本体 MIT 阻抗+末端位置模式）· is_in_position(q 或 pose, 容差) → bool（单入口双判断）
 JoyArm.rand_q_arm(size, rng)（本体硬限位内采样，委托 utils.rand_within_limits）· joint_names_arm/end · joint_index_arm/end(name)
 JoyArm.set/get_target_traj(targets) · set/get_current_frame(frame)   # 轨迹桥：应用→规划→控制（TrajFrame；发布即不可变+原子交换，写入口深拷贝隔离）✅
+JoyArm.start_motion() / stop_motion()   # 运动管线公共启停（激活 traj+control 成员线程；start 幂等+失败回滚，stop 幂等+先控制器后规划器+停启动时捕获的成员对（运行期 set_solver 不影响）；启动前须 set_mode_arm 到控制器将下发的模式；disconnect/__exit__ 自动先停管线）✅
 # 关键属性：model / pin_model / pin_data / n_arm / n_end / ee_frame_* / arm_limits(_soft) / end_limits(_soft) / arm_zero/home/neutral / end_zero/home/neutral / joint_names_arm/end / tcp_limits / _backend / connected / is_normal（运行状态标志：True=正常；False=控制器循环跳过 cmd 下发，急停/恢复由直连 safe_* 负责；本期无状态管理联动）
 #   六域字典：_fkine_solvers/_ikine_solvers/_jacobian_solvers/_dynamics_solvers/_traj_planners/_controllers + _active_name
 #   轨迹桥（私有）：_target_traj（List[TrajFrame]，写者=应用线程）/ _current_frame（TrajFrame，写者=规划线程）
@@ -204,9 +207,9 @@ JoyArm.set/get_target_traj(targets) · set/get_current_frame(frame)   # 轨迹�
 
 ```python
 FkineSolver / IkineSolver / JacobianSolver / DynamicsSolver / TrajPlanner / Controller   # ABC 契约 🟡
-TrajPlanner(plan_hz, sample_hz, dt_min_required)：plan_once(arm)（读桥目标→_check_frame 规则/超时剔除→空回退 q_home→_plan）/ sample_once(arm)（首帧规划后按 time.time() 采样→arm.set_current_frame）/ start(arm)·stop()（双 daemon 线程 @plan_hz/sample_hz）🟡
+TrajPlanner(plan_hz, sample_hz, dt_min_required)：plan_once(arm)（读桥目标→_check_frame 规则/超时/NaN 剔除→空回退 q_home→_plan）/ sample_once(arm)（首帧规划后按 time.time() 采样→arm.set_current_frame）/ start(arm)·stop()（双 PeriodicThread @plan_hz/sample_hz，stop 校验退出防双循环）🟡
 # 并发契约：_plan 系数打包为单一不可变对象原子赋值发布（发布即不可变，同轨迹桥约定）；arm 鸭子契约：get_target_traj/get_arm_state/arm_home/set_current_frame
-Controller(ctrl_hz=200)：step_once(arm)（is_normal 门控→get_current_frame→get_arm_state→_compute→set_arm_command）/ start(arm)·stop()（单 daemon 线程 @ctrl_hz）🟡
+Controller(ctrl_hz=200)：step_once(arm)（is_normal 门控→get_current_frame→get_arm_state→_compute→set_arm_command）/ start(arm)·stop()（单 PeriodicThread @ctrl_hz）🟡
 # 门控仅作用控制循环，直连 set_arm_command/move_j/safe_* 永不受门控；arm 鸭子契约：is_normal/get_current_frame/get_arm_state/set_arm_command；ctrl_hz 默认 200（DM 串口桥带宽 ~39%，500 近饱和）
 # 求解器用法二选一：子类实例.solve(arm, q)（arm 鸭子类型，课堂/单测）或 arm.* 门面（活动成员，应用）
 ```
@@ -214,8 +217,8 @@ Controller(ctrl_hz=200)：step_once(arm)（is_normal 门控→get_current_frame�
 #### Backend / 限位 / 数学 / 类型 API
 
 ```python
-Backend(ABC, cfg, arm_limits=None) ✅   # 只存硬限位（本体=入参 config 四键解析；末端=自解析 end.joints 四键，缺键 ±∞）；属性 arm_limits / end_limits；下发守卫只裁硬限位
-send_position/velocity/mit_{arm,end} 守卫模板→抽象内核 _send_*_{arm,end}（限位裁剪唯一执行点；末端标量广播逐电机裁剪、力度按 ±tau_max 数值裁剪；越限告警节流每 0.5s 至多一条；send_action_end 离散不模板化）；set_arm/end_limits_soft 运行期替换 ✅
+Backend(ABC, cfg) ✅   # 只存硬限位（本体/末端均自解析 config 对应 joints 四键，缺键 ±∞）；属性 arm_limits / end_limits；下发守卫只裁硬限位
+send_position/velocity/mit_{arm,end} 守卫模板→抽象内核 _send_*_{arm,end}（限位裁剪唯一执行点；末端标量广播逐电机裁剪、力度按 ±tau_max 数值裁剪；越限告警节流每 0.5s 至多一条（加锁防并发漏节流）；send_action_end 离散不模板化）；软限位仅 JoyArm 加载、运行期替换未实现
 get_backend(name) · REGISTRY     # config backend.name 选型 ✅
 BackendDMMujoco（DM 机械臂 MuJoCo 仿真后端桩，待实现、未注册 REGISTRY）🟡
 clamp_to_limits(targets, limits) · joint_limits_from_model(model) · limits_from_joint_cfgs(joint_cfgs) · soft_limits_from_cfg(cfg, n) · rand_within_limits(limits, size, rng)   # ✅

@@ -6,6 +6,7 @@
 - :mod:`joyarm_core.utils.types`      ：  跨层共享的 ``@dataclass`` 数据类型（``ArmState``、``Pose``、``JointLimits`` 等）与枚举（``ControlMode`` 等）。
 - :mod:`joyarm_core.utils.limits`     ：  ``clamp_to_limits`` 关节限位守卫（指令路径防护）。
 - :mod:`joyarm_core.utils.interpolation` ：关节空间插值原语（``cubic_q``/``cubic_traj``；move_j/急停复位直连使用）。
+- :mod:`joyarm_core.utils.loops`      ：  周期线程公共实现（``run_periodic``/``PeriodicThread``；控制器/规划器/保活线程共用）。
 
 """
 
@@ -54,6 +55,7 @@ from .transforms import (
 )
 from .limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
 from .interpolation import cubic_q, cubic_traj
+from .loops import run_periodic, PeriodicThread
 
 __all__ = [
     # types
@@ -102,4 +104,7 @@ __all__ = [
     # interpolation
     "cubic_q",
     "cubic_traj",
+    # loops
+    "run_periodic",
+    "PeriodicThread",
 ]

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -48,7 +49,9 @@ class Backend(ABC):
 
     def __init__(self, cfg: dict) -> None:
         self.cfg = cfg
-        self._warn_last = 0.0          # 越限告警节流：上次告警的 time.monotonic 时刻
+        # 越限告警节流：上次告警的 time.monotonic 时刻（读写加锁，指令可能从控制线程与应用线程并发）
+        self._warn_lock = threading.Lock()
+        self._warn_last = 0.0
         # ---- 硬限位构建（守卫依据）----
         self._arm_limits: Optional[JointLimits] = self.arm_limits_from_cfg(cfg)
         self._end_limits: Optional[JointLimits] = self.end_limits_from_cfg(cfg)
@@ -210,11 +213,12 @@ class Backend(ABC):
         clipped = np.clip(arr, lo, hi)      # 末端标量广播：→ (n_end,) 逐电机裁剪
         if not np.array_equal(np.broadcast_to(arr, clipped.shape), clipped):
             now = time.monotonic()
-            if now - self._warn_last >= _WARN_INTERVAL:
-                self._warn_last = now
-                logger.warning("send_*_%s: %s 指令越限，已就近裁剪 %s → %s",
-                               family, name, np.round(arr, 4).tolist(),
-                               np.round(clipped, 4).tolist())
+            with self._warn_lock:
+                if now - self._warn_last >= _WARN_INTERVAL:
+                    self._warn_last = now
+                    logger.warning("send_*_%s: %s 指令越限，已就近裁剪 %s → %s",
+                                   family, name, np.round(arr, 4).tolist(),
+                                   np.round(clipped, 4).tolist())
         return clipped
 
     @staticmethod
