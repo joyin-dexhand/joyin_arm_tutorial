@@ -80,10 +80,8 @@ from .robotics.trajectory import TrajPlanner
 from .robotics.control import Controller
 from .robotics._registry import register
 
-# ---- 指令路径守卫（clamp_to_limits）+ 关节空间插值原语（cubic）+ 周期线程 ----
+# ---- 指令路径守卫（clamp_to_limits）+ 限位构建辅助 ----
 from .utils.limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, soft_limits_from_cfg
-from .utils.interpolation import cubic_q, cubic_traj
-from .utils.loops import run_periodic, PeriodicThread
 
 # ---- 通信层（整机后端，两层继承 + name 选型注册表）----
 from . import backend
@@ -146,15 +144,11 @@ __all__ = [
     "TrajPlanner",
     "Controller",
     "register",
-    "cubic_q",
-    "cubic_traj",
-    # 指令路径守卫 + 限位构建辅助 + 周期线程
+    # 指令路径守卫 + 限位构建辅助
     "clamp_to_limits",
     "joint_limits_from_model",
     "limits_from_joint_cfgs",
     "soft_limits_from_cfg",
-    "run_periodic",
-    "PeriodicThread",
     # 通信层（整机后端）
     "backend",
     "Backend",

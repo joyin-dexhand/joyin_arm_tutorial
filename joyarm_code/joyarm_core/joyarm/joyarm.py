@@ -10,7 +10,7 @@ import logging
 import os
 import threading
 import time
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
 
 import numpy as np
 import pinocchio as pin
@@ -18,8 +18,6 @@ import pinocchio as pin
 from ..utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
 from ..utils.transforms import quat_conj, quat_mul, quat_to_axis_angle
 from ..utils.types import ArmState, ControlMode, JointLimits, Pose, TcpLimits, TrajFrame
-from ..utils.interpolation import cubic_traj as _cubic_traj
-from ..utils.loops import PeriodicThread
 
 from ..backend import Backend, get_backend
 from ..robotics.fkine import REGISTRY as _FKINE_REGISTRY
@@ -145,6 +143,147 @@ def _build_domain(domain: str, registry: dict, spec) -> dict:
     return members
 
 
+# ============================================================
+# 模块级：周期线程机制（JoyArm 专用——状态保活 + 运动管线三线程共用；
+# 单消费者故不设在 utils，utils 只放跨模块共享）
+# ============================================================
+_ERR_LOG_INTERVAL: float = 0.5   # 周期单步失败日志的最小间隔（秒）
+_JOIN_TIMEOUT: float = 1.0      # stop() 等待线程退出的上限（秒）
+
+
+def _as_hz(hz) -> float:
+    """频率参数归一：数值或返回数值的无参函数（支持运行期变频）。"""
+    return float(hz() if callable(hz) else hz)
+
+
+def _run_periodic(stop: threading.Event, hz, step: Callable[[], None],
+                  name: str = "") -> None:
+    """按 ``hz`` 频率循环执行 ``step()``，直到 ``stop`` 置位。
+
+    节拍用绝对时间累加：某次执行超时只错过该拍、后续重新对齐，不会为赶
+    进度连续快跑。单步抛异常时记日志并继续下一周期；同一故障持续出现时
+    日志按 0.5 秒节流（期间静默计数，下次记录时附上被省略的次数）。
+
+    :param stop: 停止事件（置位即退出循环）。
+    :param hz: 执行频率，Hz——数值或返回数值的无参函数（每周期重取，
+        变频下个周期即生效；读取失败沿用上一节拍）。
+    :param step: 单步函数（无参数；内部异常视为「本步失败，下周期重试」）。
+    :param name: 日志中标识本循环的名字（如线程名）。
+    """
+    period = 1.0 / _as_hz(hz)
+    deadline = time.perf_counter()
+    last_log = float("-inf")
+    suppressed = 0
+    while not stop.is_set():
+        deadline += period
+        now = time.perf_counter()
+        if deadline > now:
+            stop.wait(deadline - now)
+        else:                              # 单步超时错过节拍：重新对齐，不追赶
+            deadline = now
+        try:
+            step()
+        except Exception:
+            if time.monotonic() - last_log >= _ERR_LOG_INTERVAL:
+                detail = f"（此前 {suppressed} 次同类失败已节流省略）" \
+                         if suppressed else ""
+                logger.exception("joyarm.py - _run_periodic：%s单步 %s 失败，"
+                                 "下周期重试%s",
+                                 f"[{name}] " if name else "",
+                                 getattr(step, "__name__", step), detail)
+                last_log = time.monotonic()
+                suppressed = 0
+            else:
+                suppressed += 1
+        try:
+            period = 1.0 / _as_hz(hz)      # 每周期重取（运行期变频即时生效）
+        except Exception:
+            pass                           # 变频读取失败：沿用上一节拍
+
+
+class _PeriodicThread:
+    """单个周期线程：``start()`` 启动、``stop()`` 停止回收，可重复启停。
+
+    ``stop()`` 最多等 1 秒让线程退出；超时未退出时抛 ``RuntimeError`` 且
+    **保留线程引用**（``is_alive()`` 仍为真、再次 ``start()`` 会被拒绝），
+    避免在旧线程还卡在单步内时启动新线程、造成两个循环同时运行。
+    """
+
+    def __init__(self, step: Callable[[], None], hz: float,
+                 name: str = "periodic") -> None:
+        """:param step: 单步函数；:param hz: 频率 Hz；:param name: 线程名。"""
+        self._step = step
+        self._hz = float(hz)
+        self._name = str(name)
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def hz(self) -> float:
+        return self._hz
+
+    def set_hz(self, hz: float) -> None:
+        """运行期变频（下个周期生效；供热切换到不同频率成员时重整节拍）。"""
+        self._hz = float(hz)
+
+    def is_alive(self) -> bool:
+        """线程是否仍在运行（从未启动视为否）。"""
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> None:
+        """启动线程；已在运行（或上次 stop 未成功）时抛 ``RuntimeError``。"""
+        if self._thread is not None:
+            raise RuntimeError(
+                f"joyarm.py - _PeriodicThread.start：[{self._name}] 线程仍在运行"
+                f"（或上次 stop 未成功退出），须先确认 stop() 完成")
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=_run_periodic,
+            args=(self._stop, lambda: self._hz, self._step, self._name),
+            daemon=True, name=self._name)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """停止线程；超时（默认 1s）未退出时抛 ``RuntimeError``（引用保留）。"""
+        self._stop.set()
+        th = self._thread
+        if th is None:
+            return
+        th.join(timeout=_JOIN_TIMEOUT)
+        if th.is_alive():
+            raise RuntimeError(
+                f"joyarm.py - _PeriodicThread.stop：[{self._name}] 线程 "
+                f"{_JOIN_TIMEOUT}s 内未退出（单步可能阻塞在总线 IO 上）；"
+                f"在确认其退出前请勿重新 start()")
+        self._thread = None
+
+
+def _cubic_traj(q0, q1, t: float, rate: float = 100.0):
+    """三次多项式整段采样（move_j/_safe_move 直连路径专用，单消费者故内联）：
+    ``q0 → q1``，总时长 ``t``，采样率 ``rate``，零边界速度。
+
+    :param q0: 起始关节角 ``(n,)``；:param q1: 目标关节角 ``(n,)``。
+    :param t: 总时长（秒）；``t ≤ 0`` 退化为单帧直发目标。
+    :param rate: 采样率（Hz）。
+    :return: ``(ts, q, dq)``——时间戳 ``(N,)``、关节角 ``(N, n)``、关节速度
+        ``(N, n)``（解析导数 ``6(s−s²)·Δq/t``）。
+    """
+    q0, q1 = np.asarray(q0, dtype=float), np.asarray(q1, dtype=float)
+    t, rate = float(t), float(rate)
+    if t <= 0 or rate <= 0:
+        return (np.zeros(1), q1.reshape(1, -1), np.zeros((1, q0.size)))
+    n = max(int(round(t * rate)) + 1, 2)          # 至少首末两帧
+    ts = np.arange(n) / (n - 1) * t
+    s = ts / t
+    q = q0 + (q1 - q0) * (3.0 * s ** 2 - 2.0 * s ** 3)[:, None]
+    dq = (q1 - q0) * (6.0 * s * (1.0 - s) / t)[:, None]
+    return ts, q, dq
+
+
 class JoyArm:
     """完整机械臂类（集中装配点：按配置把算法与通信组合成一台可用的臂）。
 
@@ -218,10 +357,12 @@ class JoyArm:
         self._current_frame: Optional[TrajFrame] = None        # 当前帧（规划线程写）
         # ---- 运行状态与状态保活 ----
         self.is_normal: bool = True                     # 运行状态标志（True=正常运行；False=异常，控制器循环跳过 cmd 下发；由应用/后续监控置位）
-        self._state_thread: Optional[PeriodicThread] = None    # 空闲保活线程（connect 启动）
-        # ---- 运动管线（start_motion/stop_motion 启停规划器+控制器线程）----
+        self._state_thread: Optional[_PeriodicThread] = None    # 空闲保活线程（connect 启动）
+        # ---- 运动管线（三线程：规划/采样/控制；每周期派发激活成员，可热切换）----
         self._motion_running: bool = False              # 管线运行标志（防重复启停）
-        self._motion_members: Optional[tuple] = None    # 启动时捕获的 (规划器, 控制器)——stop 停这对，运行期 set_solver 切换不影响
+        self._motion_threads: dict = {}                 # {线程名: _PeriodicThread}（start_motion 创建）
+        self._traj_planned_by = None                    # 最近完成规划的规划器实例（采样发布门控，防切换后系数未初始化）
+        self._switching = threading.Event()             # 热切换门闸（置位期间周期线程暂停派发）
         self._solver_lock = threading.RLock()           # 求解器串行化（内核不保证线程安全，如 pinocchio pin_data 共享；可重入：ikine 内核回调 arm.fkine/jac）
 
         # ----------------------------------------------------------
@@ -749,12 +890,43 @@ class JoyArm:
         """运行期切换激活成员（按注册名；域 ∈ fkine/ikine/jacobian/dynamics/traj/control）。
 
         每域**有且仅有一个**激活成员：config 加载后首个为激活，此后经本方法切换。
+
+        **运动管线热切换**（管线运行中切 traj/control，即时生效、无缝隙）：
+        - 切 ``control``：置门闸暂停派发 → 按新控制器 ``MODE`` 切电机模式 →
+          翻指针 → 同步执行一拍控制（新控制器立即下发首条指令）→ 恢复派发；
+        - 切 ``traj``：置门闸 → 翻指针 → 同步执行一次规划+采样发布（当前帧
+          立即来自新规划器；同步规划失败则保持旧帧、由 plan 线程下周期重试）
+          → 按新频率重整两 traj 线程节拍 → 恢复派发。
         """
         if domain not in _DOMAIN_REGISTRIES:
             raise ValueError(
                 f"joyarm.py - set_solver：未知域 {domain!r}；可用：{sorted(_DOMAIN_REGISTRIES)}")
         inst = self._pick(domain, name)   # 校验已加载
-        self._active_name[domain] = name
+        if self._motion_running and domain == "control":
+            self._require_connected()     # 切电机模式需在线
+            self._switching.set()
+            try:
+                self.set_mode_arm(inst.MODE)      # 先切模式（门闸期间无指令下发）
+                self._active_name[domain] = name
+                self._motion_threads["ctrl-step"].set_hz(inst.ctrl_hz)
+                try:
+                    self._dispatch_ctrl()          # 新控制器立即下发首拍指令
+                except Exception as e:
+                    logger.warning("joyarm.py - set_solver：切换后首拍指令下发失败"
+                                   "（ctrl 线程将按节拍重试）：%s", e)
+            finally:
+                self._switching.clear()
+        elif self._motion_running and domain == "traj":
+            self._switching.set()
+            try:
+                self._active_name[domain] = name
+                self._sync_traj_tick()             # 当前帧立即来自新规划器
+                self._motion_threads["traj-plan"].set_hz(inst.plan_hz)
+                self._motion_threads["traj-sample"].set_hz(inst.sample_hz)
+            finally:
+                self._switching.clear()
+        else:
+            self._active_name[domain] = name
         return inst
 
     def list_solvers(self, domain: str) -> list:
@@ -872,19 +1044,21 @@ class JoyArm:
         """读取当前轨迹帧（读者：控制线程；首帧发布前为 ``None`` 初始态）。"""
         return self._current_frame
 
-    # ---- 运动管线启停（规划器 + 控制器线程的公共入口）----
+    # ---- 运动管线（三线程 + 激活成员派发 + 模式管理；start/stop 公共入口）----
     def start_motion(self) -> None:
-        """启动常规运动管线（激活的规划器 + 控制器线程）。
+        """启动常规运动管线（三个周期线程：规划 plan_hz / 采样 sample_hz / 控制 ctrl_hz）。
 
-        管线：应用 :meth:`set_target_traj` 写目标 → 规划器（plan/sample 双
-        线程）产当前帧 → 控制器（ctrl 线程）读帧算指令 → :meth:`set_arm_command`
-        下发。已在运行时幂等返回。
+        线程归 JoyArm、每周期派发激活成员（规划器/控制器为纯计算内核）；
+        启动时按激活控制器声明的 ``Controller.MODE`` 自动切换电机模式，并
+        同步执行一次规划+采样发布（首帧立即可用）。已在运行时幂等返回。
 
-        注意：①规划器启动后若目标桥为空，首个周期即回退规划回 ``q_home``
-        （见 ``TrajPlanner.plan_once``）——请先写有效目标，或确认当前位形
-        向 home 运动是安全的；②控制器内核返回的控制模式须与已
-        :meth:`set_mode_arm` 切换的模式一致，否则 ``set_arm_command`` 每周期
-        抛 ``RuntimeError``（指令饥饿）——请启动前先切到对应模式。
+        管线：应用 :meth:`set_target_traj` 写目标 → 规划器产插值系数 → 采样
+        线程按绝对时间产当前帧 → 控制器读帧算指令 → :meth:`set_arm_command`
+        下发；运行期 :meth:`set_solver` 切换 traj/control 成员即热切换。
+
+        注意：目标桥为空时首个规划周期即回退规划回 ``q_home``（见
+        ``TrajPlanner.plan_once``）——请先写有效目标，或确认当前位形向 home
+        运动是安全的。
 
         :raises RuntimeError: 未连接真机，或 robotics.traj / robotics.control
             域未配置成员（config ``robotics:`` 段）。
@@ -894,39 +1068,102 @@ class JoyArm:
         self._require_connected()
         planner = self._active("traj")
         controller = self._active("control")
-        planner.start(self)
-        try:
-            controller.start(self)
-        except Exception:
-            planner.stop()                     # 控制器启动失败即回滚规划器
-            raise
-        self._motion_members = (planner, controller)
+        self.set_mode_arm(controller.MODE)      # 按控制器声明自动切电机模式
+        self._traj_planned_by = None
+        self._motion_threads = {
+            "traj-plan": _PeriodicThread(self._tick_plan, planner.plan_hz,
+                                        name="traj-plan"),
+            "traj-sample": _PeriodicThread(self._tick_sample, planner.sample_hz,
+                                          name="traj-sample"),
+            "ctrl-step": _PeriodicThread(self._tick_ctrl, controller.ctrl_hz,
+                                        name="ctrl-step"),
+        }
+        for worker in self._motion_threads.values():
+            worker.start()
         self._motion_running = True
+        self._switching.set()                   # 线程起步期间同步完成首帧
+        try:
+            self._sync_traj_tick()
+        finally:
+            self._switching.clear()
 
-    def stop_motion(self) -> None:
-        """停止运动管线（先停控制器再停规划器——指令下发方先停）；幂等。
-
-        停的是 :meth:`start_motion` 时捕获的成员对——运行期 ``set_solver``
-        切换激活成员不影响停止对象。
+    def stop_motion(self, *, damping: bool = True) -> None:
+        """停止运动管线（三线程回收）；默认随后切**纯阻尼**（``damping_mode``，
+        防停流后臂急速下坠；``damping=False`` 关闭此安全默认）；幂等。
 
         :raises RuntimeError: 线程超时未退出（如单步阻塞在总线 IO 上）；
             此时管线视为仍在运行（标志未清除），处理后可重试本方法。
         """
         if not self._motion_running:
             return
-        planner, controller = self._motion_members
-        errors = []
-        for name, obj in (("control", controller), ("traj", planner)):
+        stuck = []
+        for wname, worker in self._motion_threads.items():
             try:
-                obj.stop()
+                worker.stop()
             except RuntimeError as e:
-                errors.append(f"{name}: {e}")
-        if errors:
+                stuck.append(f"{wname}: {e}")
+        if stuck:
             raise RuntimeError(
-                f"joyarm.py - stop_motion：部分线程未按时退出（{'；'.join(errors)}）；"
+                f"joyarm.py - stop_motion：部分线程未按时退出（{'；'.join(stuck)}）；"
                 f"请排查阻塞原因后重试 stop_motion()")
-        self._motion_members = None
+        self._motion_threads = {}
+        self._traj_planned_by = None
+        self._current_frame = None             # 回到「首帧发布前 None」初始态
         self._motion_running = False
+        if damping and self.connected:
+            try:
+                self.damping_mode()             # 安全默认：纯阻尼防下坠
+            except Exception as e:
+                logger.warning("joyarm.py - stop_motion：纯阻尼切换失败：%s", e)
+
+    # ---- 管线线程体（每周期经 _active() 现查激活成员——热切换的派发基础）----
+    def _tick_plan(self) -> None:
+        """规划线程单步：委托激活规划器；完成即记为已规划实例。"""
+        planner = self._active("traj")
+        planner.plan_once(self)
+        self._traj_planned_by = planner
+
+    def _tick_sample(self) -> None:
+        """采样线程单步：激活规划器与最近完成规划的实例一致才发布（防热切换
+        后新规划器系数未初始化）。"""
+        planner = self._active("traj")
+        if self._traj_planned_by is not planner:
+            return
+        self.set_current_frame(planner.sample_frame(time.time()))
+
+    def _tick_ctrl(self) -> None:
+        """控制线程单步：热切换门闸置位期间暂停（切换流程自行同步派发一拍）。"""
+        if self._switching.is_set():
+            return
+        self._dispatch_ctrl()
+
+    def _dispatch_ctrl(self) -> None:
+        """控制派发（无门闸/线程语义，供热切换同步调用）：
+        运行门控 → 读状态 → 激活控制器算指令 → 下发。"""
+        if not self.is_normal:
+            return
+        frame = self.get_current_frame()
+        if frame is None:
+            return
+        state = self.get_arm_state()
+        mode, cmd = self._active("control").compute(self, frame, state)
+        self.set_arm_command(mode, **cmd)
+
+    def _sync_traj_tick(self) -> None:
+        """同步执行一次规划+采样发布（启动/热切换时用，当前帧立即可用）。
+
+        规划失败（如回退帧构造失败/内核异常）时保持现有帧，由 plan 线程
+        下周期重试。
+        """
+        planner = self._active("traj")
+        try:
+            planner.plan_once(self)
+        except Exception as e:
+            logger.warning("joyarm.py - _sync_traj_tick：同步规划失败，沿用现有帧"
+                           "（plan 线程将按节拍重试）：%s", e)
+            return
+        self._traj_planned_by = planner
+        self.set_current_frame(planner.sample_frame(time.time()))
 
     # ----------------------------------------------------------
     # backend 真机连接与执行（依赖 _backend；connect 后才可执行 arm_*/end_*）
@@ -961,7 +1198,7 @@ class JoyArm:
         """启动状态保活线程（connect 自动调用；幂等）。"""
         if self._state_thread is not None and self._state_thread.is_alive():
             return
-        worker = PeriodicThread(self._keepalive_step, self._STATE_KEEPALIVE_HZ,
+        worker = _PeriodicThread(self._keepalive_step, self._STATE_KEEPALIVE_HZ,
                                 name="joyarm-state")
         worker.start()
         self._state_thread = worker
@@ -1365,7 +1602,7 @@ class JoyArm:
         """关节空间点到点阻塞运动（三次多项式插值，位置模式指令流）——
         **独立功能，与规划器并行**。
 
-        边界：本方法直接借 ``utils.interpolation`` 插值原语 + 位置
+        边界：本方法直接用三次多项式插值（模块内 ``_cubic_traj``）+ 位置
         指令流下发，**不经**「轨迹桥 → 规划器 → 控制器」管线，仅供直接调用。
         **常规运动**一律走 ``set_target_traj → 规划器 → 控制器 → set_arm_command``
         管线；安全回位（``safe_*``）走 MIT 阻抗模式（见 :meth:`safe_home`）。

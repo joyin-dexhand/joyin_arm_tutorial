@@ -1,9 +1,12 @@
-"""TrajPlanner —— 轨迹规划器基类（ABC）
+"""TrajPlanner —— 轨迹规划内核基类（ABC，纯计算、无线程）
 
-双线程周期机制（循环体与日志节流由 :class:`joyarm_core.utils.loops.PeriodicThread`
-统一提供）+ 可独立测试的单步内核：
-- :meth:`plan_once`（plan_hz）：读轨迹目标 → 规则/超时校验剔除 → 空则回退 q_home → 委托内核 :meth:`_plan` 计算插值系数；
-- :meth:`sample_once`（sample_hz）：规划成功后，按绝对时间采样 → 写轨迹当前帧（控制器读取消费）。
+内核入口：
+- :meth:`plan_once`：读轨迹目标 → 规则/超时校验剔除 → 空则回退 q_home → 委托内核 :meth:`_plan` 计算插值系数；
+- :meth:`sample_frame`：按绝对时间评估系数产出当前帧。
+
+周期调度（plan_hz/sample_hz 双线程）与采样发布门控由 JoyArm 运动管线负责
+（``start_motion``/``stop_motion`` 启停、运行期 ``set_solver`` 热切换时同步
+刷新一拍，当前帧立即可用）。
 
 config ``robotics.traj`` 段写注册名，即按名实例化装入 ``_traj_planners`` 成员字典。
 """
@@ -16,7 +19,6 @@ from typing import List, Optional
 
 import numpy as np
 
-from ...utils.loops import PeriodicThread
 from ...utils.types import TrajFrame
 
 __all__ = ["TrajPlanner"]
@@ -25,7 +27,7 @@ logger = logging.getLogger("joyarm_core.traj_planner")
 
 
 class TrajPlanner(ABC):
-    """轨迹规划策略基类：目标序列（+当前状态）→ 插值系数 → 按绝对时间采样帧。"""
+    """轨迹规划内核（纯计算）：目标序列（+当前状态）→ 插值系数 → 按绝对时间采样帧。"""
 
     # ----------------------------------------------------------
     # traj 构造（plan_hz/sample_hz/dt_min_required 经 config 注入）
@@ -34,76 +36,23 @@ class TrajPlanner(ABC):
                  dt_min_required: float = 1.0):
         """三参数经 config ``robotics.traj`` 的 ``**params`` 注入。
 
-        :param plan_hz: 规划频率（低频重规划：读桥目标 + 校验 + 重算系数），Hz。
-        :param sample_hz: 采样频率（≈控制频率，按绝对时间采样产当前轨迹帧），Hz。
+        :param plan_hz: 规划频率（低频重规划：读桥目标 + 校验 + 重算系数）——
+            管线 traj-plan 线程按此属性起节拍，Hz。
+        :param sample_hz: 采样频率（≈控制频率，按绝对时间采样产当前轨迹帧）——
+            管线 traj-sample 线程按此属性起节拍，Hz。
         :param dt_min_required: 目标最小提前量——时间早于``now + dt_min_required`` 的目标帧视为来不及执行，剔除。
         """
         self.plan_hz = float(plan_hz)
         self.sample_hz = float(sample_hz)
         self.dt_min_required = float(dt_min_required)
-        self._arm = None                       # start(arm) 注入，线程体消费
-        self._planned = False                  # 首帧规划成功门控（采样发布前置）
-        self._threads: List[PeriodicThread] = []
         self._last_dropped: Optional[str] = None   # 上次剔除摘要（同批问题只告警一次）
 
     # ----------------------------------------------------------
-    # traj 生命周期（双 daemon 线程：plan_hz 规划 + sample_hz 采样）
-    # ----------------------------------------------------------
-    def start(self, arm) -> None:
-        """启动规划线程（plan_hz）与采样线程（sample_hz）；已运行（或上次
-        stop 未成功）时抛 RuntimeError。
-
-        注意：首个周期无有效目标即回退规划回 q_home（见 :meth:`plan_once`）——
-        规划器启动后机械臂会立即向 home 运动，除非应用已写入有效目标。
-        """
-        if self._threads:
-            raise RuntimeError(
-                "traj_planner.py - TrajPlanner.start：规划器已在运行，须先 stop()")
-        self._arm = arm
-        self._planned = False
-        self._last_dropped = None
-        for name, hz, step in (("traj-plan", self.plan_hz, self._tick_plan),
-                               ("traj-sample", self.sample_hz, self._tick_sample)):
-            worker = PeriodicThread(step, hz, name=name)
-            worker.start()
-            self._threads.append(worker)
-
-    def stop(self) -> None:
-        """停止并回收两线程；有线程 1s 内未退出时抛 ``RuntimeError``（其引用
-        保留在 ``_threads``、重新 :meth:`start` 会被拒绝，防止双循环）。"""
-        stuck = [w.name for w in self._threads
-                 if not self._try_stop(w)]
-        self._threads = [w for w in self._threads if w.is_alive()]
-        self._planned = False
-        if stuck:
-            raise RuntimeError(
-                f"traj_planner.py - TrajPlanner.stop：线程 {stuck} 1s 内未退出"
-                f"（单步可能阻塞在总线 IO 上）；在确认退出前请勿重新 start()")
-
-    @staticmethod
-    def _try_stop(worker: PeriodicThread) -> bool:
-        """停止单个线程，返回是否成功退出（失败仅记日志，异常统一在 stop 汇总）。"""
-        try:
-            worker.stop()
-            return True
-        except RuntimeError as e:
-            logger.error("traj_planner.py - TrajPlanner.stop：%s", e)
-            return False
-
-    def _tick_plan(self) -> None:
-        """规划线程单步入口（无参，供 PeriodicThread 调用）。"""
-        self.plan_once(self._arm)
-
-    def _tick_sample(self) -> None:
-        """采样线程单步入口（无参，供 PeriodicThread 调用）。"""
-        self.sample_once(self._arm)
-
-    # ----------------------------------------------------------
-    # traj 单步内核（公开；亦可供外部驱动（如 ROS2 节点）复用）
+    # traj 单步内核（公开；可直接调用，亦供外部驱动（如 ROS2 节点）复用）
     # ----------------------------------------------------------
     def plan_once(self, arm) -> None:
         """单步规划：读桥目标 → 逐帧规则校验（无效剔除）→ 超时剔除 → 空则回退
-        q_home → 委托内核 :meth:`_plan`；成功后置采样发布门控。"""
+        q_home → 委托内核 :meth:`_plan`。"""
         now = time.time()
         kept: List[TrajFrame] = []
         dropped: List[str] = []
@@ -136,14 +85,6 @@ class TrajPlanner(ABC):
                              "回退帧构造失败，跳过本周期：%s", e)
                 return
         self._plan(arm, kept)
-        self._planned = True
-
-    def sample_once(self, arm) -> None:
-        """单步采样：首帧规划成功前不发布（保持桥「首帧前 None」契约）；之后按
-        绝对时间采样并写桥当前帧（控制器读取）。"""
-        if not self._planned:
-            return
-        arm.set_current_frame(self.sample_frame(time.time()))
 
     # ----------------------------------------------------------
     # traj 抽象内核（_plan 系数 / sample_frame 按绝对时间采样帧）

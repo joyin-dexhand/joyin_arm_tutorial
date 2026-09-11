@@ -25,11 +25,11 @@ sys.path.insert(0, str(_ROOT))
 from joyarm_core import (  # noqa: E402
     joyarm_factory, JoyArmFactory, JoyArm, Pose, Wrench,
     IKResult, IkineSolver, TrajFrame, TrajPlanner,
-    Controller, ControlMode, ArmState, JointState, Backend, cubic_traj,
+    Controller, ControlMode, ArmState, JointState, Backend,
     clamp_to_limits,
 )
 from joyarm_core.joyarm import load_config  # noqa: E402
-from joyarm_core.joyarm.joyarm import _build_domain  # noqa: E402
+from joyarm_core.joyarm.joyarm import _build_domain, _cubic_traj  # noqa: E402
 
 _ARM = None
 
@@ -313,8 +313,9 @@ def test_ikine_contracts():
 
 
 def test_traj_frame_and_planner():
-    """TrajFrame 纯数据 + TrajPlanner 单步管线（规则/超时剔除 + q_home 回退 + 采样
-    门控）+ start/stop 双线程 + JoyArm 轨迹桥访问器。"""
+    """TrajFrame 纯数据 + TrajPlanner 内核（规则/超时剔除 + q_home 回退 + 按
+    绝对时间采样）+ JoyArm 轨迹桥访问器（周期调度与发布门控归运动管线，
+    见 test_review_fixes.py）。"""
     import time as _time
 
     # TrajFrame：纯数据（公开名仅为七个字段，无任何方法）
@@ -385,35 +386,11 @@ def test_traj_frame_and_planner():
     assert np.allclose(fb.q, q_home)
     assert abs(fb.time - (_time.time() + 0.2)) < 0.5      # 容忍执行期 now 漂移
 
-    # ③ 采样门控：首帧规划前不发布；规划后发布采样帧
-    fa2 = FakeArm(targets=None, q=q0, arm_home=q_home)
+    # ③ 内核直调：规划后按绝对时间采样产出帧（周期调度与发布门控归 JoyArm 运动管线）
     dp2 = DummyPlanner()
-    dp2.sample_once(fa2)
-    assert fa2.frames == []                               # 首帧规划前不发布
-    dp2.plan_once(fa2)
-    dp2.sample_once(fa2)
-    assert len(fa2.frames) == 1 and np.allclose(fa2.frames[0].q, 7.0)
-
-    # ④ start/stop 冒烟：双线程周期运行（plan_hz=50 加速），~0.3s 后干净停止可重启
-    fa3 = FakeArm(targets=None, q=q0, arm_home=q_home)
-    n_before = len(calls)
-    dp3 = DummyPlanner(plan_hz=50.0, sample_hz=200.0)
-    dp3.start(fa3)
-    try:
-        assert len(dp3._threads) == 2
-        try:
-            dp3.start(fa3)
-            raise AssertionError("重复 start 应抛 RuntimeError")
-        except RuntimeError:
-            pass
-        _time.sleep(0.3)
-        assert len(calls) - n_before >= 10                # 50Hz → ≥10 次重规划
-        assert len(fa3.frames) > 10                       # 200Hz 采样持续发布
-    finally:
-        dp3.stop()
-    assert dp3._threads == []
-    dp3.start(fa3)
-    dp3.stop()                                            # 停止后可重启
+    dp2.plan_once(FakeArm(targets=None, q=q0, arm_home=q_home))
+    fr = dp2.sample_frame(_time.time())
+    assert np.allclose(fr.q, 7.0)
 
     # JoyArm 轨迹桥：默认 None 初始态；set/get 对应；连续 set 取最新（深拷贝隔离）
     arm = _arm()
@@ -433,75 +410,32 @@ def test_traj_frame_and_planner():
     assert not hasattr(joyarm_core, "TrajectorySpace")
 
 
-def test_controller_step():
-    """Controller.step_once：is_normal 门控（异常跳过不下发）、首帧前跳过、
-    正常路径指令原样透传（限位守卫归后端基类）；start/stop 线程冒烟。"""
-    import time as _time
-
-    class FakeArm:                       # 鸭子契约：is_normal/当前帧/状态/指令写口
-        def __init__(self):
-            self.is_normal = True
-            self.frame = None
-            self.state = ArmState()
-            self.reads = 0
-            self.computed = 0
-            self.sent = []
-
-        def get_current_frame(self):
-            return self.frame
-
-        def get_arm_state(self):
-            self.reads += 1
-            return self.state
-
-        def set_arm_command(self, mode, **cmd):
-            self.sent.append((mode, cmd))
-
+def test_controller_kernel():
+    """Controller.compute 内核（纯计算、无线程）：当前帧+状态 → 指令原样透传
+    （限位守卫归后端基类）；MODE 声明默认 MIT、子类可覆写。"""
     class DummyCtrl(Controller):
-        def _compute(self, arm, frame, state):
-            arm.computed += 1
+        def compute(self, arm, frame, state):
             return ControlMode.MIT, {"q": np.full(6, 5.0),   # 越限值原样下发
                                      "dq": np.full(6, 9.0),  # （裁剪归后端基类模板）
                                      "tau": np.zeros(6)}
 
-    arm = FakeArm()
     c = DummyCtrl(ctrl_hz=100.0)
-    assert c.ctrl_hz == 100.0
-    c.step_once(arm)                     # ① 首帧发布前：不读状态、不计算、不下发
-    assert arm.reads == 0 and arm.computed == 0 and arm.sent == []
-    arm.is_normal = False                # ② 异常态：跳过一切（急停归直连 safe_*）
-    arm.frame = TrajFrame(time=1.0, q=np.zeros(6))
-    c.step_once(arm)
-    assert arm.reads == 0 and arm.computed == 0 and arm.sent == []
-    arm.is_normal = True                 # ③ 正常 + 有帧：现读一次状态、指令原样透传
-    c.step_once(arm)
-    assert arm.reads == 1 and arm.computed == 1 and len(arm.sent) == 1
-    mode, cmd = arm.sent[0]
+    assert c.ctrl_hz == 100.0 and c.MODE == ControlMode.MIT   # 频率供管线起节拍
+    mode, cmd = c.compute(None, TrajFrame(time=1.0, q=np.zeros(6)), ArmState())
     assert mode is ControlMode.MIT
     assert np.allclose(cmd["q"], 5.0) and np.allclose(cmd["dq"], 9.0)   # 未裁剪
     assert np.allclose(cmd["tau"], 0.0)
-    # ④ start/stop 冒烟：ctrl_hz=100 加速；is_normal 翻转即时停止下发
-    c2 = DummyCtrl(ctrl_hz=100.0)
-    c2.start(arm)
-    try:
-        assert c2._thread is not None and c2._thread.is_alive()
-        try:
-            c2.start(arm)
-            raise AssertionError("重复 start 应抛 RuntimeError")
-        except RuntimeError:
-            pass
-        _time.sleep(0.2)
-        n1 = len(arm.sent)
-        assert n1 >= 20                              # 100Hz × 0.2s
-        arm.is_normal = False                        # 异常 → 立即停止下发
-        _time.sleep(0.2)
-        assert len(arm.sent) == n1
-        arm.is_normal = True
-    finally:
-        c2.stop()
-    assert c2._thread is None
-    c2.start(arm)
-    c2.stop()                                        # 停止后可重启
+
+    class PositionCtrl(Controller):
+        MODE = ControlMode.POSITION            # 管线激活/热切换时自动 set_mode_arm
+
+        def compute(self, arm, frame, state):
+            return self.MODE, {"q": frame.q}
+
+    p = PositionCtrl()
+    assert p.MODE == ControlMode.POSITION
+    mode, cmd = p.compute(None, TrajFrame(time=1.0, q=np.ones(6)), ArmState())
+    assert mode is ControlMode.POSITION and np.allclose(cmd["q"], 1.0)
 
 
 def test_state_cache_and_keepalive():
@@ -810,7 +744,7 @@ def test_move_j():
         target = np.array([0.06, -0.25, -0.35, 0.03, 0.02, 0.01])  # 软限位内目标
         arm.move_j(target, t=0.12, rate=200, wait_timeout=2.0)
         frames = [c for c in be.calls if c[0] == "send_position_arm"]
-        ts, qs, _ = cubic_traj(np.zeros(6), target, 0.12, 200)
+        ts, qs, _ = _cubic_traj(np.zeros(6), target, 0.12, 200)
         assert len(frames) == len(ts)                            # 帧数 = 采样数
         assert np.allclose(np.array([f[1] for f in frames]), qs)  # 帧落在三次曲线上
         assert ("set_mode_arm", ControlMode.POSITION, None) in be.calls[:3]
