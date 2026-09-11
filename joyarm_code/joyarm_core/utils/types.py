@@ -145,6 +145,7 @@ class TrajFrame(_ArrayEqMixin):
     :ivar wrench: 末端力/力矩参考（力控任务）。
     :ivar q: ``(n,)`` 关节位置参考，弧度。
     :ivar dq: ``(n,)`` 关节速度参考，弧度/秒。
+    :ivar ddq: ``(n,)`` 关节加速度参考，弧度/秒²。
     :ivar tau: ``(n,)`` 前馈力矩，N·m。
     """
 
@@ -154,6 +155,7 @@ class TrajFrame(_ArrayEqMixin):
     wrench: Optional[Wrench] = None
     q: Optional[np.ndarray] = None
     dq: Optional[np.ndarray] = None
+    ddq: Optional[np.ndarray] = None
     tau: Optional[np.ndarray] = None
 
 

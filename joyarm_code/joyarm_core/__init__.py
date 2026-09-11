@@ -72,12 +72,12 @@ from .joyarm.joyarm import JoyArm
 from .joyarm import JoyArmFactory, joyarm_factory
 
 # ---- 算法层（robotics；只按属性约定调用 arm，不 import joyarm）----
-from .robotics.fkine import FkineSolver
-from .robotics.ikine import IkineSolver
-from .robotics.jacobian import JacobianSolver
-from .robotics.dynamics import DynamicsSolver
-from .robotics.trajectory import TrajPlanner
-from .robotics.control import Controller
+from .robotics.fkine import FkineSolver, PinFkineSolver
+from .robotics.ikine import IkineSolver, PinIkineSolver
+from .robotics.jacobian import JacobianSolver, PinJacobianSolver
+from .robotics.dynamics import DynamicsSolver, PinDynamicsSolver
+from .robotics.trajectory import TrajPlanner, ToJointTrajPlanner
+from .robotics.control import Controller, JointPositionController
 from .robotics._registry import register
 
 # ---- 指令路径守卫（clamp_to_limits）+ 限位构建辅助 ----
@@ -144,6 +144,13 @@ __all__ = [
     "TrajPlanner",
     "Controller",
     "register",
+    # 六域默认实现（Pin 系列 / 到关节目标规划 / 关节位置控制）
+    "PinFkineSolver",
+    "PinIkineSolver",
+    "PinJacobianSolver",
+    "PinDynamicsSolver",
+    "ToJointTrajPlanner",
+    "JointPositionController",
     # 指令路径守卫 + 限位构建辅助
     "clamp_to_limits",
     "joint_limits_from_model",

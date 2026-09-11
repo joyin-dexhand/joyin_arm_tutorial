@@ -110,16 +110,24 @@ class TrajPlanner(ABC):
     def _check_frame(tg: TrajFrame) -> Optional[str]:
         """单帧有效性判别（返回问题描述，``None`` 为有效）：``time`` 必填且为
         有限数（``0.0`` 视为未填，NaN/inf 无法参与超时比较、一并剔除）；
-        ``pose``/``q`` 恰一非空；``wrench`` 可选；``twist``/``dq``/``tau`` 必须为空。"""
+        ``pose``/``q`` 恰一非空；关节目标（``q`` 非空）可携带可选 ``dq``/``ddq``
+        速度/加速度参考；``twist``/``tau`` 目标不携带；pose 目标仅可带 ``wrench``。"""
         if not tg.time or not np.isfinite(tg.time):
             return "time 缺失或非有限数（绝对到达时间必填）"
         has_pose, has_q = tg.pose is not None, tg.q is not None
         if has_pose == has_q:
             return "pose/q 应恰有一个非空（当前" \
                    + ("双双为空" if not has_pose else "双双非空") + "）"
-        for name in ("twist", "dq", "tau"):
-            if getattr(tg, name) is not None:
-                return f"{name} 应为空（目标不携带该字段）"
+        if has_q:
+            for name in ("twist", "tau"):
+                if getattr(tg, name) is not None:
+                    return f"{name} 应为空（关节目标不携带该字段）"
+            if tg.wrench is not None:
+                return "wrench 应为空（力参考仅随 pose 目标）"
+        else:
+            for name in ("twist", "dq", "ddq", "tau"):
+                if getattr(tg, name) is not None:
+                    return f"{name} 应为空（pose 目标不携带该字段）"
         return None
 
     @staticmethod

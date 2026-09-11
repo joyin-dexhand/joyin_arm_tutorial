@@ -287,7 +287,7 @@ class _NoSolveAllIkine(IkineSolver):
     """不实现 solve_all 的哑逆运动学（默认 NotImplementedError）。"""
 
     def solve(self, arm, target, frame, q0, **kw):
-        return IKResult(q=np.zeros(6), success=True, info="")
+        return IKResult(q=np.zeros(6), success=True, err=0.0)
 
 
 class _DomainSession:
@@ -690,7 +690,7 @@ def test_dm_disconnect_disable_failure_still_closes():
 def test_register_decorator():
     """命名转换 + 显式注册表注册 + 包外裸用给清晰错误。"""
     assert _snake("PinFkineSolver") == "pin_fkine_solver"     # 前缀式：算法前缀+域基类名
-    assert _snake("QuinticTrajPlanner") == "quintic_traj_planner"
+    assert _snake("ToJointTrajPlanner") == "to_joint_traj_planner"
     assert _snake("Controller") == "controller"
     assert _snake("DLSController") == "dls_controller"
 

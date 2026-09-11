@@ -22,8 +22,7 @@ __all__ = ["Controller"]
 class Controller(ABC):
     """控制律内核（纯计算）：当前轨迹帧 + 关节状态 → 控制指令。
 
-    :cvar MODE: 本控制律需要的电机控制模式——运动管线在启动/热切换时自动
-        ``set_mode_arm``；子类按需覆写（如位置跟随控制律用 ``POSITION``）。
+    :cvar MODE: 本控制律需要的电机控制模式——运动管线在启动/热切换时自动``set_mode_arm``；子类按需覆写。
     """
 
     MODE: ControlMode = ControlMode.MIT

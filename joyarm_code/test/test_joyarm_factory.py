@@ -318,9 +318,9 @@ def test_traj_frame_and_planner():
     见 test_review_fixes.py）。"""
     import time as _time
 
-    # TrajFrame：纯数据（公开名仅为七个字段，无任何方法）
+    # TrajFrame：纯数据（公开名仅为八个字段，无任何方法）
     public = [n for n in dir(TrajFrame) if not n.startswith("_")]
-    assert public == ["dq", "pose", "q", "tau", "time", "twist", "wrench"], public
+    assert public == ["ddq", "dq", "pose", "q", "tau", "time", "twist", "wrench"], public
     assert TrajFrame(time=1.0, q=np.zeros(6)) == TrajFrame(time=1.0, q=np.zeros(6))
     assert TrajFrame(time=1.0, q=np.zeros(6)) != TrajFrame(time=2.0, q=np.zeros(6))
 
@@ -333,8 +333,12 @@ def test_traj_frame_and_planner():
     assert "pose/q" in TrajPlanner._check_frame(TrajFrame(time=10.0))
     assert "pose/q" in TrajPlanner._check_frame(
         TrajFrame(time=10.0, pose=Pose(), q=np.zeros(6)))
-    assert "dq" in TrajPlanner._check_frame(
-        TrajFrame(time=10.0, q=np.zeros(6), dq=np.zeros(6)))
+    assert TrajPlanner._check_frame(
+        TrajFrame(time=10.0, q=np.zeros(6), dq=np.zeros(6), ddq=np.zeros(6))) is None
+    assert "tau" in TrajPlanner._check_frame(
+        TrajFrame(time=10.0, q=np.zeros(6), tau=np.zeros(6)))
+    assert "ddq" in TrajPlanner._check_frame(
+        TrajFrame(time=10.0, pose=Pose(), ddq=np.zeros(6)))
 
     # plan_once 管线（FakeArm 鸭子契约：桥目标 / 状态 / arm_home / 当前帧写口）
     class FakeArm:

@@ -12,7 +12,7 @@
 > 以下为 joyarm_core 架构的**持久化约束**：代码演进不得违背；如需变更须先更新本节并经人工确认。
 
 1. **组合根·单类**：`joyarm/` 的 `JoyArm` 是组合根，基于 config 型号配置对其他层功能（backend、robot 资产、robotics 各求解器）做**可更换式组合**——能力全部委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**无型号子类**：型号差异全部由配置表达（config yaml + URDF 资产 + backend 后端类），型号标识为 `model` 属性（= 工厂入参 = yaml 文件名 = `basic.name`）。**新型号 = `configs/<型号>.yaml` + `robot_model/` 资产 + `backend/backend_*.py`**（backend `REGISTRY` 一行；型号与整机后端 1:1，如 `joyarm_dm` ↔ `backend_dm`）。
-2. **接口先行·章节实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）**仅保留 ABC 接口 + 空 `REGISTRY`**——六域均为**纯计算内核、无线程**（traj/control 的周期调度与指令门控归 JoyArm 运动管线三线程，控制器经 `MODE` 类属性声明所需电机模式），具体算法为教程各章教学内容（fkine Ch2 / ikine Ch3 / jacobian Ch4 / traj Ch5 / control Ch6/8/9 / dynamics Ch8），章节实现类加 `@register` 装饰器（`robotics/_registry.py`）即自动注册接入（**实现类名 = 算法前缀 + 域基类名，如 `PinFkineSolver`；注册名 = 类名小写+下划线，如 `pin_fkine_solver`**，换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`，过渡正常态），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。
+2. **接口先行·内置默认实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）= **ABC 接口 + 内置默认实现 + `REGISTRY`**（Pin 四域 `pin_*_solver` / 到关节目标规划 `to_joint_traj_planner` / 关节位置控制 `joint_position_controller`，5/6/7 轴通用、config 选配启用）——六域均为**纯计算内核、无线程**（traj/control 的周期调度与指令门控归 JoyArm 运动管线三线程，控制器经 `MODE` 类属性声明所需电机模式）；各章自定义算法为实现类加 `@register` 装饰器（`robotics/_registry.py`）即自动注册接入（**实现类名 = 算法前缀 + 域基类名，如 `PinFkineSolver`；注册名 = 类名小写+下划线，如 `pin_fkine_solver`**，换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`，过渡正常态），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。
 3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族，多电机末端如灵巧手通用）。
 4. **软化仅限工厂入口**：工厂创建时 config 缺失、命名链不符（`basic.name` ≠ 型号名）或初始化异常则**返回 `None` 并输出创建失败信息**（不抛异常）；`JoyArm` 直用为**硬失败**——config 必需（缺失/自检不通过即抛）、backend 必配、robotics 配置的成员必须全部创建成功（约束2）。
 5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `target`/`frame`/`q0`），**特有参数 keyword-only 在后**（仅特定算法需要，如数值法的 `tol`/`iters`，解析法可忽略）——各章实现求解器时遵守。
@@ -35,13 +35,13 @@ joyarm_code/
 │   │   ├── types.py                 #     数据类 / 枚举
 │   │   ├── transforms.py            #     SO(3)/SE(3) 纯 numpy 数学
 │   │   └── limits.py                #     clamp_to_limits + 限位构建辅助
-│   ├── robotics/                    #   算法层：一域一子包（ABC + 空 REGISTRY + @register）
-│   │   ├── fkine/                   #     FkineSolver(ABC)——MDH 白盒 FK 为 Ch2 教学内容
-│   │   ├── ikine/                   #     IkineSolver(ABC)——数值/解析 IK 为 Ch3 教学内容
-│   │   ├── jacobian/                #     JacobianSolver(ABC，衍生量模板)——Ch4
-│   │   ├── trajectory/              #     TrajPlanner(ABC，纯计算内核：plan_once/sample_frame)——规划器为 Ch5 教学内容
-│   │   ├── dynamics/                #     DynamicsSolver(ABC，Λ 模板)——Ch8
-│   │   └── control/                 #     Controller(ABC，纯计算内核：compute+MODE 声明)——控制律为 Ch6/9 教学内容
+│   ├── robotics/                    #   算法层：一域一子包（ABC + 默认实现 + REGISTRY + @register）
+│   │   ├── fkine/                   #     FkineSolver(ABC) + PinFkineSolver 默认实现——MDH 白盒 FK 为 Ch2 教学内容
+│   │   ├── ikine/                   #     IkineSolver(ABC) + PinIkineSolver 默认实现——解析 IK 为 Ch3 教学内容
+│   │   ├── jacobian/                #     JacobianSolver(ABC，衍生量模板) + PinJacobianSolver——Ch4
+│   │   ├── trajectory/              #     TrajPlanner(ABC) + ToJointTrajPlanner 到关节目标规划默认实现——Ch5
+│   │   ├── dynamics/                #     DynamicsSolver(ABC，Λ 模板) + PinDynamicsSolver——Ch8
+│   │   └── control/                 #     Controller(ABC，compute+MODE 声明) + JointPositionController——Ch6/9
 │   ├── backend/                    #   通信层（整机 Backend + name 选型）
 │   │   ├── backend.py               #     Backend（整机 ABC：*_arm/*_end + 参数读写；限位 __init__ 构建 + send_* 守卫模板）
 │   │   ├── backend_dm.py            #     BackendDM（DM 整机 7 电机；内含私有协议层 DmMotor/DmCanBus）✅
@@ -75,7 +75,7 @@ joyarm_code/
 ### 1.2 依赖规则（无环明细）
 
 - `utils` → 仅 numpy；
-- `robotics` / `backend` → 仅依赖 `utils`；求解器鸭子类型消费 `arm`（经公开门面/属性），**不 import `joyarm`**（约束7）；
+- `robotics` / `backend` → 依赖 `utils`（+ numpy）；robotics 的 Pin 默认实现另需 `pinocchio`；求解器按属性约定消费 `arm`（经公开门面/属性），**不 import `joyarm`**（约束7）；
 - `joyarm` → **组合根**：门面委托六域策略字典（`robotics`）与整机后端（`backend`），构造时按 config `robotics:` 段查各域 `REGISTRY` 组装成员、按 `backend:` 段 `name` 经 `get_backend` 构建后端，运行期加载 `robot_model/`、`configs/`；
 - `joyarm_ros2_ws/src/*`（规划）→ 依赖 `joyarm_core` + `rclpy`；核心包保持 ROS2-free。
 
@@ -118,7 +118,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 | 原则 | 落地 |
 |:--|:--|
 | **组合根·单类** | `JoyArm` 持 `_backend` + 六域成员字典；公开门面全部委托激活成员，换 config 即换算法；型号差异全在 config（约束1/6） |
-| **接口先行·章节实现** | robotics 六域仅 ABC + 空 REGISTRY；域未配置即无成员（门面显性报错）；**配置的注册名无效→构造失败（硬失败）**；各章实现注册后 config 选型接入（约束2） |
+| **接口先行·内置默认实现** | 六域 = ABC + 内置默认实现（Pin 四域/到关节目标规划/关节位置控制，config 选配）；域未配置即无成员（门面显性报错）；**注册名无效→构造失败（硬失败）**；章节实现 @register 后同样 config 选型（约束2） |
 | **软化仅限工厂** | 工厂 config 缺失/命名链不符/初始化异常→`None`+信息；`JoyArm` 直用硬失败：config 必需（`check_config` 静态自检通过才初始化）、backend 必配、域成员必成（约束4） |
 | **教学数据读取** | config 一次性深拷贝存 `self._config`；教学算法经 `arm.get_config()` 读类内数据，不重读 yaml（约束8） |
 | **单向导入、无环** | `joyarm` → `robotics`/`backend` → `utils`；robotics/backend 不 import joyarm（约束7） |
@@ -145,12 +145,12 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写 + 限位构建 + send_* 两族守卫模板 + `read_state_cache_*`/`state_age_*` 只读缓存契约，默认 NotImplementedError） | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus；`read_state_cache_*` 零总线帧组装缓存槽 + `state_age_*` 陈旧度，`DmMotor.t_state` 应答时间戳） | Ch6/13 | ✅ |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
-| `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）；MDH 白盒 FK 待 Ch2 实现 | Ch2 | 🟡 |
-| `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 + solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）；数值/解析实现待 Ch3 | Ch3 | 🟡 |
-| `robotics/jacobian/` | `JacobianSolver(ABC)`（速度正逆解/静力学/奇异值谱/可操作度/`damped_pinv` 衍生量模板在 ABC） | Ch4 | 🟡 |
-| `robotics/trajectory/` | `TrajPlanner(ABC，纯计算内核)`（`plan_once` 校验/剔除/回退管线 + `sample_frame` 采样 + `_check_frame` 逐帧校验；周期调度归 JoyArm 运动管线）；规划器实现待 Ch5/9 | Ch5/9 | 🟡 |
-| `robotics/dynamics/` | `DynamicsSolver(ABC)`（Λ=J⁺ᵀMJ⁺ 模板在 ABC）；实现待 Ch8 | Ch8 | 🟡 |
-| `robotics/control/` | `Controller(ABC，纯计算内核)`（`compute` 内核 + `MODE` 模式声明；周期调度/门控归 JoyArm 运动管线）；控制律实现待 Ch6/9 | Ch6/9 | 🟡 |
+| `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御）✅；MDH 白盒 FK 为 Ch2 教学 | Ch2 | ✅ |
+| `robotics/ikine/` | `IkineSolver(ABC)`（solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅；解析 IK 为 Ch3 教学 | Ch3 | ✅ |
+| `robotics/jacobian/` | `JacobianSolver(ABC)`（衍生量模板）+ `PinJacobianSolver`（computeFrameJacobian，base/local 双参考系）✅ | Ch4 | ✅ |
+| `robotics/trajectory/` | `TrajPlanner(ABC)`（校验/剔除/回退管线）+ `ToJointTrajPlanner`（到关节目标点，五次多项式六边界条件，采样出 q/dq/ddq；目标可带 dq/ddq）✅ | Ch5 | ✅ |
+| `robotics/dynamics/` | `DynamicsSolver(ABC)`（fdyn/Λ 模板）+ `PinDynamicsSolver`（rnea/crba 对称化/nonLinearEffects，f_ext 待力控章节）✅ | Ch8 | ✅ |
+| `robotics/control/` | `Controller(ABC)`（compute 内核 + MODE 声明）+ `JointPositionController` 关节位置控制器（步长 ≤ dq_max/ctrl_hz 裁剪+节流告警）✅；运行防护 is_normal 在 JoyArm 管线 | Ch6 | ✅ |
 | `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检 + 运动管线三线程）+ `load_config`/`_build_domain`/`_parse_domain_specs` + 私有周期线程机制 `_run_periodic`/`_PeriodicThread`（单消费者，不入 utils） | — | ✅ |
 | `joyarm/__init__.py` | `JoyArmFactory`（仅工厂入口软化；`list_models` 扫描 configs） | — | ✅ |
 | `configs/joyarm_dm.yaml` | 型号 YAML 四段（robotics 段注释过渡：注册名实现并注册后取消注释接入，硬失败语义） | — | ✅ |
@@ -163,7 +163,8 @@ JoyArm（单类组合根：_backend + 六域成员字典 + config/_config）
    │  robotics:→各域 REGISTRY 字典化组装（首个激活；域未配置=空，门面显性报错）
    │  教学数据（MDH 等）：算法层经 arm.get_config() 读类内 config（不重读 yaml）
 Backend(ABC) ──▶ BackendDM ✅
-六域 ABC + 空 REGISTRY ──▶ 各章实现注册接入（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
+六域 ABC + 内置默认实现（Pin 四域 / to_joint_traj_planner / joint_position_controller）──▶
+   章节自定义实现 @register 后并列选配（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
    traj Ch5 / control Ch6/8/9 / dynamics Ch8）
 ```
 

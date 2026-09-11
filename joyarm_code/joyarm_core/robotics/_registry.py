@@ -13,7 +13,7 @@
         ...
 
 命名规则：实现类名 = 算法/方法前缀 + 域基类名（如 ``Pin`` + ``FkineSolver``；
-规划器/控制器同构，如 ``QuinticTrajPlanner``、``JointPidController``），
+规划器/控制器同构，如 ``ToJointTrajPlanner``、``JointPidController``），
 注册名由类名机械转换（``PinFkineSolver`` → ``pin_fkine_solver``）。
 """
 from __future__ import annotations

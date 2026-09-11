@@ -1,6 +1,6 @@
 """``joyarm_core.robotics`` —— 算法层子包（一域一子包，策略接口）。
 
-仅依赖 utils 与 numpy（按属性约定消费 ``arm``，不 import joyarm）。每域 = 策略 ABC + ``REGISTRY`` 注册表；
+仅依赖 utils 与 numpy（Pin 默认实现另需 pinocchio；按属性约定消费 ``arm``，不 import joyarm）。每域 = 策略 ABC + ``REGISTRY`` 注册表；
 JoyArm 构造时按 config ``robotics:`` 段查表组装私有成员字典（``_fkine_solvers`` 等），算法间互调走公开门面。
 
 子类实现：

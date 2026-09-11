@@ -4,10 +4,13 @@
 - ``REGISTRY``：注册表 ``{注册名: 求解器子类}``
                 子类加 ``@register``装饰器即自动入表（注册名 = 类名小写 + 下划线）
                 机械臂型号 config 文件的 ``robotics.jacobian`` 段按名引用。
+- ``PinJacobianSolver``：雅可比默认实现（注册名 ``pin_jacobian_solver``，见 ``jacobian_solver_pin.py``）。
 """
 from .._registry import register
 from .jacobian_solver import JacobianSolver
 
 REGISTRY: dict = {}
 
-__all__ = ["JacobianSolver", "REGISTRY", "register"]
+from .jacobian_solver_pin import PinJacobianSolver  # noqa: E402 —— 注册须在 REGISTRY 定义后执行
+
+__all__ = ["JacobianSolver", "PinJacobianSolver", "REGISTRY", "register"]
