@@ -55,6 +55,7 @@ joyarm_code/
 │   │   │                            #       + 自检 + tcp_limits 解析 + load_config/_build_domain
 │   │   │                            #       + 私有周期线程机制 _run_periodic/_PeriodicThread（保活+运动三线程）
 │   │   │                            #       + _cubic_traj 三次插值（move_j/safe_* 直连路径，单消费者内联）
+│   │   ├── fakearm.py              #     FakeArm（JoyArm 无硬件最小替身：arm 协议鸭子类型实现；算法测试/章节示例/CI）
 │   │   └── __init__.py              #     JoyArmFactory/joyarm_factory（仅工厂入口软化：失败→None+信息；JoyArm 直用硬失败）
 │   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）；joyarm_dm/ 为旧版原始构型参照（现行配置用 joyarm_dm_fixend）
 │   └── configs/                     #   per-model YAML（basic/joyarm/robotics/backend 四段）
@@ -74,6 +75,7 @@ joyarm_code/
 │   ├── test_dynamics_solver_pin.py #   PinDynamicsSolver 深度单测（四内核对拍/idyn↔fdyn 闭环/Λ）
 │   ├── test_traj_planner_to_joint.py #   ToJointTrajPlanner 深度单测（五次边界/导数交叉验证/剔除回退管线）
 │   ├── test_controller_joint_position.py #   JointPositionController 深度单测（逐关节裁剪/告警节流/NaN 拒绝）
+│   ├── test_fakearm.py              #   FakeArm 离线单测（构造/指令/运动/末端 + 六域协议符合性 + JoyArm 对拍）
 │   ├── test_joyarm_full.py          #   JoyArm 真机分层测试（29 项九层风险递增；回放/求解器类随各章实现补回）
 │   └── test_joyarm_factory.py       #   工厂软化+直用硬失败/六域字典机制/静态自检/配置 API/前置校验族
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
@@ -116,7 +118,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 ### 2.1 命名约定（全仓库强制，含 `chapt/`）
 
 - **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
-- **设备模型**（`joyarm/`）：`JoyArm` = 组合根单类（无型号子类）；`joyarm_factory(model)` 外部推荐入口（失败 → `None` + 失败信息）。文件 `joyarm.py` / `__init__.py`。
+- **设备模型**（`joyarm/`）：`JoyArm` = 组合根单类（无型号子类）；`joyarm_factory(model)` 外部推荐入口（失败 → `None` + 失败信息）；`FakeArm` = 无硬件最小替身（arm 协议鸭子类型，测试/章节示例用）。文件 `joyarm.py` / `fakearm.py` / `__init__.py`。
 - **Backend 整机两层**（`backend/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendDM`（1:1：`backend_dm` ↔ `joyarm_dm`）。`REGISTRY` + `get_backend(name)` 供 config 选型。
 - **属性约定**：型号名 = `model`（str，product model）；pinocchio 构型产物 = `pin_model`（只读共享）/`pin_data`（用户直连口，内部求解用私有 Data 不碰它；**勿与型号名混淆**）；关节数 = `n_arm`/`n_end`；硬限位 = `arm_limits`/`end_limits`（config `backend.*.joints` 四键，初始化后固定，下发守卫唯一依据）；软限位 = `arm_limits_soft`/`end_limits_soft`（config `joyarm.*_soft_limits` 直配，缺省软=硬，仅上层状态判断用）；整机后端 = `_backend`（私有，必配）；**六域策略成员字典** = `_fkine_solvers`/`_ikine_solvers`/`_jacobian_solvers`/`_dynamics_solvers`/`_traj_planners`/`_controllers`（`dict[注册名→实例]`）+ `_active_name`（域→激活注册名）；config = `self._config`（构造时深拷贝，`get_config()` 深拷贝读取）。求解器形参用 `arm`（鸭子类型）。
 - **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…，末端动作 `set_end_open/close/zero`）；执行类统一 `joint` 形参（None=全部）；`set_mode_*` 默认 POSITION；参数读写 `read/write_param_{arm,end}`（joint=None 读返列表、写标量广播或等长列表）；求解切换 `set_solver(domain, name)`、查询 `list_solvers(domain)`（每域有且仅一个激活）。
@@ -161,6 +163,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（fdyn/Λ 模板）+ `PinDynamicsSolver`（rnea/crba 对称化/nonLinearEffects，f_ext 待力控章节）✅ | Ch8 | ✅ |
 | `robotics/control/` | `Controller(ABC)`（compute 内核 + MODE 声明）+ `JointPositionController` 关节位置控制器（步长 ≤ dq_max/ctrl_hz 裁剪+节流告警）✅；运行防护 is_normal 在 JoyArm 管线 | Ch6 | ✅ |
 | `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典 + 门面 + 自检 + 运动管线三线程）+ `load_config`/`_build_domain`/`_parse_domain_specs` + 私有周期线程机制 `_run_periodic`/`_PeriodicThread`（单消费者，不入 utils） | — | ✅ |
+| `joyarm/fakearm.py` | `FakeArm`（JoyArm 无硬件最小替身：arm 协议鸭子类型实现——config/URDF/限位解析复用 JoyArm 助手 + 理想执行器状态 + 固定 Pin 默认求解器门面；算法测试/章节示例/CI 用） | — | ✅ |
 | `joyarm/__init__.py` | `JoyArmFactory`（仅工厂入口软化；`list_models` 扫描 configs） | — | ✅ |
 | `configs/joyarm_dm.yaml` | 型号 YAML 四段（robotics 段注释过渡：注册名实现并注册后取消注释接入，硬失败语义） | — | ✅ |
 
@@ -209,6 +212,9 @@ JoyArm.start_motion() / stop_motion(damping=True)   # 运动管线公共启停�
 # 关键属性：model / pin_model / pin_data / n_arm / n_end / ee_frame_* / arm_limits(_soft) / end_limits(_soft) / arm_zero/home/neutral / end_zero/home/neutral / joint_names_arm/end / tcp_limits / _backend / connected / is_normal（运行状态标志：True=正常；False=控制器循环跳过 cmd 下发，急停/恢复由直连 safe_* 负责；本期无状态管理联动）
 #   六域字典：_fkine_solvers/_ikine_solvers/_jacobian_solvers/_dynamics_solvers/_traj_planners/_controllers + _active_name
 #   轨迹桥（私有）：_target_traj（List[TrajFrame]，写者=应用线程）/ _current_frame（TrajFrame，写者=规划线程）
+# FakeArm（JoyArm 无硬件最小替身；`from joyarm_core import FakeArm`；arm 协议鸭子类型，构造/URDF/限位与 JoyArm 同源）✅
+FakeArm(model="joyarm_dm", config=None, q0=None)   # 无 backend/线程/管线/set_solver；指令为理想执行器语义——位置/MIT(kp>0) 即时置位（裁限位）、速度/纯力矩只记录；get_arm_state 免 connect（tcp.pose 由内置 fkine 填充）
+FakeArm.move_j(q, t, rate, realtime) → (ts, qs, dqs)   # 同步逐帧理想插值（默认不睡眠）返回轨迹数组（与 JoyArm 返回 None 不同）；数学门面 fkine/ikine/jac/manipulability/statics/mass_matrix/gravity 固定转发 Pin 默认实现
 ```
 
 #### Robotics 独立 API（各域 ABC；实现为教学章节内容）

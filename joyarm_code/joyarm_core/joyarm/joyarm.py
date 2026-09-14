@@ -1,10 +1,8 @@
-"""``JoyArm`` —— 机械臂主类：把"算法 + 电机通信"组装成一台能用的机械臂。
+"""``JoyArm`` —— 机械臂类
 
-一台机械臂 = 型号配置（yaml）+ 运动学模型（URDF）+ 六类算法 + 电机通信后端，
-这些全都由 ``configs/<型号>.yaml`` 描述，本类负责照着配置装配。
 推荐用工厂创建（见 ``joyarm/__init__.py``）：``joyarm_factory("joyarm_dm")``。
 
-快速上手::
+快速上手：
 
     from joyarm_core import joyarm_factory
     arm = joyarm_factory("joyarm_dm")   # 创建（默认不连真机）
@@ -13,10 +11,6 @@
     arm.move_j(q)                       # 关节运动到目标角（见"七、运动"）
     arm.disconnect()                    # 断开
 
-文件布局（从上到下）：
-- 模块级：``load_config``（读型号配置，公开）+ 几个内部工具（算法构建/周期线程/插值）；
-- ``JoyArm`` 类内：**前半是内部实现**（初始化、各类私有助手，用户无需阅读），
-  **后半是公开接口**——按"拿到一台机械臂后怎么用"分成十二类，各以 ``# ===`` 标题分隔。
 """
 from __future__ import annotations
 
@@ -96,9 +90,6 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
 # ============================================================
 # 六域算法成员的构建（内部）：按 config 的 robotics 段创建求解器实例
 # ============================================================
-# 六个算法域 → 各自的注册表（存"注册名 → 类"，注册名 = 实现类名小写加下划线，
-# 如 PinFkineSolver → "pin_fkine_solver"）。config 里可写一个或多个规格：
-# 全部创建，第一个设为当前使用（激活）。
 _DOMAIN_REGISTRIES = {
     "fkine": _FKINE_REGISTRY,
     "ikine": _IKINE_REGISTRY,
@@ -111,9 +102,7 @@ _DOMAIN_REGISTRIES = {
 def _parse_domain_specs(domain: str, spec) -> List[tuple]:
     """把 config ``robotics.<domain>`` 段解析成 ``[(注册名, 参数字典), ...]``。
 
-    单项可以是注册名字符串，或 ``{name: 注册名, 其他键: 构造参数}`` 字典；
-    结构不对抛 ``ValueError``。注册名是否存在不在这一步查（留给
-    :func:`_build_domain` 对照注册表检查）。
+    单项可以是注册名字符串，或 ``{name: 注册名, 其他键: 构造参数}`` 字典，否则抛 ``ValueError``。
     """
     if not spec:
         return []
@@ -139,8 +128,7 @@ def _parse_domain_specs(domain: str, spec) -> List[tuple]:
 def _build_domain(domain: str, registry: dict, spec) -> dict:
     """按 config 规格实例化一域算法成员，返回 ``{注册名: 实例}``。
 
-    域没配置就返回空字典；注册名不存在、参数非法或构造出错都直接抛
-    ``ValueError``（宁可失败，不带病运行）。
+    域没配置就返回空字典；注册名不存在、参数非法或构造出错都直接抛``ValueError``（宁可失败，不带病运行）。
     """
     members: dict = {}
     for name, params in _parse_domain_specs(domain, spec):
@@ -159,7 +147,6 @@ def _build_domain(domain: str, registry: dict, spec) -> dict:
 
 # ============================================================
 # 周期线程（内部）：按固定频率反复执行一个函数，直到让它停止
-# （状态后台刷新线程 + 运动管线的三个线程都用它）
 # ============================================================
 _ERR_LOG_INTERVAL: float = 0.5   # 同一故障反复出现时，日志的最小间隔（秒）
 _JOIN_TIMEOUT: float = 1.0      # stop() 等线程退出的上限（秒）
@@ -174,13 +161,11 @@ def _run_periodic(stop: threading.Event, hz, step: Callable[[], None],
                   name: str = "") -> None:
     """以 ``hz`` 频率循环调用 ``step()``，``stop`` 置位后退出。
 
-    节拍按绝对时间对齐：某一步执行太慢只跳过那一拍，之后重新对齐
-    （不会为赶进度连续快跑）。``step()`` 抛异常只记日志、下个周期照常重试；
-    同一故障反复出现时日志每 0.5 秒最多一条（省略的次数会补记）。
+    节拍按绝对时间对齐：某步执行太慢只跳过单拍，之后重新对齐。
+    ``step()`` 抛异常只记日志、下个周期照常重试；同故障持续出现时日志每 0.5 秒最多一条（省略的次数会补记）。
 
     :param stop: 停止事件（置位即退出循环）。
-    :param hz: 执行频率 Hz（数值或返回数值的无参函数，每周期重新取，
-        改频率下个周期就生效）。
+    :param hz:   执行频率 Hz（数值或返回数值的无参函数，每周期重新取，改频率下个周期就生效）。
     :param step: 单步函数（无参数；内部异常视为"这步失败，下周期重来"）。
     :param name: 日志里标识本循环的名字（如线程名）。
     """
@@ -201,8 +186,7 @@ def _run_periodic(stop: threading.Event, hz, step: Callable[[], None],
             if time.monotonic() - last_log >= _ERR_LOG_INTERVAL:
                 detail = f"（此前 {suppressed} 次同类失败已节流省略）" \
                          if suppressed else ""
-                logger.exception("joyarm.py - _run_periodic：%s单步 %s 失败，"
-                                 "下周期重试%s",
+                logger.exception("joyarm.py - _run_periodic：%s单步 %s 失败，下周期重试%s",
                                  f"[{name}] " if name else "",
                                  getattr(step, "__name__", step), detail)
                 last_log = time.monotonic()
@@ -218,13 +202,11 @@ def _run_periodic(stop: threading.Event, hz, step: Callable[[], None],
 class _PeriodicThread:
     """一个可反复启停的周期线程（``start()`` 启动、``stop()`` 停止回收）。
 
-    ``stop()`` 最多等 1 秒；超时抛 ``RuntimeError`` 并保留线程引用
-    （``is_alive()`` 仍为真、再次 ``start()`` 会被拒绝）——避免旧线程还卡在
-    单步里时又启新线程，出现两个循环同时跑。
+    ``stop()`` 最多等 1 秒；超时抛 ``RuntimeError`` 并保留线程引用（``is_alive()`` 仍为真、再次 ``start()`` 会被拒绝）
+    ——避免旧线程还卡在单步里时又启新线程，出现两个循环同时跑。
     """
 
-    def __init__(self, step: Callable[[], None], hz: float,
-                 name: str = "periodic") -> None:
+    def __init__(self, step: Callable[[], None], hz: float,name: str = "periodic") -> None:
         """:param step: 单步函数；:param hz: 频率 Hz；:param name: 线程名。"""
         self._step = step
         self._hz = float(hz)
@@ -277,7 +259,7 @@ class _PeriodicThread:
 
 
 def _cubic_traj(q0, q1, t: float, rate: float = 100.0):
-    """三次多项式插值（只有 move_j 和 _safe_move 用，故放在本文件）：
+    """三次多项式插值（只有 move_j 和 _safe_move 用）：
     ``q0 → q1`` 走 ``t`` 秒，起末速度为零，按 ``rate`` 采样。
 
     :param q0: 起始关节角 ``(n,)``；:param q1: 目标关节角 ``(n,)``。
@@ -298,20 +280,14 @@ def _cubic_traj(q0, q1, t: float, rate: float = 100.0):
 
 
 class JoyArm:
-    """一台完整的机械臂（本体 arm + 末端 end）：照着配置把算法和电机通信组装起来。
+    """JoyArm 机械臂类（本体 arm + 末端 end）
 
     :param model: 型号名（= ``configs/<model>.yaml`` 文件名 = yaml ``basic.name``）。
-    :param config: 型号配置字典；不传就自动加载 ``configs/<model>.yaml``。
-        配置缺失或 :meth:`check_config` 自检不通过，构造直接失败（抛异常）。
-
-    类内布局：**前半是内部实现**（初始化 + 私有助手，用户无需阅读）；
-    **后半是公开接口**，按使用场景分十二类（各以 ``# ===`` 标题分隔）：
-    配置自检 → 连接 → 使能 → 读状态 → 下发指令 → 末端 → 运动 → 安全 →
-    标零/故障/参数 → 基本信息 → 数学计算 → 运动管线。
+    :param config: 型号配置字典；默认自动加载 ``configs/<model>.yaml``。config 缺失或 :meth:`check_config` 自检不通过时抛异常。
     """
 
     # ============================================================
-    # 内部实现区：初始化 + 各类私有助手（用户直接看后半的"公开接口区"即可）
+    # 内部实现区：初始化 + 各类私有助手（仅调用JoyArm时直接看"公开接口区"即可）
     # ============================================================
 
     # ============================================================
@@ -338,10 +314,12 @@ class JoyArm:
         self._urdf_path: str = ""                        # URDF 文件路径
         self.connected: bool = False                     # 是否已连真机（创建后默认不连）
         self.ee_frame_name: str = str(basic.get("ee_frame") or "ee")  # 末端坐标系名
+
         # ---- 运动学模型（pinocchio，由 URDF 解析而来）----
         self.pin_model: Optional[pin.Model] = None       # 构型模型（只读共享）
         self.pin_data: Optional[pin.Data] = None         # 给用户直接用的 pin.Data（内部求解另建私有的，不共用）
         self.ee_frame_id: int = -1                       # 末端坐标系在模型里的编号
+
         # ---- 本体（arm）----
         self.n_arm: int = 0                              # 本体关节数（config arm.joints 条数）
         self.arm_limits: Optional[JointLimits] = None    # 硬限位（真正拦指令的）
@@ -350,6 +328,7 @@ class JoyArm:
         self._arm_zero: np.ndarray = np.zeros(0)         # 零位（全零）
         self._arm_home: np.ndarray = np.zeros(0)         # home 位形（config joyarm.arm_home）
         self._arm_neutral: np.ndarray = np.zeros(0)      # 数值求解默认初值（全零）
+
         # ---- 末端（end）----
         self.n_end: int = 0                              # 末端电机数（无末端为 0）
         self.end_limits: Optional[JointLimits] = None    # 末端硬限位（电机行程）
@@ -358,8 +337,10 @@ class JoyArm:
         self._end_zero: np.ndarray = np.zeros(0)         # 末端零位（全零）
         self._end_home: np.ndarray = np.zeros(0)         # 末端初始位形（config joyarm.end_home）
         self._end_neutral: np.ndarray = np.zeros(0)      # 末端求解默认初值（全零）
+
         # ---- 末端空间限位 ----
         self.tcp_limits: TcpLimits = TcpLimits()         # 末端空间限位（默认占位，未配置）
+        
         # ---- 六域算法成员（config 选型：全部创建、第一个激活）----
         self._fkine_solvers: dict = {}                   # {注册名: 实例}
         self._ikine_solvers: dict = {}
@@ -368,11 +349,13 @@ class JoyArm:
         self._traj_planners: dict = {}
         self._controllers: dict = {}
         self._active_name: dict = {}                     # 各域当前使用的注册名（有且仅一个）
+
         # ---- 电机通信后端 ----
         self._backend: Optional[Backend] = None          # 整机通信后端
         # ---- 轨迹数据（应用线程写目标 → 规划线程产当前帧 → 控制线程消费）----
         self._target_traj: Optional[List[TrajFrame]] = None    # 目标序列（应用写）
         self._current_frame: Optional[TrajFrame] = None        # 当前帧（规划线程写）
+        
         # ---- 运行状态与后台线程 ----
         self.is_normal: bool = True                     # 运行正常标志（False 时控制线程不下发指令；由应用置位）
         self._state_thread: Optional[_PeriodicThread] = None    # 状态后台刷新线程（connect 时启动）
@@ -483,7 +466,6 @@ class JoyArm:
             self._apply_tcp_limits(jcfg["tcp_limits"])
 
         # ---- 创建电机通信后端（失败即构造失败）----
-        # 指令的限位裁剪统一在后端做（这样单独用后端也受保护）
         backend_name = str(backend_cfg["name"])          # check_config 已确保存在
         bcfg_rest = dict(backend_cfg)
         bcfg_rest.pop("name", None)
@@ -536,10 +518,7 @@ class JoyArm:
     def _urdf_joint_limits(urdf_path: str) -> dict:
         """解析 URDF 里各活动关节的限位，供与 config 核对。
 
-        只收有限位的活动关节（revolute/continuous/prismatic；fixed 关节没
-        限位不参与）。``<limit>`` 四个属性对应关系：``lower``→q_min、
-        ``upper``→q_max、``velocity``→dq_max、``effort``→tau_max（缺的属性
-        记 ``None``，如 continuous 关节没有位置上下限是正常的）。
+        只收有限位的活动关节（revolute/continuous/prismatic）。``<limit>`` 缺的属性记 ``None``，如 continuous。
 
         :param urdf_path: URDF 文件路径。
         :return: ``{关节名: {q_min, q_max, dq_max, tau_max, mimic}}``，
@@ -565,17 +544,13 @@ class JoyArm:
 
     @staticmethod
     def _check_arm_limits_vs_urdf(urdf_path: str, arm_joint_cfgs: list) -> None:
-        """把 config 里的关节限位与 URDF 标定值对一遍账（只告警、不拦初始化）。
+        """config 的关节限位与 URDF 的关节限位进行对比（只告警、不拦初始化）。
 
-        约定：真正生效的是 config 四键，URDF 只是标定基准——对不上就
-        ``logger.warning`` 提醒核对，数值仍以 config 为准。查三种情况：
+        真正生效的是 config 四键，以 config 为准。查三种情况：
 
         ① config 里的关节在 URDF 中不存在（没法核对）；
-        ② 同名关节的限位数值和 URDF 不一致（容差 1e-6，逐键比）；
-        ③ URDF 里有 config 没定义的本体活动关节（joint1~joint9 的非 mimic
-        关节应与 config 一一对应；末端/手指等其他关节不校验）。
-
-        末端是电机行程（URDF 里通常没有），不参与比对。
+        ② 同名关节的限位数值和 URDF 不一致（容差 1e-4，逐键比）；
+        ③ URDF 里有 config 没定义的本体活动关节（joint1~joint9 的非 mimic 关节）。
 
         :param urdf_path: URDF 文件路径（``basic.robot`` 解析产物）。
         :param arm_joint_cfgs: config ``backend.arm.joints`` 条目列表。
@@ -609,9 +584,8 @@ class JoyArm:
     def _apply_tcp_limits(self, tl: dict) -> None:
         """用 config 的 tcp_limits 段覆盖默认末端空间限位。
 
-        ``workspace_box`` 两种写法都认：``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
-        （两行，yaml 常用）或每轴一行 ``[min,max]`` 的 ``(3,2)``；内部统一成
-        ``(3,2)``。
+        ``workspace_box`` 两种写法均可： ``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
+        （两行，yaml 常用）或每轴一行 ``[min,max]`` 的 ``(3,2)``；内部统一成``(3,2)``。
         """
         box = np.asarray(tl.get("workspace_box",
                                 [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]), dtype=float)
@@ -640,7 +614,7 @@ class JoyArm:
         }[domain]
 
     def _active(self, domain: str):
-        """取某域当前使用的成员；域没配置成员时抛 ``RuntimeError``。"""
+        """取某域当前使用的成员；未配置成员时抛 ``RuntimeError``。"""
         d = self._members(domain)
         name = self._active_name.get(domain)
         if name is None or name not in d:
@@ -705,9 +679,6 @@ class JoyArm:
 
     def _require_mode_arm(self, mode: ControlMode, joint: Optional[int] = None) -> None:
         """本体当前控制模式 ≠ ``mode`` 就抛 ``RuntimeError``（查本地缓存）。
-
-        下发控制指令前用（set_arm_command 及运动安全层）——电机收指令前
-        必须已切到对应模式；``None`` 表示还没设置过或各关节模式不一致。
         """
         cur = self.read_mode_arm(joint)
         if cur != mode:
@@ -758,7 +729,7 @@ class JoyArm:
             pass
 
     # ============================================================
-    # 运动管线内部（三个后台线程的单步逻辑；启停入口在"十二、进阶"区）
+    # 运动管线内部（三个后台线程的单步逻辑）
     # ============================================================
     def _tick_plan(self) -> None:
         """规划线程单步：交给当前规划器；**规划成功**才记下这个规划器
@@ -796,8 +767,7 @@ class JoyArm:
     def _sync_traj_tick(self) -> None:
         """同步跑一次"规划 + 采样发布"（启动/运行中换算法时用，当前帧立刻可用）。
 
-        规划失败或跳过时保持原有帧不动，plan 线程会按节拍重试自愈——
-        start_motion 不会因为这个半路抛错。
+        规划失败或跳过时保持原有帧不动，plan 线程会按节拍重试自愈——start_motion 不会因此抛错。
         """
         planner = self._active("traj")
         try:
@@ -832,8 +802,7 @@ class JoyArm:
             try:
                 if self.n_end:
                     ez = np.zeros(self.n_end)
-                    self._backend.send_mit_end(ez, ez, ez, kp=ez,
-                                               kd=np.full(self.n_end, kd))
+                    self._backend.send_mit_end(ez, ez, ez, kp=ez,kd=np.full(self.n_end, kd))
             except Exception as e:
                 logger.warning("damping_mode：%s阻尼指令失败：%s", tag, e)
 
@@ -877,9 +846,9 @@ class JoyArm:
 
     def _safe_move(self, q_arm, q_end, t=None, *, rate=None,
                    wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
-        """安全运动内核（safe_home/safe_zero 用）：本体走 MIT 阻抗模式的三次
-        多项式指令流（跟踪 q/dq + config MIT 增益 + 有重力补偿就用），末端走
-        位置模式；末段等到位。
+        """安全运动内核（safe_home/safe_zero 用）
+
+        本体走 MIT 阻抗模式的三次多项式指令流（跟踪 q/dq + config MIT 增益 + 有重力补偿就用），末端走位置模式；末段等到位。
 
         末端不用 MIT 阻抗（config 里末端 MIT 增益标定为 0），所以走位置模式。
         """
@@ -941,16 +910,15 @@ class JoyArm:
     # 一、配置与自检：看配置内容、检查配置文件、检查硬件好坏
     # ============================================================
     def get_config(self) -> dict:
-        """返回当前配置的深拷贝（四段：basic/joyarm/robotics/backend）。
+        """返回当前 config 配置的深拷贝
 
-        改返回值不影响本对象；外部算法要型号数据（如 MDH 参数）都从这里拿，
-        不要自己去重新读 yaml。
+        用于外部获取型号数据（如 MDH 参数）时调用，不建议重新读 yaml。
         """
         return copy.deepcopy(self._config)
 
     @staticmethod
     def check_config(model: str, config: dict) -> None:
-        """检查配置内容是否合格（不碰硬件；``__init__`` 第一步自动调用）。
+        """检查配置内容是否合格（不接硬件；``__init__`` 第一步自动调用）。
 
         检查项：basic 段齐全、命名一致、URDF 文件存在、backend 必配且本体
         关节四键限位齐全、home 位形长度与关节数一致、robotics 段格式合法。
@@ -1015,8 +983,7 @@ class JoyArm:
                 continue
             for k, v in soft.items():
                 if k in ("q_min", "q_max", "dq_max", "tau_max"):
-                    if np.asarray(v, dtype=float).ndim > 0 and \
-                            np.asarray(v, dtype=float).reshape(-1).shape[0] != n_ref:
+                    if np.asarray(v, dtype=float).ndim > 0 and np.asarray(v, dtype=float).reshape(-1).shape[0] != n_ref:
                         problems.append(
                             f"joyarm.{key}.{k} 长度 "
                             f"{np.asarray(v, dtype=float).reshape(-1).shape[0]} ≠ 关节数 {n_ref}")
@@ -1032,15 +999,10 @@ class JoyArm:
                 + "\n".join(f"  - {p}" for p in problems))
 
     def check_hardware(self) -> None:
-        """检查硬件好坏（需要时手动调用）。
+        """检查硬件
 
-        会临时连上硬件，在电机保持**失能**的状态下逐个检查：本体关节的
-        通讯/故障/编码器、末端电机的通讯/故障；查完自动断开（原本就连着
-        则沿用现有连接、查完不断）。一切正常就静默返回；发现问题抛
-        ``RuntimeError`` 一次列出。
-
-        注意：运行中的安全监控（过温、碰撞等）归 ROS2 节点管，不在这里；
-        指令越限由后端的限位裁剪兜底。
+        连接硬件，电机失能状态下逐个检查：arm 关节通讯/故障/编码器、end 通讯/故障；
+        查完沿用之前的连接状态。一切正常就静默返回；存在问题抛``RuntimeError`` 。
 
         :raises RuntimeError: 连接失败或存在硬件故障（消息列出全部问题）。
         """
@@ -1081,22 +1043,18 @@ class JoyArm:
     # 二、连接与断开：connect 之后才能做下面所有真机操作
     # ============================================================
     def connect(self) -> None:
-        """连接真机（本体 + 末端一起连；只连接、**不使能**电机）。
+        """连接真机（本体 + 末端一起连；只连接不使能）。
 
-        连接后自动启动一个后台小线程：空闲时定期刷新状态缓存，保证
-        ``get_arm_state()`` 随时拿到新数据（发指令期间状态随指令自动更新，
-        后台线程不额外占总线）。
+        连接后自动启动后台小线程：空闲时定期刷新状态缓存，保证``get_arm_state()`` 随时拿到新数据。
         """
         self._backend.connect()
         self.connected = bool(self._backend.connected)
         self._start_state_keepalive()
 
     def disconnect(self) -> None:
-        """断开真机：先尽力停掉运动管线和后台刷新线程，再失能全部电机、断开总线。
+        """断开真机
 
-        各收尾步骤都尽力执行：某步失败只告警、断开流程继续（防止总线卡死时
-        串口泄漏）。停管线时不切阻尼（紧接着就要失能断电，切了也白切）；
-        想停稳再断，请先手动调 ``stop_motion()``。
+        各收尾步骤都尽力执行：某步失败只告警、断开流程继续（防止总线卡死时串口泄漏）。
         """
         try:
             self.stop_motion(damping=False)
@@ -1117,8 +1075,10 @@ class JoyArm:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        """``with`` 退出收尾（尽力而为）：停管线 → 失能本体/末端 → 断开；
-        每步失败只告警不抛。"""
+        """``with`` 退出收尾
+        
+        停管线 → 失能本体/末端 → 断开；
+        """
         for name, fn in (("stop_motion", lambda: self.stop_motion(damping=False)),
                          ("disable_arm", self.disable_arm),
                          ("disable_end", self.disable_end),
@@ -1129,61 +1089,67 @@ class JoyArm:
                 logger.warning("__exit__：%s 失败：%s", name, e)
 
     # ============================================================
-    # 三、使能与控制模式：电机要先使能才能动；收指令前要先切到对应模式
+    # 三、使能与控制模式：电机要先使能才能动
     # ============================================================
     def enable_arm(self, joint: Optional[int] = None) -> None:
-        """使能本体电机（上电可动；``joint=None`` 全部）。"""
+        """使能本体电机（``joint=None`` 全部）"""
         self._require_connected()
         self._backend.enable_arm(joint)
 
     def disable_arm(self, joint: Optional[int] = None) -> None:
-        """失能本体电机（断输出力矩，臂会失去保持力）。"""
+        """失能本体电机（``joint=None`` 全部）"""
         self._require_connected()
         self._backend.disable_arm(joint)
 
     def enable_end(self, joint: Optional[int] = None) -> None:
-        """使能末端电机（``joint=None`` 全部）。"""
+        """使能末端电机（``joint=None`` 全部）"""
         self._require_connected()
         self._backend.enable_end(joint)
 
     def disable_end(self, joint: Optional[int] = None) -> None:
-        """失能末端电机。"""
+        """失能末端电机（``joint=None`` 全部）"""
         self._require_connected()
         self._backend.disable_end(joint)
 
-    def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION,
-                     joint: Optional[int] = None) -> None:
-        """切换本体控制模式（位置/速度/MIT）。发指令前必须先切到对应模式；
-        默认位置模式，``joint=None`` 全部关节。"""
+    def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION, joint: Optional[int] = None) -> None:
+        """切换本体控制模式（位置/速度/MIT）
+
+        默认位置模式，``joint=None`` 全部关节。
+        """
         self._require_connected()
         self._backend.set_mode_arm(mode, joint)
 
     def set_mode_end(self, mode: ControlMode = ControlMode.POSITION,
-                     joint: Optional[int] = None) -> None:
-        """切换末端控制模式（用法同 :meth:`set_mode_arm`）。"""
+            joint: Optional[int] = None) -> None:
+        """切换末端控制模式（位置/速度/MIT）
+
+        默认位置模式，``joint=None`` 全部关节。
+        """
         self._require_connected()
         self._backend.set_mode_end(mode, joint)
 
     def read_mode_arm(self, joint: Optional[int] = None) -> Optional[ControlMode]:
-        """查本体当前控制模式（读本地缓存、不发总线）。``joint=None`` 时，
-        整臂各关节模式一致才返回该模式，否则 ``None``。"""
+        """查本体当前控制模式（读本地缓存、不发总线）
+
+        ``joint=None`` 时，整臂各关节模式一致才返回该模式，否则 ``None``。
+        """
         return self._backend.read_mode_arm(joint)
 
     def read_mode_end(self, joint: Optional[int] = None) -> Optional[ControlMode]:
-        """查末端当前控制模式（读本地缓存；``joint=None`` 时各电机模式一致
-        才返回该模式，否则 ``None``）。"""
+        """查末端当前控制模式（读本地缓存、不发总线）
+
+        ``joint=None`` 时各电机模式一致才返回该模式，否则 ``None``。
+        """
         return self._backend.read_mode_end(joint)
 
     # ============================================================
     # 四、读状态：关节角/速度/力矩/温度、末端位姿
     # ============================================================
-    def get_arm_state(self) -> ArmState:
+    def get_arm_state(self) -> ArmState: # ！改为:param joint: 末端电机索引，``None`` 表示全部。
         """读取本体当前状态（关节角/速度/力矩、使能、故障、通讯、温度等）。
 
-        数据够新（0.15 秒内更新过）就直接用缓存、不发总线请求；太旧就先
-        向电机查询一次再返回。发指令期间状态随指令自动更新；空闲时由连接
-        后自动启动的后台线程维持数据新鲜。配置了正运动学时，会顺带算出
-        末端位姿填进 ``tcp.pose``。
+        数据新（0.15 秒内更新过）则直接用缓存、不发总线请求，太旧就先查询一次再返回。
+        空闲时由连接后自动启动的后台线程维持数据新鲜。
 
         :raises RuntimeError: 还没 ``connect()``。
         """
@@ -1205,7 +1171,9 @@ class JoyArm:
 
     def get_end_state(self, joint: Optional[int] = None) -> dict:
         """读取末端状态（q/dq/tau、使能、故障、通讯、温度，字典形式；
-        新旧数据取舍同 :meth:`get_arm_state`）。
+        
+        数据新（0.15 秒内更新过）则直接用缓存、不发总线请求，太旧就先查询一次再返回。
+        空闲时由连接后自动启动的后台线程维持数据新鲜。
 
         :param joint: 末端电机索引，``None`` 表示全部。
         :raises RuntimeError: 还没 ``connect()``。
@@ -1219,7 +1187,7 @@ class JoyArm:
             return self._backend.read_state_end(joint)
 
     # ============================================================
-    # 五、手动下发指令（底层单步）：日常运动建议用"七、运动"或"十二、运动管线"
+    # 五、手动下发指令（底层单步）
     # ============================================================
     def set_arm_command(self,
         mode: ControlMode = ControlMode.POSITION,
@@ -1230,13 +1198,12 @@ class JoyArm:
         kd: Optional[np.ndarray] = None,
         joint: Optional[int] = None,
     ) -> None:
-        """手动下发一条运动指令（三种模式：POSITION 要 ``q``；VELOCITY 要
-        ``dq``；MIT 要 ``q/dq/tau``，其中 ``kp/kd`` 可省——省了用 config 的
-        MIT 增益，纯力矩 = MIT + ``kp=kd=0``）。
+        """手动下发一条运动指令
+        
+        三种模式：POSITION 要 ``q``；VELOCITY 要 ``dq``；MIT 要 ``q/dq/tau``；
+        其中 ``kp/kd`` 默认值为 config 的 MIT 增益。
 
-        ``joint`` 指定即单关节控制（标量参数自动扩到该关节）；``joint=None``
-        全部关节。越限裁剪和越限告警由后端统一做（位置裁到硬限位、速度/
-        力矩裁到上限；kp/kd 是标定增益不裁）。
+        ``joint`` 指定单关节控制；``joint=None`` 全部关节。
 
         :raises RuntimeError: 未连接 / 当前模式与 ``mode`` 不符（先 :meth:`set_mode_arm`）。
         :raises ValueError: 该模式需要的参数没给全。
@@ -1294,17 +1261,14 @@ class JoyArm:
     # ============================================================
     def move_j(self, q, t=None, *, rate=None,
                wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
-        """关节运动到目标角（阻塞到到位/超时）——最常用的运动方法。
+        """关节运动到目标角（阻塞到到位/超时）
 
-        内部用三次多项式把轨迹铺平滑，按固定频率逐帧发位置指令，末段轮询
-        等到位。它是独立的直连通道，**不经**「规划器→控制器」常规管线
-        （那条路见 ``start_motion``）。峰值速度可能被 config ``POS_VEL.vlim``
-        限住，实际时长可能大于 ``t``（由到位等待兜底）；目标越硬限位自动
-        裁剪并告警。
+        内部用三次多项式把轨迹铺平滑，按固定频率逐帧发位置指令，末段轮询等到位。
+        独立的直连通道，**不经**「规划器→控制器」管线。
+        峰值速度可能被 config ``POS_VEL.vlim``限住，实际时长可能大于 ``t``。
 
         :param q: 目标关节角 ``(n_arm,)``，弧度。
-        :param t: 运动时长（秒）；不填按路程自动估计（峰值约 1.5 rad/s）；
-            ``t ≤ 0`` 不插值直接发目标。
+        :param t: 运动时长（秒）；不填按路程自动估计（峰值约 1.5 rad/s）；``t ≤ 0`` 不插值直接发目标。
         :param rate: 指令发送频率 Hz，默认取 config ``control_rate``（≤1000）。
         :param wait_tol: 到位判定容差（rad）。
         :param wait_timeout: 到位等待上限（秒），超时抛 ``RuntimeError``。
@@ -1342,18 +1306,18 @@ class JoyArm:
 
     def safe_home(self, t=None, *, wait_tol: float = 0.05,
                   wait_timeout: float = 10.0) -> None:
-        """安全回到 home 姿态（本体 + 末端）：本体走 MIT 阻抗模式（带重力
-        补偿的柔和跟踪），末端走位置模式到 ``end_home``。
+        """安全回到 home 姿态（本体 + 末端）
+
+        本体走 MIT 阻抗模式，末端走位置模式。
         """
         self._require_connected()
         self._require_enabled_arm()
         self._safe_move(self.arm_home, self.end_home, t,
                         wait_tol=wait_tol, wait_timeout=wait_timeout)
 
-    def home_to_zero(self, t=None, *, wait_tol: float = 0.05,
-                     wait_timeout: float = 10.0) -> None:
-        """从 home 走到零位（本体 + 末端）。会先确认当前确实在 home（否则
-        报错让你先 ``safe_home``），再用与 ``safe_home`` 相同的柔和方式走到零位。
+    def home_to_zero(self, t=None, *, wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
+        """从 home 走到零位（本体 + 末端）。
+        会先确认当前确实在 home（否则报错），再走到零位。
 
         :raises RuntimeError: 当前不在 home 位形（请先 :meth:`safe_home` /
             :meth:`safe_zero`）。
@@ -1371,18 +1335,19 @@ class JoyArm:
         self._safe_move(self.arm_zero, self.end_zero, t,
                         wait_tol=wait_tol, wait_timeout=wait_timeout)
 
-    def safe_zero(self, t=None, *, wait_tol: float = 0.05,
-                  wait_timeout: float = 10.0) -> None:
-        """安全回零（本体 + 末端）= ``safe_home()`` 回 home，再
-        ``home_to_zero()`` 走到零位；任何一段失败立即停下报错。
+    def safe_zero(self, t=None, *, wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
+        """安全回零（本体 + 末端）
+        
+        先``safe_home()`` 回 home，再 ``home_to_zero()`` 走到零位
         """
         self._require_connected()
         self.safe_home(t, wait_tol=wait_tol, wait_timeout=wait_timeout)
         self.home_to_zero(t, wait_tol=wait_tol, wait_timeout=wait_timeout)
 
     def move_l(self, pose, t=None, **kw) -> None:
-        """末端走直线到目标位姿（**占位，未实现**）：需要逆运动学 + 笛卡尔
-        轨迹规划实现后落地。当前请用 ``move_j`` 或运动管线。
+        """末端走直线到目标位姿（**占位，未实现**）
+        
+        需要逆运动学 + 笛卡尔轨迹规划实现后落地。当前请用 ``move_j`` 或运动管线。
         """
         raise NotImplementedError(
             "joyarm.py - move_l：笛卡尔直线运动需 ikine + 笛卡尔规划，尚未实现；"
@@ -1391,17 +1356,14 @@ class JoyArm:
     def teach_start(self) -> None:
         """开始拖动示教（**占位，未实现**）：需要重力补偿实现后落地。
 
-        目标效果：MIT 模式 + 重力前馈 + 零刚度（kp=0）——臂只剩重力补偿，
-        可徒手拖动，同时录制关节轨迹（录给 :meth:`teach_play` 回放）。
-        与 :meth:`hold_position` 的区别：那个是"抓"住不动，这个是随便拖。
+        目标效果：MIT 模式 + 重力前馈 + 零刚度（kp=0）——臂只剩重力补偿，可徒手拖动，同时录制关节轨迹。
         """
         raise NotImplementedError(
             "joyarm.py - teach_start：拖动示教需 dynamics 重力补偿实现"
             "（MIT 模式 + gravity 前馈 + 零刚度 kp=0）")
 
     def teach_play(self) -> None:
-        """示教轨迹回放（**占位，未实现**）：需要 :meth:`teach_start` 的录制
-        能力落地后实现。
+        """示教轨迹回放（**占位，未实现**）：需要 :meth:`teach_start` 的录制。
 
         目标效果：退出拖动示教，把录到的关节轨迹做时间参数化后回放。
         """
@@ -1410,12 +1372,8 @@ class JoyArm:
             "（录制关节轨迹 → 时间参数化 → 回放）")
 
     def teleop_keyboard(self) -> None:
-        """笛卡尔键盘遥操作（**占位，未实现**）：需要键盘输入映射与微分逆解
-        实现后落地。
+        """笛卡尔键盘遥操作（**占位，未实现**）
 
-        目标效果：键盘按键（如 WASD/QE 平移 + RF 旋转）映射成末端笛卡尔
-        速度指令，经速度限幅和微分逆解（``q̇ = J⁺·V``）转成关节速度下发；
-        松键减速停止。属第十二章示教遥操作的教学内容。
         """
         raise NotImplementedError(
             "joyarm.py - teleop_keyboard：笛卡尔键盘遥操作需键盘映射 + "
@@ -1425,8 +1383,7 @@ class JoyArm:
     # 八、安全与急停：任何状态都能用；出事先想到 damping_mode
     # ============================================================
     def damping_mode(self, kd: float = 5.0) -> None:
-        """紧急阻尼：**任何状态**下把全部电机（含末端）切成"只抵抗运动"
-        的模式——电机表现像有黏滞阻力，防乱动/防下坠。
+        """紧急阻尼：**任何状态**下把全部电机（含末端）切成"只抵抗运动"的模式。
 
         依次做：切 MIT 模式 → 发阻尼指令 → 尽力使能 → 再发一帧。每步都
         尽力执行：某步失败只告警，不影响其他电机收到指令。
@@ -1441,9 +1398,8 @@ class JoyArm:
     def hold_position(self, kp=None, kd=None, tau=None) -> None:
         """原地保持：把当前位置设为目标，用 MIT 模式"抓"住不放。
 
-        ``tau`` 不填时自动加重力补偿（需配置 dynamics 域；没配置就置零并
-        告警——纯靠刚度硬撑）。``kp/kd`` 不填用 config 的 MIT 增益。
-        与 :meth:`damping_mode` 的区别：阻尼是"软"的防下坠，这里是原地抓牢。
+        ``tau`` 不填时自动加重力补偿（需配置 dynamics 域；否则置零并告警——纯靠刚度硬撑）。
+        ``kp/kd`` 不填写则用 config 的 MIT 增益。
         """
         self._require_connected()
         self._require_enabled_arm()
@@ -1466,8 +1422,7 @@ class JoyArm:
         self.set_arm_command(ControlMode.POSITION, q=q)
 
     def is_in_position(self, q=None, pose=None, frame=None,
-                       tol_q: float = 0.05, tol_pos: float = 1e-3,
-                       tol_rot: float = 1e-2) -> bool:
+            tol_q: float = 0.05, tol_pos: float = 1e-3, tol_rot: float = 1e-2) -> bool:
         """到位判断：``q``（关节目标）和 ``pose``（笛卡尔目标）二选一传入。
 
         关节：每个关节都进入 ``tol_q``（rad）容差内算到位；
@@ -1697,14 +1652,14 @@ class JoyArm:
         return self._solve("dynamics", "gravity", self, q)
 
     # ============================================================
-    # 十二、进阶：运动管线（三个后台线程自动跑）与运行中换算法
+    # 十二、进阶：运动管线（三个后台线程自动跑）与运行中换算法求解器
     # 数据流：set_target_traj 写目标 → 规划线程算系数 → 采样线程产当前帧
-    #         → 控制线程算指令并自动下发；set_solver 运行中可换规划器/控制器
+    #        → 控制线程算指令并自动下发；set_solver 运行中可换规划器/控制器
     # ============================================================
     def set_target_traj(self, targets) -> None:
         """写入运动目标（写进去的是拷贝，之后改原对象不影响）。
 
-        :param targets: :class:`TrajFrame` 一帧或列表；``None``/空列表 = 清空
+        :param targets: :class:`TrajFrame` 单帧或帧列表；``None``/空列表 = 清空
             目标（规划器回退规划回 q_home）。目标是否有效、是否来不及执行，
             由规划线程检查、无效的会剔除。
         """
@@ -1721,10 +1676,7 @@ class JoyArm:
         return self._target_traj
 
     def set_current_frame(self, frame: TrajFrame) -> None:
-        """写入当前轨迹帧（规划线程用；写的是拷贝）。一次性整体替换，控制
-        线程任何时刻读到的都是完整的一帧（最多慢一个换帧周期）。
-        帧写进去后就不要再改它。
-        """
+        """写入当前轨迹帧（规划线程用；写的是拷贝）"""
         self._current_frame = copy.deepcopy(frame)
 
     def get_current_frame(self) -> Optional[TrajFrame]:
@@ -1732,17 +1684,14 @@ class JoyArm:
         return self._current_frame
 
     def start_motion(self) -> None:
-        """启动常规运动管线：三个后台线程（规划 plan_hz / 采样 sample_hz /
-        控制 ctrl_hz）开始自动跑。
+        """启动常规运动管线三个线程：规划 plan_hz / 采样 sample_hz / 控制 ctrl_hz
 
-        启动时按控制器的要求自动切电机模式，并立刻算出第一帧。已在运行时
-        再调用没有副作用。
+        启动时按控制器的要求自动切电机模式，并立刻算出第一帧。已在运行时再调用没有副作用。
 
         注意：启动时若还没写过目标，第一个周期就会规划"回家 q_home"——
         请先 ``set_target_traj`` 写目标，或确认往 home 走是安全的。
 
-        :raises RuntimeError: 未连接真机，或 config 没配 robotics.traj /
-            robotics.control 域。
+        :raises RuntimeError: 未连接真机，或 config 没配 robotics.traj /robotics.control 域。
         """
         if self._motion_running:
             return

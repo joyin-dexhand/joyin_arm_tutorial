@@ -66,8 +66,9 @@ from .utils.transforms import (
     slerp,
 )
 
-# ---- 设备模型层（JoyArm 单类 + 型号工厂）----
+# ---- 设备模型层（JoyArm 单类 + FakeArm 无硬件替身 + 型号工厂）----
 from .joyarm.joyarm import JoyArm
+from .joyarm.fakearm import FakeArm
 from .joyarm import JoyArmFactory, joyarm_factory
 
 # ---- 算法层（robotics；只按属性约定调用 arm，不 import joyarm）----
@@ -132,6 +133,7 @@ __all__ = [
     "slerp",
     # 设备模型层
     "JoyArm",
+    "FakeArm",
     "JoyArmFactory",
     "joyarm_factory",
     # 求解器策略接口（各章实现注册后接入）+ 注册装饰器

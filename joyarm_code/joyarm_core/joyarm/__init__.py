@@ -1,6 +1,8 @@
 """``joyarm_core.joyarm`` —— JoyArm 机械臂类 + 型号工厂。
 
 JoyArm：机械臂类（负责把各子功能按config装配起来，对外提供统一调用入口，见 :mod:`joyarm_core.joyarm.joyarm`）；
+FakeArm：JoyArm 的无硬件最小替身（鸭子类型满足"arm 协议"，供 robotics 算法测试与教程章节
+        最小示例使用，见 :mod:`joyarm_core.joyarm.fakearm`）——``from joyarm_core import FakeArm``；
 JoyArmFactory：按型号名创建（三处名称须一致：工厂入参 = configs/<型号>.yaml 文件名 = config文件 ``basic.name`` 字段）
                 ——外部推荐入口::
 
@@ -21,8 +23,9 @@ from __future__ import annotations
 import logging
 
 from .joyarm import JoyArm, load_config
+from .fakearm import FakeArm
 
-__all__ = ["JoyArm", "JoyArmFactory", "joyarm_factory", "load_config"]
+__all__ = ["JoyArm", "FakeArm", "JoyArmFactory", "joyarm_factory", "load_config"]
 
 logger = logging.getLogger("joyarm_core.joyarm")
 
