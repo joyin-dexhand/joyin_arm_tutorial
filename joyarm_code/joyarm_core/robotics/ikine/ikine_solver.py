@@ -71,7 +71,7 @@ class IkineSolver(ABC):
         **不做限位剔除**，但逐关节尝试 ``±2π`` 平移，使每组解尽量落入关节限位范围内（等价角中取离限位区间最近者）。
         """
         raise NotImplementedError(
-            "ikine_solver.py - IkineSolver.solve_all：默认实现不可用")
+            "ikine_solver.py - IkineSolver.solve_all：尚未实现求全部解（需解析法实现，求单解请用 solve）")
 
     # ----------------------------------------------------------
     # ikine 共享助手（±2π 归位 + 限位剔除选最近；解析法实现直接复用）

@@ -14,18 +14,24 @@ config 按名引用即可接入 JoyArm（改 config 即换算法）：
     - trajectory：轨迹规划
     - control：控制律
 """
-from .fkine import FkineSolver
-from .ikine import IkineSolver
-from .jacobian import JacobianSolver
-from .dynamics import DynamicsSolver
-from .trajectory import TrajPlanner
-from .control import Controller
+from .fkine import FkineSolver, PinFkineSolver
+from .ikine import IkineSolver, PinIkineSolver
+from .jacobian import JacobianSolver, PinJacobianSolver
+from .dynamics import DynamicsSolver, PinDynamicsSolver
+from .trajectory import TrajPlanner, ToJointTrajPlanner
+from .control import Controller, JointPositionController
 
 __all__ = [
     "FkineSolver",
+    "PinFkineSolver",
     "IkineSolver",
+    "PinIkineSolver",
     "JacobianSolver",
+    "PinJacobianSolver",
     "DynamicsSolver",
+    "PinDynamicsSolver",
     "TrajPlanner",
+    "ToJointTrajPlanner",
     "Controller",
+    "JointPositionController",
 ]

@@ -76,21 +76,36 @@ class TrajPlanner(ABC):
             # 剔除内容变化或中间恢复正常后再次出现时重新告警
             sig = "\n".join(dropped)
             if sig != self._last_dropped:
-                logger.warning("traj_planner.py - TrajPlanner.plan_once：剔除无效/超时"
-                               "目标帧：\n" + "\n".join(f"  - {d}" for d in dropped))
+                logger.warning(
+                    "traj_planner.py - TrajPlanner.plan_once：剔除无效/超时目标帧"
+                    "（剔除后本周期回退规划到 q_home）：\n"
+                    + "\n".join(f"  - {d}" for d in dropped)
+                    + "\n  提示：目标帧 time 须为绝对到达时间且不早于 "
+                    f"now+dt_min_required（当前 {self.dt_min_required}s）；"
+                    "提前量不足请增大 time，或经 config robotics.traj 参数"
+                    "调小 dt_min_required")
                 self._last_dropped = sig
         else:
             self._last_dropped = None
         if not kept:                           # 空目标回退：q_home 兜底
-            try:
-                kept = [self._home_fallback(arm, now)]
-            except Exception as e:
-                # 构造回退帧失败（如未连接真机读不到状态）：本周期跳过，
-                # 沿用上一次发布的系数；异常细节留 debug 级，避免离线期刷屏
-                logger.debug("traj_planner.py - TrajPlanner.plan_once："
-                             "回退帧构造失败，跳过本周期：%s", e)
-                return False
+            return self._plan_fallback_home(arm)
         self._plan(arm, kept)
+        return True
+
+    def _plan_fallback_home(self, arm) -> bool:
+        """回退规划到 q_home（空目标/无效目标的兜底路径，供子类复用）。
+
+        :return: 是否完成规划（回退帧构造失败返回 ``False``，本周期跳过）。
+        """
+        try:
+            frame = self._home_fallback(arm, time.time())
+        except Exception as e:
+            # 构造回退帧失败（如未连接真机读不到状态）：本周期跳过，
+            # 沿用上一次发布的系数；异常细节留 debug 级，避免离线期刷屏
+            logger.debug("traj_planner.py - TrajPlanner._plan_fallback_home："
+                         "回退帧构造失败，跳过本周期：%s", e)
+            return False
+        self._plan(arm, [frame])
         return True
 
     # ----------------------------------------------------------

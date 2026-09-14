@@ -252,9 +252,7 @@ class TcpLimits(_ArrayEqMixin):
     :ivar t_max: 末端最大力矩，N·m。
     """
 
-    workspace_box: np.ndarray = field(
-        default_factory=lambda: np.zeros((3, 2))
-    )
+    workspace_box: Optional[np.ndarray] = None
     v_lin_max: float = 0.0
     v_ang_max: float = 0.0
     f_max: float = 0.0

@@ -67,6 +67,10 @@ _RX_RESIDUAL_MAX = 4096
 _RX_CAP_WARN_INTERVAL = 5.0
 _RX_CAP_WARN_LAST = float("-inf")
 
+# kp/kd 越量程钳位告警节流间隔（秒）：见 _pack_mit（200Hz 指令流防刷屏）
+_MIT_RANGE_WARN_INTERVAL = 0.5
+_MIT_RANGE_WARN_LAST = float("-inf")
+
 # 错误码：0=失能正常、1=使能正常、8~E=故障（依达妙协议：8 超压/9 欠压/A 过流/
 # B MOS超温/C 线圈超温/D 通信丢失/E 过载）
 _ERR_DISABLED, _ERR_ENABLED = 0, 1
@@ -149,12 +153,28 @@ def _uint_to_float(x: int, x_min: float, x_max: float, bits: int) -> float:
 
 def _pack_mit(q: float, dq: float, tau: float, kp: float, kd: float,
               limits: tuple[float, float, float]) -> bytes:
-    """打包 MIT 指令帧载荷（8 字节）：``q16 | dq12 | kp12 | kd12 | tau12`` 共 64bit。"""
+    """打包 MIT 指令帧载荷（8 字节）：``q16 | dq12 | kp12 | kd12 | tau12`` 共 64bit。
+
+    kp/kd 超出 12bit 编码量程（``0 ≤ kp ≤ 500``、``0 ≤ kd ≤ 5``）时就近钳位
+    并节流告警——定点编码本身会静默截断，此处显式留痕防"增益名不副实"。
+    """
+    global _MIT_RANGE_WARN_LAST
+    kp_c, kd_c = _clamp(kp, 0.0, _KP_MAX), _clamp(kd, 0.0, _KD_MAX)
+    now = time.monotonic()
+    clipped = [f"{n}={v:g} → {c:g}（量程 0~{hi:g}）"
+               for n, v, c, hi in (("kp", kp, kp_c, _KP_MAX), ("kd", kd, kd_c, _KD_MAX))
+               if v != c]
+    if clipped and now - _MIT_RANGE_WARN_LAST >= _MIT_RANGE_WARN_INTERVAL:
+        _MIT_RANGE_WARN_LAST = now
+        logger.warning(
+            "backend_dm.py - _pack_mit：kp/kd 超出 MIT 帧编码量程，已就近钳位"
+            f"：{'；'.join(clipped)}；实际生效以钳位后为准，请核对 config 增益"
+            "或指令参数")
     pmax, vmax, tmax = limits
     q_u = _float_to_uint(q, -pmax, pmax, 16)
     dq_u = _float_to_uint(dq, -vmax, vmax, 12)
-    kp_u = _float_to_uint(kp, 0.0, _KP_MAX, 12)
-    kd_u = _float_to_uint(kd, 0.0, _KD_MAX, 12)
+    kp_u = _float_to_uint(kp_c, 0.0, _KP_MAX, 12)
+    kd_u = _float_to_uint(kd_c, 0.0, _KD_MAX, 12)
     tau_u = _float_to_uint(tau, -tmax, tmax, 12)
     b = bytearray(8)
     b[0] = (q_u >> 8) & 0xFF
@@ -391,6 +411,10 @@ class DmCanBus:
     # ---- 收发 ----
     def send(self, can_id: int, data: bytes) -> None:
         """发送一帧 CAN 报文（30 字节桥帧封装，TX 锁串行化）。"""
+        if self._ser is None:
+            raise RuntimeError(
+                f"backend_dm.py - DmCanBus.send：总线 {self.channel} 已关闭"
+                f"（close/disconnect 之后不可发送），请先 connect() 再发送")
         frame = _pack_tx(can_id, bytes(data))
         with self._tx_lock:
             self._ser.write(frame)
@@ -699,15 +723,17 @@ class BackendDM(Backend):
         使能并核对使能态；逐电机 best-effort，收尾汇总未恢复项。"""
         bad: list[str] = []
         for m in motors:
-            fault = _ERR_FAULT_NAMES.get(m.err, "故障")
+            fault = _ERR_FAULT_NAMES.get(m.err, "故障")   # 槽内旧值仅作初值兜底
             m.bus.disable(m)                      # ① 失能 = DM 协议的故障清除
             cleared = False
             for _ in range(10):
                 m.clear_state()
                 m.bus.refresh(m)
-                if m.wait_state(0.05) and m.err in (_ERR_ENABLED, _ERR_DISABLED):
-                    cleared = True
-                    break
+                if m.wait_state(0.05):
+                    fault = _ERR_FAULT_NAMES.get(m.err, "故障")   # 以最新应答为准
+                    if m.err in (_ERR_ENABLED, _ERR_DISABLED):
+                        cleared = True
+                        break
             if not cleared:
                 bad.append(f"{m.name}：故障未清除（{fault}({m.err:#x})，可能需断电排查）")
                 continue

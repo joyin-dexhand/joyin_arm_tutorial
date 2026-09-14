@@ -485,9 +485,9 @@ class JoyArmFullTest:
         arm = self.arm
         for action, target in (("open", self.end_qmin), ("close", self.end_qmax),
                                ("zero", _clamp(0.0, self.end_qmin, self.end_qmax))):
-            getattr(arm, f"end_{action}")()
+            getattr(arm, f"set_end_{action}")()
             ok = self._wait_end_q(target)
-            print(f"  end_{action:<6}→ {target:+.4f} rad：{'✓ 到位' if ok else '未到位'}")
+            print(f"  set_end_{action:<4}→ {target:+.4f} rad：{'✓ 到位' if ok else '未到位'}")
         arm.set_end_position(99.0)                          # 越行程 → 裁剪
         self._wait_end_q(self.end_qmax)
         q = float(arm.get_end_state()["q"][0])

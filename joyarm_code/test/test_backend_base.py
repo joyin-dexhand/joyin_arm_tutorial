@@ -4,7 +4,10 @@
 段不启用；只存硬限位、无软限位属性）；②本体守卫
 （q 硬限位 / dq、tau 幅值 / kp、kd 透传 / 单关节切片 / 维度不符放行）；
 ③末端守卫（逐电机裁剪 / 标量广播裁剪（多执行器）/ force 按 ±tau_max 数值
-守卫 / MIT 末端）；④越限告警节流。
+守卫 / MIT 末端）；④越限告警节流；⑤缓存契约默认实现（read_state_cache_* /
+state_age_* 未覆写时 NotImplementedError）；⑥指令升维与透传细节（_vec /
+列表输入 / MIT kp/kd=None 透传 / 末端标量+单电机 / 末端维度不符放行 /
+限内不告警 / 末端缺 q 键 ±∞ 不裁）。
 
 运行：``python test/test_backend_base.py`` 或 pytest。
 """
@@ -302,6 +305,90 @@ def test_guard_warns_on_clip():
         assert len(cap.msgs) == 2
     finally:
         be_mod.time = orig_time
+        log.removeHandler(cap)
+
+
+# ----------------------------------------------------------
+# 缓存契约默认实现（未覆写后端显性 NotImplementedError）
+# ----------------------------------------------------------
+def test_cache_contract_defaults():
+    """read_state_cache_* / state_age_*：未覆写的后端抛 NotImplementedError
+    （消息提示回退 read_state_* 请求-应答路径）。"""
+    be = _DummyBackend(cfg=_ARM_CFG)
+    for call in (lambda: be.read_state_cache_arm(),
+                 lambda: be.read_state_cache_arm(0),
+                 lambda: be.read_state_cache_end(),
+                 lambda: be.state_age_arm(),
+                 lambda: be.state_age_end()):
+        try:
+            call()
+            raise AssertionError("应抛 NotImplementedError")
+        except NotImplementedError as e:
+            assert "未实现" in str(e)
+
+
+# ----------------------------------------------------------
+# 指令升维与透传细节
+# ----------------------------------------------------------
+def test_vec_promotion():
+    """_vec 升维：None 透传、标量 → (1,)、列表 → (k,)、统一 float dtype。"""
+    assert Backend._vec(None) is None
+    v = Backend._vec(1.5)
+    assert v.shape == (1,) and v.dtype == np.float64 and v[0] == 1.5
+    v = Backend._vec([1, 2, 3])
+    assert v.shape == (3,) and v.dtype == np.float64
+    assert np.allclose(v, [1.0, 2.0, 3.0])
+
+
+def test_list_input_promotion():
+    """列表输入指令：升维后正常裁剪（越限元素就近裁到硬限位）。"""
+    be = _DummyBackend(cfg=_ARM_CFG)
+    be.send_position_arm([5.0, 0.0, -0.5])
+    assert np.allclose(be.kernel[-1][1], [1.0, 0.0, -0.5])
+
+
+def test_mit_kp_kd_none_passthrough():
+    """MIT kp/kd=None 原样透传内核（增益回退 config 由子类内核负责，守卫不动）。"""
+    be = _DummyBackend(cfg=_ARM_CFG)
+    be.send_mit_arm(np.zeros(3), np.zeros(3), np.ones(3))   # kp/kd 缺省 None
+    _, _, _, _, kp, kd, _ = be.kernel[-1]
+    assert kp is None and kd is None
+
+
+def test_end_guard_scalar_with_single_joint():
+    """末端标量 + 单电机索引：取该电机限位切片裁剪（不触发广播分支）。"""
+    be = _DummyBackend(cfg=_END_CFG)
+    be.send_position_end(99.0, joint=1)                # g2 上限 0.5
+    assert be.kernel[-1][0] == "pos_end"
+    assert be.kernel[-1][1].shape == (1,)
+    assert np.allclose(be.kernel[-1][1], 0.5)
+
+
+def test_end_tau_dimension_mismatch_passthrough():
+    """末端 tau 长度 ≠ n_end：守卫放行，由内核校验维度。"""
+    be = _DummyBackend(cfg=_END_CFG)
+    be.send_tau_end(np.zeros(3))
+    assert be.kernel[-1][1].shape == (3,)
+
+
+def test_in_range_no_warning_and_missing_q_keys_inf():
+    """限内指令不告警；末端缺 q_min/q_max 键 → ±∞ 边界不裁（对称于缺 tau_max）。"""
+    cap = _Cap()
+    log = logging.getLogger("joyarm_core.backend")
+    log.addHandler(cap)
+    try:
+        cfg = {"end": {"joints": [
+            {"name": "g1", "q_min": -1.0, "q_max": 1.0,
+             "dq_max": 2.0, "tau_max": 10.0},
+            {"name": "g2", "dq_max": 3.0},             # 缺 q/tau 键 → ±∞
+        ]}}
+        be = _DummyBackend(cfg=cfg)
+        be.send_position_arm(np.array([0.5, -0.5, 0.0]))   # 限内：不告警
+        assert cap.msgs == []
+        be.send_position_end(np.array([5.0, 5.0]))         # 仅 g1 越限告警
+        assert len(cap.msgs) == 1 and "end" in cap.msgs[0]
+        assert np.allclose(be.kernel[-1][1], [1.0, 5.0])   # g2 不裁
+    finally:
         log.removeHandler(cap)
 
 

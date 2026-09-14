@@ -2,19 +2,23 @@
 
 点到点关节空间规划：由当前 ``(q0, dq0, ddq0)`` 到目标 ``(q1, dq1, ddq1)``
 （目标缺省速度/加速度为 0），六边界条件解五次多项式系数；采样按绝对时间输出 ``q/dq/ddq``。
+
 config ``robotics.traj`` 段写注册名 ``to_joint_traj_planner``即选用。
 """
 from __future__ import annotations
 
+import logging
 import time as _time
 from typing import List, Optional, Tuple
 
 import numpy as np
 
 from . import TrajPlanner
-from ...utils.types import TrajFrame
+from ...utils import TrajFrame
 
 __all__ = ["ToJointTrajPlanner"]
+
+logger = logging.getLogger("joyarm_core.traj_planner_to_joint")
 
 # 发布的系数包（不可变约定：发布后禁止原地修改）
 # (t0, T, c0..c2 (3,n), c3..c5 (3,n))
@@ -27,6 +31,29 @@ class ToJointTrajPlanner(TrajPlanner):
     def __init__(self, **kw):
         super().__init__(**kw)
         self._coeffs: Optional[_Coeffs] = None   # 原子发布（并发契约）
+        self._last_multi_warn: Optional[tuple] = None   # 上次多帧告警的目标时刻序列
+
+    # ----------------------------------------------------------
+    # 单帧目标策略（覆写）：多目标连续轨迹待教程章节实现
+    # ----------------------------------------------------------
+    def plan_once(self, arm) -> bool:
+        """单帧目标策略：目标序列在检查/剔除**前后**均恰为单帧才有效——
+        0/1 帧走基类路径（空 → 回退 q_home；唯一帧被剔除 → 同样回退）；
+        >1 帧告警并回退规划到 q_home（输出当前控制轨迹帧趋近 q_home）。
+        """
+        raw = list(arm.get_target_traj() or [])
+        if len(raw) <= 1:
+            return super().plan_once(arm)
+        # 多帧告警（各帧到达时刻序列不变则只告警一次，防滚动重规划刷屏）
+        times = tuple(round(float(t.time), 3) for t in raw)
+        if times != self._last_multi_warn:
+            logger.warning(
+                "traj_planner_to_joint.py - ToJointTrajPlanner.plan_once：目标"
+                f"帧数 {len(raw)} > 1（各帧到达时刻 {times}），本规划器仅支持"
+                "单帧目标——多目标连续轨迹待教程章节实现，已回退规划到 q_home；"
+                "请每次只写一帧目标（set_target_traj 单帧），多余帧会被忽略")
+            self._last_multi_warn = times
+        return self._plan_fallback_home(arm)
 
     # ----------------------------------------------------------
     # 内核：规划（解系数）与采样（按绝对时间求值）

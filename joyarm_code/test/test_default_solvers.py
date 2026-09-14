@@ -204,12 +204,12 @@ def test_quintic_planner():
         fr = sample(dt)
         assert np.max(np.abs(fr.q - prev)) < 0.2
         prev = fr.q
-    # 多目标取终点（最晚时刻）
+    # 多帧目标：仅支持单帧——告警并回退规划到 q_home（哑臂 arm_home=全零）
     fa._target = [TrajFrame(time=t_end, q=q1),
                   TrajFrame(time=t_end + 1.0, q=q1 * 0.5)]
     qp.plan_once(fa)
     fr = qp.sample_frame(time.time() + 5.0)
-    assert np.allclose(fr.q, q1 * 0.5, atol=1e-6)
+    assert np.allclose(fr.q, fa.arm_home, atol=1e-6)
 
 
 class _LimArm:
@@ -384,7 +384,7 @@ def test_pipeline_with_default_solvers():
         arm.stop_motion()                                   # 默认纯阻尼收尾
         assert ("set_mode_arm", ControlMode.MIT) in be.calls
         mit = [c for c in be.calls if c[0] == "send_mit_arm"]
-        assert mit and np.allclose(mit[-1][1], 0.0) and np.allclose(mit[-1][2], 10.0)
+        assert mit and np.allclose(mit[-1][1], 0.0) and np.allclose(mit[-1][2], 5.0)
         arm.start_motion()                                  # 重启后关闭阻尼
         n_mit = len([c for c in be.calls if c[0] == "send_mit_arm"])
         arm.stop_motion(damping=False)
