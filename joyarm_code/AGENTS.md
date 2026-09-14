@@ -12,7 +12,7 @@
 > 以下为 joyarm_core 架构的**持久化约束**：代码演进不得违背；如需变更须先更新本节并经人工确认。
 
 1. **组合根·单类**：`joyarm/` 的 `JoyArm` 是组合根，基于 config 型号配置对其他层功能（backend、robot 资产、robotics 各求解器）做**可更换式组合**——能力全部委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**无型号子类**：型号差异全部由配置表达（config yaml + URDF 资产 + backend 后端类），型号标识为 `model` 属性（= 工厂入参 = yaml 文件名 = `basic.name`）。**新型号 = `configs/<型号>.yaml` + `robot_model/` 资产 + `backend/backend_*.py`**（backend `REGISTRY` 一行；型号与整机后端 1:1，如 `joyarm_dm` ↔ `backend_dm`）。
-2. **接口先行·内置默认实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）= **ABC 接口 + 内置默认实现 + `REGISTRY`**（Pin 四域 `pin_*_solver` / 到关节目标规划 `to_joint_traj_planner` / 关节位置控制 `joint_position_controller`，5/6/7 轴通用、config 选配启用）——六域均为**纯计算内核、无线程**（traj/control 的周期调度与指令门控归 JoyArm 运动管线三线程，控制器经 `MODE` 类属性声明所需电机模式）；各章自定义算法为实现类加 `@register` 装饰器（`robotics/_registry.py`）即自动注册接入（**实现类名 = 算法前缀 + 域基类名，如 `PinFkineSolver`；注册名 = 类名小写+下划线，如 `pin_fkine_solver`**，换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`，过渡正常态），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。
+2. **接口先行·内置默认实现**：robotics 六域（fkine/ikine/jacobian/dynamics/traj/control）= **ABC 接口 + 内置默认实现 + `REGISTRY`**（Pin 四域 `pin_*_solver` / 到关节目标规划 `to_joint_traj_planner` / 关节位置控制 `joint_position_controller`，5/6/7 轴通用、config 选配启用）——六域均为**纯计算内核、无线程**（traj/control 的周期调度与指令门控归 JoyArm 运动管线三线程，控制器经 `MODE` 类属性声明所需电机模式）；各章自定义算法在所在域 `REGISTRY` 显式加一行注册（import 类 + 表中一行，默认实现恒居首）即接入（**实现类名 = 算法前缀 + 域基类名，如 `PinFkineSolver`；注册名 = 类名小写+下划线，如 `pin_fkine_solver`**，换 config 即换算法）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`，过渡正常态），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。
 3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族，多电机末端如灵巧手通用）。
 4. **软化仅限工厂入口**：工厂创建时 config 缺失、命名链不符（`basic.name` ≠ 型号名）或初始化异常则**返回 `None` 并输出创建失败信息**（不抛异常）；`JoyArm` 直用为**硬失败**——config 必需（缺失/自检不通过即抛）、backend 必配、robotics 配置的成员必须全部创建成功（约束2）。
 5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `target`/`frame`/`q0`），**特有参数 keyword-only 在后**（仅特定算法需要，如数值法的 `tol`/`iters`，解析法可忽略）——各章实现求解器时遵守。
@@ -20,6 +20,8 @@
 7. **robotics 独立运行**：robotics 子模块不得 import `joyarm`（鸭子类型消费 `arm`）；各章算法实现须可脱离 JoyArm 独立运行与测试（直接实例化，构造参数自足）。
 8. **教学数据读取路径**：config 在 `JoyArm.__init__` **一次性深拷贝**存入 `self._config`（隔离外部引用，`get_config()` 另返回深拷贝）；教学数据（如 MDH 参数 `joyarm.arm_mdh_and_limits`）由教学算法经 `arm.get_config()` 从**类内已加载数据**读取，**不重新加载 yaml 文件**；MDH 校验（yaml 可不含该字段）在算法层使用时做，不在 `check_config`。
 9. **开闭原则**：常见变更（新型号、换电机、结构更新、升级算法）以最小改动完成（新型号三件套 / 换算法 = 改 config 注册名 + 注册表一行），对扩展开放、对修改关闭；新增实现不得改动 `JoyArm` 接口签名。
+10. **全局优先（执行约束）**：任何改动须为**全局最优**而非局部最优——源码可见结构必须与运行时行为一致（**所见即所得**：禁止 import 副作用隐式注册、动态改写等造成「打开文件看到的」与「运行时实际的」分歧的机制，如已移除的 @register 装饰器）；局部加固（防错/便利）与全局一致性冲突时局部让位、必要时阻挡局部修改；改动审查从整个代码库与读者心智模型出发，不因小失大。
+11. **大道至简·第一性原理（执行约束）**：**用最简单的操作做最复杂的事**——先看透问题本质，提炼能覆盖整类问题的本质原语并把它用深用透（如原子引用赋值之于并发读写、config 驱动之于型号差异），一个原语胜过堆叠多个浅层机制；实现与文档说人话、精简、易于理解，少用黑科技（动态建类/反射/元编程/隐式回调链等），仅当常规手段无法实现或存在明显缺陷时才引入更深技术并就地文档说明——简洁是深度理解的产物，不是能力妥协。
 
 ## 1. 架构细化
 
@@ -65,6 +67,7 @@ joyarm_code/
 │   ├── test_backend_dm_full.py      #   DM 真机全覆盖（42 项，风险递增、逐项确认）
 │   ├── test_backend_base.py         #   Backend 基类限位守卫离线单测（arm/end 两族，哑后端）
 │   ├── test_limits.py               #   utils/limits.py 离线单测（限位构建/直配软限位 + 裁剪）
+│   ├── test_default_solvers.py     #   六默认求解器离线测试（pin 对拍/五次边界/config 端到端）
 │   ├── test_joyarm_full.py          #   JoyArm 真机分层测试（29 项九层风险递增；回放/求解器类随各章实现补回）
 │   └── test_joyarm_factory.py       #   工厂软化+直用硬失败/六域字典机制/静态自检/配置 API/前置校验族
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
@@ -109,7 +112,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 - **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
 - **设备模型**（`joyarm/`）：`JoyArm` = 组合根单类（无型号子类）；`joyarm_factory(model)` 外部推荐入口（失败 → `None` + 失败信息）。文件 `joyarm.py` / `__init__.py`。
 - **Backend 整机两层**（`backend/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendDM`（1:1：`backend_dm` ↔ `joyarm_dm`）。`REGISTRY` + `get_backend(name)` 供 config 选型。
-- **属性约定**：型号名 = `model`（str，product model）；pinocchio 构型产物 = `pin_model`/`pin_data`（**勿与型号名混淆**）；关节数 = `n_arm`/`n_end`；硬限位 = `arm_limits`/`end_limits`（config `backend.*.joints` 四键，初始化后固定，下发守卫唯一依据）；软限位 = `arm_limits_soft`/`end_limits_soft`（config `joyarm.*_soft_limits` 直配，缺省软=硬，仅上层状态判断用）；整机后端 = `_backend`（私有，必配）；**六域策略成员字典** = `_fkine_solvers`/`_ikine_solvers`/`_jacobian_solvers`/`_dynamics_solvers`/`_traj_planners`/`_controllers`（`dict[注册名→实例]`）+ `_active_name`（域→激活注册名）；config = `self._config`（构造时深拷贝，`get_config()` 深拷贝读取）。求解器形参用 `arm`（鸭子类型）。
+- **属性约定**：型号名 = `model`（str，product model）；pinocchio 构型产物 = `pin_model`（只读共享）/`pin_data`（用户直连口，内部求解用私有 Data 不碰它；**勿与型号名混淆**）；关节数 = `n_arm`/`n_end`；硬限位 = `arm_limits`/`end_limits`（config `backend.*.joints` 四键，初始化后固定，下发守卫唯一依据）；软限位 = `arm_limits_soft`/`end_limits_soft`（config `joyarm.*_soft_limits` 直配，缺省软=硬，仅上层状态判断用）；整机后端 = `_backend`（私有，必配）；**六域策略成员字典** = `_fkine_solvers`/`_ikine_solvers`/`_jacobian_solvers`/`_dynamics_solvers`/`_traj_planners`/`_controllers`（`dict[注册名→实例]`）+ `_active_name`（域→激活注册名）；config = `self._config`（构造时深拷贝，`get_config()` 深拷贝读取）。求解器形参用 `arm`（鸭子类型）。
 - **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…，末端动作 `set_end_open/close/zero`）；执行类统一 `joint` 形参（None=全部）；`set_mode_*` 默认 POSITION；参数读写 `read/write_param_{arm,end}`（joint=None 读返列表、写标量广播或等长列表）；求解切换 `set_solver(domain, name)`、查询 `list_solvers(domain)`（每域有且仅一个激活）。
 - **算法可换（成员即策略）**：每域 = ABC + `REGISTRY`（实现一节点一文件，各章新增）。
 
@@ -118,7 +121,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 | 原则 | 落地 |
 |:--|:--|
 | **组合根·单类** | `JoyArm` 持 `_backend` + 六域成员字典；公开门面全部委托激活成员，换 config 即换算法；型号差异全在 config（约束1/6） |
-| **接口先行·内置默认实现** | 六域 = ABC + 内置默认实现（Pin 四域/到关节目标规划/关节位置控制，config 选配）；域未配置即无成员（门面显性报错）；**注册名无效→构造失败（硬失败）**；章节实现 @register 后同样 config 选型（约束2） |
+| **接口先行·内置默认实现** | 六域 = ABC + 内置默认实现（Pin 四域/到关节目标规划/关节位置控制，config 选配）；域未配置即无成员（门面显性报错）；**注册名无效→构造失败（硬失败）**；章节实现显式入表后同样 config 选型（约束2） |
 | **软化仅限工厂** | 工厂 config 缺失/命名链不符/初始化异常→`None`+信息；`JoyArm` 直用硬失败：config 必需（`check_config` 静态自检通过才初始化）、backend 必配、域成员必成（约束4） |
 | **教学数据读取** | config 一次性深拷贝存 `self._config`；教学算法经 `arm.get_config()` 读类内数据，不重读 yaml（约束8） |
 | **单向导入、无环** | `joyarm` → `robotics`/`backend` → `utils`；robotics/backend 不 import joyarm（约束7） |
@@ -164,7 +167,7 @@ JoyArm（单类组合根：_backend + 六域成员字典 + config/_config）
    │  教学数据（MDH 等）：算法层经 arm.get_config() 读类内 config（不重读 yaml）
 Backend(ABC) ──▶ BackendDM ✅
 六域 ABC + 内置默认实现（Pin 四域 / to_joint_traj_planner / joint_position_controller）──▶
-   章节自定义实现 @register 后并列选配（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
+   章节自定义实现显式入表后并列选配（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
    traj Ch5 / control Ch6/8/9 / dynamics Ch8）
 ```
 
@@ -183,7 +186,7 @@ JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件自�
 JoyArm.set_solver(domain, name) · list_solvers(domain)   # 运行期切换/查询（有且仅一个激活） ✅
 # 计算门面（已配置域可用；参数排序：通用前/特有 keyword-only 后，约束5）
 JoyArm.fkine(q, frame, rep="pose") · ikine(target, frame, q0, **kw) → IKResult 单解（限位剔除+q0 最近） · ikine_all(target, frame) → 全解 (K,n)（±2π 归位）
-JoyArm.jac(q, frame, ref="base") · fkine_vel(q, dq, frame, ref)（V=J·q̇ 六维速度旋量） · ikine_vel(q, V, frame, ref, damping=1e-3)（q̇=J*·V 微分逆解） · manipulability（w=Πσᵢ） / statics(q, F∈R^6, frame)（τ=JᵀF ∈ R^n_arm）；求解统一经 _solve（RLock 串行化，内核免线程安全）
+JoyArm.jac(q, frame, ref="base") · fkine_vel(q, dq, frame, ref)（V=J·q̇ 六维速度旋量） · ikine_vel(q, V, frame, ref, damping=1e-3)（q̇=J*·V 微分逆解） · manipulability（w=Πσᵢ） / statics(q, F∈R^6, frame)（τ=JᵀF ∈ R^n_arm）；求解统一经 _solve 纯派发——内置 Pin 求解器每次计算新建私有 pin.Data，无共享可变状态、多线程天然安全
 JoyArm.idyn / mass_matrix / coriolis / gravity · cartesian_inertia(q, frame)
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
 JoyArm.connect() / disconnect()（支持 with 上下文：enter 自动 connect，exit 尽力 disable→disconnect；connect 自动启动**状态保活线程** joyarm-state@10Hz——空闲期缓存陈旧（age>0.15s）时主动刷新，控制流期间随指令帧刷新零总线开销）· enable/disable_{arm,end} · set_zero_{arm,end} · clear_fault_{arm,end}（验证式清错复位） · set_mode_{arm,end}(mode=POSITION, joint=None) · read_mode_{arm,end}

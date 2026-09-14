@@ -11,7 +11,6 @@ from __future__ import annotations
 import numpy as np
 import pinocchio as pin
 
-from .._registry import register
 from . import IkineSolver
 from ...utils.types import IKResult, Pose
 
@@ -24,14 +23,13 @@ def _frame_id(model, frame) -> int:
     """帧名/索引 → 帧索引；未找到抛错（getFrameId 静默返回哨兵，须拦截）。"""
     fid = int(frame) if isinstance(frame, (int, np.integer)) \
         else model.getFrameId(str(frame))
-    if fid >= model.nframes:
+    if not 0 <= fid < model.nframes:   # 拒越界与负索引
         raise ValueError(
             f"ikine_solver_pin.py - PinIkineSolver：帧 {frame!r} 在模型中未找到；"
             f"可用帧：{[f.name for f in model.frames]}")
     return fid
 
 
-@register
 class PinIkineSolver(IkineSolver):
     """逆运动学默认实现：LM 数值迭代 + 多起点重启（pinocchio FK/雅可比）。"""
 
@@ -55,14 +53,16 @@ class PinIkineSolver(IkineSolver):
 
         不可达目标**不抛异常**——返回 ``IKResult(success=False, err=最优残差)``。
         """
-        model, data = arm.pin_model, arm.pin_data
+        model = arm.pin_model
+        data = pin.Data(model)      # 整个求解一份私有 Data（迭代内复用、不共享）
         fid = _frame_id(model, frame)
         limits = arm.arm_limits
         T_ref = target.T
         starts = [np.asarray(q0, dtype=float).reshape(-1)]
-        rng = np.random.default_rng(0)                      # 重启确定性
-        for _ in range(self.restarts):
-            starts.append(rng.uniform(limits.q_min, limits.q_max))
+        if limits is not None:                              # 无限位声明则不重启
+            rng = np.random.default_rng(0)                  # 重启确定性
+            for _ in range(self.restarts):
+                starts.append(rng.uniform(limits.q_min, limits.q_max))
 
         best = IKResult(success=False, err=float("inf"))
         total = 0
@@ -100,7 +100,8 @@ class PinIkineSolver(IkineSolver):
                 n = np.linalg.norm(dq)
                 if n > self.step_max:
                     dq *= self.step_max / n
-                q_new = np.clip(q + dq, limits.q_min, limits.q_max)
+                q_new = np.clip(q + dq, limits.q_min, limits.q_max) \
+                    if limits is not None else q + dq
                 err_new = self._err(model, data, fid, q_new, T_ref)
                 if err_new < err:
                     lam = max(lam * 0.5, 1e-6)

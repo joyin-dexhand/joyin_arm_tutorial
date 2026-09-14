@@ -42,6 +42,10 @@ class TrajPlanner(ABC):
             管线 traj-sample 线程按此属性起节拍，Hz。
         :param dt_min_required: 目标最小提前量——时间早于``now + dt_min_required`` 的目标帧视为来不及执行，剔除。
         """
+        if plan_hz <= 0 or sample_hz <= 0:
+            raise ValueError(
+                f"traj_planner.py - TrajPlanner.__init__：频率须为正数"
+                f"（plan_hz={plan_hz}, sample_hz={sample_hz}）")
         self.plan_hz = float(plan_hz)
         self.sample_hz = float(sample_hz)
         self.dt_min_required = float(dt_min_required)
@@ -50,9 +54,11 @@ class TrajPlanner(ABC):
     # ----------------------------------------------------------
     # traj 单步内核（公开；可直接调用，亦供外部驱动（如 ROS2 节点）复用）
     # ----------------------------------------------------------
-    def plan_once(self, arm) -> None:
-        """单步规划：读桥目标 → 逐帧规则校验（无效剔除）→ 超时剔除 → 空则回退
-        q_home → 委托内核 :meth:`_plan`。"""
+    def plan_once(self, arm) -> bool:
+        """单步规划：读目标 → 逐帧校验剔除→ 超时剔除 → 空则回退q_home → 委托内核 :meth:`_plan`。
+
+        :return: 本次是否完成规划（``True`` = ``_plan`` 已被调用；回退帧构造失败等跳过路径返回 ``False``）。
+        """
         now = time.time()
         kept: List[TrajFrame] = []
         dropped: List[str] = []
@@ -83,8 +89,9 @@ class TrajPlanner(ABC):
                 # 沿用上一次发布的系数；异常细节留 debug 级，避免离线期刷屏
                 logger.debug("traj_planner.py - TrajPlanner.plan_once："
                              "回退帧构造失败，跳过本周期：%s", e)
-                return
+                return False
         self._plan(arm, kept)
+        return True
 
     # ----------------------------------------------------------
     # traj 抽象内核（_plan 系数 / sample_frame 按绝对时间采样帧）
@@ -124,6 +131,10 @@ class TrajPlanner(ABC):
                     return f"{name} 应为空（关节目标不携带该字段）"
             if tg.wrench is not None:
                 return "wrench 应为空（力参考仅随 pose 目标）"
+            for name in ("q", "dq", "ddq"):             # NaN/inf 会毒化整条轨迹
+                v = getattr(tg, name)
+                if v is not None and not np.all(np.isfinite(np.asarray(v, dtype=float))):
+                    return f"{name} 含非有限值（NaN/inf）"
         else:
             for name in ("twist", "dq", "ddq", "tau"):
                 if getattr(tg, name) is not None:

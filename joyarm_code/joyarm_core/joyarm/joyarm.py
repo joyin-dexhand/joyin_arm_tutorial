@@ -321,8 +321,8 @@ class JoyArm:
         self.connected: bool = False                     # 真机连接状态（初始化后默认不连接）
         self.ee_frame_name: str = str(basic.get("ee_frame") or "ee")  # 末端帧名
         # ---- pinocchio 构型（URDF 驱动）----
-        self.pin_model: Optional[pin.Model] = None       # URDF 解析构型模型
-        self.pin_data: Optional[pin.Data] = None         # 模型配套计算数据
+        self.pin_model: Optional[pin.Model] = None       # URDF 解析构型模型（只读共享）
+        self.pin_data: Optional[pin.Data] = None         # 用户直连口（内部求解用私有 Data，不共享此对象）
         self.ee_frame_id: int = -1                       # 末端帧索引（pinocchio frames 表）
         # ---- 本体（arm）----
         self.n_arm: int = 0                              # 本体关节数（config arm.joints 数）
@@ -363,7 +363,6 @@ class JoyArm:
         self._motion_threads: dict = {}                 # {线程名: _PeriodicThread}（start_motion 创建）
         self._traj_planned_by = None                    # 最近完成规划的规划器实例（采样发布门控，防切换后系数未初始化）
         self._switching = threading.Event()             # 热切换门闸（置位期间周期线程暂停派发）
-        self._solver_lock = threading.RLock()           # 求解器串行化（内核不保证线程安全，如 pinocchio pin_data 共享；可重入：ikine 内核回调 arm.fkine/jac）
 
         # ----------------------------------------------------------
         # init 逐步赋真实值（robot_model URDF → 关节数/名称 → 限位（硬/软）→
@@ -875,25 +874,24 @@ class JoyArm:
         return d[name]
 
     def _solve(self, domain: str, method: str, *args, **kw):
-        """统一求解入口：取激活成员并加锁调用（六域门面共用）。
+        """统一求解入口：取激活成员调用（六域门面共用，纯派发）。
 
-        求解器内核不保证线程安全（如 fkine 实现可能共享 pinocchio
-        ``pin_data``，而控制器/保活/应用线程会并发调用门面），故全部经
-        本方法串行化；用可重入锁是因 ikine/jacobian 内核会回调
-        ``arm.fkine``/``arm.jac`` 门面（同线程嵌套加锁）。
+        内置 Pin 求解器每次计算新建私有 ``pin.Data``（µs 级），多线程并发天然安全、无需排队。
         """
         solver = self._active(domain)
-        with self._solver_lock:
-            return getattr(solver, method)(*args, **kw)
+        return getattr(solver, method)(*args, **kw)
 
     def set_solver(self, domain: str, name: str):
         """运行期切换激活成员（按注册名；域 ∈ fkine/ikine/jacobian/dynamics/traj/control）。
 
         每域**有且仅有一个**激活成员：config 加载后首个为激活，此后经本方法切换。
+        生命周期接口（start/stop_motion/set_solver 热切换）约定由应用线程调用，
+        不做跨线程互斥（轨迹桥读写为单次原子引用赋值，无需锁）。
 
-        **运动管线热切换**（管线运行中切 traj/control，即时生效、无缝隙）：
+        **运动管线热切换**（管线运行中切 traj/control，即时生效）：
         - 切 ``control``：置门闸暂停派发 → 按新控制器 ``MODE`` 切电机模式 →
           翻指针 → 同步执行一拍控制（新控制器立即下发首条指令）→ 恢复派发；
+          极端交错下至多丢一拍（``_require_mode_arm`` 兜底拒发、节流记日志）；
         - 切 ``traj``：置门闸 → 翻指针 → 同步执行一次规划+采样发布（当前帧
           立即来自新规划器；同步规划失败则保持旧帧、由 plan 线程下周期重试）
           → 按新频率重整两 traj 线程节拍 → 恢复派发。
@@ -908,7 +906,9 @@ class JoyArm:
             try:
                 self.set_mode_arm(inst.MODE)      # 先切模式（门闸期间无指令下发）
                 self._active_name[domain] = name
-                self._motion_threads["ctrl-step"].set_hz(inst.ctrl_hz)
+                worker = self._motion_threads.get("ctrl-step")
+                if worker is not None:            # 并发 stop 极端下优雅降级
+                    worker.set_hz(inst.ctrl_hz)
                 try:
                     self._dispatch_ctrl()          # 新控制器立即下发首拍指令
                 except Exception as e:
@@ -921,8 +921,11 @@ class JoyArm:
             try:
                 self._active_name[domain] = name
                 self._sync_traj_tick()             # 当前帧立即来自新规划器
-                self._motion_threads["traj-plan"].set_hz(inst.plan_hz)
-                self._motion_threads["traj-sample"].set_hz(inst.sample_hz)
+                for wname, hz in (("traj-plan", inst.plan_hz),
+                                  ("traj-sample", inst.sample_hz)):
+                    worker = self._motion_threads.get(wname)
+                    if worker is not None:
+                        worker.set_hz(hz)
             finally:
                 self._switching.clear()
         else:
@@ -930,8 +933,13 @@ class JoyArm:
         return inst
 
     def list_solvers(self, domain: str) -> list:
-        """列出某域已加载成员注册名（首个为激活成员）。"""
-        return sorted(self._members(domain))
+        """列出某域已加载成员注册名（**激活成员置首**，其余按字典序）。"""
+        names = sorted(self._members(domain))
+        active = self._active_name.get(domain)
+        if active in names:
+            names.remove(active)
+            names.insert(0, active)
+        return names
 
     # ---- fkine 正运动学（参数排序：通用在前、特有 keyword-only 在后）----
     def fkine(self, q: np.ndarray, frame: Union[str, int], rep: str = "pose"):
@@ -1020,11 +1028,16 @@ class JoyArm:
         """写入目标序列（写者：应用线程，低频；**深拷贝隔离**，调用方后续
         修改不影响桥内数据）。
 
-        :param targets: :class:`TrajFrame` 单帧或列表（单帧自动归一为列表）。
-            目标有效性/超时判别在规划时由 ``TrajPlanner.plan_once`` 执行
-            （无效/超时帧剔除，目标序列为空时回退 q_home）。
+        :param targets: :class:`TrajFrame` 单帧或列表（单帧自动归一为列表）；
+            ``None`` 或空列表 = 清空目标（规划回退 q_home）。目标有效性/超时
+            判别在规划时由 ``TrajPlanner.plan_once`` 执行（无效/超时帧剔除）。
         """
-        frames = [targets] if isinstance(targets, TrajFrame) else list(targets)
+        if targets is None:
+            frames = []
+        elif isinstance(targets, TrajFrame):
+            frames = [targets]
+        else:
+            frames = list(targets)
         self._target_traj = copy.deepcopy(frames)
 
     def get_target_traj(self) -> Optional[List[TrajFrame]]:
@@ -1118,10 +1131,11 @@ class JoyArm:
 
     # ---- 管线线程体（每周期经 _active() 现查激活成员——热切换的派发基础）----
     def _tick_plan(self) -> None:
-        """规划线程单步：委托激活规划器；完成即记为已规划实例。"""
+        """规划线程单步：委托激活规划器；**完成规划**才记为已规划实例
+        （plan_once 返回 False 表示本周期跳过，不更新采样门控）。"""
         planner = self._active("traj")
-        planner.plan_once(self)
-        self._traj_planned_by = planner
+        if planner.plan_once(self):
+            self._traj_planned_by = planner
 
     def _tick_sample(self) -> None:
         """采样线程单步：激活规划器与最近完成规划的实例一致才发布（防热切换
@@ -1152,18 +1166,24 @@ class JoyArm:
     def _sync_traj_tick(self) -> None:
         """同步执行一次规划+采样发布（启动/热切换时用，当前帧立即可用）。
 
-        规划失败（如回退帧构造失败/内核异常）时保持现有帧，由 plan 线程
-        下周期重试。
+        规划失败/跳过（回退帧构造失败、内核异常等）时保持现有帧，由 plan
+        线程按节拍重试自愈——start_motion 不会因此半启动抛错。
         """
         planner = self._active("traj")
         try:
-            planner.plan_once(self)
+            ok = planner.plan_once(self)
         except Exception as e:
             logger.warning("joyarm.py - _sync_traj_tick：同步规划失败，沿用现有帧"
                            "（plan 线程将按节拍重试）：%s", e)
             return
+        if not ok:
+            return                             # 本周期跳过（如回退帧失败）
         self._traj_planned_by = planner
-        self.set_current_frame(planner.sample_frame(time.time()))
+        try:
+            self.set_current_frame(planner.sample_frame(time.time()))
+        except Exception as e:
+            logger.warning("joyarm.py - _sync_traj_tick：同步采样发布失败，沿用"
+                           "现有帧（sample 线程将按节拍重试）：%s", e)
 
     # ----------------------------------------------------------
     # backend 真机连接与执行（依赖 _backend；connect 后才可执行 arm_*/end_*）
@@ -1181,9 +1201,14 @@ class JoyArm:
 
     def disconnect(self) -> None:
         """断开真机（先尽力停止运动管线与状态保活线程；整机后端先失能全部
-        电机再断开总线）。"""
+        电机再断开总线）。
+
+        停管线**不进纯阻尼**（``damping=False``）——紧随其后的失能断链使阻尼
+        徒增一次 best-effort 使能与延迟；需要阻尼缓冲时请先显式调用
+        :meth:`stop_motion`。
+        """
         try:
-            self.stop_motion()
+            self.stop_motion(damping=False)
         except Exception as e:
             logger.warning("joyarm.py - disconnect：停止运动管线失败（继续断开）：%s", e)
         self._stop_state_keepalive()
@@ -1234,8 +1259,9 @@ class JoyArm:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        """退出收尾（尽力而为）：停运动管线 → 失能本体/末端 → 断开；各步失败仅告警不抛。"""
-        for name, fn in (("stop_motion", self.stop_motion),
+        """退出收尾（尽力而为）：停运动管线（不进阻尼，失能紧随其后）→
+        失能本体/末端 → 断开；各步失败仅告警不抛。"""
+        for name, fn in (("stop_motion", lambda: self.stop_motion(damping=False)),
                          ("disable_arm", self.disable_arm),
                          ("disable_end", self.disable_end),
                          ("disconnect", self.disconnect)):

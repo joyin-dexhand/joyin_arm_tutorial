@@ -20,55 +20,103 @@ import numpy as np
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
-from joyarm_core import Backend  # noqa: E402
+from joyarm_core import Backend, ControlMode  # noqa: E402
 
-# 与指令内核无关的其余抽象方法：哑化（type() 创建时注入以满足 ABC 检查；
-# send_position/force/mit_end 已为基类模板，不在哑化列表）
-_STUB_NAMES = (
-    "connect", "disconnect",
-    "enable_arm", "disable_arm", "set_zero_arm", "clear_fault_arm", "set_mode_arm",
-    "read_mode_arm", "read_state_arm", "read_param_arm", "write_param_arm",
-    "enable_end", "disable_end", "set_zero_end", "clear_fault_end", "set_mode_end",
-    "read_mode_end", "read_state_end", "send_action_end",
-    "read_param_end", "write_param_end",
-)
+class _DummyBackend(Backend):
+    """离线哑后端：仅记录六个指令内核收到的参数；与指令无关的其余抽象
+    方法哑化（空实现满足 ABC 契约；send_position/force/mit_end 已为基类
+    模板，不在哑化之列）。"""
 
-
-def _dummy_backend(cfg: dict | None = None) -> Backend:
-    """离线哑后端：仅记录六个指令内核收到的参数；构造参数原样透传基类。"""
-
-    def _init(self, cfg=None):
+    def __init__(self, cfg: dict | None = None):
         Backend.__init__(self, cfg or {})
         self.kernel = []          # [(方法名, 收到的参数元组)]
 
-    def _noop(self, *a, **k):
-        return None
+    connected = True
 
-    def _rec(tag):
-        def _kernel(self, *a, **k):
-            self.kernel.append((tag,) + tuple(np.asarray(x, float) if np.ndim(x) else x
-                                              for x in a) + (k.get("joint"),))
-        return _kernel
+    # ---- 指令内核：记录收到的参数（数组升维后记录便于断言）----
+    def _send_position_arm(self, q, joint=None):
+        self.kernel.append(("pos_arm", np.asarray(q, float), joint))
 
-    ns = {
-        "__init__": _init,
-        "connected": property(lambda self: True),
-        "_send_position_arm": _rec("pos_arm"), "_send_velocity_arm": _rec("vel_arm"),
-        "_send_position_end": _rec("pos_end"), "_send_tau_end": _rec("tau_end"),
-    }
+    def _send_velocity_arm(self, dq, joint=None):
+        self.kernel.append(("vel_arm", np.asarray(dq, float), joint))
 
-    def _mit_arm(self, q, dq, tau_ff, kp=None, kd=None, joint=None):
+    def _send_position_end(self, position, joint=None):
+        self.kernel.append(("pos_end", np.asarray(position, float), joint))
+
+    def _send_tau_end(self, tau, joint=None):
+        self.kernel.append(("tau_end", np.asarray(tau, float), joint))
+
+    def _send_mit_arm(self, q, dq, tau_ff, kp=None, kd=None, joint=None):
         self.kernel.append(("mit_arm", np.asarray(q, float), np.asarray(dq, float),
                             np.asarray(tau_ff, float), kp, kd, joint))
 
-    def _mit_end(self, q, dq, tau_ff, kp=None, kd=None, joint=None):
+    def _send_mit_end(self, q, dq, tau_ff, kp=None, kd=None, joint=None):
         self.kernel.append(("mit_end", np.asarray(q, float), np.asarray(dq, float),
                             np.asarray(tau_ff, float), kp, kd, joint))
 
-    ns["_send_mit_arm"] = _mit_arm
-    ns["_send_mit_end"] = _mit_end
-    ns.update({name: _noop for name in _STUB_NAMES})
-    return type("DummyBackend", (Backend,), ns)(cfg)
+    # ---- 其余接口：哑化（空实现）----
+    def connect(self):
+        pass
+
+    def disconnect(self):
+        pass
+
+    def enable_arm(self, joint=None):
+        pass
+
+    def disable_arm(self, joint=None):
+        pass
+
+    def set_zero_arm(self, joint=None):
+        pass
+
+    def clear_fault_arm(self, joint=None):
+        pass
+
+    def set_mode_arm(self, mode=ControlMode.POSITION, joint=None):
+        pass
+
+    def read_mode_arm(self, joint=None):
+        return None
+
+    def read_state_arm(self, joint=None):
+        return None
+
+    def read_param_arm(self, key, joint=None):
+        return None
+
+    def write_param_arm(self, key, value, joint=None, persist=False):
+        pass
+
+    def enable_end(self, joint=None):
+        pass
+
+    def disable_end(self, joint=None):
+        pass
+
+    def set_zero_end(self, joint=None):
+        pass
+
+    def clear_fault_end(self, joint=None):
+        pass
+
+    def set_mode_end(self, mode=ControlMode.POSITION, joint=None):
+        pass
+
+    def read_mode_end(self, joint=None):
+        return None
+
+    def read_state_end(self, joint=None):
+        return None
+
+    def send_action_end(self, action, joint=None):
+        pass
+
+    def read_param_end(self, key, joint=None):
+        return None
+
+    def write_param_end(self, key, value, joint=None, persist=False):
+        pass
 
 
 # 本体三关节硬限位（cfg 四键）：q ∈ [-1,1]，dq ≤ 2，tau ≤ 10
@@ -90,11 +138,11 @@ _END_CFG = {"end": {"joints": [
 # ----------------------------------------------------------
 def test_arm_limits_from_cfg():
     """本体硬限位自 cfg 逐关节解析；backend 只存硬限位（无软限位属性）。"""
-    be = _dummy_backend(cfg=_ARM_CFG)
+    be = _DummyBackend(cfg=_ARM_CFG)
     s = be.arm_limits
     assert np.allclose(s.q_min, -1.0) and np.allclose(s.q_max, 1.0)
     assert np.allclose(s.dq_max, 2.0) and np.allclose(s.tau_max, 10.0)
-    be0 = _dummy_backend(cfg={"end": {}})
+    be0 = _DummyBackend(cfg={"end": {}})
     assert be0.arm_limits is None                      # 无 arm 段 → 守卫放行
     for gone in ("arm_limits_soft", "end_limits_soft",
                  "set_arm_limits_soft", "set_end_limits_soft"):
@@ -103,12 +151,12 @@ def test_arm_limits_from_cfg():
 
 def test_end_limits_from_cfg():
     """末端硬限位自 cfg 逐电机解析（缺键 ±∞）；无 end 段 → None。"""
-    be = _dummy_backend(cfg=_END_CFG)
+    be = _DummyBackend(cfg=_END_CFG)
     e = be.end_limits
     assert np.allclose(e.q_min, [-1.0, -0.5]) and np.allclose(e.q_max, [1.0, 0.5])
     assert np.allclose(e.dq_max, [2.0, 3.0])
     assert np.isfinite(e.tau_max[0]) and np.isinf(e.tau_max[1])
-    be2 = _dummy_backend(cfg={"arm": {}})
+    be2 = _DummyBackend(cfg={"arm": {}})
     assert be2.end_limits is None
 
 
@@ -117,7 +165,7 @@ def test_end_limits_from_cfg():
 # ----------------------------------------------------------
 def test_guard_passthrough_without_limits():
     """cfg 无 arm 段（独立使用无本体限位）：本体守卫放行。"""
-    be = _dummy_backend()
+    be = _DummyBackend()
     assert be.arm_limits is None
     be.send_position_arm(np.full(3, 99.0))
     assert np.allclose(be.kernel[0][1], 99.0)
@@ -125,7 +173,7 @@ def test_guard_passthrough_without_limits():
 
 def test_guard_clips_q_dq_tau():
     """本体：q 硬限位裁剪、dq/tau 幅值裁剪、kp/kd 透传。"""
-    be = _dummy_backend(cfg=_ARM_CFG)
+    be = _DummyBackend(cfg=_ARM_CFG)
     be.send_position_arm(np.full(3, 5.0))                       # q → 1.0（硬上限）
     assert be.kernel[-1][0] == "pos_arm" and np.allclose(be.kernel[-1][1], 1.0)
     be.send_velocity_arm(np.full(3, -9.0))                      # dq → -2.0
@@ -139,7 +187,7 @@ def test_guard_clips_q_dq_tau():
 
 def test_guard_single_joint_slice():
     """单关节指令：取该关节限位切片（其余关节限位不参与）。"""
-    be = _dummy_backend(cfg=_ARM_CFG)
+    be = _DummyBackend(cfg=_ARM_CFG)
     be._arm_limits.q_max[1] = 0.5                       # joint2 上限更紧
     be.send_position_arm(np.array([99.0]), joint=1)
     assert be.kernel[-1][0] == "pos_arm" and np.allclose(be.kernel[-1][1], 0.5)
@@ -148,17 +196,17 @@ def test_guard_single_joint_slice():
 
 def test_guard_dimension_mismatch_passthrough():
     """指令长度 ≠ n：守卫放行，由内核（真实后端）报清晰的维度错误。"""
-    be = _dummy_backend(cfg=_ARM_CFG)
+    be = _DummyBackend(cfg=_ARM_CFG)
     be.send_position_arm(np.zeros(4))
     assert be.kernel[-1][1].shape == (4,)
-    be2 = _dummy_backend(cfg=_END_CFG)
+    be2 = _DummyBackend(cfg=_END_CFG)
     be2.send_position_end(np.zeros(3))                    # 末端同理
     assert be2.kernel[-1][1].shape == (3,)
 
 
 def test_guard_scalar_promotion():
     """标量指令升维为 (1,)（单关节用法），守卫按长度放行交内核校验。"""
-    be = _dummy_backend(cfg=_ARM_CFG)
+    be = _DummyBackend(cfg=_ARM_CFG)
     be.send_position_arm(1.5, joint=0)
     assert be.kernel[-1][1].shape == (1,) and np.allclose(be.kernel[-1][1], 1.0)
 
@@ -168,7 +216,7 @@ def test_guard_scalar_promotion():
 # ----------------------------------------------------------
 def test_end_guard_clips_position():
     """末端位置：逐电机裁剪到各自行程。"""
-    be = _dummy_backend(cfg=_END_CFG)
+    be = _DummyBackend(cfg=_END_CFG)
     be.send_position_end(np.array([5.0, -5.0]))
     assert be.kernel[-1][0] == "pos_end"
     assert np.allclose(be.kernel[-1][1], [1.0, -0.5])
@@ -176,7 +224,7 @@ def test_end_guard_clips_position():
 
 def test_end_guard_scalar_broadcast():
     """末端标量广播（多执行器）：按逐电机限位各自就近裁剪 → (n_end,)。"""
-    be = _dummy_backend(cfg=_END_CFG)
+    be = _DummyBackend(cfg=_END_CFG)
     be.send_position_end(99.0)                             # g1→1.0，g2→0.5
     assert be.kernel[-1][1].shape == (2,)
     assert np.allclose(be.kernel[-1][1], [1.0, 0.5])
@@ -184,7 +232,7 @@ def test_end_guard_scalar_broadcast():
 
 def test_end_guard_single_motor_slice():
     """末端单电机指令：取该电机限位切片。"""
-    be = _dummy_backend(cfg=_END_CFG)
+    be = _DummyBackend(cfg=_END_CFG)
     be.send_position_end(np.array([9.0]), joint=1)
     assert be.kernel[-1][0] == "pos_end" and np.allclose(be.kernel[-1][1], 0.5)
     assert be.kernel[-1][2] == 1
@@ -192,7 +240,7 @@ def test_end_guard_single_motor_slice():
 
 def test_end_guard_tau_clip():
     """末端力矩：tau 按逐电机 ±tau_max 裁剪（缺 tau_max 不裁）。"""
-    be = _dummy_backend(cfg=_END_CFG)
+    be = _DummyBackend(cfg=_END_CFG)
     be.send_tau_end(50.0)                                  # 标量广播：g1→10，g2→∞不裁
     assert be.kernel[-1][0] == "tau_end"
     assert np.allclose(be.kernel[-1][1], [10.0, 50.0])
@@ -200,7 +248,7 @@ def test_end_guard_tau_clip():
 
 def test_end_guard_mit():
     """末端 MIT：q/dq/tau 守卫，kp/kd 透传。"""
-    be = _dummy_backend(cfg=_END_CFG)
+    be = _DummyBackend(cfg=_END_CFG)
     be.send_mit_end(np.array([5.0, -5.0]), np.array([9.0, -9.0]),
                     np.array([50.0, -50.0]), kp=np.ones(2), kd=np.ones(2))
     _, q, dq, tau, kp, kd, _ = be.kernel[-1]
@@ -212,7 +260,7 @@ def test_end_guard_mit():
 
 def test_end_guard_without_end_section():
     """无 end 段：末端守卫放行（透传内核）。"""
-    be = _dummy_backend(cfg=_ARM_CFG)
+    be = _DummyBackend(cfg=_ARM_CFG)
     be.send_position_end(np.array([99.0]))
     assert np.allclose(be.kernel[-1][1], 99.0)
 
@@ -234,7 +282,7 @@ class _Cap(logging.Handler):
 def test_guard_warns_on_clip():
     """越限告警节流：首条即告警，0.5s 内重复越限静默（裁剪照常），过后再告警。"""
     import joyarm_core.backend.backend as be_mod
-    be = _dummy_backend(cfg=_ARM_CFG)
+    be = _DummyBackend(cfg=_ARM_CFG)
     cap = _Cap()
     log = logging.getLogger("joyarm_core.backend")
     log.addHandler(cap)

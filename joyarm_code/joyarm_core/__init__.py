@@ -5,12 +5,11 @@
     joyarm/     JoyArm：唯一组装入口（读config配置，把算法、通信各部分装配成一个
                 可用的机械臂对象）；JoyArmFactory：按型号名创建joyarm对象
     ─────────────────────────────────────────────
-    robotics/   算法层：六个子域（正运动学 fkine · 逆运动学 ikine · 雅可比 jacobian · 
-                轨迹 trajectory · 动力学 dynamics · 控制 control），每域 = 接口 + 注册表；
-                加 ``@register`` 自动注册（只调用 ``arm`` 公开属性/方法，不反向依赖 joyarm）
+    robotics/   算法层：六个子域（fkine / ikine / jacobian / trajectory / dynamics / control），
+                    每域 = 接口 + 注册表；（只调用 ``arm`` 公开属性/方法，不反向依赖 joyarm）
     backend/    通信层：Backend（整机接口）→ Backend*（具体后端实现）
     ─────────────────────────────────────────────
-    utils/      数学 / 共享数据类型 / 限位裁剪 / 关节插值 / 周期线程等
+    utils/      数学 / 共享数据类型 / 限位裁剪
     robot_model/ configs/   URDF+网格资产 / 每型号一份 YAML 配置
 
 接入新型号：复制 ``configs/joyarm_template.yaml`` 填写 + 放入
@@ -78,10 +77,9 @@ from .robotics.jacobian import JacobianSolver, PinJacobianSolver
 from .robotics.dynamics import DynamicsSolver, PinDynamicsSolver
 from .robotics.trajectory import TrajPlanner, ToJointTrajPlanner
 from .robotics.control import Controller, JointPositionController
-from .robotics._registry import register
 
 # ---- 指令路径守卫（clamp_to_limits）+ 限位构建辅助 ----
-from .utils.limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, soft_limits_from_cfg
+from .utils.limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
 
 # ---- 通信层（整机后端，两层继承 + name 选型注册表）----
 from . import backend
@@ -143,7 +141,6 @@ __all__ = [
     "DynamicsSolver",
     "TrajPlanner",
     "Controller",
-    "register",
     # 六域默认实现（Pin 系列 / 到关节目标规划 / 关节位置控制）
     "PinFkineSolver",
     "PinIkineSolver",
@@ -156,6 +153,7 @@ __all__ = [
     "joint_limits_from_model",
     "limits_from_joint_cfgs",
     "soft_limits_from_cfg",
+    "rand_within_limits",
     # 通信层（整机后端）
     "backend",
     "Backend",

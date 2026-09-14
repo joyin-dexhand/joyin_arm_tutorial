@@ -1,10 +1,10 @@
 """BackendDM 协议层离线单测（无需硬件）。
 
 覆盖：float↔uint 映射、MIT 位打包、状态帧解包、30B 桥发送帧封装、16B 应答帧
-提取（含跨读残余）、DmCanBus 帧分发（状态帧/参数应答/CANID==0 回退）与指令
+提取（含跨读残余、乱码残余上限截断）、DmCanBus 帧分发（状态帧/参数应答/CANID==0 回退）与指令
 原语字节级正确性、BackendDM 离线实例化与约束检查、公共查询接口
 （connected / read_mode_* 三态语义）、错误码语义回归
-（0=失能正常/1=使能正常/8~E=故障）。
+（0=失能正常/1=使能正常/8~E=故障）、连接失败回滚与拔线断开保护（资源安全契约）。
 
 运行：``python test/test_backend_dm.py``（或 ``pytest test/test_backend_dm.py``）。
 """
@@ -484,6 +484,110 @@ def test_backenddm_err_semantics():
         raise AssertionError("超压应答应抛 RuntimeError")
     except RuntimeError as exc:
         assert "超压(0x8)" in str(exc)
+
+
+# ============================================================
+# 帧缓冲上限 + 连接回滚 / 断开保护（资源安全契约）
+# ============================================================
+def test_extract_frames_residual_cap():
+    """持续乱码：残余被截断到上限且保尾部；跨读半帧仍可在下一轮成帧。"""
+    from joyarm_core.backend.backend_dm import _RX_RESIDUAL_MAX
+    garbage = bytes([0x00]) * (_RX_RESIDUAL_MAX + 6000)     # 10KB 无帧乱码
+    frames, rest = _extract_frames(garbage)
+    assert frames == [] and len(rest) == _RX_RESIDUAL_MAX   # 截断保尾
+    head = bytes([0xAA]) + bytes(range(1, 8))               # 帧头+7字节（跨读半帧）
+    frames, rest = _extract_frames(garbage + head)
+    assert frames == [] and len(rest) == _RX_RESIDUAL_MAX
+    completion = bytes(range(8, 15)) + bytes([0x55])        # 剩余 9 字节（尾 0x55）
+    frames2, _ = _extract_frames(bytes(rest) + completion)
+    assert len(frames2) == 1                                 # 半帧跨读不丢
+
+
+class _FakeDmBus:
+    """替身总线：open/disable 可控失败；记录 open/close/disable 调用。"""
+
+    fail_open_channels: set = set()
+    fail_disable = False
+    opened: list = []
+    closed: list = []
+    disabled: list = []
+
+    def __init__(self, channel, baud_rate=921600):
+        self.channel = channel
+
+    def open(self):
+        if self.channel in _FakeDmBus.fail_open_channels:
+            raise OSError(f"cannot open {self.channel}")
+        _FakeDmBus.opened.append(self.channel)
+
+    def close(self):
+        _FakeDmBus.closed.append(self.channel)
+
+    def add_motor(self, motor):
+        motor.bus = self
+
+    def disable(self, motor):
+        if _FakeDmBus.fail_disable:
+            raise OSError("device unplugged")
+        _FakeDmBus.disabled.append((self.channel, motor.name))
+
+
+def _make_dm_backend():
+    """从 joyarm_dm 真实 config 构建 BackendDM（离线：不碰串口）。"""
+    from joyarm_core.joyarm import load_config
+    import copy
+    cfg = copy.deepcopy(load_config("joyarm_dm")["backend"])
+    cfg.pop("name", None)
+    return BackendDM(cfg)
+
+
+def _with_fake_bus(fn):
+    """测试期间把 backend_dm.DmCanBus 换成替身，用毕还原。"""
+    from joyarm_core.backend import backend_dm as dm_mod
+
+    def wrapper():
+        saved = dm_mod.DmCanBus
+        dm_mod.DmCanBus = _FakeDmBus
+        try:
+            fn()
+        finally:
+            dm_mod.DmCanBus = saved
+    wrapper.__name__ = fn.__name__
+    return wrapper
+
+
+@_with_fake_bus
+def test_dm_connect_failure_rolls_back():
+    """end 总线打开失败：arm 已开总线被回滚关闭，无句柄残留。"""
+    be = _make_dm_backend()
+    be._end_cfg["channel"] = "/dev/ttyFAKE_END"             # 独立通道触发第二段失败
+    _FakeDmBus.opened.clear(), _FakeDmBus.closed.clear()
+    _FakeDmBus.fail_open_channels = {"/dev/ttyFAKE_END"}
+    try:
+        be.connect()
+        raise AssertionError("end 总线打开失败应抛")
+    except OSError:
+        pass
+    assert len(_FakeDmBus.opened) == 1                      # arm 总线曾打开
+    assert _FakeDmBus.closed == _FakeDmBus.opened           # 已被回滚关闭
+    assert not be.connected                                 # 无残留总线
+
+
+@_with_fake_bus
+def test_dm_disconnect_disable_failure_still_closes():
+    """拔线场景：disable 抛错不断开收尾，串口仍被关闭、状态被清。"""
+    be = _make_dm_backend()
+    _FakeDmBus.opened.clear(), _FakeDmBus.closed.clear(), _FakeDmBus.disabled.clear()
+    _FakeDmBus.fail_open_channels = set()
+    _FakeDmBus.fail_disable = True
+    be.connect()
+    assert be.connected
+    be.disconnect()                                         # 不抛：失能失败仅告警
+    assert _FakeDmBus.disabled == []                        # 全部 disable 失败
+    assert len(_FakeDmBus.closed) == len(_FakeDmBus.opened)  # 总线仍全被关闭
+    assert not be.connected
+    assert all(m.bus is None for m in be._arm_motors + be._end_motors)
+
 
 
 if __name__ == "__main__":

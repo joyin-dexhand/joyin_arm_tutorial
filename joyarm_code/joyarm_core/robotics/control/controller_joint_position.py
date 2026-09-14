@@ -13,7 +13,6 @@ from typing import Tuple
 
 import numpy as np
 
-from .._registry import register
 from . import Controller
 from ...utils.types import ArmState, ControlMode, TrajFrame
 
@@ -24,7 +23,6 @@ logger = logging.getLogger("joyarm_core.controller")
 _WARN_INTERVAL: float = 0.5    # 步长裁剪告警节流（秒）
 
 
-@register
 class JointPositionController(Controller):
     """控制默认实现：位置模式逐周期跟踪当前轨迹帧的关节位置参考。"""
 
@@ -45,6 +43,10 @@ class JointPositionController(Controller):
                 "controller_joint_position.py - JointPositionController."
                 "compute：当前轨迹帧缺 q（位置跟随需关节位置参考）")
         q_ref = np.asarray(frame.q, dtype=float).reshape(-1)
+        if not np.all(np.isfinite(q_ref)):
+            raise ValueError(                               # NaN 兜底：拒绝下发
+                "controller_joint_position.py - JointPositionController."
+                "compute：当前轨迹帧 q 含非有限值（NaN/inf），拒绝下发")
         q_cur = np.asarray(state.joint.q, dtype=float).reshape(-1)
         q_cmd = q_ref
         limits = arm.arm_limits

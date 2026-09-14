@@ -35,7 +35,13 @@ class Controller(ABC):
 
         :param ctrl_hz: 控制频率——管线 ctrl-step 线程按此属性起节拍（切换到
             不同频率的控制器时热重整），Hz。
+        :raises ValueError: 频率非正（config 手误在构造时立即暴露，避免线程
+            静默死亡或零间歇狂发）。
         """
+        if ctrl_hz <= 0:
+            raise ValueError(
+                f"controller.py - Controller.__init__：ctrl_hz 须为正数"
+                f"（收到 {ctrl_hz}）")
         self.ctrl_hz = float(ctrl_hz)
 
     # ----------------------------------------------------------

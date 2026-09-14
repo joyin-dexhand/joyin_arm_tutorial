@@ -2,7 +2,7 @@
 
 覆盖架构约束的单类行为：①工厂软化语义（未知型号 → ``None`` + 失败信息；
 JoyArm 直用为硬失败——坏注册名 / 缺 backend / 缺 config 构造即抛）；②六域
-成员字典机制（各域 REGISTRY 默认空表，域未配置即无成员、门面调用显性报错；
+成员字典机制（config 未配置即无成员、门面调用显性报错；
 配置的成员必须全部创建成功）；③配置读取/静态自检（``get_config``/
 ``check_config``）与限位加载（硬限位 config 四键、软限位直配仅加载）；④离线
 语义（执行类抛错）与拷贝隔离（config / 轨迹桥深拷贝）；⑤前置校验族
@@ -24,7 +24,7 @@ sys.path.insert(0, str(_ROOT))
 
 from joyarm_core import (  # noqa: E402
     joyarm_factory, JoyArmFactory, JoyArm, Pose, Wrench,
-    IKResult, IkineSolver, TrajFrame, TrajPlanner,
+    IKResult, IkineSolver, FkineSolver, TrajFrame, TrajPlanner,
     Controller, ControlMode, ArmState, JointState, Backend,
     clamp_to_limits,
 )
@@ -90,7 +90,7 @@ def test_hardfail_construction():
 
 
 def test_domain_dicts_default_empty():
-    """过渡态：各域 REGISTRY 默认空表、config 未配置即无成员；门面调用显性报错。"""
+    """config 未配置即无成员（注册表有默认实现但未选配）；门面调用显性报错。"""
     arm = _arm()
     for d in ("fkine", "ikine", "jacobian", "dynamics", "traj", "control"):
         assert arm._active_name[d] is None
@@ -315,7 +315,7 @@ def test_ikine_contracts():
 def test_traj_frame_and_planner():
     """TrajFrame 纯数据 + TrajPlanner 内核（规则/超时剔除 + q_home 回退 + 按
     绝对时间采样）+ JoyArm 轨迹桥访问器（周期调度与发布门控归运动管线，
-    见 test_review_fixes.py）。"""
+    见 test_default_solvers.py）。"""
     import time as _time
 
     # TrajFrame：纯数据（公开名仅为八个字段，无任何方法）
@@ -414,6 +414,48 @@ def test_traj_frame_and_planner():
     assert not hasattr(joyarm_core, "TrajectorySpace")
 
 
+def test_get_arm_state_does_not_mutate_cache():
+    """get_arm_state 填 tcp.pose 前复制外壳：后端共享缓存对象不被污染。"""
+    class _SharedCacheBackend:
+        """read_state_cache_arm 恒返回同一共享对象（模拟坏后端契约）。"""
+        connected = True
+
+        def __init__(self):
+            self.state = None
+
+        def state_age_arm(self, joint=None):
+            return 0.0
+
+        def read_state_cache_arm(self, joint=None):
+            return self.state
+
+        def read_state_end(self, joint=None):
+            return {"q": [0.0]}
+
+    class _DummyFk(FkineSolver):
+        def frame_pose(self, arm, q, frame):
+            return Pose(position=np.array([1.0, 2.0, 3.0]))
+
+    arm = _arm()
+    saved = (arm._backend, arm.connected)
+    try:
+        be = _SharedCacheBackend()
+        be.state = ArmState(joint=JointState(q=np.full(6, 0.5)))
+        arm._backend = be
+        arm.connected = True
+        arm._fkine_solvers["fk_dummy"] = _DummyFk()
+        arm._active_name["fkine"] = "fk_dummy"
+        orig_pose = be.state.tcp.pose
+        st = arm.get_arm_state()
+        assert np.allclose(st.tcp.pose.position, [1.0, 2.0, 3.0])   # 已填充
+        assert st.tcp.pose is not orig_pose                         # 外壳已复制
+        assert be.state.tcp.pose is orig_pose                       # 原对象未被改写
+    finally:
+        arm._fkine_solvers.pop("fk_dummy", None)
+        arm._active_name.pop("fkine", None)
+        arm._backend, arm.connected = saved
+
+
 def test_controller_kernel():
     """Controller.compute 内核（纯计算、无线程）：当前帧+状态 → 指令原样透传
     （限位守卫归后端基类）；MODE 声明默认 MIT、子类可覆写。"""
@@ -449,7 +491,7 @@ def test_state_cache_and_keepalive():
     arm = _arm()
     saved = (arm._backend, arm.connected)
     try:
-        be = _fake_backend()
+        be = _FakeBackend()
         age = {"arm": 0.0, "end": 0.0}               # 可控陈旧度（0=新鲜）
         sync = {"arm": 0, "end": 0}
         orig_arm, orig_end = be.read_state_arm, be.read_state_end
@@ -496,7 +538,7 @@ def test_state_cache_and_keepalive():
         arm.disconnect()
         assert arm._state_thread is None
         # ⑤ 后端无缓存读/陈旧度（基类默认 NotImplementedError）→ 回退同步路径
-        be2 = _fake_backend()
+        be2 = _FakeBackend()
         arm._backend = be2
         arm.connected = True
         st2 = arm.get_arm_state()
@@ -514,84 +556,131 @@ def test_repr_contains_state():
 # ----------------------------------------------------------
 # 运动便利与安全层（FakeBackend 注入离线测；_arm 单例须还原）
 # ----------------------------------------------------------
-def _fake_backend(q0=None, converge: float = 0.5, n: int = 6, enabled: bool = True) -> Backend:
-    """离线哑后端：记录全部调用；q 状态机每次读状态向最后位置目标靠近 converge 比例。
+class _FakeBackend(Backend):
+    """离线哑后端：记录全部调用；q 状态机每次读状态向最后位置目标靠近
+    converge 比例（模真机跟随）。
 
-    模式缓存（set/read_mode_*）与使能位语义同 backend_dm：read_mode_* 离线可查、
-    各电机模式唯一才返回；state.enabled 由 ``enabled`` 参数控制。
+    模式缓存（set/read_mode_*）与使能位语义同 backend_dm：read_mode_* 离线
+    可查、各电机模式唯一才返回；state.enabled 由 ``enabled`` 参数控制。
     """
 
-    def _init(self):
+    def __init__(self, q0=None, converge: float = 0.5, n: int = 6,
+                 enabled: bool = True):
         Backend.__init__(self, {})
+        self.converge = converge
+        self.n = n
+        self.enabled = enabled
         self.calls = []                      # (方法名, 参数...)
         self._q = np.zeros(n) if q0 is None else np.array(q0, dtype=float)
         self._target = self._q.copy()
         self._mode_arm: dict = {}            # 电机名 → 模式（空=未设置）
         self._mode_end: dict = {}
 
-    def _rec(name):
-        def _m(self, *a, **k):
-            self.calls.append((name,) + a)
-        return _m
+    connected = True
 
-    def _set_mode_arm(self, mode, joint=None):
-        self.calls.append(("set_mode_arm", mode, joint))
-        for i in range(n):
-            self._mode_arm[f"joint{i + 1}"] = mode
-
-    def _read_mode_arm(self, joint=None):
-        vals = list(self._mode_arm.values())
-        return vals[0] if len(self._mode_arm) == n and len(set(vals)) == 1 else None
-
-    def _set_mode_end(self, mode, joint=None):
-        self.calls.append(("set_mode_end", mode, joint))
-        self._mode_end["gripper"] = mode
-
-    def _read_mode_end(self, joint=None):
-        vals = list(self._mode_end.values())
-        return vals[0] if len(self._mode_end) == 1 else None
-
-    def _pos(self, q, joint=None):
+    # ---- 指令内核：记录 + q 状态机跟随目标 ----
+    def _send_position_arm(self, q, joint=None):
         self._target = np.asarray(q, dtype=float).copy()
         self.calls.append(("send_position_arm", self._target.copy(), joint))
 
-    def _mit(self, q, dq, tau_ff, kp=None, kd=None, joint=None):
+    def _send_mit_arm(self, q, dq, tau_ff, kp=None, kd=None, joint=None):
         self._target = np.asarray(q, dtype=float).copy()
         self.calls.append(("send_mit_arm", self._target.copy(),
                            np.asarray(dq, dtype=float), np.asarray(tau_ff, dtype=float),
                            kp, kd, joint))
 
-    def _read_state(self, joint=None):
-        self._q = self._q + converge * (self._target - self._q)   # 模真机跟随
-        ok = np.full(n, enabled, dtype=bool)
-        return ArmState(joint=JointState(q=self._q.copy(), dq=np.zeros(n),
-                                         tau=np.zeros(n), enabled=ok,
-                                         comm_ok=np.ones(n, dtype=bool),
-                                         error=np.zeros(n, dtype=bool),
-                                         angle_ok=np.ones(n, dtype=bool)))
+    def _send_position_end(self, position, joint=None):
+        self.calls.append(("send_position_end",
+                           np.asarray(position, dtype=float).copy(), joint))
 
-    def _read_state_end(self, joint=None):
+    def read_state_arm(self, joint=None):
+        self._q = self._q + self.converge * (self._target - self._q)
+        ok = np.full(self.n, self.enabled, dtype=bool)
+        return ArmState(joint=JointState(q=self._q.copy(), dq=np.zeros(self.n),
+                                         tau=np.zeros(self.n), enabled=ok,
+                                         comm_ok=np.ones(self.n, dtype=bool),
+                                         error=np.zeros(self.n, dtype=bool),
+                                         angle_ok=np.ones(self.n, dtype=bool)))
+
+    def read_state_end(self, joint=None):
         self.calls.append(("read_state_end", joint))
         return {"q": [0.0], "comm_ok": [True], "error": [False], "enabled": [True]}
 
-    def _pos_end(self, position, joint=None):
-        self.calls.append(("send_position_end", np.asarray(position, dtype=float).copy(), joint))
+    # ---- 模式缓存（语义同 backend_dm）----
+    def set_mode_arm(self, mode, joint=None):
+        self.calls.append(("set_mode_arm", mode, joint))
+        for i in range(self.n):
+            self._mode_arm[f"joint{i + 1}"] = mode
 
-    ns = {"__init__": _init, "connected": property(lambda self: True),
-          "_send_position_arm": _pos, "_send_mit_arm": _mit,
-          "_send_position_end": _pos_end,
-          "read_state_arm": _read_state, "read_state_end": _read_state_end,
-          "set_mode_arm": _set_mode_arm, "read_mode_arm": _read_mode_arm,
-          "set_mode_end": _set_mode_end, "read_mode_end": _read_mode_end}
-    for name in ("connect", "disconnect",
-                 "enable_arm", "disable_arm", "set_zero_arm", "clear_fault_arm",
-                 "read_param_arm", "write_param_arm",
-                 "_send_velocity_arm",
-                 "enable_end", "disable_end", "set_zero_end", "clear_fault_end",
-                 "_send_tau_end", "_send_mit_end",
-                 "send_action_end", "read_param_end", "write_param_end"):
-        ns[name] = _rec(name)
-    return type("FakeBackend", (Backend,), ns)()
+    def read_mode_arm(self, joint=None):
+        vals = list(self._mode_arm.values())
+        return vals[0] if len(self._mode_arm) == self.n \
+            and len(set(vals)) == 1 else None
+
+    def set_mode_end(self, mode, joint=None):
+        self.calls.append(("set_mode_end", mode, joint))
+        self._mode_end["gripper"] = mode
+
+    def read_mode_end(self, joint=None):
+        vals = list(self._mode_end.values())
+        return vals[0] if len(self._mode_end) == 1 else None
+
+    # ---- 其余接口：记录型空实现（满足 ABC 契约，无副作用）----
+    def _send_velocity_arm(self, dq, joint=None):
+        self.calls.append(("send_velocity_arm", np.asarray(dq, dtype=float), joint))
+
+    def connect(self):
+        self.calls.append(("connect",))
+
+    def disconnect(self):
+        self.calls.append(("disconnect",))
+
+    def enable_arm(self, joint=None):
+        self.calls.append(("enable_arm", joint))
+
+    def disable_arm(self, joint=None):
+        self.calls.append(("disable_arm", joint))
+
+    def set_zero_arm(self, joint=None):
+        self.calls.append(("set_zero_arm", joint))
+
+    def clear_fault_arm(self, joint=None):
+        self.calls.append(("clear_fault_arm", joint))
+
+    def read_param_arm(self, key, joint=None):
+        self.calls.append(("read_param_arm", key, joint))
+
+    def write_param_arm(self, key, value, joint=None, persist=False):
+        self.calls.append(("write_param_arm", key, value, joint, persist))
+
+    def enable_end(self, joint=None):
+        self.calls.append(("enable_end", joint))
+
+    def disable_end(self, joint=None):
+        self.calls.append(("disable_end", joint))
+
+    def set_zero_end(self, joint=None):
+        self.calls.append(("set_zero_end", joint))
+
+    def clear_fault_end(self, joint=None):
+        self.calls.append(("clear_fault_end", joint))
+
+    def _send_tau_end(self, tau, joint=None):
+        self.calls.append(("send_tau_end", np.asarray(tau, dtype=float), joint))
+
+    def _send_mit_end(self, q, dq, tau_ff, kp=None, kd=None, joint=None):
+        self.calls.append(("send_mit_end", np.asarray(q, dtype=float),
+                           np.asarray(dq, dtype=float), np.asarray(tau_ff, dtype=float),
+                           kp, kd, joint))
+
+    def send_action_end(self, action, joint=None):
+        self.calls.append(("send_action_end", action, joint))
+
+    def read_param_end(self, key, joint=None):
+        self.calls.append(("read_param_end", key, joint))
+
+    def write_param_end(self, key, value, joint=None, persist=False):
+        self.calls.append(("write_param_end", key, value, joint, persist))
 
 
 class _FakeSession:
@@ -600,21 +689,12 @@ class _FakeSession:
     def __init__(self, q0=None, converge: float = 0.5, enabled: bool = True):
         self.arm = _arm()
         self._saved = (self.arm._backend, self.arm.connected)
-        self.be = _fake_backend(q0, converge, n=self.arm.n_arm, enabled=enabled)
+        self.be = _FakeBackend(q0, converge, n=self.arm.n_arm, enabled=enabled)
         self.arm._backend = self.be
         self.arm.connected = True
 
     def restore(self):
         self.arm._backend, self.arm.connected = self._saved
-
-
-def test_deleted_redundant_apis():
-    arm = _arm()
-    for name in ("state", "qlow", "qhigh", "set_controller", "clamp_q", "is_q_valid",
-                 "set_config", "set_arm_soft_margins", "set_end_soft_margins"):
-        assert not hasattr(arm, name), f"{name} 应已删除"
-    q = arm.rand_q_arm(rng=np.random.default_rng(0))
-    assert q.shape == (arm.n_arm,)                # rand_q_arm：按本体硬限位采样
 
 
 def test_joint_names_and_index():

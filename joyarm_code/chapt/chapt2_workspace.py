@@ -5,7 +5,7 @@ JoyArm 工作空间蒙特卡洛采样与可视化  (第二章 §5)
 【功能概要】
     用蒙特卡洛采样近似 JoyArm 的可达工作空间，并动态可视化：
       1. 离线创建 JoyArm（加载型号 URDF，无需连接硬件）
-      2. 在关节软限位内均匀随机采样 N 组关节角
+      2. 在关节硬限位内均匀随机采样 N 组关节角
       3. 对每组关节角求末端位置（Pinocchio 正运动学，同第二章 §4.3.2）
       4. MeshCat 3D 点云逐批动态刷新，点色按到基座的距离渐变
     采样完成后在浏览器打开提示的 URL，旋转/缩放观察点云包络。
@@ -76,7 +76,7 @@ def main() -> None:
     print(f"模型就绪：{arm}\n")
 
     Q = arm.rand_q_arm(args.n, rng=np.random.default_rng(args.seed))
-    print(f"软限位内采样 {args.n} 组关节角，每批 {args.batch} 组……")
+    print(f"硬限位内采样 {args.n} 组关节角，每批 {args.batch} 组……")
 
     vis = None
     if not args.headless:

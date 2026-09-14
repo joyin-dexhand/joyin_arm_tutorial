@@ -11,7 +11,6 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from .._registry import register
 from . import TrajPlanner
 from ...utils.types import TrajFrame
 
@@ -22,7 +21,6 @@ __all__ = ["ToJointTrajPlanner"]
 _Coeffs = Tuple[float, float, np.ndarray, np.ndarray]
 
 
-@register
 class ToJointTrajPlanner(TrajPlanner):
     """到关节目标点的规划默认实现：五次多项式（六边界条件，加速度连续）。"""
 
@@ -43,6 +41,11 @@ class ToJointTrajPlanner(TrajPlanner):
         未知 ``c3..c5`` 由末端位置/速度/加速度三条件唯一确定）。
         """
         tg = max(targets, key=lambda t: t.time)             # 终点目标
+        if tg.q is None:
+            raise ValueError(
+                "traj_planner_to_joint.py - ToJointTrajPlanner._plan：目标为笛卡尔"
+                "位姿型（pose），本规划器仅支持关节目标 q（可带 dq/ddq，其余字段"
+                "不使用、保持 None）；笛卡尔目标需 ikine 逆解管线（待教程章节）")
         q1 = np.asarray(tg.q, dtype=float).reshape(-1)
         dq1 = np.zeros_like(q1) if tg.dq is None \
             else np.asarray(tg.dq, dtype=float).reshape(-1)
