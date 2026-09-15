@@ -18,7 +18,7 @@
     cd ~/joyarm_code
     uv sync
     source .venv/bin/activate
-    # Linux 缺少 libxcb-cursor.so.0 时执行
+    # 若 Linux 缺少 libxcb-cursor.so.0 ，则先安装：
     sudo apt-get install -y libxcb-cursor0 
 
     # 3. 运行本脚本

@@ -2,6 +2,8 @@
 site/
 */.venv/
 spec/
+.vscode/
+
 
 # Python 字节码缓存 / 打包元数据 / 测试缓存
 __pycache__/
@@ -13,4 +15,3 @@ __pycache__/
 joyarm_code/joyarm_ros2_ws/build/
 joyarm_code/joyarm_ros2_ws/install/
 joyarm_code/joyarm_ros2_ws/log/
-

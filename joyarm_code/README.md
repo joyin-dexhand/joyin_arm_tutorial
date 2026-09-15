@@ -45,6 +45,7 @@ joyarm_code/
 
 ```bash
 cd joyarm_code
+# 若未安装uv，则先安装uv: curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync                    # 创建 .venv + 按 uv.lock 安装全部依赖 + 可编辑安装 joyarm_core
 source .venv/bin/activate  # 激活后直接用 python；或免激活用 uv run <命令>
 ```
