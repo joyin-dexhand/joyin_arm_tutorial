@@ -365,9 +365,9 @@ class JoyArm:
         self._switching = threading.Event()             # 换算法时的暂停开关（置位期间管线线程暂停派发）
 
         # ---- 逐步换成真值：URDF → 关节数/顺序 → 硬/软限位 → 特征位形 → 末端空间限位 → 通信后端 → 六域算法 ----
-        # ---- 解析 URDF，构建 pinocchio 模型 ----
+        # ---- 解析 URDF，构建 pinocchio 模型（锁定非本体活动关节 → nq = n_arm）----
         self._urdf_path = self._resolve_robot_urdf(str(basic["robot"]))
-        self.pin_model = pin.buildModelFromUrdf(self._urdf_path)
+        self.pin_model = self._build_pin_model(self._urdf_path)
         self.pin_data = self.pin_model.createData()
 
         # ---- 末端坐标系（getFrameId 对不存在的名字不报错、返回越界值，据此判断缺失）----
@@ -497,6 +497,23 @@ class JoyArm:
             avail = []
         raise ValueError(
             f"joyarm.py - _resolve_robot_urdf：『{robot}』型号在 robot_model 中未找到；可用：{avail}")
+
+    @staticmethod
+    def _build_pin_model(urdf_path: str):
+        """解析 URDF → 本体计算模型（锁定 joint1~joint9 之外的活动关节）。
+
+        nq 收敛为 n_arm、全部帧保留（末端帧/参考 TCP 帧按参考位形固化）。URDF 仍为几何/限位/命名的
+        权威源——限位核对直接解析 URDF XML，不经 pin 模型。
+
+        :param urdf_path: URDF 文件路径。
+        :return: pinocchio 模型（无多余活动关节时即原解析模型）。
+        """
+        model = pin.buildModelFromUrdf(urdf_path)
+        lock = [model.getJointId(n) for i, n in enumerate(model.names)
+                if i > 0 and n not in _ARM_JOINT_NAMES]
+        if lock:
+            model = pin.buildReducedModel(model, lock, pin.neutral(model))
+        return model
 
     @staticmethod
     def _urdf_arm_nq(pin_model) -> int:
@@ -1701,12 +1718,9 @@ class JoyArm:
         self.set_mode_arm(controller.MODE)      # 按控制器声明自动切电机模式
         self._traj_planned_by = None
         self._motion_threads = {
-            "traj-plan": _PeriodicThread(self._tick_plan, planner.plan_hz,
-                                        name="traj-plan"),
-            "traj-sample": _PeriodicThread(self._tick_sample, planner.sample_hz,
-                                          name="traj-sample"),
-            "ctrl-step": _PeriodicThread(self._tick_ctrl, controller.ctrl_hz,
-                                        name="ctrl-step"),
+            "traj-plan": _PeriodicThread(self._tick_plan, planner.plan_hz, name="traj-plan"),
+            "traj-sample": _PeriodicThread(self._tick_sample, planner.sample_hz, name="traj-sample"),
+            "ctrl-step": _PeriodicThread(self._tick_ctrl, controller.ctrl_hz, name="ctrl-step"),
         }
         self._switching.set()                   # 先置暂停开关再启线程（与运行中换算法的时序一致）
         try:                                    # 线程起步期间同步算出首帧
@@ -1747,8 +1761,7 @@ class JoyArm:
                 logger.warning("joyarm.py - stop_motion：纯阻尼切换失败：%s", e)
 
     def set_solver(self, domain: str, name: str):
-        """切换某域当前使用的算法（按注册名；域 ∈ fkine/ikine/jacobian/
-        dynamics/traj/control）。每个域同一时刻只有一个在用。
+        """切换某域当前使用的算法（按注册名）。每个域同一时刻只有一个被激活。
 
         平时只是换指针；若运动管线正在跑、且切的是 control 或 traj，会先让
         管线暂停一拍 → 完成切换并立刻用新算法算一拍 → 再恢复，运行中切换
@@ -1770,8 +1783,7 @@ class JoyArm:
                 try:
                     self._dispatch_ctrl()          # 新控制器立即下发首拍指令
                 except Exception as e:
-                    logger.warning("joyarm.py - set_solver：切换后首拍指令下发失败"
-                                   "（ctrl 线程将按节拍重试）：%s", e)
+                    logger.warning("joyarm.py - set_solver：切换后首拍指令下发失败（ctrl 线程将按节拍重试）：%s", e)
             finally:
                 self._switching.clear()
         elif self._motion_running and domain == "traj":
@@ -1779,8 +1791,7 @@ class JoyArm:
             try:
                 self._active_name[domain] = name
                 self._sync_traj_tick()             # 当前帧立即来自新规划器
-                for wname, hz in (("traj-plan", inst.plan_hz),
-                                  ("traj-sample", inst.sample_hz)):
+                for wname, hz in (("traj-plan", inst.plan_hz), ("traj-sample", inst.sample_hz)):
                     worker = self._motion_threads.get(wname)
                     if worker is not None:
                         worker.set_hz(hz)

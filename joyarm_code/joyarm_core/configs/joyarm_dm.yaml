@@ -3,7 +3,7 @@
 # ===================================================================
 basic:
   name: joyarm_dm # 型号名（命名校验）
-  robot: joyarm_dm_fixend # robot_model下的urdf+mesh
+  robot: joyarm_dm # robot_model下的urdf+mesh
   ee_frame: link_end # 末端坐标系名（pin 模型帧）
 
 # ===================================================================
@@ -12,33 +12,33 @@ basic:
 joyarm:
   # arm 的 MDH 参数及各关节限位：6 行 × [α_{i-1}, a_{i-1}, d_i, θ_i, q_min_i, q_max_i, dq_max_i, tau_max_i, soft_margin]，单位：rad, m, m, rad, rad, rad, rad/s, N·m, None
   arm_mdh_and_limits:
-    - [0.0, 0.0, 0.0, 0.0, -2.80, 2.80, 50.0, 27.0, 0.05]
-    - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
-    - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 50.0, 27.0, 0.05]
-    - [0.0, 0.0, 0.0, 0.0, -1.87, 1.57, 200.0, 7.0, 0.05]
-    - [0.0, 0.0, 0.0, 0.0, -1.57, 1.57, 200.0, 7.0, 0.05]
-    - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 200.0, 7.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -2.80, 2.80, 5.0, 27.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, 0.0, 3.14, 5.0, 27.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0, 5.0, 27.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -1.57, 1.57, 20.0, 7.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -1.57, 1.57, 20.0, 7.0, 0.05]
+    - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 20.0, 7.0, 0.05]
 
-  # 末link系 → end系的固定位姿：4×4 齐次矩阵
-  T_linkn_end:
-    - [3.6732051e-06, -9.2653590e-05, 1.0, 0.0]
-    - [-3.4033564e-10, -1.0, -9.2653590e-05, 0.0]
-    - [1.0, 0.0, -3.6732051e-06, 0.15539]
+  # 末link系 → end_tcp系的固定位姿
+  T_linkn_tcp:
+    - [0.0, -1.0, 0.0, 0.0]
+    - [0.0, 0.0, -1.0, 0.0]
+    - [1.0, 0.0, 0.0, 0.032692]
     - [0.0, 0.0, 0.0, 1.0]
 
   # 软限位（直配，不经 margin 换算）：供上层状态判断（超软限位 → 状态异常 → 急停恢复，后续实现）；
   # backend 下发指令只裁硬限位；软限位须位于对应硬限位内；
   # 四键：q_min/q_max(rad)、dq_max(rad/s)、tau_max(N·m)；每键写标量（全关节统一）或 n 元列表（逐关节）；缺省键 = 该量不设软限（±∞）
   arm_soft_limits: # 本体（数值 = 硬限位内缩，与原 margin 配置边界等效）
-    q_min: [-2.52, -2.98, -2.98, -1.70, -1.41, -2.83] # rad
-    q_max: [2.52, -0.16, -0.16, 1.40, 1.41, 2.83] # rad
-    dq_max: [45.0, 45.0, 45.0, 180.0, 180.0, 180.0] # rad/s
+    q_min: [-2.52, 0.16, -2.98, -1.41, -1.41, -2.83] # rad
+    q_max: [2.52, 2.98, -0.16, 1.41, 1.41, 2.83] # rad
+    dq_max: [4.5, 4.5, 4.5, 18.0, 18.0, 18.0] # rad/s
     tau_max: [24.3, 24.3, 24.3, 6.3, 6.3, 6.3] # N·m
   end_soft_limits: # 末端（电机空间；数值 = 末端硬限位，即不额外收缩）
-    q_min: -1.8 # rad
-    q_max: 3.8 # rad
-    dq_max: 2.0 # rad/s
-    tau_max: 1.0 # N·m
+    q_min: -5.49 # rad
+    q_max: 0.0 # rad
+    dq_max: 20.0 # rad/s
+    tau_max: 7.0 # N·m
 
   # 末端系空间限位
   tcp_limits:
@@ -57,19 +57,19 @@ joyarm:
 # 规格 = 注册名字符串 或 {name: 注册名, **构造参数}；运行期 arm.set_solver(域, 名) 切换。
 # 注册名 = 实现类名小写+下划线（类名 = 算法前缀+域基类名，如 PinFkineSolver →  pin_fkine_solver；
 # ===================================================================
-# robotics:
-#   fkine:
-#     - { name: pin_fkine_solver }    
-#   ikine:
-#     - { name: pin_ikine_solver, tol: 1.0e-4, iters: 200 }
-#   jacobian:
-#     - { name: pin_jacobian_solver }
-#   dynamics:
-#     - { name: pin_dynamics_solver }
-#   traj:
-#     - { name: to_joint_traj_planner, plan_hz: 5.0, sample_hz: 200.0, dt_min_required: 1.0 }
-#   control:
-#     - { name: joint_position_controller, ctrl_hz: 200.0 }
+robotics:
+  fkine:
+    - { name: pin_fkine_solver }    
+  ikine:
+    - { name: pin_ikine_solver, damping: 1.0e-3, step_max: 0.5, restarts: 3 }
+  jacobian:
+    - { name: pin_jacobian_solver }
+  dynamics:
+    - { name: pin_dynamics_solver }
+  traj:
+    - { name: to_joint_traj_planner, plan_hz: 5.0, sample_hz: 200.0, dt_min_required: 1.0 }
+  control:
+    - { name: joint_position_controller, ctrl_hz: 200.0 }
 
 # ===================================================================
 # 通信层（backend）：arm与end的硬件通讯，达妙 DM 电机，USB-CAN
@@ -88,7 +88,7 @@ backend:
         model: "4340P"
         q_min: -2.8 # 行程下限（rad，硬限位）
         q_max: 2.8 # 行程上限（rad）
-        dq_max: 50.0 # 速度上限（rad/s）
+        dq_max: 5.0 # 速度上限（rad/s）
         tau_max: 27.0 # 力矩上限（N·m）
         MIT:
           kp: 120.0
@@ -104,9 +104,9 @@ backend:
         motor_id: 0x02
         feedback_id: 0x12
         model: "4340P"
-        q_min: -3.14
-        q_max: 0.0
-        dq_max: 50.0
+        q_min: 0.0
+        q_max: 3.14
+        dq_max: 5.0
         tau_max: 27.0
         MIT:
           kp: 120.0
@@ -124,7 +124,7 @@ backend:
         model: "4340P"
         q_min: -3.14
         q_max: 0.0
-        dq_max: 50.0
+        dq_max: 5.0
         tau_max: 27.0
         MIT:
           kp: 120.0
@@ -140,9 +140,9 @@ backend:
         motor_id: 0x04
         feedback_id: 0x14
         model: "4310"
-        q_min: -1.87
+        q_min: -1.57
         q_max: 1.57
-        dq_max: 200.0
+        dq_max: 20.0
         tau_max: 7.0
         MIT:
           kp: 18.0
@@ -160,7 +160,7 @@ backend:
         model: "4310"
         q_min: -1.57
         q_max: 1.57
-        dq_max: 200.0
+        dq_max: 20.0
         tau_max: 7.0
         MIT:
           kp: 18.0
@@ -178,7 +178,7 @@ backend:
         model: "4310"
         q_min: -3.14
         q_max: 3.14
-        dq_max: 200.0
+        dq_max: 20.0
         tau_max: 7.0
         MIT:
           kp: 18.0
@@ -195,14 +195,14 @@ backend:
     protocol: serial_can
     baud_rate: 921600
     joints:
-      - name: gripper
+      - name: joint_end1 # 末端电机名（与 URDF 末端旋转关节一致，驱动两指平行开合）
         motor_id: 0x07
         feedback_id: 0x17
         model: "4310"
-        q_min: -1.8 # 行程下限（rad，张开位）
-        q_max: 3.8 # 行程上限（rad，闭合位）
-        dq_max: 2.0 # 速度上限（rad/s）
-        tau_max: 1.0 # 力矩上限（N·m）
+        q_min: -5.49 # 行程下限（rad，张开位）
+        q_max: 0.0 # 行程上限（rad，闭合位）
+        dq_max: 20.0 # 速度上限（rad/s）
+        tau_max: 7.0 # 力矩上限（N·m）
         MIT:
           # kp: 8.0
           # kd: 1.0

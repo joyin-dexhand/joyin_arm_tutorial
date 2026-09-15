@@ -67,19 +67,19 @@ joyarm:
 # 规格 = 注册名字符串 或 {name: 注册名, **构造参数}；运行期 arm.set_solver(域, 名) 切换。
 # 注册名 = 实现类名小写+下划线（类名 = 算法前缀+域基类名，如 PinFkineSolver → pin_fkine_solver；
 # -------------------------------------------------------------------
-# robotics:
-#   fkine:
-#     - { name: pin_fkine_solver }
-#   ikine:
-#     - { name: pin_ikine_solver, tol: 1.0e-4, iters: 200 }
-#   jacobian:
-#     - { name: pin_jacobian_solver }
-#   dynamics:
-#     - { name: pin_dynamics_solver }
-#   traj:
-#     - { name: to_joint_traj_planner, plan_hz: 5.0, sample_hz: 200.0, dt_min_required: 1.0 }
-#   control:
-#     - { name: joint_position_controller, ctrl_hz: 200.0 }
+robotics:
+  fkine:
+    - { name: pin_fkine_solver }
+  ikine:
+    - { name: pin_ikine_solver, damping: 1.0e-3, step_max: 0.5, restarts: 3 }
+  jacobian:
+    - { name: pin_jacobian_solver }
+  dynamics:
+    - { name: pin_dynamics_solver }
+  traj:
+    - { name: to_joint_traj_planner, plan_hz: 5.0, sample_hz: 200.0, dt_min_required: 1.0 }
+  control:
+    - { name: joint_position_controller, ctrl_hz: 200.0 }
 
 # -------------------------------------------------------------------
 # 通信层（backend）：arm 与 end 的硬件通讯（字段以 DM 实现为参照）

@@ -273,6 +273,17 @@ class DmMotor:
 
     def __init__(self, jcfg: dict) -> None:
         self.name = str(jcfg.get("name", "motor"))
+        for key in ("motor_id", "feedback_id"):
+            v = jcfg.get(key)
+            try:
+                vi = int(v)
+            except (TypeError, ValueError):
+                vi = None
+            if vi is None or not 0 <= vi <= 0x1FFFFFFF:
+                raise ValueError(
+                    f"backend_dm.py - DmMotor.__init__：关节 {self.name} 的 "
+                    f"{key}={v!r} 缺失或非法（CAN ID 须为非负整数；"
+                    f"现有键：{sorted(jcfg)}）")
         self.motor_id = int(jcfg["motor_id"])
         self.feedback_id = int(jcfg["feedback_id"])
         model = str(jcfg.get("model", ""))

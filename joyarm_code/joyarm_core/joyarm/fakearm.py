@@ -135,7 +135,7 @@ class FakeArm:
 
         # ---- 运动学模型（pinocchio，与 JoyArm 同一 URDF 解析路径）----
         self._urdf_path: str = JoyArm._resolve_robot_urdf(str(basic["robot"]))
-        self.pin_model: pin.Model = pin.buildModelFromUrdf(self._urdf_path)
+        self.pin_model: pin.Model = JoyArm._build_pin_model(self._urdf_path)
         self.pin_data: pin.Data = self.pin_model.createData()
         self.ee_frame_id: int = self.pin_model.getFrameId(self.ee_frame_name)
         if self.ee_frame_id >= len(self.pin_model.frames):

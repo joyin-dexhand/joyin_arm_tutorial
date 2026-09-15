@@ -53,11 +53,12 @@ joyarm_code/
 │   ├── joyarm/                     #   设备模型层（组合根 + 型号工厂）
 │   │   ├── joyarm.py                #     JoyArm（单类）：config 驱动构造 + 六域字典组装 + 公开门面
 │   │   │                            #       + 自检 + tcp_limits 解析 + load_config/_build_domain
+│   │   │                            #       + _build_pin_model（URDF 解析并锁定非本体关节 → nq=n_arm 计算模型）
 │   │   │                            #       + 私有周期线程机制 _run_periodic/_PeriodicThread（保活+运动三线程）
 │   │   │                            #       + _cubic_traj 三次插值（move_j/safe_* 直连路径，单消费者内联）
 │   │   ├── fakearm.py              #     FakeArm（JoyArm 无硬件最小替身：arm 协议鸭子类型实现；算法测试/章节示例/CI）
 │   │   └── __init__.py              #     JoyArmFactory/joyarm_factory（仅工厂入口软化：失败→None+信息；JoyArm 直用硬失败）
-│   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）；joyarm_dm/ 为旧版原始构型参照（现行配置用 joyarm_dm_fixend）
+│   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）；现行配置用 joyarm_dm，rebot_dm/ rebot_dm_fixend/ 为旧版构型参照
 │   └── configs/                     #   per-model YAML（basic/joyarm/robotics/backend 四段）
 │       ├── joyarm_dm.yaml           #     正式型号配置
 │       └── joyarm_template.yaml     #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 list_models）

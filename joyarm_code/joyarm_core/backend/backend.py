@@ -137,8 +137,7 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION,
-                     joint: Optional[int] = None) -> None:
+    def set_mode_arm(self, mode: ControlMode = ControlMode.POSITION, joint: Optional[int] = None) -> None:
         """切换本体控制模式（收指令前必须先切到对应模式；默认位置模式）。
 
         ``POSITION → 电机 POS_VEL``、``VELOCITY → 电机 VEL``、``MIT → 电机 MIT``；
@@ -169,24 +168,19 @@ class Backend(ABC):
     # ----------------------------------------------------------
     # 指令限位守卫（arm/end 两族共用裁剪核；send_* 模板前置；只裁硬限位）
     # ----------------------------------------------------------
-    def _guard_arm(self, name: str, arr: np.ndarray,
-                   joint: Optional[int]) -> np.ndarray:
+    def _guard_arm(self, name: str, arr: np.ndarray,joint: Optional[int]) -> np.ndarray:
         """本体指令守卫：``q`` 硬限位裁剪、``dq``/``tau`` 幅值裁剪。
 
         无硬限位（cfg 未配置 ``arm.joints``）/ 维度不符时原样放行。
         """
-        return self._clip_within(self._arm_limits, name, arr, joint,
-                                 family="arm", broadcast=False)
+        return self._clip_within(self._arm_limits, name, arr, joint,family="arm", broadcast=False)
 
-    def _guard_end(self, name: str, arr: np.ndarray,
-                   joint: Optional[int]) -> np.ndarray:
+    def _guard_end(self, name: str, arr: np.ndarray,joint: Optional[int]) -> np.ndarray:
         """末端指令守卫（逐电机硬限位；多执行器末端支持标量广播裁剪）。"""
-        return self._clip_within(self._end_limits, name, arr, joint,
-                                 family="end", broadcast=True)
+        return self._clip_within(self._end_limits, name, arr, joint,family="end", broadcast=True)
 
-    def _clip_within(self, limits: Optional[JointLimits], name: str,
-                     arr: Optional[np.ndarray], joint: Optional[int],
-                     family: str, broadcast: bool) -> Optional[np.ndarray]:
+    def _clip_within(self, limits: Optional[JointLimits], name: str,arr: Optional[np.ndarray], 
+            joint: Optional[int],family: str, broadcast: bool) -> Optional[np.ndarray]:
         """裁剪核：``q`` → [q_min, q_max]，``dq``/``tau`` → ±幅值上限，其余放行。
 
         ``joint`` 指定时取该关节限位切片；指令长度与限位不符时放行交内核校验；
@@ -216,9 +210,8 @@ class Backend(ABC):
             with self._warn_lock:
                 if now - self._warn_last >= _WARN_INTERVAL:
                     self._warn_last = now
-                    logger.warning("send_*_%s: %s 指令越限，已就近裁剪 %s → %s",
-                                   family, name, np.round(arr, 4).tolist(),
-                                   np.round(clipped, 4).tolist())
+                    logger.warning("send_*_%s: %s 指令越限，已就近裁剪 %s → %s",family, name, 
+                                   np.round(arr, 4).tolist(), np.round(clipped, 4).tolist())
         return clipped
 
     @staticmethod
@@ -270,8 +263,7 @@ class Backend(ABC):
     ) -> None:
         """本体 MIT 阻抗/前馈指令（守卫模板：``τ = kp·(q_des−q) + kd·(dq_des−dq) + tau_ff``）。
 
-        ``q``/``dq``/``tau_ff`` 越限时就近裁剪并告警（``kp``/``kd`` 为标定增益，
-        不裁剪），再委托内核下发。
+        ``q``/``dq``/``tau_ff`` 越限时就近裁剪并告警（kp/kd为增益，不裁剪），再委托内核下发。
 
         :param q: 位置目标 ``(n,)``，弧度。
         :param dq: 速度目标 ``(n,)``，rad/s。
@@ -344,8 +336,7 @@ class Backend(ABC):
         """末端电机故障清除（语义同 :meth:`clear_fault_arm`，验证式复位）。"""
 
     @abstractmethod
-    def set_mode_end(self, mode: ControlMode = ControlMode.POSITION,
-                     joint: Optional[int] = None) -> None:
+    def set_mode_end(self, mode: ControlMode = ControlMode.POSITION,joint: Optional[int] = None) -> None:
         """切换末端控制模式（语义同 :meth:`set_mode_arm`，默认位置模式）。
 
         :param mode: 目标控制模式，默认 ``ControlMode.POSITION``（电机 POS_VEL）。
@@ -373,7 +364,7 @@ class Backend(ABC):
         """
 
     def read_state_cache_arm(self, joint: Optional[int] = None) -> ArmState:
-        """读取本体状态快照的**缓存视图**。
+        """读取本体状态快照的**缓存视图**（q/dq/tau 换算关节空间，同 :meth:`read_state_arm`）。
 
         数据来自最近一次状态应答写入的缓存槽——控制流期间随指令帧同频刷新（一发一收），
         空闲期由上层保活刷新维持新鲜（见:meth:`state_age_arm`）。
@@ -436,8 +427,7 @@ class Backend(ABC):
             限位**广播就近裁剪**）或与所选电机数一致的序列（N·m）。
         :param joint: 末端电机索引，``None`` 表示全部。
         """
-        self._send_tau_end(self._guard_end("tau", self._vec(tau), joint),
-                           joint)
+        self._send_tau_end(self._guard_end("tau", self._vec(tau), joint),joint)
 
     @abstractmethod
     def _send_tau_end(self, tau, joint: Optional[int] = None) -> None:
