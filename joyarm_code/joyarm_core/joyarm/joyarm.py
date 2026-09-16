@@ -313,7 +313,7 @@ class JoyArm:
         self._config: dict = cfg                         # 配置快照（get_config 返回它的深拷贝）
         self._urdf_path: str = ""                        # URDF 文件路径
         self.connected: bool = False                     # 是否已连真机（创建后默认不连）
-        self.ee_frame_name: str = str(basic.get("ee_frame") or "ee")  # 末端坐标系名
+        self.ee_frame_name: str = str(basic.get("end_frame") or "ee")  # 末端坐标系名
 
         # ---- 运动学模型（pinocchio，由 URDF 解析而来）----
         self.pin_model: Optional[pin.Model] = None       # 构型模型（只读共享）
@@ -366,7 +366,7 @@ class JoyArm:
 
         # ---- 逐步换成真值：URDF → 关节数/顺序 → 硬/软限位 → 特征位形 → 末端空间限位 → 通信后端 → 六域算法 ----
         # ---- 解析 URDF，构建 pinocchio 模型（锁定非本体活动关节 → nq = n_arm）----
-        self._urdf_path = self._resolve_robot_urdf(str(basic["robot"]))
+        self._urdf_path = self._resolve_robot_urdf(str(basic["robot_model"]))
         self.pin_model = self._build_pin_model(self._urdf_path)
         self.pin_data = self.pin_model.createData()
 
@@ -569,7 +569,7 @@ class JoyArm:
         ② 同名关节的限位数值和 URDF 不一致（容差 1e-4，逐键比）；
         ③ URDF 里有 config 没定义的本体活动关节（joint1~joint9 的非 mimic 关节）。
 
-        :param urdf_path: URDF 文件路径（``basic.robot`` 解析产物）。
+        :param urdf_path: URDF 文件路径（``basic.robot_model`` 解析产物）。
         :param arm_joint_cfgs: config ``backend.arm.joints`` 条目列表。
         """
         urdf = JoyArm._urdf_joint_limits(urdf_path)
@@ -949,15 +949,15 @@ class JoyArm:
         basic = cfg.get("basic") or {}
         if basic.get("name") not in (None, model):
             problems.append(f"basic.name={basic.get('name')!r} 与 model={model!r} 不一致")
-        if not basic.get("robot"):
-            problems.append("basic.robot 缺失（robot_model URDF 索引，无法解析 URDF）")
+        if not basic.get("robot_model"):
+            problems.append("basic.robot_model 缺失（robot_model URDF 索引，无法解析 URDF）")
         else:
             try:
-                JoyArm._resolve_robot_urdf(str(basic["robot"]))
+                JoyArm._resolve_robot_urdf(str(basic["robot_model"]))
             except ValueError as e:
                 problems.append(str(e))
-        if not basic.get("ee_frame"):
-            problems.append("basic.ee_frame 缺失（末端帧名）")
+        if not basic.get("end_frame"):
+            problems.append("basic.end_frame 缺失（末端帧名）")
         if "backend" not in cfg:
             problems.append("缺少配置段：backend（必配：不配置则无法指定通信与执行）")
         bcfg = cfg.get("backend") or {}

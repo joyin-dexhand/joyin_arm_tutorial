@@ -58,7 +58,7 @@ joyarm_code/
 │   │   │                            #       + _cubic_traj 三次插值（move_j/safe_* 直连路径，单消费者内联）
 │   │   ├── fakearm.py              #     FakeArm（JoyArm 无硬件最小替身：arm 协议鸭子类型实现；算法测试/章节示例/CI）
 │   │   └── __init__.py              #     JoyArmFactory/joyarm_factory（仅工厂入口软化：失败→None+信息；JoyArm 直用硬失败）
-│   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）；现行配置用 joyarm_dm，rebot_dm/ rebot_dm_fixend/ 为旧版构型参照
+│   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
 │   └── configs/                     #   per-model YAML（basic/joyarm/robotics/backend 四段）
 │       ├── joyarm_dm.yaml           #     正式型号配置
 │       └── joyarm_template.yaml     #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 list_models）
@@ -96,8 +96,8 @@ joyarm_code/
 `configs/<model>.yaml` 四段：`basic`（基本信息 + robot_model URDF 索引）/ `joyarm`（设备模型 + 直配软限位）/ `robotics`（六域算法选型）/ `backend`（通信层 + 硬限位四键）。**命名链**：工厂入参 = 文件名 = `basic.name` 字段，任一环节不符即工厂返回 `None`（约束4）；backend 与机械臂型号 1:1（`backend_dm`）：
 
 ```yaml
-basic: {name, robot, ee_frame}
-joyarm: {arm_mdh_and_limits, T_linkn_end, arm_soft_limits, end_soft_limits, tcp_limits, arm_home, end_home}   # 软限位四键直值 {q_min, q_max, dq_max, tau_max}（arm/end 分开，标量或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero/neutral 按自由度全零（代码固定，不经 config）；MDH/T_linkn_end 为教学数据（约束8）；workspace_box 兼容 (2,3)/(3,2)
+basic: {name, robot_model, end_frame}
+joyarm: {arm_mdh_and_limits, T_linkn_endtcp, arm_soft_limits, end_soft_limits, tcp_limits, arm_home, end_home}   # 软限位四键直值 {q_min, q_max, dq_max, tau_max}（arm/end 分开，标量或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero/neutral 按自由度全零（代码固定，不经 config）；MDH/T_linkn_endtcp 为教学数据（约束8）；workspace_box 兼容 (2,3)/(3,2)
 robotics: {六域契约规格}   # 六域选型（注册名 / {name, **参数} / 规格列表，全部加载、首个激活）；当前整段注释过渡——注册名实现并注册后取消注释接入（硬失败语义）
 backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {channel, protocol, baud_rate, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源，backend `__init__` 自解析；arm 数值须与 URDF limit 标定保持一致，JoyArm init 三类自检告警：关节缺失/数值不一致/URDF 多余非 mimic 活动关节）；
 ```

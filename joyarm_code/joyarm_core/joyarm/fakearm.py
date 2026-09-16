@@ -42,7 +42,7 @@
     from joyarm_core import FakeArm
 
     arm = FakeArm()                                # 默认型号 joyarm_dm，初始停在 home
-    pose = arm.fkine(arm.arm_home, "link_end")     # 数学门面：不连"机"也能算
+    pose = arm.fkine(arm.arm_home, "frame_end_tcp")  # 数学门面：不连"机"也能算
     arm.connect()                                  # 生命周期标志（无实际 IO）
     arm.enable_arm()
     ts, qs, dqs = arm.move_j(arm.rand_q_arm())     # 理想插值运动，返回轨迹数组
@@ -130,11 +130,11 @@ class FakeArm:
         self.model: str = model
         self._config: dict = cfg
         self.connected: bool = False        # 连接标志（connect 只置标志，无 IO）
-        self.ee_frame_name: str = str(basic.get("ee_frame") or "ee")
+        self.ee_frame_name: str = str(basic.get("end_frame") or "ee")
         self.is_normal: bool = True
 
         # ---- 运动学模型（pinocchio，与 JoyArm 同一 URDF 解析路径）----
-        self._urdf_path: str = JoyArm._resolve_robot_urdf(str(basic["robot"]))
+        self._urdf_path: str = JoyArm._resolve_robot_urdf(str(basic["robot_model"]))
         self.pin_model: pin.Model = JoyArm._build_pin_model(self._urdf_path)
         self.pin_data: pin.Data = self.pin_model.createData()
         self.ee_frame_id: int = self.pin_model.getFrameId(self.ee_frame_name)
