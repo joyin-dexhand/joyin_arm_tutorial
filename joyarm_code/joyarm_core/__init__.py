@@ -10,13 +10,14 @@
     backend/    通信层：Backend（整机接口）→ Backend*（具体后端实现）
     ─────────────────────────────────────────────
     utils/      数学 / 共享数据类型 / 限位裁剪
-    robot_model/ configs/   URDF+网格资产 / 每型号一份 YAML 配置
+    robot_model/ config/    URDF+网格资产 / 每型号一份 YAML 配置
 
-接入新型号：复制 ``configs/joyarm_template.yaml`` 填写 + 放入
-``robot_model/<robot>/`` 资产 + 新写 ``backend/backend_<型号>.py``（注册表加
-一行）即可，无需改动 JoyArm 本身（型号与整机后端一一对应）。
-ROS2 封装（节点/launch/rviz2 等）在 ``joyarm_ros2_ws/``（详见 AGENTS.md）；
-状态监测归 ROS2 节点（Ch11）。命名约定：类名驼峰，文件名小写 snake_case。用法::
+接入新型号：
+    1. 复制 ``config/joyarm_template.yaml`` 填写；
+    2. 放入``robot_model/<型号名>/`` 资产；
+    3. 新写 ``backend/backend_<型号>.py``（注册表一行注册）；
+
+命名约定：类名驼峰，文件名小写 snake_case。用法::
 
     from joyarm_core import joyarm_factory   # 推荐入口：型号名唯一参数
 
@@ -80,14 +81,13 @@ from .robotics.trajectory import TrajPlanner, ToJointTrajPlanner
 from .robotics.control import Controller, JointPositionController
 
 # ---- 指令路径守卫（clamp_to_limits）+ 限位构建辅助 ----
-from .utils.limits import clamp_to_limits, joint_limits_from_model, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
+from .utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg, tcp_limits_from_cfg
 
 # ---- 通信层（整机后端，两层继承 + name 选型注册表）----
 from . import backend
 from .backend import (
     Backend,
     BackendDM,
-    BackendDMMujoco,
     get_backend,
 )
 
@@ -136,7 +136,7 @@ __all__ = [
     "FakeArm",
     "JoyArmFactory",
     "joyarm_factory",
-    # 求解器策略接口（各章实现注册后接入）+ 注册装饰器
+    # 求解器策略接口
     "FkineSolver",
     "IkineSolver",
     "JacobianSolver",
@@ -152,15 +152,14 @@ __all__ = [
     "JointPositionController",
     # 指令路径守卫 + 限位构建辅助
     "clamp_to_limits",
-    "joint_limits_from_model",
     "limits_from_joint_cfgs",
     "soft_limits_from_cfg",
+    "tcp_limits_from_cfg",
     "rand_within_limits",
     # 通信层（整机后端）
     "backend",
     "Backend",
     "BackendDM",
-    "BackendDMMujoco",
     "get_backend",
     # 版本
     "__version__",

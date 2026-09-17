@@ -24,7 +24,7 @@ from typing import Callable, List, Optional, Union
 import numpy as np
 import pinocchio as pin
 
-from ..utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg
+from ..utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg, tcp_limits_from_cfg
 from ..utils.transforms import quat_conj, quat_mul, quat_to_axis_angle
 from ..utils.types import ArmState, ControlMode, JointLimits, Pose, TcpLimits, TrajFrame
 
@@ -42,11 +42,11 @@ logger = logging.getLogger("joyarm_core.joyarm")
 
 
 # ============================================================
-# 路径常量（内部）：configs/ 与 robot_model/ 目录位置
+# 路径常量（内部）：config/ 与 robot_model/ 目录位置
 # ============================================================
-# configs/ 目录（joyarm.py 位于 joyarm_core/joyarm/，上溯一级即包根）
-_CONFIGS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs"
+# config/ 目录（joyarm.py 位于 joyarm_core/joyarm/，上溯一级即包根）
+_CONFIG_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config"
 )
 
 # robot_model/ 目录（URDF 模型 + 网格文件，运行期加载）
@@ -58,11 +58,32 @@ _ROBOT_MODEL_DIR = os.path.join(
 # 其余（末端/手指等）不参与关节数与顺序校验
 _ARM_JOINT_NAMES = {f"joint{i}" for i in range(1, 10)}
 
+# config 四键限位与 URDF limit 的一致性核对容差（超出才告警；数值以 config 为准）
+_URDF_LIMIT_TOL = 1e-4
+
+
+def _soft_beyond_hard(soft, hard) -> bool:
+    """软限位是否越出硬限位（JoyArm / FakeArm 共用，同一份 config 两侧同判定）。
+
+    软限位某键为 ±∞（缺省键，``soft_limits_from_cfg`` 兜底值）表示该维度
+    **不设软限**，跳过比较——只比对显式给出的有限值。
+    """
+    def _bad(s, h, upper: bool) -> bool:
+        s, h = np.asarray(s, dtype=float), np.asarray(h, dtype=float)
+        if upper:
+            return bool((np.isfinite(s) & (s > h + 1e-9)).any())
+        return bool((np.isfinite(s) & (s < h - 1e-9)).any())
+
+    return (_bad(soft.q_min, hard.q_min, False)
+            or _bad(soft.q_max, hard.q_max, True)
+            or _bad(soft.dq_max, hard.dq_max, True)
+            or _bad(soft.tau_max, hard.tau_max, True))
+
 
 def load_config(model: str, strict: bool = False) -> Optional[dict]:
-    """读取 ``configs/<model>.yaml`` 型号配置文件。
+    """读取 ``config/<model>.yaml`` 型号配置文件。
 
-    :param model: 型号名（= yaml 文件名 = yaml 里 ``basic.name`` 字段）。
+    :param model: 型号名（= yaml 文件名；URDF 目录 ``robot_model/<model>/`` 同名）。
     :param strict: ``True`` 时文件缺失/解析出错直接抛 ``ValueError``（并列出
         可用型号）；默认 ``False``，出错返回 ``None``（工厂用这种方式，
         由工厂自己把 ``None`` 转成失败提示）。
@@ -70,7 +91,7 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
     try:
         import yaml
 
-        with open(os.path.join(_CONFIGS_DIR, f"{model}.yaml"), encoding="utf-8") as f:
+        with open(os.path.join(_CONFIG_DIR, f"{model}.yaml"), encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         if not isinstance(cfg, dict):
             raise ValueError(f"joyarm.py - load_config：顶层应为映射，实际 {type(cfg).__name__}")
@@ -79,11 +100,11 @@ def load_config(model: str, strict: bool = False) -> Optional[dict]:
         if not strict:
             return None
         try:
-            avail = sorted(f[:-5] for f in os.listdir(_CONFIGS_DIR) if f.endswith(".yaml"))
+            avail = sorted(f[:-5] for f in os.listdir(_CONFIG_DIR) if f.endswith(".yaml"))
         except OSError:
             avail = []
         raise ValueError(
-            f"joyarm.py - load_config：『{model}』型号在 configs 中未找到；可用：{avail}"
+            f"joyarm.py - load_config：『{model}』型号在 config 中未找到；可用：{avail}"
         ) from e
 
 
@@ -282,8 +303,8 @@ def _cubic_traj(q0, q1, t: float, rate: float = 100.0):
 class JoyArm:
     """JoyArm 机械臂类（本体 arm + 末端 end）
 
-    :param model: 型号名（= ``configs/<model>.yaml`` 文件名 = yaml ``basic.name``）。
-    :param config: 型号配置字典；默认自动加载 ``configs/<model>.yaml``。config 缺失或 :meth:`check_config` 自检不通过时抛异常。
+    :param model: 型号名（= ``config/<model>.yaml`` 文件名 = URDF 目录 ``robot_model/<model>/``）。
+    :param config: 型号配置字典；默认自动加载 ``config/<model>.yaml``。config 缺失或 :meth:`check_config` 自检不通过时抛异常。
     """
 
     # ============================================================
@@ -295,13 +316,12 @@ class JoyArm:
     # 装配特征位形与末端限位 → 创建通信后端 → 创建六域算法成员
     # ============================================================
     def __init__(self, model: str, config: Optional[dict] = None):
-        # ---- 读取 config：不传就自动加载 configs/<model>.yaml ----
+        # ---- 读取 config：不传就自动加载 config/<model>.yaml ----
         if config is None:
             config = load_config(model, strict=True)   # 文件缺失/解析错 → 直接抛错
         cfg = copy.deepcopy(config)   # 拷贝一份：调用方之后改原字典不影响本对象
         self.check_config(model, cfg)  # 先整体自检，通过才继续装配
 
-        basic = cfg.get("basic") or {}
         jcfg = cfg.get("joyarm") or {}
         backend_cfg = cfg.get("backend") or {}
         arm_joint_cfgs = (backend_cfg.get("arm") or {}).get("joints") or []
@@ -313,7 +333,7 @@ class JoyArm:
         self._config: dict = cfg                         # 配置快照（get_config 返回它的深拷贝）
         self._urdf_path: str = ""                        # URDF 文件路径
         self.connected: bool = False                     # 是否已连真机（创建后默认不连）
-        self.ee_frame_name: str = str(basic.get("end_frame") or "ee")  # 末端坐标系名
+        self.ee_frame_name: str = str(jcfg.get("end_frame") or "ee")  # 末端坐标系名
 
         # ---- 运动学模型（pinocchio，由 URDF 解析而来）----
         self.pin_model: Optional[pin.Model] = None       # 构型模型（只读共享）
@@ -366,7 +386,7 @@ class JoyArm:
 
         # ---- 逐步换成真值：URDF → 关节数/顺序 → 硬/软限位 → 特征位形 → 末端空间限位 → 通信后端 → 六域算法 ----
         # ---- 解析 URDF，构建 pinocchio 模型（锁定非本体活动关节 → nq = n_arm）----
-        self._urdf_path = self._resolve_robot_urdf(str(basic["robot_model"]))
+        self._urdf_path = self._resolve_robot_urdf(model)
         self.pin_model = self._build_pin_model(self._urdf_path)
         self.pin_data = self.pin_model.createData()
 
@@ -412,7 +432,7 @@ class JoyArm:
         # 约定：四键数值与 URDF limit 保持一致（下一行会核对，不一致只告警）
         self.arm_limits = limits_from_joint_cfgs(arm_joint_cfgs)
         self.end_limits = limits_from_joint_cfgs(end_joint_cfgs)
-        self._check_arm_limits_vs_urdf(self._urdf_path, arm_joint_cfgs)
+        self._check_limits_vs_urdf(self._urdf_path, arm_joint_cfgs, end_joint_cfgs)
 
         # ---- 软限位（config joyarm.*_soft_limits，不填就软=硬）----
         # 只加载备用（供上层"超软限位→报警/急停"用），不参与指令裁剪
@@ -424,16 +444,12 @@ class JoyArm:
             soft_limits_from_cfg(jcfg["end_soft_limits"], self.n_end)
             if (self.end_limits is not None and jcfg.get("end_soft_limits") is not None)
             else copy.deepcopy(self.end_limits))
-        # 软限位必须落在硬限位里面（超出=配置写错，直接抛错）
+        # 软限位必须落在硬限位里面（超出=配置写错，直接抛错；±∞ = 该维度不设软限）
         for tag, soft, hard in (("arm", self.arm_limits_soft, self.arm_limits),
                                 ("end", self.end_limits_soft, self.end_limits)):
             if soft is None or hard is None:
                 continue
-            beyond = ((np.asarray(soft.q_min) < np.asarray(hard.q_min) - 1e-9).any()
-                      or (np.asarray(soft.q_max) > np.asarray(hard.q_max) + 1e-9).any()
-                      or (np.asarray(soft.dq_max) > np.asarray(hard.dq_max) + 1e-9).any()
-                      or (np.asarray(soft.tau_max) > np.asarray(hard.tau_max) + 1e-9).any())
-            if beyond:
+            if _soft_beyond_hard(soft, hard):
                 raise ValueError(
                     f"joyarm.py - JoyArm.__init__：joyarm.{tag}_soft_limits 超出对应"
                     f"硬限位（软限位须位于硬限位内，供上层状态判断）")
@@ -464,6 +480,13 @@ class JoyArm:
         # ---- 末端空间限位（config joyarm 段配了就覆盖默认占位）----
         if jcfg.get("tcp_limits"):
             self._apply_tcp_limits(jcfg["tcp_limits"])
+
+        # ---- 运行参数（config joyarm.runtime 可选段，缺省用内置值）----
+        rt = jcfg.get("runtime") or {}
+        self._keepalive_hz: float = float(rt.get("state_keepalive_hz", 10.0))  # 空闲期状态保活频率 Hz
+        self._stale_after: float = float(rt.get("state_stale_timeout", 0.15))  # 缓存数据过期阈值 s
+        self._poll_interval: float = float(rt.get("move_poll_interval", 0.05))  # 到位轮询间隔 s
+        self._wait_timeout: float = float(rt.get("move_wait_timeout", 10.0))   # 运动等待超时 s
 
         # ---- 创建电机通信后端（失败即构造失败）----
         backend_name = str(backend_cfg["name"])          # check_config 已确保存在
@@ -560,8 +583,9 @@ class JoyArm:
         return joints
 
     @staticmethod
-    def _check_arm_limits_vs_urdf(urdf_path: str, arm_joint_cfgs: list) -> None:
-        """config 的关节限位与 URDF 的关节限位进行对比（只告警、不拦初始化）。
+    def _check_limits_vs_urdf(urdf_path: str, arm_joint_cfgs: list,
+                              end_joint_cfgs: list) -> None:
+        """config 的关节限位与 URDF 的关节限位进行对比（arm + end；只告警、不拦初始化）。
 
         真正生效的是 config 四键，以 config 为准。查三种情况：
 
@@ -569,26 +593,28 @@ class JoyArm:
         ② 同名关节的限位数值和 URDF 不一致（容差 1e-4，逐键比）；
         ③ URDF 里有 config 没定义的本体活动关节（joint1~joint9 的非 mimic 关节）。
 
-        :param urdf_path: URDF 文件路径（``basic.robot_model`` 解析产物）。
+        :param urdf_path: URDF 文件路径（按型号名解析产物）。
         :param arm_joint_cfgs: config ``backend.arm.joints`` 条目列表。
+        :param end_joint_cfgs: config ``backend.end.joints`` 条目列表。
         """
         urdf = JoyArm._urdf_joint_limits(urdf_path)
-        for j in arm_joint_cfgs or []:
-            name = str(j.get("name", ""))
-            u = urdf.get(name)
-            if u is None:
-                logger.warning(
-                    "URDF 限位自检：config 关节 %r 在 URDF 中不存在（限位无法与 URDF 标定核对）",
-                    name)
-                continue
-            for key in ("q_min", "q_max", "dq_max", "tau_max"):
-                cfg_v, urdf_v = j.get(key), u[key]
-                if cfg_v is None or urdf_v is None:
-                    continue     # config 缺键由 check_config 把关；URDF 缺属性不比对
-                if abs(float(cfg_v) - urdf_v) > 1e-6:
+        for part, joint_cfgs in (("arm", arm_joint_cfgs), ("end", end_joint_cfgs)):
+            for j in joint_cfgs or []:
+                name = str(j.get("name", ""))
+                u = urdf.get(name)
+                if u is None:
                     logger.warning(
-                        "URDF 限位自检：关节 %r 的 %s 不一致——config=%s，URDF=%s"
-                        "（数值以 config 为准，请核对标定）", name, key, cfg_v, urdf_v)
+                        "URDF 限位自检：%s 关节 %r 在 URDF 中不存在（限位无法与 URDF 标定核对）",
+                        part, name)
+                    continue
+                for key in ("q_min", "q_max", "dq_max", "tau_max"):
+                    cfg_v, urdf_v = j.get(key), u[key]
+                    if cfg_v is None or urdf_v is None:
+                        continue     # config 缺键由 check_config 把关；URDF 缺属性不比对
+                    if abs(float(cfg_v) - urdf_v) > _URDF_LIMIT_TOL:
+                        logger.warning(
+                            "URDF 限位自检：%s 关节 %r 的 %s 不一致——config=%s，URDF=%s"
+                            "（数值以 config 为准，请核对标定）", part, name, key, cfg_v, urdf_v)
         defined = {str(j.get("name", "")) for j in arm_joint_cfgs or []}
         for name, u in urdf.items():
             if name not in _ARM_JOINT_NAMES:
@@ -599,22 +625,8 @@ class JoyArm:
                     name)
 
     def _apply_tcp_limits(self, tl: dict) -> None:
-        """用 config 的 tcp_limits 段覆盖默认末端空间限位。
-
-        ``workspace_box`` 两种写法均可： ``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
-        （两行，yaml 常用）或每轴一行 ``[min,max]`` 的 ``(3,2)``；内部统一成``(3,2)``。
-        """
-        box = np.asarray(tl.get("workspace_box",
-                                [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]), dtype=float)
-        if box.shape == (2, 3):          # [min 行, max 行] → 每轴 [min, max]
-            box = box.T
-        self.tcp_limits = TcpLimits(
-            workspace_box=box,
-            v_lin_max=float(tl.get("v_lin_max", 0.0)),
-            v_ang_max=float(tl.get("v_ang_max", 0.0)),
-            f_max=float(tl.get("f_max", 0.0)),
-            t_max=float(tl.get("t_max", 0.0)),
-        )
+        """用 config 的 tcp_limits 段覆盖默认末端空间限位（解析在 utils）。"""
+        self.tcp_limits = tcp_limits_from_cfg(tl)
 
     # ============================================================
     # 六域成员管理（内部）：取某域的成员字典 / 当前使用的成员 / 统一求解入口
@@ -706,16 +718,14 @@ class JoyArm:
 
     # ============================================================
     # 状态后台刷新线程（内部）：connect 后自动启动，空闲时定期刷新状态缓存，
-    # 保证 get_arm_state 随时能拿到新数据（发指令期间状态随指令自动更新）
+    # 保证 get_arm_state 随时能拿到新数据（发指令期间状态随指令自动更新）；
+    # 频率与过期阈值来自 config joyarm.runtime（见 __init__）
     # ============================================================
-    _STATE_KEEPALIVE_HZ: float = 10.0   # 巡检频率（Hz）
-    _STATE_STALE_AFTER: float = 0.15    # 数据超过这么久没更新就算"旧"（秒）
-
     def _start_state_keepalive(self) -> None:
         """启动状态后台刷新线程（connect 自动调用；已在跑就不重复启动）。"""
         if self._state_thread is not None and self._state_thread.is_alive():
             return
-        worker = _PeriodicThread(self._keepalive_step, self._STATE_KEEPALIVE_HZ,
+        worker = _PeriodicThread(self._keepalive_step, self._keepalive_hz,
                                 name="joyarm-state")
         worker.start()
         self._state_thread = worker
@@ -737,10 +747,10 @@ class JoyArm:
         if not self.connected:
             return
         try:
-            if self._backend.state_age_arm() > self._STATE_STALE_AFTER:
+            if self._backend.state_age_arm() > self._stale_after:
                 self._backend.read_state_arm()
             if self.n_end and \
-                    self._backend.state_age_end() > self._STATE_STALE_AFTER:
+                    self._backend.state_age_end() > self._stale_after:
                 self._backend.read_state_end()   # 无末端型号跳过（末端查询会抛错）
         except NotImplementedError:        # 后端不支持查数据新旧 → 没法保活
             pass
@@ -862,13 +872,16 @@ class JoyArm:
             send(i)
 
     def _safe_move(self, q_arm, q_end, t=None, *, rate=None,
-                   wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
+                   wait_tol: float = 0.05, wait_timeout: Optional[float] = None) -> None:
         """安全运动内核（safe_home/safe_zero 用）
 
         本体走 MIT 阻抗模式的三次多项式指令流（跟踪 q/dq + config MIT 增益 + 有重力补偿就用），末端走位置模式；末段等到位。
 
         末端不用 MIT 阻抗（config 里末端 MIT 增益标定为 0），所以走位置模式。
+        ``wait_timeout`` 缺省取 config ``joyarm.runtime.move_wait_timeout``。
         """
+        if wait_timeout is None:
+            wait_timeout = self._wait_timeout
         # 入口裁硬限位（与 move_j 同一判定基准；软限位归上层状态判断）
         q_arm = clamp_to_limits(np.asarray(q_arm, dtype=float).reshape(-1),
                                 self.arm_limits)
@@ -911,12 +924,12 @@ class JoyArm:
         return bool(np.max(np.abs(cur - q_end)) <= tol_q)
 
     def _wait_in_position(self, q, tol_q: float, timeout: float) -> bool:
-        """每隔 50ms 查一次是否到位；超时前再查最后一次并返回结果。"""
+        """按 config ``joyarm.runtime.move_poll_interval`` 的间隔轮询到位；超时前再查最后一次并返回结果。"""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.is_in_position(q=q, tol_q=tol_q):
                 return True
-            time.sleep(0.05)
+            time.sleep(self._poll_interval)
         return self.is_in_position(q=q, tol_q=tol_q)
 
     # ============================================================
@@ -937,53 +950,122 @@ class JoyArm:
     def check_config(model: str, config: dict) -> None:
         """检查配置内容是否合格（不接硬件；``__init__`` 第一步自动调用）。
 
-        检查项：basic 段齐全、命名一致、URDF 文件存在、backend 必配且本体
-        关节四键限位齐全、home 位形长度与关节数一致、robotics 段格式合法。
+        检查项：joyarm 段齐全（``end_frame``）、URDF 文件存在（按型号名）、
+        backend 必配且 arm/end 关节四键限位齐全且 ``q_min ≤ q_max``、关节名
+        无重复、arm/end ``channel`` 必填且同 channel 总线参数一致、同总线
+        电机 ID 无冲突、arm 段 ``control_rate`` 为正数、runtime 参数为正数、
+        home/软限位长度与关节数一致、robotics 段格式合法。
 
         :raises ValueError: 有问题时抛出，一条消息列出全部问题。
         """
         problems: List[str] = []
         cfg = config or {}
-        if "basic" not in cfg:
-            problems.append("缺少配置段：basic")
-        basic = cfg.get("basic") or {}
-        if basic.get("name") not in (None, model):
-            problems.append(f"basic.name={basic.get('name')!r} 与 model={model!r} 不一致")
-        if not basic.get("robot_model"):
-            problems.append("basic.robot_model 缺失（robot_model URDF 索引，无法解析 URDF）")
-        else:
-            try:
-                JoyArm._resolve_robot_urdf(str(basic["robot_model"]))
-            except ValueError as e:
-                problems.append(str(e))
-        if not basic.get("end_frame"):
-            problems.append("basic.end_frame 缺失（末端帧名）")
+        jcfg = cfg.get("joyarm") or {}
+        if "joyarm" not in cfg:
+            problems.append("缺少配置段：joyarm")
+        if not jcfg.get("end_frame"):
+            problems.append("joyarm.end_frame 缺失（末端帧名）")
+        try:
+            JoyArm._resolve_robot_urdf(model)
+        except ValueError as e:
+            problems.append(str(e))
         if "backend" not in cfg:
             problems.append("缺少配置段：backend（必配：不配置则无法指定通信与执行）")
         bcfg = cfg.get("backend") or {}
         if not bcfg.get("name"):
             problems.append("backend.name 缺失（整机后端选型键）")
-        for i, j in enumerate((bcfg.get("arm") or {}).get("joints") or []):
-            if not isinstance(j, dict) or not j.get("name"):
-                problems.append(f"backend.arm.joints[{i}] 缺少 name 键")
-            else:
-                missing = [k for k in ("q_min", "q_max", "dq_max", "tau_max")
-                           if j.get(k) is None]
-                if missing:
-                    problems.append(
-                        f"backend.arm.joints[{i}]（{j.get('name')}）缺少限位键 {missing}"
-                        f"（四键数值须与 URDF limit 标定保持一致）")
         for part in ("arm", "end"):
             joints = (bcfg.get(part) or {}).get("joints") or []
             if part == "arm" and not joints:
                 problems.append("backend.arm.joints 为空（本体电机列表必配）")
             for i, j in enumerate(joints):
                 if not isinstance(j, dict) or not j.get("name"):
-                    if part == "end":
-                        problems.append(f"backend.end.joints[{i}] 缺少 name 键")
+                    problems.append(f"backend.{part}.joints[{i}] 缺少 name 键")
+                else:
+                    missing = [k for k in ("q_min", "q_max", "dq_max", "tau_max")
+                               if j.get(k) is None]
+                    if missing:
+                        problems.append(
+                            f"backend.{part}.joints[{i}]（{j.get('name')}）缺少限位键 {missing}"
+                            f"（四键数值须与 URDF limit 标定保持一致）")
+                    elif float(j["q_min"]) > float(j["q_max"]):
+                        problems.append(
+                            f"backend.{part}.joints[{i}]（{j.get('name')}）q_min={j['q_min']}"
+                            f" > q_max={j['q_max']}（行程上下限写反）")
+            names = [str(j.get("name")) for j in joints
+                     if isinstance(j, dict) and j.get("name")]
+            dup = sorted({n for n in names if names.count(n) > 1})
+            if dup:
+                problems.append(
+                    f"backend.{part}.joints 存在重复关节名 {dup}"
+                    f"（name 是状态报告/模式缓存/joint_index 的键，重复会互相遮蔽）")
+        # ---- channel 必填（arm 恒查；end 段存在才查；同值共享总线、异值独立建线）----
+        for part in ("arm", "end"):
+            if part == "end" and not (bcfg.get("end") or {}):
+                continue
+            if not (bcfg.get(part) or {}).get("channel"):
+                problems.append(
+                    f"backend.{part}.channel 缺失（总线设备路径，如 /dev/ttyACM0）")
+        # ---- 同 channel 总线参数一致性（复用总线时 end 的参数不会生效，须一致）----
+        sec_arm = bcfg.get("arm") or {}
+        sec_end = bcfg.get("end") or {}
+        if sec_arm.get("channel") and sec_arm.get("channel") == sec_end.get("channel"):
+            for key in ("baud_rate", "protocol"):
+                va, ve = sec_arm.get(key), sec_end.get(key)
+                if va is not None and ve is not None and va != ve:
+                    problems.append(
+                        f"backend.arm 与 backend.end 同 channel（{sec_arm.get('channel')!r}）"
+                        f"但 {key} 不一致（arm={va!r}，end={ve!r}；同 channel 共享一条总线，"
+                        f"end 的 {key} 不会生效——请改为一致，或给 end 换独立 channel）")
+        # ---- arm 段 control_rate 为正数（直连轨迹采样频率；≤0 会退化为单帧目标且无告警）----
+        cr = sec_arm.get("control_rate")
+        if cr is not None:
+            try:
+                cr_ok = float(cr) > 0.0
+            except (TypeError, ValueError):
+                cr_ok = False
+            if not cr_ok:
+                problems.append(
+                    f"backend.arm.control_rate = {cr!r} 非法（须为正数；"
+                    f"move_j/safe_* 直连轨迹的默认采样频率）")
+        # ---- 同总线电机 ID 冲突：按 channel 分组，组内 motor_id/feedback_id 合并查重 ----
+        # （重复 ID 会被 RX 分发表后注册遮蔽先注册，症状为某电机永远收不到状态，须静态拦下）
+        by_channel: dict = {}
+        for part in ("arm", "end"):
+            sec = bcfg.get(part) or {}
+            for i, j in enumerate(sec.get("joints") or []):
+                if not isinstance(j, dict):
+                    continue
+                for key in ("motor_id", "feedback_id"):
+                    v = j.get(key)
+                    if v is None:
+                        continue
+                    ch = str(sec.get("channel") or "")
+                    by_channel.setdefault(ch, {}).setdefault(
+                        v, []).append(f"{part}.joints[{i}]（{j.get('name')}）的 {key}")
+        for ch, rec in by_channel.items():
+            for v, where in rec.items():
+                if len(where) > 1:
+                    vid = f"0x{v:X}" if isinstance(v, int) else repr(v)
+                    problems.append(
+                        f"总线 {ch or '<channel缺失>'} 上电机 ID {vid} 重复：{'、'.join(where)}"
+                        f"（同总线 CAN ID 冲突会互相遮蔽收发）")
+        # ---- runtime 参数为正数（显式给出的键；缺省键走内置值不受影响）----
+        rt = jcfg.get("runtime")
+        if rt is not None:
+            if not isinstance(rt, dict):
+                problems.append("joyarm.runtime 需为四键字典（state_keepalive_hz/"
+                                "state_stale_timeout/move_poll_interval/move_wait_timeout）")
+            else:
+                for k, v in rt.items():
+                    try:
+                        ok = float(v) > 0.0
+                    except (TypeError, ValueError):
+                        ok = False
+                    if not ok:
+                        problems.append(f"joyarm.runtime.{k} = {v!r} 非法（须为正数）")
         n_arm_cfg = len((bcfg.get("arm") or {}).get("joints") or [])
         n_end_cfg = len((bcfg.get("end") or {}).get("joints") or [])
-        jcfg = cfg.get("joyarm") or {}
         for key, n_ref in (("arm_home", n_arm_cfg), ("end_home", n_end_cfg)):
             v = jcfg.get(key)
             if v is None:
@@ -1037,11 +1119,12 @@ class JoyArm:
                     problems.append(f"本体关节[{i}] 电机故障（故障标志置位）")
                 if not bool(np.asarray(js.angle_ok)[i]):
                     problems.append(f"本体关节[{i}] 编码器角度无效")
-            try:
-                es = self.get_end_state()
-            except Exception as e:
-                es = {}
-                problems.append(f"末端状态读取失败：{e}")
+            es = {}
+            if self.n_end:
+                try:
+                    es = self.get_end_state()
+                except Exception as e:
+                    problems.append(f"末端状态读取失败：{e}")
             for i, ok in enumerate(es.get("comm_ok", [])):
                 if not ok:
                     problems.append(f"末端电机[{i}] 通讯无应答")
@@ -1162,17 +1245,18 @@ class JoyArm:
     # ============================================================
     # 四、读状态：关节角/速度/力矩/温度、末端位姿
     # ============================================================
-    def get_arm_state(self) -> ArmState: # ！改为:param joint: 末端电机索引，``None`` 表示全部。
+    def get_arm_state(self) -> ArmState:
         """读取本体当前状态（关节角/速度/力矩、使能、故障、通讯、温度等）。
 
-        数据新（0.15 秒内更新过）则直接用缓存、不发总线请求，太旧就先查询一次再返回。
+        数据新鲜（年龄 ≤ config ``joyarm.runtime.state_stale_timeout``，缺省 0.15 s）
+        则直接用缓存、不发总线请求，太旧就先查询一次再返回。
         空闲时由连接后自动启动的后台线程维持数据新鲜。
 
         :raises RuntimeError: 还没 ``connect()``。
         """
         self._require_connected()
         try:
-            if self._backend.state_age_arm() <= self._STATE_STALE_AFTER:
+            if self._backend.state_age_arm() <= self._stale_after:
                 state = self._backend.read_state_cache_arm()
             else:
                 state = self._backend.read_state_arm()   # 太旧 → 先查一次
@@ -1189,7 +1273,8 @@ class JoyArm:
     def get_end_state(self, joint: Optional[int] = None) -> dict:
         """读取末端状态（q/dq/tau、使能、故障、通讯、温度，字典形式；
         
-        数据新（0.15 秒内更新过）则直接用缓存、不发总线请求，太旧就先查询一次再返回。
+        数据新鲜（年龄 ≤ config ``joyarm.runtime.state_stale_timeout``，缺省 0.15 s）
+        则直接用缓存、不发总线请求，太旧就先查询一次再返回。
         空闲时由连接后自动启动的后台线程维持数据新鲜。
 
         :param joint: 末端电机索引，``None`` 表示全部。
@@ -1197,7 +1282,7 @@ class JoyArm:
         """
         self._require_connected()
         try:
-            if self._backend.state_age_end(joint) <= self._STATE_STALE_AFTER:
+            if self._backend.state_age_end(joint) <= self._stale_after:
                 return self._backend.read_state_cache_end(joint)
             return self._backend.read_state_end(joint)     # 太旧 → 先查一次
         except NotImplementedError:
@@ -1277,7 +1362,7 @@ class JoyArm:
     # 七、运动（最常用）：move_j 一把梭；safe_* 柔和回位；后四个为占位
     # ============================================================
     def move_j(self, q, t=None, *, rate=None,
-               wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
+               wait_tol: float = 0.05, wait_timeout: Optional[float] = None) -> None:
         """关节运动到目标角（阻塞到到位/超时）
 
         内部用三次多项式把轨迹铺平滑，按固定频率逐帧发位置指令，末段轮询等到位。
@@ -1288,10 +1373,12 @@ class JoyArm:
         :param t: 运动时长（秒）；不填按路程自动估计（峰值约 1.5 rad/s）；``t ≤ 0`` 不插值直接发目标。
         :param rate: 指令发送频率 Hz，默认取 config ``control_rate``（≤1000）。
         :param wait_tol: 到位判定容差（rad）。
-        :param wait_timeout: 到位等待上限（秒），超时抛 ``RuntimeError``。
+        :param wait_timeout: 到位等待上限（秒），缺省取 config ``joyarm.runtime.move_wait_timeout``，超时抛 ``RuntimeError``。
         :raises ValueError: 目标维度与关节数不符。
         :raises RuntimeError: 未连接 / 未使能 / 到位超时。
         """
+        if wait_timeout is None:
+            wait_timeout = self._wait_timeout
         self._require_connected()
         self._require_enabled_arm()
         q = np.asarray(q, dtype=float).reshape(-1)
@@ -1322,7 +1409,7 @@ class JoyArm:
                 f"{wait_tol} rad；可能受 vlim 限速，请增大 t 或检查 config）")
 
     def safe_home(self, t=None, *, wait_tol: float = 0.05,
-                  wait_timeout: float = 10.0) -> None:
+                  wait_timeout: Optional[float] = None) -> None:
         """安全回到 home 姿态（本体 + 末端）
 
         本体走 MIT 阻抗模式，末端走位置模式。
@@ -1332,7 +1419,7 @@ class JoyArm:
         self._safe_move(self.arm_home, self.end_home, t,
                         wait_tol=wait_tol, wait_timeout=wait_timeout)
 
-    def home_to_zero(self, t=None, *, wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
+    def home_to_zero(self, t=None, *, wait_tol: float = 0.05, wait_timeout: Optional[float] = None) -> None:
         """从 home 走到零位（本体 + 末端）。
         会先确认当前确实在 home（否则报错），再走到零位。
 
@@ -1352,7 +1439,7 @@ class JoyArm:
         self._safe_move(self.arm_zero, self.end_zero, t,
                         wait_tol=wait_tol, wait_timeout=wait_timeout)
 
-    def safe_zero(self, t=None, *, wait_tol: float = 0.05, wait_timeout: float = 10.0) -> None:
+    def safe_zero(self, t=None, *, wait_tol: float = 0.05, wait_timeout: Optional[float] = None) -> None:
         """安全回零（本体 + 末端）
         
         先``safe_home()`` 回 home，再 ``home_to_zero()`` 走到零位
@@ -1405,8 +1492,9 @@ class JoyArm:
         依次做：切 MIT 模式 → 发阻尼指令 → 尽力使能 → 再发一帧。每步都
         尽力执行：某步失败只告警，不影响其他电机收到指令。
 
-        :param kd: 阻尼强度（N·m·s/rad），默认 5.0（DM 电机能编码的上限，
-            越大越"黏"；给更大的值会被后端钳到 5 并告警）。
+        :param kd: 阻尼强度（N·m·s/rad），默认 5.0（当前 DM 型号表 MIT 帧 kd
+            编码量程上限，见 backend_dm 的 ``_MOTOR_LIMITS``；越大越"黏"，
+            给更大的值会被后端钳到量程并告警）。
         :raises RuntimeError: 未连接真机。
         """
         self._require_connected()

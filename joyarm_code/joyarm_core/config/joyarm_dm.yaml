@@ -1,36 +1,30 @@
 # ===================================================================
-# 基本信息（basic）：型号标识 / robot_model URDF 索引 / 末端坐标系
-# ===================================================================
-basic:
-  name: joyarm_dm # 机械臂型号名
-  robot_model: joyarm_dm # robot_model/<值>/urdf/<值>.urdf（URDF 文件名）
-  end_frame: frame_end_tcp # 末端坐标系名（URDF 虚拟系，pin 模型末端帧）
-
-# ===================================================================
-# 设备模型（joyarm）：整臂层配置
+# 设备模型（joyarm）：型号标识 = 本文件名 = URDF 目录 robot_model/<型号名>
 # ===================================================================
 joyarm:
-  # arm 的 MDH 参数及各关节限位：
-  # 6 行 × [α_{i-1}, a_{i-1}, d_i, θ_i, q_min_i, q_max_i, dq_max_i, tau_max_i, soft_margin]
-  # 单位：    rad,      m,      m,  rad,  rad,     rad,     rad/s,      N·m,      None
-  arm_mdh_and_limits:
-    - [0.0, 0.0, 0.0, 0.0, -2.80, 2.80, 5.0, 30.0, 0.05]
-    - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0,  5.0, 30.0, 0.05]
-    - [0.0, 0.0, 0.0, 0.0, -3.14, 0.0,  5.0, 30.0, 0.05]
-    - [0.0, 0.0, 0.0, 0.0, -1.57, 1.57, 8.0, 9.0,  0.05]
-    - [0.0, 0.0, 0.0, 0.0, -1.57, 1.57, 8.0, 9.0,  0.05]
-    - [0.0, 0.0, 0.0, 0.0, -3.14, 3.14, 8.0, 9.0,  0.05]
+  end_frame: frame_end_tcp # 末端坐标系名（URDF 虚拟系，pin 模型末端帧）
 
-  # 末link（link6）系 → frame_end_tcp系的固定位姿（= URDF joint_frame_end_tcp 变换）
+  # arm 的 MDH 参数：6 行 × [α_{i-1}, a_{i-1}, d_i, θ_i]，单位：rad, m, m, rad
+  arm_mdh:
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+
+  # 末link（link6）系 → frame_end_tcp系的固定位姿
   T_linkn_endtcp:
     - [0.0, -1.0, 0.0, 0.0]
     - [0.0, 0.0, -1.0, 0.0]
     - [1.0, 0.0, 0.0, 0.032692]
     - [0.0, 0.0, 0.0, 1.0]
 
-  # 软限位：供上层状态判断（超软限位 → 状态异常 → 急停恢复）；
-  # backend 下发指令只裁硬限位；软限位须位于硬限位内；
-  arm_soft_limits: # 本体（数值 = 硬限位内缩，与原 margin 配置边界等效）
+  # 硬限位：在 backend 段配置（arm/end joints 各关节条目的 q_min/q_max/dq_max/tau_max 四键，
+  #        数值须与 URDF limit 标定一致）；backend 下发指令按硬限位裁剪。
+  
+  # 软限位：供上层状态判断（超软限位 → 状态异常 → 急停恢复），须位于硬限位内。
+  arm_soft_limits: # 本体（数值 = 硬限位内缩）
     q_min: [-2.52, -2.98, -2.98, -1.41, -1.41, -2.83] # rad
     q_max: [2.52, -0.16, -0.16, 1.41, 1.41, 2.83] # rad
     dq_max: [4.5, 4.5, 4.5, 7.2, 7.2, 7.2] # rad/s
@@ -41,7 +35,7 @@ joyarm:
     dq_max: 8.0 # rad/s
     tau_max: 1.5 # N·m
 
-  # end_frame 系空间限位
+  # end_frame 系三维位置空间限位
   tcp_limits:
     workspace_box: [[-0.2, -0.6, 0.05], [0.7, 0.6, 0.8]] # [min, max] (m)
     v_lin_max: 1.0 # m/s
@@ -51,6 +45,13 @@ joyarm:
 
   arm_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   end_home: [-3.0]
+
+  # 运行参数
+  runtime:
+    state_keepalive_hz: 10.0 # 空闲期状态保活频率 Hz
+    state_stale_timeout: 0.15 # 缓存数据过期阈值 s
+    move_poll_interval: 0.05 # 到位轮询间隔 s
+    move_wait_timeout: 10.0 # 运动等待超时 s
 
 # ===================================================================
 # 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按 REGISTRY 注册名加载激活）；
@@ -78,9 +79,9 @@ backend:
   name: backend_dm
   arm: # arm本体后端（joints 条目四键限位 = 硬限位，数值须与 URDF limit 标定保持一致）
     channel: /dev/ttyACM0
-    protocol: serial_can
+    protocol: serial_can # 信息性标识：当前总线由 backend_dm 决定
     baud_rate: 921600
-    control_rate: 200
+    control_rate: 200 # 直连指令频率 Hz（move_j/safe_* 轨迹采样与发送节拍默认值）
     joints:
       - name: joint1
         motor_id: 0x01
@@ -192,8 +193,9 @@ backend:
 
   end: # 末端后端
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
-    protocol: serial_can
+    protocol: serial_can # 信息性标识：当前总线由 backend_dm 决定
     baud_rate: 921600
+    # control_rate: 200 # 周期控制频率 Hz；backend_dm 末端无周期流未使用
     joints:
       - name: joint_end1 # 末端电机名（与 URDF 末端旋转关节一致，驱动两指平行开合）
         motor_id: 0x07

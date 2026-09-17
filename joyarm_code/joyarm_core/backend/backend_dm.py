@@ -51,16 +51,17 @@ logger = logging.getLogger("joyarm_core.backend_dm")
 # ============================================================
 # 协议常量
 # ============================================================
-# 型号 → (PMAX rad, VMAX rad/s, TMAX N·m)，MIT 打包与状态解包的线性标度极限；
+# 型号 → (PMAX rad, VMAX rad/s, TMAX N·m, KP_MAX, KD_MAX)：MIT 打包与状态解包的线性标度极限；
+# kp/kd 为 MIT 帧 12bit 定点编码量程（随型号可异，超量程会被就近钳位并告警）；
 # 仅收录本项目所用型号（4340P 为 4340 的命名变体，限值相同）
-_MOTOR_LIMITS: dict[str, tuple[float, float, float]] = {
-    "4310": (12.5, 30.0, 10.0),
-    "4340": (12.5, 10.0, 28.0),
-    "4340P": (12.5, 10.0, 28.0),
+_MOTOR_LIMITS: dict[str, tuple[float, float, float, float, float]] = {
+    "4310": (12.5, 30.0, 10.0, 500.0, 5.0),
+    "4340": (12.5, 10.0, 28.0, 500.0, 5.0),
+    "4340P": (12.5, 10.0, 28.0, 500.0, 5.0),
 }
 
-# MIT 帧固定位宽：q 16bit / dq 12bit / tau 12bit（按型号极限缩放），kp/kd 12bit（固定量程）
-_KP_MAX, _KD_MAX = 500.0, 5.0
+# 串口 CAN 桥默认波特率（config 缺 baud_rate 键时的回退值）
+_DEFAULT_BAUD_RATE: int = 921600
 
 # 接收残余缓冲上限（字节）与截断告警节流间隔（秒）：见 _extract_frames
 _RX_RESIDUAL_MAX = 4096
@@ -152,17 +153,19 @@ def _uint_to_float(x: int, x_min: float, x_max: float, bits: int) -> float:
 
 
 def _pack_mit(q: float, dq: float, tau: float, kp: float, kd: float,
-              limits: tuple[float, float, float]) -> bytes:
+              limits: tuple[float, float, float, float, float]) -> bytes:
     """打包 MIT 指令帧载荷（8 字节）：``q16 | dq12 | kp12 | kd12 | tau12`` 共 64bit。
 
-    kp/kd 超出 12bit 编码量程（``0 ≤ kp ≤ 500``、``0 ≤ kd ≤ 5``）时就近钳位
-    并节流告警——定点编码本身会静默截断，此处显式留痕防"增益名不副实"。
+    kp/kd 超出该型号 12bit 编码量程（``0 ≤ kp ≤ kp_max``、``0 ≤ kd ≤ kd_max``，
+    即 ``_MOTOR_LIMITS`` 型号表第 4/5 元）时就近钳位并节流告警——定点编码
+    本身会静默截断，此处显式留痕防"增益名不副实"。
     """
     global _MIT_RANGE_WARN_LAST
-    kp_c, kd_c = _clamp(kp, 0.0, _KP_MAX), _clamp(kd, 0.0, _KD_MAX)
+    pmax, vmax, tmax, kp_max, kd_max = limits
+    kp_c, kd_c = _clamp(kp, 0.0, kp_max), _clamp(kd, 0.0, kd_max)
     now = time.monotonic()
     clipped = [f"{n}={v:g} → {c:g}（量程 0~{hi:g}）"
-               for n, v, c, hi in (("kp", kp, kp_c, _KP_MAX), ("kd", kd, kd_c, _KD_MAX))
+               for n, v, c, hi in (("kp", kp, kp_c, kp_max), ("kd", kd, kd_c, kd_max))
                if v != c]
     if clipped and now - _MIT_RANGE_WARN_LAST >= _MIT_RANGE_WARN_INTERVAL:
         _MIT_RANGE_WARN_LAST = now
@@ -170,11 +173,10 @@ def _pack_mit(q: float, dq: float, tau: float, kp: float, kd: float,
             "backend_dm.py - _pack_mit：kp/kd 超出 MIT 帧编码量程，已就近钳位"
             f"：{'；'.join(clipped)}；实际生效以钳位后为准，请核对 config 增益"
             "或指令参数")
-    pmax, vmax, tmax = limits
     q_u = _float_to_uint(q, -pmax, pmax, 16)
     dq_u = _float_to_uint(dq, -vmax, vmax, 12)
-    kp_u = _float_to_uint(kp_c, 0.0, _KP_MAX, 12)
-    kd_u = _float_to_uint(kd_c, 0.0, _KD_MAX, 12)
+    kp_u = _float_to_uint(kp_c, 0.0, kp_max, 12)
+    kd_u = _float_to_uint(kd_c, 0.0, kd_max, 12)
     tau_u = _float_to_uint(tau, -tmax, tmax, 12)
     b = bytearray(8)
     b[0] = (q_u >> 8) & 0xFF
@@ -188,12 +190,12 @@ def _pack_mit(q: float, dq: float, tau: float, kp: float, kd: float,
     return bytes(b)
 
 
-def _unpack_status(data: bytes, limits: tuple[float, float, float]):
+def _unpack_status(data: bytes, limits: tuple[float, float, float, float, float]):
     """解包状态帧载荷（8 字节）→ ``(q, dq, tau, err, t_mos, t_rotor)``。
 
     D6~7 为驱动板 MOS / 转子温度（1 字节，℃）；旧固件该两字节未用（恒 0）。
     """
-    pmax, vmax, tmax = limits
+    pmax, vmax, tmax = limits[:3]
     err = (data[0] >> 4) & 0x0F
     q = _uint_to_float((data[1] << 8) | data[2], -pmax, pmax, 16)
     dq = _uint_to_float((data[3] << 4) | (data[4] >> 4), -vmax, vmax, 12)
@@ -266,9 +268,11 @@ class DmMotor:
     """单个 DM 电机：config 一个 joint 条目 → 一个实例。
 
     持有通讯参数（``motor_id``/``feedback_id``/型号限值）、控制增益（config
-    ``MIT`` / ``POS_VEL`` 段回退源）、末端限位语义（``q_min``/``q_max``/
-    ``dq_max``/``tau_max``，仅 end 关节配置），以及 RX 线程
-    回填的状态槽与参数槽（配到达 Event，供"发请求 → 等应答"同步）。
+    ``MIT`` / ``POS_VEL`` 段回退源）、关节限位（``q_min``/``q_max``/
+    ``dq_max``/``tau_max``，四键 arm/end 同构必配，齐全性由
+    ``JoyArm.check_config`` 把关；q_min/q_max/dq_max 供 end 行程语义复用，
+    tau_max 供上层读取，arm 守卫走基类限位），以及 RX 线程回填的状态槽与
+    参数槽（配到达 Event，供"发请求 → 等应答"同步）。
     """
 
     def __init__(self, jcfg: dict) -> None:
@@ -312,7 +316,9 @@ class DmMotor:
                            "POS_VEL.vlim（速度上限），位置/速度指令将以速度 0 "
                            "下发（电机不动作），请在 config 补该键", self.name)
 
-        # 末端限位语义（可选；arm 关节不配置）
+        # 关节限位（四键 arm/end 同构必配，check_config 把关齐全性；
+        # q_min/q_max/dq_max 供 end 行程语义复用，tau_max 供上层读取——
+        # arm 守卫走基类 limits_from_joint_cfgs）
         self.q_min = None if jcfg.get("q_min") is None else float(jcfg["q_min"])
         self.q_max = None if jcfg.get("q_max") is None else float(jcfg["q_max"])
         self.dq_max = None if jcfg.get("dq_max") is None else float(jcfg["dq_max"])
@@ -376,7 +382,7 @@ class DmCanBus:
     已注册）分发到参数槽——双重判别防止状态帧位置低字节撞上参数子码。
     """
 
-    def __init__(self, channel: str, baud_rate: int = 921600) -> None:
+    def __init__(self, channel: str, baud_rate: int = _DEFAULT_BAUD_RATE) -> None:
         self.channel = channel
         self.baud_rate = int(baud_rate)
         self._ser = None
@@ -561,8 +567,10 @@ class BackendDM(Backend):
     :param cfg: yaml ``backend:`` 段字典（``name`` 已由 JoyArm 弹出），含
         ``arm:`` / ``end:`` 子段（``channel`` / ``baud_rate`` / ``joints``，
         joints 各含 ``motor_id`` / ``feedback_id`` / ``model`` / ``MIT`` /
-        ``POS_VEL``，四键限位由基类自 cfg 解析；end 关节另含 ``q_min`` /
-        ``q_max`` / ``dq_max`` / ``tau_max``）。
+        ``POS_VEL`` 与四键限位 ``q_min`` / ``q_max`` / ``dq_max`` /
+        ``tau_max``——arm/end 同构必配，守卫限位由基类自 cfg 解析，本类
+        DmMotor 的 q_min/q_max/dq_max 供 end 行程语义复用，tau_max 供上层
+        读取）。
     """
 
     def __init__(self, cfg: dict) -> None:
@@ -703,10 +711,11 @@ class BackendDM(Backend):
             if not m.wait_state(0.5):
                 raise RuntimeError(f"backend_dm.py - _enable_motors：电机 {m.name} 使能无应答")
             if m.err != _ERR_ENABLED:
+                fault = ("仍处于失能态（错误码 0x0，非故障；使能帧可能未生效）"
+                         if m.err == _ERR_DISABLED
+                         else f"故障（{_ERR_FAULT_NAMES.get(m.err, '未知')}({m.err:#x})）")
                 raise RuntimeError(
-                    f"backend_dm.py - _enable_motors：电机 {m.name} 使能失败"
-                    f"（{_ERR_FAULT_NAMES.get(m.err, '故障')}({m.err:#x})）"
-                )
+                    f"backend_dm.py - _enable_motors：电机 {m.name} 使能失败（{fault}）")
 
     def _set_zero_motors(self, motors: list[DmMotor]) -> None:
         """标零流程：失能 → 轮询反馈至无故障（错误码 0/1）→ 发标零帧。"""
@@ -825,7 +834,7 @@ class BackendDM(Backend):
                         f"（串口设备路径，如 /dev/ttyACM0）")
                 bus = self._buses.get(channel)
                 if bus is None:
-                    bus = DmCanBus(channel, sec.get("baud_rate", 921600))
+                    bus = DmCanBus(channel, sec.get("baud_rate", _DEFAULT_BAUD_RATE))
                     bus.open()
                     self._buses[channel] = bus
                     opened[channel] = bus

@@ -1,47 +1,50 @@
 # ===================================================================
-# JoyArm 型号配置模板（basic / joyarm / robotics / backend）
+# JoyArm 型号配置模板（joyarm / robotics / backend）
 # ===================================================================
-# 用途：新型号开发时复制本文件为 configs/<型号>.yaml（命名链三处一致：文件名 = basic.name 字段 = 工厂入参 joyarm_factory("<型号>")），再按真机逐段填写；
-#      配套动作：robot_model/<robot>/ 放 URDF+meshes、新写 backend/backend_<型号>.py（REGISTRY 注册）。
-# 说明：本文件数值为参考值，仅示范结构与单位，真机须按标定修改；
+# 用途：新型号开发时复制本文件为 config/<型号>.yaml（文件名 = 型号名 = 工厂入参 joyarm_factory("<型号>")），再按真机逐段填写；
+#      配套动作：robot_model/<型号>/ 放 URDF+meshes（目录名 = 型号名）、新写 backend/backend_<型号>.py（REGISTRY 注册）。
+# 说明：本文件数值仅示范结构与单位，真机按实际情况配置和修改（尤其backend段）；
 # ===================================================================
 
 # -------------------------------------------------------------------
-# 基本信息（basic）：型号标识 / robot_model URDF 索引 / 末端坐标系
-# -------------------------------------------------------------------
-basic:
-  name: <型号名> # 型号名（命名链校验：= yaml 文件名 = 工厂入参）
-  robot_model: <robot_model子目录/urdf文件名> # robot_model/<值>/urdf/<值>.urdf（与目录、URDF 文件同名）
-  end_frame: <末端帧名> # 末端坐标系名（pin 模型帧，URDF 中须存在，如 frame_end_tcp）
-
-# -------------------------------------------------------------------
-# 设备模型（joyarm）：软限位 / 末端TCP限位 / 特征位形 等
+# 设备模型（joyarm）：末端坐标系 / 限位 / 特征位形 / 运行参数 等
 # -------------------------------------------------------------------
 joyarm:
-  # 软限位：供上层状态判断（超软限位 → 状态异常 → 急停恢复）；
-  # backend 下发指令只裁硬限位；软限位须位于硬限位内；
-  arm_soft_limits: # arm 本体（单值或n元列表）
-    q_min: -2.7 # rad
-    q_max: 2.7 # rad
-    dq_max: 45.0 # rad/s
-    tau_max: 24.3 # N·m
+  end_frame: frame_end_tcp # 末端坐标系名（pin 模型帧，URDF 中须存在）
+
+  # 硬限位：在 backend 段配置（arm/end joints 各关节条目的 q_min/q_max/dq_max/tau_max 四键，
+  #        数值须与 URDF limit 标定一致）；backend 下发指令按硬限位裁剪。
+  
+  # 软限位：供上层状态判断（超软限位 → 状态异常 → 急停恢复），须位于硬限位内。
+  arm_soft_limits: # arm 本体
+    q_min: [-2.52, -2.98, -2.98, -1.41, -1.41, -2.83] # rad
+    q_max: [2.52, -0.16, -0.16, 1.41, 1.41, 2.83] # rad
+    dq_max: [4.5, 4.5, 4.5, 7.2, 7.2, 7.2] # rad/s
+    tau_max: [27.0, 27.0, 27.0, 8.1, 8.1, 8.1] # N·m
   end_soft_limits: # end 末端（电机空间；单值或n_end元列表）
-    q_min: -1.8 # rad
-    q_max: 3.8 # rad
-    dq_max: 2.0 # rad/s
-    tau_max: 1.0 # N·m
+    q_min: -5.49 # rad
+    q_max: 0.0 # rad
+    dq_max: 8.0 # rad/s
+    tau_max: 1.5 # N·m
 
   # 末端 tcp 限制: 结合实际任务配置
   tcp_limits:
-    workspace_box: [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]] # [min, max] (m)
+    workspace_box: [[-0.2, -0.6, 0.05], [0.7, 0.6, 0.8]] # [min, max] (m)
     v_lin_max: 1.0 # m/s
     v_ang_max: 3.0 # rad/s
-    f_max: 10.0 # N
-    t_max: 3.0 # N·m
+    f_max: 20.0 # N
+    t_max: 5.0 # N·m
 
   # 特征位形（rad）：zero/neutral 按自由度全零（代码实现）；
   arm_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  end_home: [0.0]
+  end_home: [-3.0]
+
+  # 运行参数
+  runtime:
+    state_keepalive_hz: 10.0 # 空闲期状态保活频率 Hz
+    state_stale_timeout: 0.15 # 缓存数据过期阈值 s
+    move_poll_interval: 0.05 # 到位轮询间隔 s
+    move_wait_timeout: 10.0 # 运动等待超时 s
 
 # -------------------------------------------------------------------
 # 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按 REGISTRY 注册名加载激活）；
@@ -70,9 +73,9 @@ backend:
 
   arm: # arm 段
     channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）
-    protocol: serial_can # 协议标识（如 DM 电机的 USB-CAN 串口桥）
+    protocol: serial_can # 信息性标识：当前总线由 backend 决定
     baud_rate: 921600 # 通讯波特率
-    control_rate: 200 # Hz
+    control_rate: 200 # 直连指令频率 Hz（move_j/safe_* 轨迹采样与发送节拍默认值）
     joints:
       - name: joint1 # 关节名（状态报告 / 模式缓存的键）
         motor_id: 0x01 # CAN 指令 ID
@@ -81,8 +84,8 @@ backend:
         # —— 硬限位（与 end.joints 同构；数值须与 URDF limit 标定保持一致）——
         q_min: -2.8 # 行程下限（rad）
         q_max: 2.8 # 行程上限（rad）
-        dq_max: 50.0 # 速度上限（rad/s）
-        tau_max: 27.0 # 力矩上限（N·m）
+        dq_max: 5.0 # 速度上限（rad/s）
+        tau_max: 30.0 # 力矩上限（N·m）
         MIT: # MIT 模式增益（MIT 指令未传 kp/kd 时使用）
           kp: 120.0
           kd: 8.0
@@ -96,18 +99,19 @@ backend:
 
   end: # end 段（执行器电机组，可多电机如灵巧手）
     channel: /dev/ttyACM0 # 与 arm 相同 → 共享总线；不同 → 独立总线（互不干扰）
-    protocol: serial_can
+    protocol: serial_can # 信息性标识：当前总线由 backend 决定
     baud_rate: 921600
+    # control_rate: 200 # 周期控制频率 Hz；backend_dm 末端无周期流不使用
     joints:
-      - name: gripper # 末端电机名
-        motor_id: 0x07
-        feedback_id: 0x17
+      - name: joint_end1 # 末端电机名（与 URDF 末端joint一致）
+        motor_id: 0x07 
+        feedback_id: 0x17 
         model: "4310"
         # —— 硬限位（与 arm 关节同构）——
-        q_min: -1.8 # 行程下限（rad）
-        q_max: 3.8 # 行程上限（rad）
-        dq_max: 2.0 # 速度上限（rad/s）
-        tau_max: 1.0 # 力矩上限（N·m）
+        q_min: -5.49 # 行程下限（rad）
+        q_max: 0.0 # 行程上限（rad）
+        dq_max: 8.0 # 速度上限（rad/s）
+        tau_max: 1.5 # 力矩上限（N·m）
         MIT: # 末端默认纯力矩风格
           kp: 0.0
           kd: 0.0

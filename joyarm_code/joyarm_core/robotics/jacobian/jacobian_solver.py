@@ -67,7 +67,6 @@ class JacobianSolver(ABC):
 
     def manipulability(self, arm, q: np.ndarray, frame: Union[str, int], ref: str = "base") -> float:
         """Yoshikawa 可操作度 ``w = Πσᵢ``——全部 ``min(6,n)`` 个奇异值之积（速度椭球体积度量）。
-        ``n≥6`` 且满秩时等于 ``sqrt(det(JJᵀ))``；``n<6`` 时恒为 0。
         """
         return float(np.prod(np.linalg.svd(self.jac(arm, q, frame, ref=ref), compute_uv=False)))
 

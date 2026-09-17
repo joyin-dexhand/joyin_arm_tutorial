@@ -68,6 +68,7 @@ from ..utils.limits import (
     limits_from_joint_cfgs,
     rand_within_limits,
     soft_limits_from_cfg,
+    tcp_limits_from_cfg,
 )
 from ..utils.types import (
     ArmState,
@@ -79,7 +80,7 @@ from ..utils.types import (
     TrajFrame,
 )
 
-from .joyarm import _ARM_JOINT_NAMES, _cubic_traj, JoyArm, load_config
+from .joyarm import _ARM_JOINT_NAMES, _cubic_traj, _soft_beyond_hard, JoyArm, load_config
 
 __all__ = ["FakeArm"]
 
@@ -100,7 +101,7 @@ def _clip_abs(values, max_abs) -> np.ndarray:
 class FakeArm:
     """JoyArm 的无硬件最小替身（"arm 协议"的鸭子类型实现，详见模块 docstring）。
 
-    :param model: 型号名（= ``configs/<model>.yaml``，默认 ``"joyarm_dm"``）。
+    :param model: 型号名（= ``config/<model>.yaml``，默认 ``"joyarm_dm"``）。
     :param config: 型号配置字典；不传就自动加载（与 JoyArm 同一解析路径）。
     :param q0: 初始关节角 ``(n_arm,)``；缺省停在 home 位形。
 
@@ -120,7 +121,6 @@ class FakeArm:
         cfg = copy.deepcopy(config)
         JoyArm.check_config(model, cfg)
 
-        basic = cfg.get("basic") or {}
         jcfg = cfg.get("joyarm") or {}
         backend_cfg = cfg.get("backend") or {}
         arm_joint_cfgs = (backend_cfg.get("arm") or {}).get("joints") or []
@@ -130,11 +130,11 @@ class FakeArm:
         self.model: str = model
         self._config: dict = cfg
         self.connected: bool = False        # 连接标志（connect 只置标志，无 IO）
-        self.ee_frame_name: str = str(basic.get("end_frame") or "ee")
+        self.ee_frame_name: str = str(jcfg.get("end_frame") or "ee")
         self.is_normal: bool = True
 
         # ---- 运动学模型（pinocchio，与 JoyArm 同一 URDF 解析路径）----
-        self._urdf_path: str = JoyArm._resolve_robot_urdf(str(basic["robot_model"]))
+        self._urdf_path: str = JoyArm._resolve_robot_urdf(model)
         self.pin_model: pin.Model = JoyArm._build_pin_model(self._urdf_path)
         self.pin_data: pin.Data = self.pin_model.createData()
         self.ee_frame_id: int = self.pin_model.getFrameId(self.ee_frame_name)
@@ -175,6 +175,16 @@ class FakeArm:
             soft_limits_from_cfg(jcfg["end_soft_limits"], self.n_end)
             if (self.end_limits is not None and jcfg.get("end_soft_limits") is not None)
             else copy.deepcopy(self.end_limits))
+
+        # ---- 软⊆硬校验（与 JoyArm 同一判定：同一份 config 两侧行为一致）----
+        for tag, soft, hard in (("arm", self.arm_limits_soft, self.arm_limits),
+                                ("end", self.end_limits_soft, self.end_limits)):
+            if soft is None or hard is None:
+                continue
+            if _soft_beyond_hard(soft, hard):
+                raise ValueError(
+                    f"fakearm.py - FakeArm.__init__：joyarm.{tag}_soft_limits 超出对应"
+                    f"硬限位（软限位须位于硬限位内；与 JoyArm 同一判定）")
 
         # ---- 特征位形（zero/neutral 恒全零；home 来自 config，越限裁剪告警）----
 
@@ -228,18 +238,8 @@ class FakeArm:
 
     # === 初始化助手（内部）===
     def _apply_tcp_limits(self, tl: dict) -> None:
-        """解析 config ``tcp_limits`` 段（``workspace_box`` 兼容 (2,3)/(3,2)）。"""
-        box = np.asarray(tl.get("workspace_box",
-                                [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]), dtype=float)
-        if box.shape == (2, 3):
-            box = box.T
-        self.tcp_limits = TcpLimits(
-            workspace_box=box,
-            v_lin_max=float(tl.get("v_lin_max", 0.0)),
-            v_ang_max=float(tl.get("v_ang_max", 0.0)),
-            f_max=float(tl.get("f_max", 0.0)),
-            t_max=float(tl.get("t_max", 0.0)),
-        )
+        """解析 config ``tcp_limits`` 段（解析在 utils，与 JoyArm 同源）。"""
+        self.tcp_limits = tcp_limits_from_cfg(tl)
 
     # === 前置校验（内部）===
     def _require_connected(self) -> None:
@@ -465,6 +465,8 @@ class FakeArm:
         """末端位置指令 → 全电机目标向量 → 裁行程后即时置位。"""
         self._require_connected()
         self._require_end(what)
+        if joint is not None:
+            self._joint_indices(joint, self.n_end, what)
         t = np.asarray(target, dtype=float).reshape(-1)
         if joint is None and t.size == 1:
             t = np.full(self.n_end, t[0])
@@ -482,12 +484,18 @@ class FakeArm:
 
     def set_end_open(self, joint: Optional[int] = None) -> None:
         """张开末端到行程下限（= ``q_min``，夹爪张开位）。"""
+        self._require_end("set_end_open")
+        if joint is not None:
+            self._joint_indices(joint, self.n_end, "set_end_open")
         lim = self.end_limits
         self._apply_end_position(lim.q_min if joint is None else lim.q_min[joint],
                                  joint, "set_end_open")
 
     def set_end_close(self, joint: Optional[int] = None) -> None:
         """闭合末端到行程上限（= ``q_max``，夹爪闭合位）。"""
+        self._require_end("set_end_close")
+        if joint is not None:
+            self._joint_indices(joint, self.n_end, "set_end_close")
         lim = self.end_limits
         self._apply_end_position(lim.q_max if joint is None else lim.q_max[joint],
                                  joint, "set_end_close")
@@ -504,6 +512,8 @@ class FakeArm:
         """末端力矩控制（只记录，裁 ``tau_max``；不产生运动）。"""
         self._require_connected()
         self._require_end("set_end_tau")
+        if joint is not None:
+            self._joint_indices(joint, self.n_end, "set_end_tau")
         t = np.asarray(tau, dtype=float).reshape(-1)
         if joint is None and t.size == 1:
             t = np.full(self.n_end, t[0])

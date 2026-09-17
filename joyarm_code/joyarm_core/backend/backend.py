@@ -201,6 +201,7 @@ class Backend(ABC):
             return arr
         if joint is not None:               # 单关节：取该关节限位（arr 长度 1）
             lo, hi = lo[joint:joint + 1], hi[joint:joint + 1]
+        arr = np.asarray(arr).reshape(-1)  # 归一 1-D：(1,n)/(n,1) 等同长形态一并参与裁剪，防旁路
         if arr.shape != np.shape(lo):       # 长度 ≠ 限位数 → 交内核报维度错误
             if not (broadcast and arr.size == 1 and lo.size > 1):
                 return arr
@@ -367,8 +368,7 @@ class Backend(ABC):
         """读取本体状态快照的**缓存视图**（q/dq/tau 换算关节空间，同 :meth:`read_state_arm`）。
 
         数据来自最近一次状态应答写入的缓存槽——控制流期间随指令帧同频刷新（一发一收），
-        空闲期由上层保活刷新维持新鲜（见:meth:`state_age_arm`）。
-        上层 :meth:`read_state_arm`。
+        空闲期由上层保活刷新维持新鲜（见 :meth:`state_age_arm`）。
 
         :param joint: 关节索引，``None`` 表示全部。
         :raises NotImplementedError: 子类未实现缓存读。

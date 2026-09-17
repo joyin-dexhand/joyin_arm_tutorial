@@ -1,10 +1,10 @@
-# 项目说明（ZCode 项目记忆）
+# 项目说明（Agent 项目记忆）
 
 本仓库是 **JoyArm 机械臂教程的文档站点源码**：用 MkDocs + Material for MkDocs 主题，把"使用 / 基础 / 进阶 / 应用"四篇教程编译成静态网站，经 GitHub Pages 发布。正文（`docs/*.md`）为教程核心产出；`joyarm_code/` 为配套代码（可复用核心库 + 章节演示脚本 + 快速上手例程）。
 
 > ⚠️ **两类内容**：`docs/` 下是面向读者的教程正文（会渲染上网）；`AGENTS.md` 等内部文档不进站点。
-> **文档层级**（自上而下只概述 + 链接，不重复展开）：根 `AGENTS.md`（教程站点）→ [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)（代码库，agent/开发者向）→ [`joyarm_code/README.md`](./joyarm_code/README.md)（使用者向基础）。子库 AGENTS 依赖其 README 并在其上**补充**维护信息，不重复；README 给人看、AGENTS 给 agent 看。
-> **职责分离**：本文件只维护**教程站点**部分；代码库 `joyarm_code/` 的架构、命名约定、API 与维护规则由子库自含的 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md) 负责，用户向介绍见 [`joyarm_code/README.md`](./joyarm_code/README.md)。本文件提及代码库时只**概述 + 链接**，不展开细节。
+> **文档层级**（自上而下只概述 + 链接，不重复展开）：根 `AGENTS.md`（教程站点）→ [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)（代码库，agent/开发者向）→ [`joyarm_code/README.md`](./joyarm_code/README.md)（使用者向）。子库 AGENTS 依赖其 README 并在其上**补充**维护信息，不重复；README 给人看、AGENTS 给 agent 看。
+> **职责分离**：本文件只维护**教程站点**部分；代码库 `joyarm_code/` 的架构、命名约定、API 与维护规则由子库自含的 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md) 负责，代码库用户向介绍见 [`joyarm_code/README.md`](./joyarm_code/README.md)。本文件提及代码库时只**概述 + 链接**，不展开细节。
 
 ## 仓库结构
 
@@ -65,20 +65,20 @@ joyin_arm_tutorial/
 
 ### 文档风格
 
-- 文档务必保持**结构化、清晰、表达简洁、指代无歧义**，**避免啰嗦和讲解不清晰**
-- 教程内容与代码、文档要求**结构化有条理**，**不允许思维跳跃**，需对**新手友好**
+- 教程文档务必遵循**结构化、清晰化、表达简洁、指代无歧义、总分结构**的原则，**避免语句啰嗦和指代歧义**
+- 教程内容与代码、文档均要求**结构化有条理**，**不允许思维跳跃**，需对**新手友好**
 - 每章（对应一个独立 md 文件）不设"本章小结"，用**概要**总结全章（类似论文摘要）：概要不设标题等级，直接紧随章标题后（第二行），用 `> 📌 **概述**：……` 引用块形式；正文按 H2 → H3 → H4 展开，最后一节通常为"本章实践"（对应程序脚本位于 `joyarm_code/chapt/` ）
 
 ### 教程各章对应的脚本文件
 
-- 各章脚本存放于 `joyarm_code/chapt/<章序_功能>.py`（如 `chapt2_T_demo.py`），仅作一次性教学示例，**优先调用**核心库 `joyarm_code/joyarm_core/` 的功能（`fkine`、`JoyArm` 类等）。
-- 脚本前几行必须添加使用说明段落注释：功能概要，以及新建/激活环境、安装 Python 与依赖、切换目录、运行脚本等步骤。
+- 各章脚本存放于 `joyarm_code/chapt/<章序_功能>.py`（如 `chapt2_T_demo.py`），仅作一次性教学示例，**优先调用**核心库 `joyarm_code/joyarm_core/` 的功能，单向依赖（`chapt` 依赖 `joyarm_core`）。
+- 脚本文件头部前几行必须添加使用说明段落注释：功能概要，以及新建/激活环境、安装 Python 与依赖、切换目录、运行脚本等步骤。
 - 代码规范（命名 / 注释 / 结构）与代码库维护规则见 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)，本文件不展开。
 
-## 常见陷阱
+## 常见陷阱（需避免的情况）
 
 - ❌ 在本文件详细展开代码库内容 → ✅ 只概述并链接 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)。
-- ❌ 在 `docs/` 写"本章小结" → ✅ 改为章标题第二行的概要块。
-- ❌ 手改或提交 `site/` → ✅ 它是构建产物，已忽略。
-- ❌ 跨章链接用绝对路径 → ✅ 用相对链接（如 `chapt3_ikine.md`）。
+- ❌ 在 `docs/` 写"本章小结" → ✅ 改为章标题第二行的概要块，每章、每节均遵循“总-分”的文章结构。
+- ❌ 手改或提交 `site/` → ✅ 它是构建产物，忽略并 `gitignore`。
+- ❌ 跨章链接用绝对路径 → ✅ 用相对链接。
 - ❌ 章号写成阿拉伯数字"第2章" → ✅ H1 与 nav 均用汉字，如："第二章"。
