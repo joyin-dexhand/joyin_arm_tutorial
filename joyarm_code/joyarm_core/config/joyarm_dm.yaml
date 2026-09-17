@@ -1,0 +1,230 @@
+# ===================================================================
+# 整机层（joyarm）：型号标识 = 本文件名 = URDF 目录 robot_model/<型号名>
+# ===================================================================
+joyarm:
+  end_frame: frame_end_tcp # 指定的末端坐标系名（URDF 系，pin 模型帧）
+
+  # arm 的 MDH 参数：6 行 × [α_{i-1}, a_{i-1}, d_i, θ_i]，单位：rad, m, m, rad
+  arm_mdh:                                                                                  # ！ 待标定
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 0.0, 0.0]
+
+  # 末link（link6）系 → frame_end_tcp 系的固定位姿
+  T_linkn_endtcp:                                                                           # ！ 待标定
+    - [0.0, -1.0, 0.0, 0.0]
+    - [0.0, 0.0, -1.0, 0.0]
+    - [1.0, 0.0, 0.0, 0.032692]
+    - [0.0, 0.0, 0.0, 1.0]
+
+  # 硬限位：在 backend 段配置（arm/end joints 各关节条目的 q_min/q_max/dq_max/tau_max 四键，
+  #        数值须与 URDF limit 标定一致）；backend 下发指令按硬限位裁剪。
+  #        下列速查表已与 joyarm_dm.urdf 的 <limit> 逐项核对一致（2026-09-17），
+  #    软限位取值参考此表并整体内缩：
+  #
+  # |    关节    | q_min (rad) | q_max (rad) | dq_max (rad/s) | tau_max (N·m) |
+  # |:----------:|:-----------:|:-----------:|:--------------:|:-------------:|
+  # |   joint1   |    -2.8     |    2.8      |      5.0       |     30.0      |
+  # |   joint2   |   -3.14     |    0.0      |      5.0       |     30.0      |
+  # |   joint3   |   -3.14     |    0.0      |      5.0       |     30.0      |
+  # |   joint4   |   -1.57     |    1.57     |      8.0       |      9.0      |
+  # |   joint5   |   -1.57     |    1.57     |      8.0       |      9.0      |
+  # |   joint6   |   -3.14     |    3.14     |      8.0       |      9.0      |
+  # | joint_end1 |   -5.49     |    0.0      |      8.0       |      1.5      |
+  
+  # 软限位：供上层状态判断（超软限位 → 状态异常 → 急停恢复），须位于硬限位内。
+  arm_soft_limits: # 本体（数值 = 硬限位内缩）                                                  # ！ 待标定
+    q_min: [-2.52, -2.98, -2.98, -1.41, -1.41, -2.83] # rad
+    q_max: [2.52, -0.16, -0.16, 1.41, 1.41, 2.83] # rad
+    dq_max: [4.5, 4.5, 4.5, 7.2, 7.2, 7.2] # rad/s
+    tau_max: [27.0, 27.0, 27.0, 8.1, 8.1, 8.1] # N·m
+  end_soft_limits: # 末端（电机空间）
+    q_min: -5.1 # rad
+    q_max: 0.0 # rad
+    dq_max: 6.0 # rad/s
+    tau_max: 1.0 # N·m
+
+  # end_frame 系三维位置空间限位
+  tcp_limits:                                                                               # ！ 待标定
+    workspace_box: [[-0.2, -0.6, 0.05], [0.7, 0.6, 0.8]] # [min, max] (m)
+    v_lin_max: 1.0 # m/s
+    v_ang_max: 3.0 # rad/s
+    f_max: 10.0 # N
+    t_max: 3.0 # N·m
+
+  # home 位形（rad）。zero/neutral 由代码实现，neural为软限位中点，zero为全零位形
+  arm_home: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]                                                   # ！ 待标定
+  end_home: [-4.0]
+
+  # 运行参数
+  runtime:                                                                                   # ！ 待标定
+    state_keepalive_hz: 10.0 # 空闲期状态保活频率 Hz
+    state_stale_timeout: 0.15 # 缓存数据过期阈值 s
+    move_poll_interval: 0.05 # 到位轮询间隔 s
+    move_wait_timeout: 10.0 # 运动等待超时 s
+
+# ===================================================================
+# 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按 REGISTRY 注册名加载激活）；
+# ===================================================================
+# 规格 = 注册名字符串 或 {name: 注册名, **构造参数}；
+# 注册名: 类名小写+下划线，如 PinFkineSolver →  pin_fkine_solver；
+robotics:
+  fkine:
+    - { name: pin_fkine_solver }
+  ikine:
+    - { name: pin_ikine_solver, damping: 1.0e-3, step_max: 0.5, restarts: 3 }
+  jacobian:
+    - { name: pin_jacobian_solver }
+  dynamics:
+    - { name: pin_dynamics_solver }
+  traj:
+    - { name: to_joint_traj_planner, plan_hz: 5.0, sample_hz: 200.0, dt_min_required: 1.0 }
+  control:
+    - { name: joint_position_controller, ctrl_hz: 200.0 }
+
+# ===================================================================
+# 电机硬件层（backend）：arm与end的硬件通讯
+# ===================================================================
+backend:
+  name: backend_dm
+  arm: # arm本体后端（joints 条目四键限位 = 硬限位，数值须与 URDF limit 标定保持一致）
+    channel: /dev/ttyACM0
+    protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
+    baud_rate: 921600
+    control_rate: 200 # 直连指令频率 Hz（move_j/safe_* 轨迹采样与发送节拍默认值）
+    joints:
+      - name: joint1
+        motor_id: 0x01
+        feedback_id: 0x11
+        model: "4340P"
+        q_min: -2.8 # 行程下限（rad，硬限位）
+        q_max: 2.8 # 行程上限（rad）
+        dq_max: 5.0 # 速度上限（rad/s）
+        tau_max: 30.0 # 力矩上限（N·m）
+        MIT:                                                                                  # ！ 待标定 
+          kp: 120.0
+          kd: 8.0
+        POS_VEL:                                                                              # ！ 待标定
+          vel_kp: 0.0125
+          vel_ki: 0.004
+          pos_kp: 150.0
+          pos_ki: 0.5
+          vlim: 5.0
+
+      - name: joint2
+        motor_id: 0x02
+        feedback_id: 0x12
+        model: "4340P"
+        q_min: -3.14
+        q_max: 0.0
+        dq_max: 5.0
+        tau_max: 30.0
+        MIT:                                                                                  # ！ 待标定
+          kp: 120.0
+          kd: 8.0
+        POS_VEL:                                                                              # ！ 待标定                            
+          vel_kp: 0.0125
+          vel_ki: 0.004
+          pos_kp: 150.0
+          pos_ki: 0.5
+          vlim: 5.0
+
+      - name: joint3
+        motor_id: 0x03
+        feedback_id: 0x13
+        model: "4340P"
+        q_min: -3.14
+        q_max: 0.0
+        dq_max: 5.0
+        tau_max: 30.0
+        MIT:                                                                                 # ！ 待标定                                  
+          kp: 120.0
+          kd: 8.0
+        POS_VEL:                                                                             # ！ 待标定
+          vel_kp: 0.0125
+          vel_ki: 0.004
+          pos_kp: 150.0
+          pos_ki: 0.5
+          vlim: 5.0
+
+      - name: joint4
+        motor_id: 0x04
+        feedback_id: 0x14
+        model: "4310"
+        q_min: -1.57
+        q_max: 1.57
+        dq_max: 8.0
+        tau_max: 9.0
+        MIT:                                                                                # ！ 待标定
+          kp: 18.0
+          kd: 2.0
+        POS_VEL:                                                                            # ！ 待标定
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 100.0
+          pos_ki: 0.2
+          vlim: 3.0
+
+      - name: joint5
+        motor_id: 0x05
+        feedback_id: 0x15
+        model: "4310"
+        q_min: -1.57
+        q_max: 1.57
+        dq_max: 8.0
+        tau_max: 9.0
+        MIT:                                                                                # ！ 待标定
+          kp: 18.0
+          kd: 2.0
+        POS_VEL:                                                                            # ！ 待标定
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 100.0
+          pos_ki: 0.2
+          vlim: 3.0
+
+      - name: joint6
+        motor_id: 0x06
+        feedback_id: 0x16
+        model: "4310"
+        q_min: -3.14
+        q_max: 3.14
+        dq_max: 8.0
+        tau_max: 9.0
+        MIT:                                                                            # ！ 待标定
+          kp: 18.0
+          kd: 2.0
+        POS_VEL:                                                                        # ！ 待标定
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 100.0
+          pos_ki: 0.2
+          vlim: 3.0
+
+  end: # 末端后端
+    channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
+    protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
+    baud_rate: 921600
+    # control_rate: 200 # 周期控制频率 Hz；backend_dm 未使用（末端无周期流）
+    joints:
+      - name: joint_end1 # 末端电机名
+        motor_id: 0x07
+        feedback_id: 0x17
+        model: "4310"
+        q_min: -5.49 # 行程下限（rad，张开位）
+        q_max: 0.0 # 行程上限（rad，闭合位）
+        dq_max: 8.0 # 速度上限（rad/s）
+        tau_max: 1.5 # 力矩上限（N·m）
+        MIT:                                                                                  # ！ 待标定 
+          # kp: 8.0
+          # kd: 1.0
+          kp: 0.0
+          kd: 0.0
+        POS_VEL:                                                                              # ！ 待标定
+          vel_kp: 0.0008
+          vel_ki: 0.002
+          pos_kp: 50.0
+          pos_ki: 1.0
+          vlim: 3.0

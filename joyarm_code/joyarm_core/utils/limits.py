@@ -1,8 +1,8 @@
-"""关节限位守卫（指令路径防护底层）+ 限位构建/采样辅助。
+"""关节/末端限位守卫（指令路径防护底层）+ 限位构建/采样辅助。
 
 ``clamp_to_limits``：指令下发前逐元素裁剪到关节限位（backend 传**硬限位**）；
-``joint_limits_from_model`` / ``limits_from_joint_cfgs``：硬限位解析；
-``soft_limits_from_cfg``：软限位直配解析；``rand_within_limits``：限位内均匀采样。
+``limits_from_joint_cfgs``：硬限位解析；``soft_limits_from_cfg``：软限位直配解析；
+``tcp_limits_from_cfg``：末端空间限位解析；``rand_within_limits``：限位内均匀采样。
 """
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from typing import Optional
 
 import numpy as np
 
-from .types import JointLimits
+from .types import JointLimits, TcpLimits
 
-__all__ = ["clamp_to_limits", "joint_limits_from_model", "limits_from_joint_cfgs",
-           "soft_limits_from_cfg", "rand_within_limits"]
+__all__ = ["clamp_to_limits", "limits_from_joint_cfgs", "soft_limits_from_cfg",
+           "tcp_limits_from_cfg", "rand_within_limits"]
 
 
 # ============================================================
@@ -53,34 +53,8 @@ def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
 
 
 # ============================================================
-# 限位构建（joint_limits_from_model 硬限位解析 / soft_limits 软限位派生）
+# 限位构建（硬限位 / 软限位 / 末端空间限位）
 # ============================================================
-def joint_limits_from_model(model) -> JointLimits:
-    """从模型对象解析**硬限位**（只按属性名访问，不依赖 pinocchio 本身）。
-
-    位置限位 ``q_min/q_max`` 与速度/力矩上限（``velocityLimit``/``effortLimit``
-    缺失时置 ∞）。
-
-    :param model: pinocchio ``model``（或提供 ``nq``/``nv``/``lowerPositionLimit``/
-                    ``upperPositionLimit``/``velocityLimit``/``effortLimit`` 等属性的等价对象）。
-    """
-    n, nv = model.nq, model.nv
-    q_min = np.asarray(model.lowerPositionLimit, dtype=float).reshape(n)
-    q_max = np.asarray(model.upperPositionLimit, dtype=float).reshape(n)
-    dq_max = (
-        np.asarray(model.velocityLimit, dtype=float).reshape(nv)
-        if hasattr(model, "velocityLimit") else np.full(nv, np.inf)
-    )
-    tau_max = (
-        np.asarray(model.effortLimit, dtype=float).reshape(nv)
-        if hasattr(model, "effortLimit") else np.full(nv, np.inf)
-    )
-    if nv != n:  # 含非旋转关节等自由度不等臂：逐关节上限退化为 ∞（由 config 精确覆盖）
-        dq_max = np.full(n, np.inf)
-        tau_max = np.full(n, np.inf)
-    return JointLimits(q_min=q_min, q_max=q_max, dq_max=dq_max, tau_max=tau_max)
-
-
 def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
     """从 config 关节条目列表解析**硬限位**（arm/end 同构；空列表返回 ``None``）。
 
@@ -123,7 +97,7 @@ def rand_within_limits(limits: JointLimits, size: Optional[int] = None,
 
 
 def soft_limits_from_cfg(cfg: dict, n: int) -> JointLimits:
-    """从 config 四键**直值**字典解析软限位（不经 margin 换算）。
+    """从 config 四键**直值**字典解析软限位。
 
     软限位供**上层状态判断**使用（如超软限位 → 状态异常 → 急停恢复）；
     backend 指令守卫只裁硬限位。JoyArm 的 ``arm_limits_soft`` / ``end_limits_soft``
@@ -170,3 +144,25 @@ def soft_limits_from_cfg(cfg: dict, n: int) -> JointLimits:
     if np.any(out.dq_max < 0) or np.any(out.tau_max < 0):
         raise ValueError("limits.py - soft_limits_from_cfg：dq_max/tau_max 不允许负值")
     return out
+
+
+def tcp_limits_from_cfg(tl: dict) -> TcpLimits:
+    """从 config ``tcp_limits`` 段解析末端空间限位。
+
+    ``workspace_box`` 两种写法均可：``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
+    （两行，yaml 常用）或每轴一行 ``[min,max]`` 的 ``(3,2)``；内部统一成
+    ``(3,2)``。JoyArm / FakeArm 的 ``tcp_limits`` 均由此解析。
+
+    :param tl: config ``joyarm.tcp_limits`` 段（各键可缺省）。
+    """
+    box = np.asarray(tl.get("workspace_box",
+                            [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]), dtype=float)
+    if box.shape == (2, 3):          # [min 行, max 行] → 每轴 [min, max]
+        box = box.T
+    return TcpLimits(
+        workspace_box=box,
+        v_lin_max=float(tl.get("v_lin_max", 0.0)),
+        v_ang_max=float(tl.get("v_ang_max", 0.0)),
+        f_max=float(tl.get("f_max", 0.0)),
+        t_max=float(tl.get("t_max", 0.0)),
+    )

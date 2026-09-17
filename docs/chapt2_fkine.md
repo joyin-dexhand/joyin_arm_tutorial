@@ -488,21 +488,21 @@ $$
 JoyArm 机械臂的基座、关节 1 和连杆 1 的URDF定义示例如下
 
 ```xml
-<link name="link_base">
+<link name="link0">
   <visual>
     <origin xyz="0 0 0" rpy="0 0 0"/>
     <geometry>
-      <mesh filename="../meshes/link_base.STL"/>
+      <mesh filename="../meshes/link0.STL"/>
     </geometry>
   </visual>
 </link>
 
 <joint name="joint1" type="revolute">
-  <origin xyz="-8.416E-05 0 0.08465" rpy="0 0 0"/>
-  <parent link="link_base"/>
+  <origin xyz="0 0 0.1402" rpy="0 0 0"/>
+  <parent link="link0"/>
   <child  link="link1"/>
   <axis xyz="0 0 1"/>
-  <limit lower="-2.8" upper="2.8" effort="27" velocity="50"/>
+  <limit lower="-2.8" upper="2.8" effort="30" velocity="5"/>
 </joint>
 
 <link name="link1">
@@ -538,9 +538,9 @@ data  = model.createData() # 数据
 # 2. 给定六关节角（rad）
 q = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) 
 
-# 3. 求解末端（"link_end" 帧）相对基座的位姿
+# 3. 求解末端（"frame_end_tcp" 帧，即 config end_frame 指向的 TCP 系）相对基座的位姿
 pin.forwardKinematics(model, data, q) # 计算正运动学
-T_ee = pin.updateFramePlacement(model, data, model.getFrameId("link_end")) # 获取结果
+T_ee = pin.updateFramePlacement(model, data, model.getFrameId("frame_end_tcp")) # 获取结果
 ```
 
 > 💡 **何时手写、何时用库？** 学原理时手写（理解参数与矩阵对应），做项目时用库（避免低级错误）。本教程作为教学，实践脚本（[第 5 节](#5-joyarm)）两种方式都会给出。
