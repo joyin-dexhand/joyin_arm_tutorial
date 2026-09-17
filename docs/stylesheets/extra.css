@@ -53,6 +53,12 @@
   vertical-align: middle !important;
 }
 
+/* 五列表格的最后一列通常是说明或操作图片，避免被长代码名称挤成竖排。 */
+.md-typeset table th:nth-child(5):last-child,
+.md-typeset table td:nth-child(5):last-child {
+  min-width: 12rem;
+}
+
 /* ============================================================
    表格内图片统一宽度
    - 分类表（应用/移动/构型）的实例列配图统一宽度，
@@ -63,4 +69,42 @@
   max-width: 300px !important;
   width: 300px !important;
   height: auto !important;
+}
+
+/* 正文图片放大查看，独立于正文和表格内的图片尺寸限制。 */
+.md-typeset img[data-image-viewer] {
+  cursor: zoom-in;
+}
+
+.image-viewer {
+  width: 96vw;
+  height: 94vh;
+  max-width: 96vw;
+  max-height: 94vh;
+  padding: 2.5rem 1rem 1rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+}
+
+.image-viewer::backdrop {
+  background: rgb(0 0 0 / 75%);
+}
+
+.image-viewer img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.image-viewer__close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.5rem;
+  padding: 0 0.5rem;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
 }
