@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="340" viewBox="0 0 900 340" role="img" aria-labelledby="title desc">
+<title id="title">悬臂梁末端载荷与挠度</title><desc id="desc">梁左端固定，长为L，右端受向下的力F。虚线为放大后的变形曲线，末端位移为挠度delta。</desc>
+<rect width="900" height="340" rx="12" fill="#f8fafc"/>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#b45309"/></marker></defs>
+<g font-family="sans-serif" fill="#182b49" font-size="21">
+<rect x="108" y="65" width="32" height="155" fill="#94a3b8"/>
+<path d="M108 70 L85 93 M108 99 L85 122 M108 128 L85 151 M108 157 L85 180 M108 186 L85 209" stroke="#64748b" stroke-width="2"/>
+<path d="M140 130 H700" stroke="#2563eb" stroke-width="10"/>
+<path d="M140 130 C350 130 540 150 700 211" stroke="#d97706" stroke-width="3" stroke-dasharray="9 6" fill="none"/>
+<path d="M700 52 V117" stroke="#b45309" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="718" y="80">F</text><text x="75" y="252">固定端</text>
+<path d="M140 270 H700" stroke="#64748b" stroke-width="2"/><path d="M140 259 V281 M700 259 V281" stroke="#64748b" stroke-width="2"/>
+<text x="410" y="260">L</text>
+<path d="M710 130 H778 M710 211 H778" stroke="#94a3b8" stroke-width="1.5"/>
+<path d="M760 135 V206" stroke="#b45309" stroke-width="2" marker-start="url(#arrow)" marker-end="url(#arrow)"/><text x="785" y="179">δ</text>
+<text x="240" y="98" font-size="18">未变形位置</text><text x="385" y="208" font-size="18">变形曲线（放大示意）</text>
+<text x="200" y="318" font-size="17">等截面、线弹性、小变形；仅考虑末端横向集中力。</text>
+</g></svg>
