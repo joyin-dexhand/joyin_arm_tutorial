@@ -359,7 +359,7 @@ class JoyArm:
         self._end_neutral: np.ndarray = np.zeros(0)      # 末端求解默认初值（全零）
 
         # ---- 末端空间限位 ----
-        self.tcp_limits: TcpLimits = TcpLimits()         # 末端空间限位（默认占位，未配置）
+        self.tcp_limits: TcpLimits = TcpLimits()         # 末端空间限位（config 配置 joyarm.tcp_limits 后生效）
         
         # ---- 六域算法成员（config 选型：全部创建、第一个激活）----
         self._fkine_solvers: dict = {}                   # {注册名: 实例}

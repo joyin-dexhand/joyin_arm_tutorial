@@ -139,7 +139,7 @@ class Pose(_ArrayEqMixin):
 class TrajFrame(_ArrayEqMixin):
     """力-位、关节-笛卡尔，混合轨迹帧
 
-    :ivar time: 绝对时间戳，Unix 秒（纪元 1970-01-01 UTC）。
+    :ivar time: 绝对时间戳，Unix 秒。
     :ivar pose: 末端位姿参考（笛卡尔任务）。
     :ivar twist: 末端速度参考。
     :ivar wrench: 末端力/力矩参考（力控任务）。
@@ -149,7 +149,7 @@ class TrajFrame(_ArrayEqMixin):
     :ivar tau: ``(n,)`` 前馈力矩，N·m。
     """
 
-    time: float = 0.0
+    time: Optional[float] = None
     pose: Optional[Pose] = None
     twist: Optional[Twist] = None
     wrench: Optional[Wrench] = None
@@ -203,18 +203,18 @@ class TcpState(_ArrayEqMixin):
 class ArmState(_ArrayEqMixin):
     """整机状态聚合快照
 
+    :ivar timestamp: 绝对时间戳，Unix 秒。
+    :ivar mode: 当前控制模式 (所有关节均一致)。
+    :ivar errors: 错误信息列表。
     :ivar joint: 关节层状态。
     :ivar tcp: 末端层状态。
-    :ivar mode: 当前控制模式。
-    :ivar timestamp: 时间戳，秒。
-    :ivar errors: 错误信息列表。
     """
 
+    timestamp: float = 0.0
+    mode: ControlMode = ControlMode.POSITION
+    errors: list[str] = field(default_factory=list)
     joint: JointState = field(default_factory=JointState)
     tcp: TcpState = field(default_factory=TcpState)
-    mode: ControlMode = ControlMode.POSITION
-    timestamp: float = 0.0
-    errors: list[str] = field(default_factory=list)
 
 
 # ============================================================
@@ -229,34 +229,34 @@ class JointLimits(_ArrayEqMixin):
     - **硬限位**实例（如 ``JoyArm.arm_limits``）：URDF/电机物理极限；
     - **软限位**实例（如 ``JoyArm.arm_limits_soft``）：略窄于硬限位、留余量。
 
-    :ivar q_min: ``(n,)`` 关节角下限，弧度。
-    :ivar q_max: ``(n,)`` 关节角上限，弧度。
-    :ivar dq_max: ``(n,)`` 关节速度上限，弧度/秒。
-    :ivar tau_max: ``(n,)`` 关节力矩上限，N·m。
+    :ivar q_min: ``(n,)`` 关节角下限，弧度（不限位为 ``-inf``）。
+    :ivar q_max: ``(n,)`` 关节角上限，弧度（不限位为 ``inf``）。
+    :ivar dq_max: ``(n,)`` 关节速度上限，弧度/秒（不限位为 ``inf``）。
+    :ivar tau_max: ``(n,)`` 关节力矩上限，N·m（不限位为 ``inf``）。
     """
 
-    q_min: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    q_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    dq_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    tau_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    q_min: np.ndarray = field(default_factory=lambda: np.full(0, -np.inf))
+    q_max: np.ndarray = field(default_factory=lambda: np.full(0, np.inf))
+    dq_max: np.ndarray = field(default_factory=lambda: np.full(0, np.inf))
+    tau_max: np.ndarray = field(default_factory=lambda: np.full(0, np.inf))
 
 
 @dataclass(eq=False)
 class TcpLimits(_ArrayEqMixin):
     """末端限位声明
 
-    :ivar workspace_box: ``(3,2)`` 末端工作空间包围盒，每行 ``[min, max]`` 对应 x/y/z，单位 m。
-    :ivar v_lin_max: 末端最大线速度，m/s。
-    :ivar v_ang_max: 末端最大角速度，rad/s。
-    :ivar f_max: 末端最大力，N。
-    :ivar t_max: 末端最大力矩，N·m。
+    :ivar workspace_box: ``(3,2)`` 末端工作空间包围盒，每行 ``[min, max]`` 对应 x/y/z，单位 m（不限位为 ``None``）。
+    :ivar v_lin_max: 末端最大线速度，m/s（不限位为 ``inf``）。
+    :ivar v_ang_max: 末端最大角速度，rad/s（不限位为 ``inf``）。
+    :ivar f_max: 末端最大力，N（不限位为 ``inf``）。
+    :ivar t_max: 末端最大力矩，N·m（不限位为 ``inf``）。
     """
 
     workspace_box: Optional[np.ndarray] = None
-    v_lin_max: float = 0.0
-    v_ang_max: float = 0.0
-    f_max: float = 0.0
-    t_max: float = 0.0
+    v_lin_max: float = float("inf")
+    v_ang_max: float = float("inf")
+    f_max: float = float("inf")
+    t_max: float = float("inf")
 
 
 # ============================================================
@@ -268,11 +268,11 @@ class IKResult(_ArrayEqMixin):
 
     :ivar q: 解算得到的关节角，弧度。单解为 ``(n,)``；``solve_all`` 全解为``(K,n)``（每行一组）。
     :ivar success: 是否收敛到满足精度的解（全解时为"存在可行解"）。
-    :ivar err: 末端位姿误差（残差范数）。
+    :ivar err: 末端位姿误差（残差范数；``success=False`` 时数值法为最优尝试解的残差）。
     :ivar n_iter: 迭代次数（解析法恒 0）。
     """
 
-    q: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    q: Optional[np.ndarray] = None
     success: bool = False
     err: float = float("inf")
     n_iter: int = 0
@@ -281,9 +281,6 @@ class IKResult(_ArrayEqMixin):
 @dataclass(eq=False)
 class ComplianceParams(_ArrayEqMixin):
     """笛卡尔柔顺参数
-
-    阻抗控制器 ``K_d/D_d/M_d`` 与导纳控制器 ``K_a/D_a/M_a``
-    均映射到本类的 ``K/D/M`` 三个 6×6 笛卡尔矩阵（默认对角）。
 
     :ivar K: ``(6,6)`` 刚度矩阵。
     :ivar D: ``(6,6)`` 阻尼矩阵。

@@ -6,7 +6,7 @@
 ----------------
 
 - **``R``**：``(3,3)`` numpy 数组，右手坐标系。
-- **RPY**：``rpy = (r, p, y)`` 传入（roll/pitch/yaw），弧度；默认按 ``R = Rz(y)·Ry(p)·Rx(r)`` 计算。
+- **RPY**：``rpy = (r, p, y)`` 传入（roll/pitch/yaw），弧度；按 ``R = Rz(y)·Ry(p)·Rx(r)`` 计算。
 - **四元数**：``(w, x, y, z)`` 顺序，实部在前，单位四元数。
 - **``T``** ：``(4,4)``。
 
@@ -28,7 +28,7 @@ __all__ = [
     "rodrigues",            # rodrigues(k, theta=None) -> np.ndarray
     "R_to_axis_angle",      # R_to_axis_angle(R) -> tuple[np.ndarray, float]
     "axis_angle_to_R",      # axis_angle_to_R(k, theta: float) -> np.ndarray
-    # 四元数 ↔ 旋转矩阵 / 轴角 / RPY
+    # 四元数 ↔ 旋转矩阵/轴角/RPY
     "quat_to_R",            # quat_to_R(quat) -> np.ndarray
     "R_to_quat",            # R_to_quat(R) -> np.ndarray
     "quat_to_axis_angle",   # quat_to_axis_angle(quat) -> tuple[np.ndarray, float]
@@ -84,15 +84,13 @@ def rpy_to_R(rpy) -> np.ndarray:
     rpy = np.asarray(rpy, dtype=float).reshape(3)
     r, p, y = rpy
     # 外旋 X-Y-Z：先绕 X 转 r，再绕 Y 转 p，最后绕 Z 转 y
-    # 矩阵相乘顺序与"绕固定轴旋转"的顺序相反（右乘）
     return rot_z(y) @ rot_y(p) @ rot_x(r)
 
 
 def R_to_rpy(R) -> np.ndarray:
     """旋转矩阵 → RPY 角 ``(roll, pitch, yaw)``，弧度。
 
-    与 :func:`rpy_to_R` 互为逆运算。当 ``pitch`` 接近 ±90° 时
-    进入万向锁奇异，仅 roll 与 yaw 之和有效。
+    当 ``pitch`` 接近 ±90° 时进入万向锁奇异，仅 roll 与 yaw 之和有效。
 
     :param R: ``(3,3)`` 旋转矩阵。
     :return: ``(3,)`` 数组 ``(r, p, y)``。
@@ -147,8 +145,8 @@ def rodrigues(k, theta=None) -> np.ndarray:
     else:
         k = _normalize(k)                        # 给了角度，只需单位化轴
 
-    if theta < 1e-12:
-        return np.eye(3)                         # 角度≈0 → 单位阵（不转）
+    if abs(theta) < 1e-12:
+        return np.eye(3)                         # 角度≈0（含负号）→ 单位阵（不转）
 
     # 反对称矩阵 K（叉积矩阵），让公式能写成纯矩阵乘法
     K = np.array([[0.0, -k[2], k[1]], [k[2], 0.0, -k[0]], [-k[1], k[0], 0.0]])
@@ -380,7 +378,7 @@ def adT(T) -> np.ndarray:
     .. math::
 
         \\mathrm{Ad}_T = \\begin{bmatrix} R & \\hat{p} R \\\\
-                                       0 & R \\end{bmatrix}
+                                          0 & R \\end{bmatrix}
 
     其中 :math:`\\hat{p}` 为 ``p`` 的反对称矩阵。
 

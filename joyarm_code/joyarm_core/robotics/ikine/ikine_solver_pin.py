@@ -51,7 +51,7 @@ class PinIkineSolver(IkineSolver):
         """数值求解：LM 迭代至位姿误差 < ``tol``（位置 m 范数 + 姿态 rad
         范数之和）；``q0`` 为首选起点，失败时限位内随机重启。
 
-        不可达目标**不抛异常**——返回 ``IKResult(success=False, err=最优残差)``。
+        返回 ``IKResult(success=False, err=最优残差)``，``q`` 为取得该残差的最接近尝试解。
         """
         model = arm.pin_model
         data = pin.Data(model)      # 整个求解一份私有 Data（迭代内复用、不共享）

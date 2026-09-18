@@ -51,7 +51,7 @@ class IkineSolver(ABC):
             偏差平方和最小的一组（即构型上最接近 ``q0`` 的解，避免机械臂大幅换构型）。
         :param tol: 残差范数收敛容差（数值法特有，默认 ``1e-3``）。
         :param iters: 迭代次数上限（数值法特有，默认 ``200``）。
-        :return: :class:`IKResult`，``q`` 为 ``(n,)`` 单解；无可行解时``success=False``,``q`` 为空。
+        :return: :class:`IKResult`，``q`` 为 ``(n,)`` 单解；无可行解时``success=False``。
         """
 
     # ----------------------------------------------------------
@@ -104,13 +104,13 @@ class IkineSolver(ABC):
                         q_min: np.ndarray, q_max: np.ndarray) -> IKResult:
         """限位剔除 + 选最近解（解析法 :meth:`solve` 的收尾逻辑）。
 
-        ``sols`` 为 ``(K,n)`` 候选解：剔除任一关节超出 ``[q_min, q_max]`` 的行，
-        剩余行中取与 ``q0`` 各关节角偏差平方和最小的一组；全部越限时返回``success=False``、``q`` 为空。
+        ``sols`` 为 ``(K,n)`` 候选解：剔除任一关节超出 ``[q_min, q_max]`` 的行，剩余行中
+        取与 ``q0`` 各关节角偏差平方和最小的一组；全部越限返回``success=False``、``q`` 为 ``None``。
         """
         sols = np.atleast_2d(np.asarray(sols, dtype=float))
         q0 = np.asarray(q0, dtype=float).reshape(-1)
         feas = sols[((sols >= q_min) & (sols <= q_max)).all(axis=1)]
         if feas.size == 0:
-            return IKResult(q=np.zeros(0), success=False, err=float("inf"), n_iter=0)
+            return IKResult(success=False, err=float("inf"))
         k = int(np.argmin(((feas - q0) ** 2).sum(axis=1)))
         return IKResult(q=feas[k], success=True, err=0.0, n_iter=0)

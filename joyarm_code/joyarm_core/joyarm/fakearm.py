@@ -209,7 +209,7 @@ class FakeArm:
             jcfg.get("end_home") if jcfg.get("end_home") is not None else np.zeros(self.n_end),
             self.end_limits, "end_home")
 
-        # ---- 末端空间限位（config joyarm.tcp_limits 配了就加载）----
+        # ---- 末端空间限位（加载 config joyarm.tcp_limits ）----
         self.tcp_limits: TcpLimits = TcpLimits()
         if jcfg.get("tcp_limits"):
             self._apply_tcp_limits(jcfg["tcp_limits"])

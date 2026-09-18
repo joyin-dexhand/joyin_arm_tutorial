@@ -1,7 +1,7 @@
 """关节/末端限位守卫（指令路径防护底层）+ 限位构建/采样辅助。
 
 ``clamp_to_limits``：指令下发前逐元素裁剪到关节限位（backend 传**硬限位**）；
-``limits_from_joint_cfgs``：硬限位解析；``soft_limits_from_cfg``：软限位直配解析；
+``limits_from_joint_cfgs``：硬限位解析；``soft_limits_from_cfg``：软限位解析；
 ``tcp_limits_from_cfg``：末端空间限位解析；``rand_within_limits``：限位内均匀采样。
 """
 from __future__ import annotations
@@ -21,9 +21,6 @@ __all__ = ["clamp_to_limits", "limits_from_joint_cfgs", "soft_limits_from_cfg",
 # ============================================================
 def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
     """运动指令逐元素裁剪到关节限位内；返回与 ``targets`` 同形状。
-
-    传硬限位（如 ``JoyArm.arm_limits``）裁到硬限位；backend 指令守卫一律传
-    硬限位（软限位归上层状态判断，不参与指令裁剪）。
 
     :param targets: ``(n,)`` 或 ``(N,n)`` 目标关节角，弧度。
     :raises ValueError: 限位 ``q_min > q_max``（配置错误）、标量输入、末维与限位不匹配。
@@ -58,10 +55,8 @@ def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
 def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
     """从 config 关节条目列表解析**硬限位**（arm/end 同构；空列表返回 ``None``）。
 
-    条目四键 ``q_min``/``q_max``/``dq_max``/``tau_max``（rad / rad/s / N·m，
-    末端为电机空间行程）；缺键量纲置 ±∞（不参与守卫）。JoyArm 的
-    ``arm_limits``/``end_limits`` 均由此解析（arm 条目四键在
-    ``JoyArm.check_config`` 中强制齐全，数值须与 URDF limit 标定保持一致）。
+    ``q_min``/``q_max``/``dq_max``/``tau_max``（rad / rad/s / N·m，）。
+    ``arm_limits``/``end_limits`` 均由此解析。
 
     :param joint_cfgs: ``backend.arm.joints`` / ``backend.end.joints`` 条目列表。
     """
@@ -82,12 +77,12 @@ def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
 
 
 def rand_within_limits(limits: JointLimits, size: Optional[int] = None,
-                       rng: Optional[np.random.Generator] = None) -> np.ndarray:
+            rng: Optional[np.random.Generator] = None) -> np.ndarray:
     """在限位内均匀采样关节角（``(n,)``；``size`` 给出 ``(size, n)``）。
 
-    :param limits: 限位（如 ``JoyArm.arm_limits``）。
+    :param limits: 限位。
     :param size: 采样组数；缺省单组 ``(n,)``。
-    :param rng: ``numpy`` 随机生成器；缺省 ``np.random.default_rng()``。
+    :param rng: ``numpy`` 随机生成器。
     """
     rng = rng if rng is not None else np.random.default_rng()
     n = np.asarray(limits.q_min).shape[0]
@@ -99,16 +94,11 @@ def rand_within_limits(limits: JointLimits, size: Optional[int] = None,
 def soft_limits_from_cfg(cfg: dict, n: int) -> JointLimits:
     """从 config 四键**直值**字典解析软限位。
 
-    软限位供**上层状态判断**使用（如超软限位 → 状态异常 → 急停恢复）；
-    backend 指令守卫只裁硬限位。JoyArm 的 ``arm_limits_soft`` / ``end_limits_soft``
-    均由此解析（config ``joyarm.arm_soft_limits`` / ``end_soft_limits`` 段，
-    arm/end 分开配置），且须位于对应硬限位内（由 JoyArm 校验）。
+    ``arm_limits_soft`` / ``end_limits_soft``均由此解析，且须位于对应硬限位内。
 
-    :param cfg: 四键字典 ``{"q_min", "q_max", "dq_max", "tau_max"}``，每键为标量
-        （全关节统一）或 n 元列表（逐关节）；缺省键置 ±∞（该量不设软限）。
-    :param n: 关节数（列表长度校验基准）。
-    :raises ValueError: 结构非法（非字典/未知键/列表长度 ≠ n/负的幅值上限/
-        ``q_min > q_max``）。
+    :param cfg: 四键字典 ``{"q_min", "q_max", "dq_max", "tau_max"}``，每键为标量或n元列表。
+    :param n: 关节数。
+    :raises ValueError: 结构非法（非字典/未知键/列表长度 ≠ n/负的幅值上限/``q_min > q_max``）。
     """
     if not isinstance(cfg, dict):
         raise ValueError(
@@ -132,10 +122,8 @@ def soft_limits_from_cfg(cfg: dict, n: int) -> JointLimits:
                 f"与关节数 {n} 不匹配（逐关节需 n 元列表，或写标量统一全关节）")
         return arr
 
-    out = JointLimits(q_min=_arr("q_min", -np.inf),
-                      q_max=_arr("q_max", np.inf),
-                      dq_max=_arr("dq_max", np.inf),
-                      tau_max=_arr("tau_max", np.inf))
+    out = JointLimits(q_min=_arr("q_min", -np.inf),q_max=_arr("q_max", np.inf),
+                dq_max=_arr("dq_max", np.inf),tau_max=_arr("tau_max", np.inf))
     bad = np.where(out.q_min > out.q_max)[0]
     if bad.size > 0:
         raise ValueError(
@@ -149,20 +137,19 @@ def soft_limits_from_cfg(cfg: dict, n: int) -> JointLimits:
 def tcp_limits_from_cfg(tl: dict) -> TcpLimits:
     """从 config ``tcp_limits`` 段解析末端空间限位。
 
-    ``workspace_box`` 两种写法均可：``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
-    （两行，yaml 常用）或每轴一行 ``[min,max]`` 的 ``(3,2)``；内部统一成
-    ``(3,2)``。JoyArm / FakeArm 的 ``tcp_limits`` 均由此解析。
+    ``workspace_box`` 两种写法：``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
+    或三行``[min,max]`` 的 ``(3,2)``，内部统一成 ``(3,2)``。
 
-    :param tl: config ``joyarm.tcp_limits`` 段（各键可缺省）。
+    :param tl: config ``joyarm.tcp_limits`` 段。
     """
-    box = np.asarray(tl.get("workspace_box",
-                            [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.8]]), dtype=float)
-    if box.shape == (2, 3):          # [min 行, max 行] → 每轴 [min, max]
+    box = np.asarray(tl["workspace_box"], dtype=float) \
+        if tl.get("workspace_box") is not None else None
+    if box is not None and box.shape == (2, 3):   # [min 行, max 行] → 每轴 [min, max]
         box = box.T
     return TcpLimits(
         workspace_box=box,
-        v_lin_max=float(tl.get("v_lin_max", 0.0)),
-        v_ang_max=float(tl.get("v_ang_max", 0.0)),
-        f_max=float(tl.get("f_max", 0.0)),
-        t_max=float(tl.get("t_max", 0.0)),
+        v_lin_max=float(tl.get("v_lin_max", float("inf"))),
+        v_ang_max=float(tl.get("v_ang_max", float("inf"))),
+        f_max=float(tl.get("f_max", float("inf"))),
+        t_max=float(tl.get("t_max", float("inf"))),
     )
