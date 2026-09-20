@@ -2,9 +2,9 @@
 
 承载底层的共享基础设施（仅依赖 numpy / 标准库，被 robotics / backend / joyarm 依赖）：
 
-- :mod:`joyarm_core.utils.transforms` ：  SE(3)/SO(3) 数学（旋转矩阵、RPY、轴角、四元数、齐次变换、球面插值 slerp）。
-- :mod:`joyarm_core.utils.types`      ：  跨层共享的 ``@dataclass`` 数据类型（``ArmState``、``Pose``、``JointLimits`` 等）与枚举（``ControlMode`` 等）。
-- :mod:`joyarm_core.utils.limits`     ：  关节限位守卫（指令路径防护）+ 关节/末端限位构建解析等。
+- :mod:`joyarm_core.utils.transforms` ：  纯 numpy SE(3)/SO(3) 数学：旋转矩阵、RPY、轴角、四元数、齐次变换的互转与运算，以及伴随 ``adT``、球面插值 ``slerp``。
+- :mod:`joyarm_core.utils.types`      ：  跨层共享的 ``@dataclass`` 数据类型（``ArmState``、``Pose``、``JointLimits`` 等）与枚举（``ControlMode`` 等），全库统一引用此处定义、杜绝重复定义。
+- :mod:`joyarm_core.utils.limits`     ：  关节限位守卫（``clamp_to_limits`` 指令下发前裁剪）+ 硬 / 软 / 末端限位构建解析 + 限位内均匀采样。
 
 """
 
