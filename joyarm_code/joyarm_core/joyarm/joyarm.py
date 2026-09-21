@@ -348,6 +348,7 @@ class JoyArm:
         self._arm_zero: np.ndarray = np.zeros(0)         # 零位（全零）
         self._arm_home: np.ndarray = np.zeros(0)         # home 位形（config joyarm.arm_home）
         self._arm_neutral: np.ndarray = np.zeros(0)      # 数值求解默认初值（全零）
+        self._arm_enabled: np.ndarray = np.zeros(0, dtype=bool)  # 使能标志缓存（enable/disable_arm 维护，先使能才能 move_j）
 
         # ---- 末端（end）----
         self.n_end: int = 0                              # 末端电机数（无末端为 0）
@@ -409,6 +410,7 @@ class JoyArm:
         ]
         self.n_arm = len(self._arm_joint_names)
         self.n_end = len(self._end_joint_names)
+        self._arm_enabled = np.zeros(self.n_arm, dtype=bool)  # 连接后电机默认失能
         arm_nq_urdf = self._urdf_arm_nq(self.pin_model)
         if self.n_arm != arm_nq_urdf:
             raise ValueError(
@@ -685,14 +687,15 @@ class JoyArm:
                 f"请先 connect()。")
 
     def _require_enabled_arm(self) -> None:
-        """本体电机没全部使能就抛 ``RuntimeError``（在线查使能位）。
+        """本体电机没全部使能就抛 ``RuntimeError``（查内部使能标志缓存）。
 
         用于运动/下发指令前（move_j、safe_*、hold_position 等）；
         急停类操作（damping_mode/lock_position）不需要先使能。
+        标志由 enable/disable_arm 维护、connect 时复位（对齐 FakeArm 的
+        ``_enabled`` 设计；电机故障另经 ``joint.error`` / ``check_hardware`` 暴露）。
         """
-        enabled = np.asarray(self.get_arm_state().joint.enabled, dtype=bool).reshape(-1)
-        if not bool(enabled.all()):
-            bad = np.where(~enabled)[0].tolist()
+        if not bool(self._arm_enabled.all()):
+            bad = np.where(~self._arm_enabled)[0].tolist()
             raise RuntimeError(
                 f"joyarm.py - _require_enabled_arm：本体关节 {bad} 未使能；请先 enable_arm()")
 
@@ -1100,7 +1103,7 @@ class JoyArm:
     def check_hardware(self) -> None:
         """检查硬件
 
-        连接硬件，电机失能状态下逐个检查：arm 关节通讯/故障/编码器、end 通讯/故障；
+        连接硬件，电机失能状态下逐个检查：arm 关节通讯/故障、end 通讯/故障；
         查完沿用之前的连接状态。一切正常就静默返回；存在问题抛``RuntimeError`` 。
 
         :raises RuntimeError: 连接失败或存在硬件故障（消息列出全部问题）。
@@ -1113,12 +1116,10 @@ class JoyArm:
             st = self.get_arm_state()
             js = st.joint
             for i in range(self.n_arm):
-                if not bool(np.asarray(js.comm_ok)[i]):
-                    problems.append(f"本体关节[{i}] 通讯无应答")
                 if bool(np.asarray(js.error)[i]):
                     problems.append(f"本体关节[{i}] 电机故障（故障标志置位）")
-                if not bool(np.asarray(js.angle_ok)[i]):
-                    problems.append(f"本体关节[{i}] 编码器角度无效")
+            # 通讯异常（无应答）由后端汇入 ArmState.errors（如 "joint1: 通讯无应答"）
+            problems.extend(f"本体 {msg}" for msg in st.errors)
             es = {}
             if self.n_end:
                 try:
@@ -1149,6 +1150,7 @@ class JoyArm:
         """
         self._backend.connect()
         self.connected = bool(self._backend.connected)
+        self._arm_enabled[:] = False   # 新连接电机默认失能（重连后须重新使能）
         self._start_state_keepalive()
 
     def disconnect(self) -> None:
@@ -1195,11 +1197,19 @@ class JoyArm:
         """使能本体电机（``joint=None`` 全部）"""
         self._require_connected()
         self._backend.enable_arm(joint)
+        if joint is None:
+            self._arm_enabled[:] = True
+        else:
+            self._arm_enabled[joint] = True
 
     def disable_arm(self, joint: Optional[int] = None) -> None:
         """失能本体电机（``joint=None`` 全部）"""
         self._require_connected()
         self._backend.disable_arm(joint)
+        if joint is None:
+            self._arm_enabled[:] = False
+        else:
+            self._arm_enabled[joint] = False
 
     def enable_end(self, joint: Optional[int] = None) -> None:
         """使能末端电机（``joint=None`` 全部）"""
@@ -1246,7 +1256,7 @@ class JoyArm:
     # 四、读状态：关节角/速度/力矩/温度、末端位姿
     # ============================================================
     def get_arm_state(self) -> ArmState:
-        """读取本体当前状态（关节角/速度/力矩、使能、故障、通讯、温度等）。
+        """读取本体当前状态（关节角/速度/力矩/温度、故障标志、通讯异常汇总等）。
 
         数据新鲜（年龄 ≤ config ``joyarm.runtime.state_stale_timeout``，缺省 0.15 s）
         则直接用缓存、不发总线请求，太旧就先查询一次再返回。

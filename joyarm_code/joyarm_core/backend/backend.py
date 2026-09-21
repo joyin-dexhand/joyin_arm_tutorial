@@ -1,17 +1,17 @@
-"""``Backend`` —— 整机硬件通信后端抽象基类（定义多厂商关节电机的通用功能）。
+"""``Backend`` —— joyarm 整机硬件通信后端的抽象基类（定义通用功能）。
 
-一个后端 = 一台完整设备的硬件（多轴本体 + 末端执行器，共用或各用通信总线）；
-子类按**电机厂商/型号**派生（结构相同、参数不同），以 ``_arm`` / ``_end``后缀区分本体与末端两组。
+子类按**型号**派生，以 ``_arm`` / ``_end``后缀区分 arm 与 end 两类方法。
+arm 本体和 end 执行器若位于同一串行总线则共用通讯总线（end复用arm的总线）；若两者为不同通讯口则各自建立通信
 
 配置结构即代码结构（yaml ``backend:`` 段，``name`` 选型键经 ``REGISTRY`` 解析）::
 
     backend:
-      name: backend_dm          # 选型键（JoyArm 弹出后按 REGISTRY 构建子类）
+      name: backend_dm          # 选型键（按 REGISTRY 构建 backend 子类）
       arm: {channel, protocol, baud_rate, control_rate, joints}   # 本体子段
-      end: {channel, protocol, baud_rate, joints}   # 末端子段（单帧锁存，无控制率）
+      end: {channel, protocol, baud_rate, joints}   # 末端子段
 
-接口按功能分类：生命周期（connect/disconnect）、使能失能（enable/disable/set_zero）、状态读取（read_state）、
-模式切换（set_mode）、指令下发（send_*，「限位守卫模板 + 子类内核」）、电机参数读写（read_param/write_param）。
+接口按功能分类：生命周期（connect/disconnect）、使能失能（enable/disable）、状态读取（read_state）、
+    模式切换（set_mode）、指令下发（send_*，「限位守卫模板 + 子类内核」）、电机参数读写（read_param/write_param）。
 
 """
 from __future__ import annotations

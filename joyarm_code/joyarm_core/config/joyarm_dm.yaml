@@ -93,7 +93,6 @@ backend:
     channel: /dev/ttyACM0
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
     baud_rate: 921600
-    control_rate: 200 # 直连指令频率 Hz（move_j/safe_* 轨迹采样与发送节拍默认值）
     joints:
       - name: joint1
         motor_id: 0x01
@@ -207,7 +206,6 @@ backend:
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
     baud_rate: 921600
-    # control_rate: 200 # 周期控制频率 Hz；backend_dm 未使用（末端无周期流）
     joints:
       - name: joint_end1 # 末端电机名
         motor_id: 0x07

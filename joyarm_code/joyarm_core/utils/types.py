@@ -22,7 +22,7 @@ __all__ = [
     "Twist",            # 空间速度：linear + angular
     "Pose",             # 统一位姿表示：position + orientation（单位四元数）
     "TrajFrame",        # 轨迹帧：time + pose/twist/wrench + q/dq/tau（纯数据）
-    "JointState",       # 关节状态：control_mode + q/dq/tau + enabled/error/comm_ok/angle_ok + 温度
+    "JointState",       # 关节状态：control_mode + q/dq/tau + 温度 + error
     "TcpState",         # 工具中心点状态：pose + twist + wrench
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
     "JointLimits",      # 关节限位: q_min/q_max + dq_max + tau_max
@@ -170,24 +170,18 @@ class JointState(_ArrayEqMixin):
     :ivar q: ``(n,)`` 关节位置，弧度。
     :ivar dq: ``(n,)`` 关节速度，弧度/秒。
     :ivar tau: ``(n,)`` 关节力矩，N·m。
-    :ivar enabled: ``(n,)`` bool 使能状态，``True``=使能，``False``=失能。
-    :ivar error: ``(n,)`` bool 异常状态，``True``=电机异常（过温/过流等），``False``=正常。
-    :ivar comm_ok: ``(n,)`` bool 通讯状态，``True``=正常，``False``=异常。
-    :ivar angle_ok: ``(n,)`` bool 角度状态（编码器角度有效性），``True``=正常，``False``=异常。
     :ivar temp_mos: ``(n,)`` 驱动板（MOS）温度，℃（固件反馈帧不含时恒 0）。
     :ivar temp_rotor: ``(n,)`` 转子（线圈）温度，℃（同上）。
+    :ivar error: ``(n,)`` bool 异常状态，``True``=电机异常（过温/过流等），``False``=正常。
     """
 
     control_mode: ControlMode = ControlMode.POSITION
     q: np.ndarray = field(default_factory=lambda: np.zeros(0))
     dq: np.ndarray = field(default_factory=lambda: np.zeros(0))
     tau: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    enabled: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
-    error: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
-    comm_ok: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
-    angle_ok: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
     temp_mos: np.ndarray = field(default_factory=lambda: np.zeros(0))
     temp_rotor: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    error: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
 
 
 @dataclass(eq=False)

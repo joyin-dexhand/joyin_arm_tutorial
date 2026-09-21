@@ -371,17 +371,14 @@ class FakeArm:
     # 三、读状态：快照来自内部仿真状态（不要求 connect，算法测试随时可读）
     # ===
     def get_arm_state(self) -> ArmState:
-        """本体当前状态快照（关节 q/dq/tau、使能标志，恒"通讯正常/无故障"）；
+        """本体当前状态快照（关节 q/dq/tau，恒"无故障"）；
         末端位姿 ``tcp.pose`` 用内置 fkine 现算填充。"""
         n = self.n_arm
         return ArmState(
             joint=JointState(
                 control_mode=self._mode,
                 q=self._q.copy(), dq=self._dq.copy(), tau=self._tau.copy(),
-                enabled=self._enabled.copy(),
                 error=np.zeros(n, dtype=bool),
-                comm_ok=np.ones(n, dtype=bool),
-                angle_ok=np.ones(n, dtype=bool),
                 temp_mos=np.zeros(n), temp_rotor=np.zeros(n),
             ),
             tcp=TcpState(pose=self.fkine(self._q, self.ee_frame_name)),
