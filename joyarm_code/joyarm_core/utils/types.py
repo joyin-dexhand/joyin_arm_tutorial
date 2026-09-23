@@ -16,13 +16,13 @@ from .transforms import T_to_Rp, R_to_quat, quat_to_R, Rp_to_T
 
 __all__ = [
     # 枚举
-    "ControlMode",      # 关节控制模式：POSITION / VELOCITY / MIT
+    "ControlMode",      # 关节控制模式：MIT / POSITION / VELOCITY
     # 数据类
     "Wrench",           # 六维力/力矩：force + torque
     "Twist",            # 空间速度：linear + angular
     "Pose",             # 统一位姿表示：position + orientation（单位四元数）
     "TrajFrame",        # 轨迹帧：time + pose/twist/wrench + q/dq/tau（纯数据）
-    "JointState",       # 关节状态：control_mode + q/dq/tau + 温度 + error
+    "JointState",       # 关节状态：q/dq/tau + 温度 + error（含 t）
     "TcpState",         # 工具中心点状态：pose + twist + wrench
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
     "JointLimits",      # 关节限位: q_min/q_max + dq_max + tau_max
@@ -40,15 +40,14 @@ class ControlMode(Enum):
 
     下发指令时，``JoyArm.set_arm_command()`` 根据 mode 调用 backend 的不同方法。
 
+    :cvar MIT: MIT 模式，下发 ``(tau, q, dq, kp, kd)``，纯力矩经 MIT（``kp=kd=0``，仅前馈``tau_ff``）实现。
     :cvar POSITION: 位置模式，下发目标关节角 ``q``。
     :cvar VELOCITY: 速度模式，下发目标关节速度 ``dq``。
-    :cvar MIT: MIT 阻抗/前馈模式，下发 ``(q, dq, tau_ff, kp, kd)``；
-        纯力矩经 MIT（``kp=kd=0``，仅前馈 ``tau_ff``）实现，不设独立力矩模式。
     """
 
+    MIT = "mit"
     POSITION = "position"
     VELOCITY = "velocity"
-    MIT = "mit"
 
 
 # ============================================================
@@ -164,24 +163,24 @@ class TrajFrame(_ArrayEqMixin):
 # ============================================================
 @dataclass(eq=False)
 class JointState(_ArrayEqMixin):
-    """关节层状态快照
+    """关节层状态快照（同一 ``t`` 批次的物理量整族装配）
 
-    :ivar control_mode: 关节当前控制模式（见 :class:`ControlMode`）。
+    :ivar t: 状态最近更新时刻，Unix 秒（float64 与 ``ArmState.timestamp`` 同基准；0 = 从未更新）。
     :ivar q: ``(n,)`` 关节位置，弧度。
     :ivar dq: ``(n,)`` 关节速度，弧度/秒。
     :ivar tau: ``(n,)`` 关节力矩，N·m。
     :ivar temp_mos: ``(n,)`` 驱动板（MOS）温度，℃（固件反馈帧不含时恒 0）。
     :ivar temp_rotor: ``(n,)`` 转子（线圈）温度，℃（同上）。
-    :ivar error: ``(n,)`` bool 异常状态，``True``=电机异常（过温/过流等），``False``=正常。
+    :ivar error: ``(n,)`` int 状态码（0=失能、1=使能，均正常；2 及以上为故障码，含义随固件/型号定）。
     """
 
-    control_mode: ControlMode = ControlMode.POSITION
+    t: float = 0.0
     q: np.ndarray = field(default_factory=lambda: np.zeros(0))
     dq: np.ndarray = field(default_factory=lambda: np.zeros(0))
     tau: np.ndarray = field(default_factory=lambda: np.zeros(0))
     temp_mos: np.ndarray = field(default_factory=lambda: np.zeros(0))
     temp_rotor: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    error: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
+    error: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=int))
 
 
 @dataclass(eq=False)
@@ -205,7 +204,7 @@ class ArmState(_ArrayEqMixin):
     """
 
     timestamp: float = 0.0
-    mode: ControlMode = ControlMode.POSITION
+    mode: ControlMode = ControlMode.MIT
     errors: list[str] = field(default_factory=list)
     joint: JointState = field(default_factory=JointState)
     tcp: TcpState = field(default_factory=TcpState)

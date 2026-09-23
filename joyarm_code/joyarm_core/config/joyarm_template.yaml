@@ -88,12 +88,13 @@ backend:
         MIT: # MIT 模式增益（MIT 指令未传 kp/kd 时使用）
           kp: 120.0
           kd: 8.0
-        POS_VEL: # 位置模式闭环增益 + 限速
-          vel_kp: 0.0125 # 速度环 Kp
-          vel_ki: 0.004 # 速度环 Ki
+        POS_VEL: # 位置/速度两模式共用：闭环增益 + 限速 + 力矩电流上限
           pos_kp: 150.0 # 位置环 Kp
           pos_ki: 0.5 # 位置环 Ki
+          vel_kp: 0.0125 # 速度环 Kp（两模式共用）
+          vel_ki: 0.004 # 速度环 Ki（两模式共用）
           vlim: 5.0 # 位置/速度指令限速（rad/s）
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
       # joint2 … jointN：同构复制上一条目，改 name / motor_id / feedback_id / 硬限位与增益
 
   end: # end 段（执行器电机组，可多电机如灵巧手）
@@ -113,10 +114,11 @@ backend:
         MIT: 
           kp: 0.0
           kd: 0.0
-        POS_VEL: 
-          vel_kp: 0.0008
-          vel_ki: 0.002
+        POS_VEL:
           pos_kp: 50.0
           pos_ki: 1.0
+          vel_kp: 0.0008
+          vel_ki: 0.002
           vlim: 3.0
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
       # 多电机末端（如灵巧手）：同构追加条目，逐电机独立 ID / 行程 / 增益

@@ -40,11 +40,11 @@ joyarm_code/
 │   │   ├── fkine / ikine / jacobian / dynamics     #     求解器四域
 │   │   └── trajectory / control                    #     规划域 / 控制域
 │   ├── backend/                     #   通信层（整机 Backend + name 选型）
-│   │   ├── backend.py               #     Backend（整机 ABC：*_arm/*_end + 参数读写；限位 __init__ 构建 + send_* 守卫模板）
-│   │   ├── backend_dm.py            #     BackendDM（DM 整机 7 电机；内含私有协议层 DmMotor/DmCanBus）✅
+│   │   ├── backend.py               #     Backend（整机 ABC：三段式——公开薄委托/族通用 impl/29 个单 joint 抽象内核）✅
+│   │   ├── backend_dm.py            #     BackendDM（DM 整机 7 电机；按新基类内核重建中，重建后恢复注册）🟡
 │   │   ├── backend_dm_mujoco.py     #     BackendDMMujoco（DM 机械臂 MuJoCo 仿真后端桩，待实现）🟡
 │   │   ├── u2can/                   #     厂商 DM 参考库（协议参照用，不依赖不导入）
-│   │   └── __init__.py              #     REGISTRY + get_backend(name)
+│   │   └── __init__.py              #     REGISTRY（暂空，backend_dm 重建后恢复）+ get_backend(name)
 │   ├── joyarm/                      #   设备模型层（组合根 + 型号工厂）
 │   │   ├── joyarm.py                #     JoyArm（单类）：config 驱动构造 + 六域字典组装 + 公开门面
 │   │   ├── fakearm.py               #     FakeArm（无硬件最小替身：arm 协议鸭子类型实现）
@@ -55,7 +55,7 @@ joyarm_code/
 │       └── joyarm_template.yaml     #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 list_models）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性；基础设施优先复用 joyarm_core，章节算法可自行实现）
-├── test/                            # 测试套件目录（占位待重建；旧套件已整批删除，见 git 历史 35b765f）
+├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；旧套件见 git 历史 35b765f）
 ├── quickstart/                      # 快速上手示例（占位待补；CLI/GUI 入口规划见 §2.3）
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
 ├── README.md                        # 用户向入口
@@ -99,7 +99,7 @@ backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, jo
 - **设备模型**（`joyarm/`）：`JoyArm` = 组合根单类（无型号子类）；`joyarm_factory(model)` 外部推荐入口；`FakeArm` = 无硬件最小替身（arm 协议鸭子类型，测试/章节示例用）。文件 `joyarm.py` / `fakearm.py` / `__init__.py`。
 - **Backend 整机两层**（`backend/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendDM`（1:1 对应见约束1）。`REGISTRY` + `get_backend(name)` 供 config 选型。
 - **属性约定**：型号名 = `model`（str，product model）；pinocchio 构型产物 = `pin_model`（只读共享）/`pin_data`（用户直连口，内部求解用私有 Data 不碰它；**勿与型号名混淆**）；关节数 = `n_arm`/`n_end`；硬限位 = `arm_limits`/`end_limits`、软限位 = `arm_limits_soft`/`end_limits_soft`（限位语义见 §1.3）；整机后端 = `_backend`（私有，必配）；**六域策略成员字典** = `_fkine_solvers`/`_ikine_solvers`/`_jacobian_solvers`/`_dynamics_solvers`/`_traj_planners`/`_controllers`（`dict[注册名→实例]`）+ `_active_name`（域→激活注册名）；config = `self._config`（深拷贝语义见约束8）。求解器形参用 `arm`（鸭子类型）。
-- **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…，末端动作 `set_end_open/close/zero`）；执行类统一 `joint` 形参（None=全部）；`set_mode_*` 默认 POSITION；参数读写 `read/write_param_{arm,end}`（joint=None 读返列表、写标量广播或等长列表）；求解切换 `set_solver(domain, name)`、查询 `list_solvers(domain)`（每域有且仅一个激活）。
+- **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…，末端动作 `set_end_open/close/zero`）；执行类形参：backend 整族执行（无 `joint` 子集参数；JoyArm 层旧 `joint` 参数待重构移除）；`set_mode_*` 默认 MIT；参数读写 `read/write_param_{arm,end}`（族级：读返列表、写等长列表并读回验证）；求解切换 `set_solver(domain, name)`、查询 `list_solvers(domain)`（每域有且仅一个激活）。
 - **算法可换（成员即策略）**：每域 = ABC + `REGISTRY`（实现一节点一文件，各章新增）。
 
 ### 2.2 编码与运行约定（架构类原则见 §0，此处不重复）
@@ -125,8 +125,8 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举 + 数据类（Pose/TrajFrame/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | 限位助手：硬/软/tcp 限位构建 + 指令裁剪 + 限位内采样（签名见 §3.3） | Ch11 | ✅ |
-| `backend/backend.py` | `Backend(ABC)` 整机契约（`*_arm`/`*_end` + 参数读写 + 限位构建 + send_* 两族守卫模板 + `read_state_cache_*`/`state_age_*` 只读缓存契约，默认 NotImplementedError） | Ch2 | ✅ |
-| `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus；`read_state_cache_*` 零总线帧组装缓存槽 + `state_age_*` 陈旧度，`DmMotor.t_state` 应答时间戳） | Ch6/13 | ✅ |
+| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个单 joint 抽象内核）；三模式发送（MIT 默认，connect 自动 best-effort 设定）；公开状态槽 `joint_state_arm/end`（含 `t`，纯物理量）+ `is_connected/is_abled` 三值标志 + `mode_arm/end` 族模式成员（逐 joint 模式在私有缓存，与状态读取解耦）；cfg 预解析硬限位/发送默认/POS_VEL 四增益/baud 为成员 | Ch2 | ✅ |
+| `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus；按新基类内核重建中） | Ch6/13 | 🟡 |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
 | `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御）✅；MDH 白盒 FK 为 Ch2 教学 | Ch2 | ✅ |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅；解析 IK 为 Ch3 教学 | Ch3 | ✅ |
@@ -146,7 +146,7 @@ JoyArm（单类组合根：_backend + 六域成员字典 + config/_config）
    │  config 驱动：型号名→URDF（pin_model/pin_data）；backend.name→后端（必配）；
    │  robotics:→各域 REGISTRY 字典化组装（首个激活；域未配置=空，门面显性报错）
    │  教学数据（MDH 等）：算法层经 arm.get_config() 读类内 config（约束8）
-Backend(ABC) ──▶ BackendDM ✅
+Backend(ABC) ──▶ BackendDM 🟡（按新基类重建中）
 六域 ABC + 内置默认实现（Pin 四域 / to_joint_traj_planner / joint_position_controller）──▶
    章节自定义实现显式入表后并列选配（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
    traj Ch5 / control Ch6/8/9 / dynamics Ch8）
@@ -203,9 +203,9 @@ Controller(ctrl_hz=200) + MODE 类属性：纯计算内核——compute(arm, fra
 #### Backend / 限位 / 数学 / 类型 API
 
 ```python
-Backend(ABC, cfg) ✅   # 只存硬限位（本体/末端均自解析 config 对应 joints 四键，缺键 ±∞）；属性 arm_limits / end_limits（限位语义见 §1.3）
-send_position/velocity/mit_{arm,end} 守卫模板→抽象内核 _send_*_{arm,end}（限位裁剪唯一执行点；末端标量广播逐电机裁剪、力度按 ±tau_max 数值裁剪；越限告警节流每 0.5s 至多一条（加锁防并发漏节流）；send_action_end 离散不模板化）；软限位仅 JoyArm 加载、运行期替换未实现
-get_backend(name) · REGISTRY     # config backend.name 选型 ✅
+Backend(ABC, cfg) ✅   # 公开面：connect/enable、get_mode（一致返模式+更新 mode_arm/end，不一致 False，失败 None）、get_state（JointState 纯物理量含 t）、read/write_param（写后读回验证）、set_zero、set_mode（默认 MIT）、check/clear_error、send_action_end、属性 cfg/name/n_joints_*/joint_limits_*/joint_state_*（公开实时状态槽）+ is_connected/is_abled 三值标志；限位裁剪唯一执行点（语义见 §1.3）
+send_mit_{arm,end}(tau,q,dq,kp=None,kd=None) · send_position_{arm,end}(q,vlim=None,flim=None) · send_vel_{arm,end}(dq)   # 三模式整组下发（①维度→②空值/越限裁剪→③连接/模式门禁→④逐 joint 内核）；缺省取 cfg 成员默认；越限告警节流每 0.5s 至多一条
+get_backend(name) · REGISTRY     # config backend.name 选型（REGISTRY 暂空，backend_dm 重建后恢复）✅
 BackendDMMujoco   # MuJoCo 仿真后端桩，待实现（详情见 §3.1）🟡
 clamp_to_limits(targets, limits) · limits_from_joint_cfgs(joint_cfgs) · soft_limits_from_cfg(cfg, n) · tcp_limits_from_cfg(tl) · rand_within_limits(limits, size, rng)   # ✅
 transforms.py（23 函数，清单见 §3.1）✅ · types.py 枚举+数据类（见 §3.1）✅

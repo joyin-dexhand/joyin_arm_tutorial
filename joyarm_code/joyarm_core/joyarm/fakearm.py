@@ -376,7 +376,6 @@ class FakeArm:
         n = self.n_arm
         return ArmState(
             joint=JointState(
-                control_mode=self._mode,
                 q=self._q.copy(), dq=self._dq.copy(), tau=self._tau.copy(),
                 error=np.zeros(n, dtype=bool),
                 temp_mos=np.zeros(n), temp_rotor=np.zeros(n),

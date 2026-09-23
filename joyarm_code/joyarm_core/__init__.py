@@ -87,7 +87,6 @@ from .utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_l
 from . import backend
 from .backend import (
     Backend,
-    BackendDM,
     get_backend,
 )
 
@@ -159,7 +158,6 @@ __all__ = [
     # 通信层（整机后端）
     "backend",
     "Backend",
-    "BackendDM",
     "get_backend",
     # 版本
     "__version__",

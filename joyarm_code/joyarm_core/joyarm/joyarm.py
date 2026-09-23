@@ -832,7 +832,7 @@ class JoyArm:
             try:
                 if self.n_end:
                     ez = np.zeros(self.n_end)
-                    self._backend.send_mit_end(ez, ez, ez, kp=ez,kd=np.full(self.n_end, kd))
+                    self._backend.send_mit_end(ez, ez, ez, kp=ez, kd=np.full(self.n_end, kd))
             except Exception as e:
                 logger.warning("damping_mode：%s阻尼指令失败：%s", tag, e)
 
@@ -910,7 +910,7 @@ class JoyArm:
             tau_ff = np.zeros(self.n_arm)
         self.set_mode_arm(ControlMode.MIT)
         self._paced_send(ts, lambda i: self._backend.send_mit_arm(
-            qs[i], dqs[i], tau_ff))
+            tau_ff, qs[i], dqs[i]))
         if not self._wait_in_position(q_arm, wait_tol, wait_timeout):
             raise RuntimeError(
                 f"joyarm.py - _safe_move：到位超时（{wait_timeout}s 内未达容差 "
@@ -1336,7 +1336,7 @@ class JoyArm:
             ]
             if missing:
                 raise ValueError(f"joyarm.py - set_arm_command：MIT 模式缺少参数：{missing}")
-            self._backend.send_mit_arm(q, dq, tau, kp=kp, kd=kd, joint=joint)
+            self._backend.send_mit_arm(tau, q, dq, kp=kp, kd=kd)
         else:
             raise ValueError(f"joyarm.py - set_arm_command：未知控制模式：{mode}")
 

@@ -89,6 +89,7 @@ robotics:
 # ===================================================================
 backend:
   name: backend_dm
+  state_refresh_hz: 10 # 低频状态刷新频率（Hz）：失能/空闲期定时读取各族控制模式与状态，已被更高频途径更新的族自动跳过
   arm: # arm本体后端（joints 条目四键限位 = 硬限位，数值须与 URDF limit 标定保持一致）
     channel: /dev/ttyACM0
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
@@ -103,14 +104,15 @@ backend:
         dq_max: 5.0 # 速度上限（rad/s）
         tau_max: 30.0 # 力矩上限（N·m）
         MIT:                                                                                  # ！ 待标定 
-          kp: 120.0
-          kd: 8.0
-        POS_VEL:                                                                              # ！ 待标定
-          vel_kp: 0.0125
-          vel_ki: 0.004
+          kp: 120.0   # max=500
+          kd: 5.0     # max=5
+        POS_VEL: # 位置/速度两模式共用：闭环增益 + 限速 + 力矩电流上限                              # ！ 待标定
           pos_kp: 150.0
           pos_ki: 0.5
+          vel_kp: 0.0125
+          vel_ki: 0.004
           vlim: 5.0
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
 
       - name: joint2
         motor_id: 0x02
@@ -121,14 +123,15 @@ backend:
         dq_max: 5.0
         tau_max: 30.0
         MIT:                                                                                  # ！ 待标定
-          kp: 120.0
-          kd: 8.0
-        POS_VEL:                                                                              # ！ 待标定                            
-          vel_kp: 0.0125
-          vel_ki: 0.004
+          kp: 120.0   # max=500
+          kd: 5.0     # max=5
+        POS_VEL:                                                                              # ！ 待标定 
           pos_kp: 150.0
           pos_ki: 0.5
+          vel_kp: 0.0125
+          vel_ki: 0.004
           vlim: 5.0
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
 
       - name: joint3
         motor_id: 0x03
@@ -139,14 +142,15 @@ backend:
         dq_max: 5.0
         tau_max: 30.0
         MIT:                                                                                 # ！ 待标定                                  
-          kp: 120.0
-          kd: 8.0
+          kp: 120.0   # max=500
+          kd: 5.0     # max=5
         POS_VEL:                                                                             # ！ 待标定
-          vel_kp: 0.0125
-          vel_ki: 0.004
           pos_kp: 150.0
           pos_ki: 0.5
+          vel_kp: 0.0125
+          vel_ki: 0.004
           vlim: 5.0
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
 
       - name: joint4
         motor_id: 0x04
@@ -157,14 +161,15 @@ backend:
         dq_max: 8.0
         tau_max: 9.0
         MIT:                                                                                # ！ 待标定
-          kp: 18.0
-          kd: 2.0
+          kp: 18.0    # max=500
+          kd: 2.0     # max=5
         POS_VEL:                                                                            # ！ 待标定
-          vel_kp: 0.0008
-          vel_ki: 0.002
           pos_kp: 100.0
           pos_ki: 0.2
+          vel_kp: 0.0008
+          vel_ki: 0.002
           vlim: 3.0
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
 
       - name: joint5
         motor_id: 0x05
@@ -175,14 +180,15 @@ backend:
         dq_max: 8.0
         tau_max: 9.0
         MIT:                                                                                # ！ 待标定
-          kp: 18.0
-          kd: 2.0
+          kp: 18.0    # max=500
+          kd: 2.0     # max=5
         POS_VEL:                                                                            # ！ 待标定
-          vel_kp: 0.0008
-          vel_ki: 0.002
           pos_kp: 100.0
           pos_ki: 0.2
+          vel_kp: 0.0008
+          vel_ki: 0.002
           vlim: 3.0
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
 
       - name: joint6
         motor_id: 0x06
@@ -193,14 +199,15 @@ backend:
         dq_max: 8.0
         tau_max: 9.0
         MIT:                                                                            # ！ 待标定
-          kp: 18.0
-          kd: 2.0
+          kp: 18.0    # max=500
+          kd: 2.0     # max=5 
         POS_VEL:                                                                        # ！ 待标定
+          pos_kp: 100.0
+          pos_ki: 0.2                                                                      
           vel_kp: 0.0008
           vel_ki: 0.002
-          pos_kp: 100.0
-          pos_ki: 0.2
           vlim: 3.0
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
 
   end: # 末端后端
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
@@ -218,11 +225,12 @@ backend:
         MIT:                                                                                  # ！ 待标定 
           # kp: 8.0
           # kd: 1.0
-          kp: 0.0
-          kd: 0.0
+          kp: 0.0     # max=500
+          kd: 0.0     # max=5
         POS_VEL:                                                                              # ！ 待标定
-          vel_kp: 0.0008
-          vel_ki: 0.002
           pos_kp: 50.0
           pos_ki: 1.0
+          vel_kp: 0.0008
+          vel_ki: 0.002
           vlim: 3.0
+          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
