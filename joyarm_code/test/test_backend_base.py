@@ -216,6 +216,9 @@ def test_01_init(b, cfg):
     assert b.name == "backend_dm"
     assert b._channel_arm == "/dev/ttyACM0" and b._protocol_arm == "serial_can"
     assert b._baud_arm == 921600 and b._baud_end == 921600
+    assert b._joint_motor_id_arm == [j["motor_id"] for j in arm_j] and b._joint_motor_id_end == [0x07]
+    assert b._joint_feedback_id_arm == [j["feedback_id"] for j in arm_j] and b._joint_feedback_id_end == [0x17]
+    assert b._joint_model_arm == [j["model"] for j in arm_j] and b._joint_model_end == ["4310"]
     assert b.n_joints_arm == 6 and b.n_joints_end == 1
     assert np.allclose(b.joint_limits_arm.dq_max, [5, 5, 5, 8, 8, 8])
     assert b.joint_limits_arm.q_min[0] == -2.8
@@ -417,7 +420,7 @@ def test_11_write_param(b):
     cap.msgs.clear()
     t0 = time.perf_counter()
     assert b.write_param_arm("pos_kp", [1, 2, 3, 4, 5, 6]) == 1
-    assert time.perf_counter() - t0 >= 0.095  # _WRITE_SETTLE = 0.1
+    assert time.perf_counter() - t0 >= 0.095  # write_settle 默认 0.1 s（cfg 可覆盖）
     assert all(b.registers[("arm", i, "pos_kp")] == i + 1 for i in range(6))
     b.readback_scale = 0.5
     assert b.write_param_arm("pos_kp", [1, 2, 3, 4, 5, 6]) == 0

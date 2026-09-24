@@ -43,6 +43,7 @@ joyarm_code/
 │   │   ├── backend.py               #     Backend（整机 ABC：三段式——公开薄委托/族通用 impl/29 个单 joint 抽象内核）✅
 │   │   ├── backend_dm.py            #     BackendDM（DM 整机 7 电机；按新基类内核重建中，重建后恢复注册）🟡
 │   │   ├── backend_dm_mujoco.py     #     BackendDMMujoco（DM 机械臂 MuJoCo 仿真后端桩，待实现）🟡
+│   │   ├── backend_template.py      #     BackendTemplate（子类实现模板：复制为实现，不入 REGISTRY）✅
 │   │   ├── u2can/                   #     厂商 DM 参考库（协议参照用，不依赖不导入）
 │   │   └── __init__.py              #     REGISTRY（暂空，backend_dm 重建后恢复）+ get_backend(name)
 │   ├── joyarm/                      #   设备模型层（组合根 + 型号工厂）
@@ -76,7 +77,7 @@ joyarm_code/
 ```yaml
 joyarm: {end_frame, arm_soft_limits, end_soft_limits, tcp_limits, arm_home, end_home, runtime}   # 软限位四键直值 {q_min, q_max, dq_max, tau_max}（arm/end 分开，标量或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero/neutral 按自由度全零（代码固定，不经 config）；arm_mdh（6×4：α/a/d/θ）/T_linkn_endtcp 为教学数据（约束8）；runtime 四键 {state_keepalive_hz, state_stale_timeout, move_poll_interval, move_wait_timeout}（可选，缺省 10.0/0.15/0.05/10.0）；workspace_box 兼容 (2,3)/(3,2)
 robotics: {六域契约规格}   # 六域选型（注册名 / {name, **参数} / 规格列表，全部加载、首个激活）；显式配置，注册名无效/实例化失败即硬失败（约束2）
-backend: {name: backend_dm, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {channel, protocol, baud_rate, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源，backend `__init__` 自解析；arm/end 数值须与 URDF limit 标定保持一致，JoyArm init 三类自检告警：关节缺失/数值不一致（容差 1e-4）/URDF 多余非 mimic 本体活动关节）；end 段可按需启用 control_rate（注释形式给出，backend_dm 末端无周期流未用）
+backend: {name: backend_dm, 可选运行键 state_refresh_hz/warn_interval/write_settle（默认 10Hz/0.5s/0.1s）, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {channel, protocol, baud_rate, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源，与协议标识三键 motor_id/feedback_id/model 一并由 backend `__init__` 自解析；arm/end 数值须与 URDF limit 标定保持一致，JoyArm init 三类自检告警：关节缺失/数值不一致（容差 1e-4）/URDF 多余非 mimic 本体活动关节）；end 段可按需启用 control_rate（注释形式给出，backend_dm 末端无周期流未用）
 ```
 
 **限位语义**：**backend 下发指令只裁硬限位**（`Backend.send_*` 守卫模板，唯一执行点）；软限位由 JoyArm 直配加载（`arm_limits_soft`/`end_limits_soft`，缺省软=硬）仅作上层状态判断依据（超软限位→状态异常→急停恢复，后续实现）；config 改动重启生效，**不回写 yaml**。
@@ -125,9 +126,10 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举 + 数据类（Pose/TrajFrame/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | 限位助手：硬/软/tcp 限位构建 + 指令裁剪 + 限位内采样（签名见 §3.3） | Ch11 | ✅ |
-| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个单 joint 抽象内核）；三模式发送（MIT 默认，connect 自动 best-effort 设定）；公开状态槽 `joint_state_arm/end`（含 `t`，纯物理量）+ `is_connected/is_abled` 三值标志 + `mode_arm/end` 族模式成员（逐 joint 模式在私有缓存，与状态读取解耦）；cfg 预解析硬限位/发送默认/POS_VEL 四增益/baud 为成员 | Ch2 | ✅ |
+| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个单 joint 抽象内核）；三模式发送（MIT 默认，connect 自动 best-effort 设定）；公开状态槽 `joint_state_arm/end`（含 `t`，纯物理量）+ `is_connected/is_abled` 三值标志 + `mode_arm/end` 族模式成员（逐 joint 模式在私有缓存，与状态读取解耦）；cfg 预解析硬限位/发送默认/POS_VEL 四增益/baud/协议标识三键（motor_id、feedback_id、model → `_joint_*`）/三运行键（state_refresh_hz、warn_interval、write_settle）为成员 | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus；按新基类内核重建中） | Ch6/13 | 🟡 |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
+| `backend/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError + 逐方法实现指引注释；复制为 `backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入） | — | ✅ |
 | `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御）✅；MDH 白盒 FK 为 Ch2 教学 | Ch2 | ✅ |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅；解析 IK 为 Ch3 教学 | Ch3 | ✅ |
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（衍生量模板）+ `PinJacobianSolver`（computeFrameJacobian，base/local 双参考系）✅ | Ch4 | ✅ |

@@ -71,6 +71,11 @@ robotics:
 backend:
   name: backend_dm # backend 类（backend/__init__.py REGISTRY 中的注册名），与 joyarm_<型号> 对应
 
+  # 可选运行参数（缺省或非正数时沿用默认并 warn）
+  state_refresh_hz: 10.0 # 低频状态刷新频率（Hz，默认 10）：失能/空闲期定时读取各组的控制模式与状态；已被更高频途径更新的组自动跳过
+  warn_interval: 0.5 # 越限告警限频间隔（秒，默认 0.5）：持续告警至多每 interval 一条，防高频刷屏；裁剪/拦截本身始终执行，不受限频影响
+  write_settle: 0.1 # 写入读回等待间隔（秒，默认 0.1）：write_param / set_mode / clear_error 写入后等待生效、再读回验证
+
   arm: # arm 段
     channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定

@@ -11,7 +11,8 @@ joyarm:
     - [0.0, 0.0, 0.0, 0.0]
     - [0.0, 0.0, 0.0, 0.0]
     - [0.0, 0.0, 0.0, 0.0]
-
+    - [0.0, 0.0, 0.0, 0.0]
+    
   # 末link（link6）系 → frame_end_tcp 系的固定位姿
   T_linkn_endtcp:                                                                           # ！ 待标定
     - [0.0, -1.0, 0.0, 0.0]
@@ -88,8 +89,10 @@ robotics:
 # 电机硬件层（backend）：arm与end的硬件通讯
 # ===================================================================
 backend:
-  name: backend_dm
-  state_refresh_hz: 10 # 低频状态刷新频率（Hz）：失能/空闲期定时读取各族控制模式与状态，已被更高频途径更新的族自动跳过
+  name: backend_dm # backend 类（backend/__init__.py REGISTRY 中的注册名），与 joyarm_<型号> 对应
+  state_refresh_hz: 10 # 低频状态刷新频率：失能/空闲期定时读取各组的控制模式与状态；已被更高频途径更新的组自动跳过
+  warn_interval: 0.5 # 越限告警限频间隔：持续告警至多每 interval 一条，防高频刷屏；裁剪/拦截本身始终执行，不受限频影响
+  write_settle: 0.1 # 写入读回等待间隔：write_param / set_mode / clear_error 写入后等待生效、再读回验证
   arm: # arm本体后端（joints 条目四键限位 = 硬限位，数值须与 URDF limit 标定保持一致）
     channel: /dev/ttyACM0
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
@@ -107,11 +110,11 @@ backend:
           kp: 120.0   # max=500
           kd: 5.0     # max=5
         POS_VEL: # 位置/速度两模式共用：闭环增益 + 限速 + 力矩电流上限                              # ！ 待标定
-          pos_kp: 150.0
+          pos_kp: 150.0 
           pos_ki: 0.5
           vel_kp: 0.0125
           vel_ki: 0.004
-          vlim: 5.0
+          vlim: 5.0 
           flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
 
       - name: joint2
