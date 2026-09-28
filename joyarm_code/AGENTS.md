@@ -77,7 +77,7 @@ joyarm_code/
 ```yaml
 joyarm: {end_frame, arm_soft_limits, end_soft_limits, tcp_limits, arm_home, end_home, runtime}   # 软限位四键直值 {q_min, q_max, dq_max, tau_max}（arm/end 分开，标量或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero/neutral 按自由度全零（代码固定，不经 config）；arm_mdh（6×4：α/a/d/θ）/T_linkn_endtcp 为教学数据（约束8）；runtime 四键 {state_keepalive_hz, state_stale_timeout, move_poll_interval, move_wait_timeout}（可选，缺省 10.0/0.15/0.05/10.0）；workspace_box 兼容 (2,3)/(3,2)
 robotics: {六域契约规格}   # 六域选型（注册名 / {name, **参数} / 规格列表，全部加载、首个激活）；显式配置，注册名无效/实例化失败即硬失败（约束2）
-backend: {name: backend_dm, 可选运行键 state_refresh_hz/warn_interval/write_settle（默认 10Hz/0.5s/0.1s）, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {channel, protocol, baud_rate, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源，与协议标识三键 motor_id/feedback_id/model 一并由 backend `__init__` 自解析；arm/end 数值须与 URDF limit 标定保持一致，JoyArm init 三类自检告警：关节缺失/数值不一致（容差 1e-4）/URDF 多余非 mimic 本体活动关节）；end 段可按需启用 control_rate（注释形式给出，backend_dm 末端无周期流未用）
+backend: {name: backend_dm, 可选运行键 state_refresh_hz/warn_interval/info_interval/write_settle（默认 10Hz/0.5s/0.5s/0.1s）, arm: {channel, protocol, baud_rate, control_rate, joints}, end: {channel, protocol, baud_rate, joints}}   # arm/end joints 条目四限位键 q_min/q_max/dq_max/tau_max 同构（= 硬限位来源，与协议标识三键 motor_id/feedback_id/model 一并由 backend `__init__` 自解析；arm/end 数值须与 URDF limit 标定保持一致，JoyArm init 三类自检告警：关节缺失/数值不一致（容差 1e-4）/URDF 多余非 mimic 本体活动关节）；end 段可按需启用 control_rate（注释形式给出，backend_dm 末端无周期流未用）
 ```
 
 **限位语义**：**backend 下发指令只裁硬限位**（`Backend.send_*` 守卫模板，唯一执行点）；软限位由 JoyArm 直配加载（`arm_limits_soft`/`end_limits_soft`，缺省软=硬）仅作上层状态判断依据（超软限位→状态异常→急停恢复，后续实现）；config 改动重启生效，**不回写 yaml**。
@@ -126,7 +126,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举 + 数据类（Pose/TrajFrame/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | 限位助手：硬/软/tcp 限位构建 + 指令裁剪 + 限位内采样（签名见 §3.3） | Ch11 | ✅ |
-| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个单 joint 抽象内核）；三模式发送（MIT 默认，connect 自动 best-effort 设定）；状态对象 `joint_state_arm/end`（含 `t`，纯物理量）+ `is_connected/is_abled` 三值标志 + `mode_arm/end` 组模式（均私有成员 + 只读属性；逐 joint 模式在私有缓存，与状态读取解耦）；cfg 预解析硬限位/发送默认/POS_VEL 四增益/baud/协议标识三键（motor_id、feedback_id、model → `_joint_*`）/三运行键（state_refresh_hz、warn_interval、write_settle）为成员 | Ch2 | ✅ |
+| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个单 joint 抽象内核）；三模式发送（MIT 默认，connect 自动 best-effort 设定）；状态对象 `joint_state_arm/end`（含 `t`，纯物理量）+ `is_connected/is_abled` 三值标志 + `mode_arm/end` 组模式（均私有成员 + 只读属性；逐 joint 模式在私有缓存，与状态读取解耦）；cfg 预解析硬限位/发送默认/POS_VEL 四增益/baud/协议标识三键（motor_id、feedback_id、model → `_joint_*`）/四运行键（state_refresh_hz、warn_interval、info_interval、write_settle）为成员；运行期 warn/info 一律按语义通道独立限频（`_warn_throttled`/`_info_throttled`，无锁、双键分治；`__init__` 一次性日志直接输出） | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus；按新基类内核重建中） | Ch6/13 | 🟡 |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
 | `backend/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError + 逐方法实现指引注释；复制为 `backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入） | — | ✅ |
@@ -206,7 +206,7 @@ Controller(ctrl_hz=200) + MODE 类属性：纯计算内核——compute(arm, fra
 
 ```python
 Backend(ABC, cfg) ✅   # 公开面：connect/enable、get_mode（一致返模式+更新 mode_arm/end，不一致/失败 None）、get_state（JointState 纯物理量含 t）、read/write_param（写后读回验证）、set_zero、set_mode（默认 MIT）、get/check/clear_error（读状态快照 error 码 list、不发帧 → 判 0/1 正常 → 失能态发清错指令、无回读验证）、send_action_end、属性 cfg/name/n_joints_*/joint_limits_*/joint_state_*/is_connected_*/is_abled_*/mode_*（只读，转发同名 _ 前缀私有成员；joint_state_* 返回当前引用——get_state 原子换入新对象、旧引用冻结为快照）——成员变量全私有化（含关节数 _n_joints_*）；限位裁剪唯一执行点（语义见 §1.3）
-send_mit_{arm,end}(tau,q,dq,kp=None,kd=None) · send_position_{arm,end}(q,vlim=None,flim=None) · send_vel_{arm,end}(dq)   # 三模式整组下发（①维度→②空值/越限裁剪→③连接/模式门禁→④逐 joint 内核）；缺省取 cfg 成员默认；越限告警节流每 0.5s 至多一条
+send_mit_{arm,end}(tau,q,dq,kp=None,kd=None) · send_position_{arm,end}(q,vlim=None,flim=None) · send_vel_{arm,end}(dq)   # 三模式整组下发（①维度→②空值/越限裁剪→③连接/模式门禁→④逐 joint 内核）；缺省取 cfg 成员默认；运行期 warn/info 按语义通道独立限频（每通道每 warn_interval/info_interval 秒至多一条，无锁，防刷屏）
 get_backend(name) · REGISTRY     # config backend.name 选型（REGISTRY 暂空，backend_dm 重建后恢复）✅
 BackendDMMujoco   # MuJoCo 仿真后端桩，待实现（详情见 §3.1）🟡
 clamp_to_limits(targets, limits) · limits_from_joint_cfgs(joint_cfgs) · soft_limits_from_cfg(cfg, n) · tcp_limits_from_cfg(tl) · rand_within_limits(limits, size, rng)   # ✅
