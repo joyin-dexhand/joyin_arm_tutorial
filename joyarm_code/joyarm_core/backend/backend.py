@@ -1,22 +1,20 @@
 """``Backend`` —— joyarm 硬件后端抽象基类。
 
-负责接入具体型号的机械臂硬件（总线、电机协议、末端执行器），向 joyarm 提供硬件无关的统一接口。
-功能分 ``_arm`` / ``_end`` 两种：arm = 本体关节电机组，end = 末端执行器电机组。
+负责接入具体型号机械臂硬件（总线、协议），向 joyarm 提供硬件无关的统一接口。
 
-代码分三层：
-    1. 公开方法（供上层调用）→ 共用实现 ``_*_impl``（前置检查、维度校验、越限裁剪、逐关节循环、日志与返回值）
-    2. 抽象方法（共 29 个``@abstractmethod``，子类按型号实现协议细节；
-    3. 多数为单关节粒度，连接/断开/末端离散动作为整组粒度）。
+代码主要分三层：
+  1. 公开方法（供上层调用）；
+  2. 共用实现 ``_*_impl``；
+  3. 抽象方法（``@abstractmethod``，子类按型号实现；多数为单关节操作，连接/断开/末端离散动作为整组操作。
 
 主要约定：
-- 失败处理：抽象方法失败可上抛异常或返回 ``False``/``None``，基类统一转为 warn 日志，
-        公开方法不向调用者抛异常（失败以 ``0``/``None``/``[]`` 返回）；
+- 失败处理：抽象方法失败可上抛异常或返回 ``False``/``None``，基类统一转为 warn 日志；
 - 生命周期标志 ``is_connected_*`` / ``is_abled_*``：``None`` 未知、``True``/``False`` 已确定；
         操作执行前置 ``None``，成功后确定，中途意外停留 ``None``；
-- 发送指令自动做维度/空值检查与越限裁剪（就近裁剪 + 限频告警）；
+- 发送指令自动做模式检查、维度/空值检查与越限裁剪（就近裁剪 + 限频告警）；
 - 状态码统一 ``0``=失能、``1``=使能（均正常）、``≥2``=故障（子类负责映射厂商原始码）。
 
-实现子类：实现全部 ``@abstractmethod``，契约见其 docstring（按「抽象方法（子类实现）」分节集中放置）。
+子类：实现全部 ``@abstractmethod``。
 """
 from __future__ import annotations
 
@@ -37,78 +35,73 @@ logger = logging.getLogger("joyarm_core.backend")
 logger.setLevel(logging.INFO)  # 教学库：放行 INFO，成功信息默认可见（不依赖应用层日志配置）
 
 # 三个可选运行参数的默认值（cfg ``backend:`` 段顶层同名键可覆盖，缺省或非正数沿用默认并 warn）
-_WARN_INTERVAL_DEFAULT = 0.5   # warn_interval（秒）：越限告警限频间隔——至多每 0.5 秒一条；裁剪始终执行，不受限频影响
-_WRITE_SETTLE_DEFAULT = 0.1    # write_settle（秒）：写入读回等待间隔——write_param / set_mode / clear_error 共用
+_WARN_INTERVAL_DEFAULT = 0.5   # warn_interval（秒）：越限告警限频间隔
+_WRITE_SETTLE_DEFAULT = 0.1    # write_settle（秒）：写参数后的静置等待
 _REFRESH_HZ_DEFAULT = 10.0     # state_refresh_hz（Hz）：低频状态刷新频率
 
 
 class Backend(ABC):
-    """joyarm 硬件后端抽象基类（arm 本体 + end 末端执行器一体）。
-
-    九个分节：成员变量定义 / 初始化过程 / 生命周期管理（连接与使能）/失能态读取 / 失能态写入 / 
-    使能态指令发送 / 错误与恢复 / 外部属性访问 / 内部助手。
-    状态标志（``is_connected_arm/end`` / ``is_abled_arm/end``）：``None`` 未知、``True``/``False`` 已确定；
-    生命周期操作执行前置 ``None``，成功后确定，中途意外停留 ``None``。
-
-    :param cfg: config 配置 ``backend:`` 段整体
+    """硬件后端抽象基类（arm + end 一体）。
     """
 
     def __init__(self, cfg: dict) -> None:
-        """初始化 backend：自 cfg 解析成员并启动低频状态刷新线程。
+        """初始化: cfg 解析成员并启动低频状态刷新线程。
 
         :param cfg: config 配置 ``backend:`` 段整体。
         """
         # ============================================================
         # 成员变量定义（先赋初值，具体值经下方初始化过程自 cfg 解析）
         # ============================================================
-        self._cfg = cfg                                       # config 的 backend 段整体
+        self._cfg = cfg                                       # config 的 backend 段
         self._name = ""                                       # backend 名（cfg.name）
         self._channel_arm = None                              # arm 总线通道（cfg.arm.channel）
         self._channel_end = None                              # end 总线通道（cfg.end.channel）
-        self._baud_arm = None                                 # arm 总线波特率（cfg.arm.baud_rate，协议相关键）
-        self._baud_end = None                                 # end 总线波特率（cfg.end.baud_rate，协议相关键）
-        self._protocol_arm = ""                               # arm 协议标识（cfg.arm.protocol）
-        self._protocol_end = ""                               # end 协议标识（cfg.end.protocol）
-        self._jointscfg_arm: list[dict] = []                  # arm 各 joint 配置列表（cfg.arm.joints）
-        self._jointscfg_end: list[dict] = []                  # end 各 joint 配置列表（cfg.end.joints）
-        self._joint_motor_id_arm: list = []                   # arm 各关节电机总线地址（cfg.arm.joints[].motor_id，缺键 None）
-        self._joint_motor_id_end: list = []                   # end 各电机总线地址（cfg.end.joints[].motor_id，缺键 None）
-        self._joint_feedback_id_arm: list = []                # arm 各关节应答帧标识（cfg.arm.joints[].feedback_id，缺键 None）
-        self._joint_feedback_id_end: list = []                # end 各电机应答帧标识（cfg.end.joints[].feedback_id，缺键 None）
-        self._joint_model_arm: list = []                      # arm 各关节电机型号（cfg.arm.joints[].model，缺键 None）
-        self._joint_model_end: list = []                      # end 各电机型号（cfg.end.joints[].model，缺键 None）
+        self._baud_arm = None                                 # arm 总线波特率（cfg.arm.baud_rate）
+        self._baud_end = None                                 # end 总线波特率（cfg.end.baud_rate）
+        self._protocol_arm = ""                               # arm 协议（cfg.arm.protocol）
+        self._protocol_end = ""                               # end 协议（cfg.end.protocol）
+        self._jointscfg_arm: list[dict] = []                  # arm 各 joint 配置（cfg.arm.joints）
+        self._jointscfg_end: list[dict] = []                  # end 各 joint 配置（cfg.end.joints）
+        self._n_joints_arm: int = 0                           # arm 关节数（len(cfg.arm.joints)）
+        self._n_joints_end: int = 0                           # end 电机数（len(cfg.end.joints)）
+        self._joint_motor_id_arm: list = []                   # arm 各电机总线地址（cfg.arm.joints[].motor_id）
+        self._joint_motor_id_end: list = []                   # end 各电机总线地址（cfg.end.joints[].motor_id）
+        self._joint_feedback_id_arm: list = []                # arm 各关节应答帧标识（cfg.arm.joints[].feedback_id）
+        self._joint_feedback_id_end: list = []                # end 各电机应答帧标识（cfg.end.joints[].feedback_id）
+        self._joint_model_arm: list = []                      # arm 各电机型号（cfg.arm.joints[].model）
+        self._joint_model_end: list = []                      # end 各电机型号（cfg.end.joints[].model）
         self._joint_limits_arm: Optional[JointLimits] = None  # arm 硬限位（发送越限裁剪的依据）
         self._joint_limits_end: Optional[JointLimits] = None  # end 硬限位（发送越限裁剪的依据）
-        self._kp_mit_default_arm: Optional[np.ndarray] = None    # arm MIT 位置增益发送默认（cfg MIT.kp → (n,)）
-        self._kd_mit_default_arm: Optional[np.ndarray] = None    # arm MIT 速度阻尼发送默认（cfg MIT.kd → (n,)）
-        self._kp_mit_default_end: Optional[np.ndarray] = None    # end MIT 位置增益发送默认（cfg MIT.kp → (n,)）
-        self._kd_mit_default_end: Optional[np.ndarray] = None    # end MIT 速度阻尼发送默认（cfg MIT.kd → (n,)）
-        self._vlim_default_arm: Optional[np.ndarray] = None      # arm 位置指令限速发送默认（cfg POS_VEL.vlim → (n,)）
-        self._flim_default_arm: Optional[np.ndarray] = None      # arm 归一化限流发送默认 0~1（cfg POS_VEL.flim → (n,)）
-        self._vlim_default_end: Optional[np.ndarray] = None      # end 位置指令限速发送默认（cfg POS_VEL.vlim → (n,)）
-        self._flim_default_end: Optional[np.ndarray] = None      # end 归一化限流发送默认 0~1（cfg POS_VEL.flim → (n,)）
-        self._pos_kp_arm: Optional[np.ndarray] = None        # arm 位置环 kp 增益（cfg POS_VEL.pos_kp → (n,)，设模式时子类直取）
-        self._pos_ki_arm: Optional[np.ndarray] = None        # arm 位置环 ki 增益（cfg POS_VEL.pos_ki → (n,)）
-        self._vel_kp_arm: Optional[np.ndarray] = None        # arm 速度环 kp 增益（cfg POS_VEL.vel_kp → (n,)）
-        self._vel_ki_arm: Optional[np.ndarray] = None        # arm 速度环 ki 增益（cfg POS_VEL.vel_ki → (n,)）
-        self._pos_kp_end: Optional[np.ndarray] = None        # end 位置环 kp 增益（cfg POS_VEL.pos_kp → (n,)）
-        self._pos_ki_end: Optional[np.ndarray] = None        # end 位置环 ki 增益（cfg POS_VEL.pos_ki → (n,)）
-        self._vel_kp_end: Optional[np.ndarray] = None        # end 速度环 kp 增益（cfg POS_VEL.vel_kp → (n,)）
-        self._vel_ki_end: Optional[np.ndarray] = None        # end 速度环 ki 增益（cfg POS_VEL.vel_ki → (n,)）
-        self.is_connected_arm: Optional[bool] = None          # arm 连接状态（True 已连接 / False 未连接 / None 未知）
-        self.is_connected_end: Optional[bool] = None          # end 连接状态（True 已连接 / False 未连接 / None 未知）
-        self.is_abled_arm: Optional[bool] = None              # arm 使能状态（True 已使能 / False 已失能 / None 未知）
-        self.is_abled_end: Optional[bool] = None              # end 使能状态（True 已使能 / False 已失能 / None 未知）
-        self.mode_arm: Optional[ControlMode] = None           # arm 全组一致的控制模式（公开；get_mode 读齐且一致时更新，None=未读取）
-        self.mode_end: Optional[ControlMode] = None           # end 全组一致的控制模式（公开；get_mode 读齐且一致时更新，None=未读取）
-        self._joint_mode_arm: list = []                       # arm 逐关节模式缓存（None=未读取；get_mode 读齐后整体赋值）
-        self._joint_mode_end: list = []                       # end 逐关节模式缓存（None=未读取；get_mode 读齐后整体赋值）
-        self.joint_state_arm = JointState()                   # arm 整组实时关节状态（公开引用，get_state 成功时原地更新）
-        self.joint_state_end = JointState()                   # end 整组实时关节状态（公开引用，get_state 成功时原地更新）
+        self._kp_mit_default_arm: Optional[np.ndarray] = None # arm MIT 位置增益发送默认（cfg MIT.kp → (n,)）
+        self._kd_mit_default_arm: Optional[np.ndarray] = None # arm MIT 速度阻尼发送默认（cfg MIT.kd → (n,)）
+        self._kp_mit_default_end: Optional[np.ndarray] = None # end MIT 位置增益发送默认（cfg MIT.kp → (n,)）
+        self._kd_mit_default_end: Optional[np.ndarray] = None # end MIT 速度阻尼发送默认（cfg MIT.kd → (n,)）
+        self._vlim_default_arm: Optional[np.ndarray] = None   # arm 位置指令限速发送默认（cfg POS_VEL.vlim → (n,)）
+        self._flim_default_arm: Optional[np.ndarray] = None   # arm 归一化限流发送默认 0~1（cfg POS_VEL.flim → (n,)）
+        self._vlim_default_end: Optional[np.ndarray] = None   # end 位置指令限速发送默认（cfg POS_VEL.vlim → (n,)）
+        self._flim_default_end: Optional[np.ndarray] = None   # end 归一化限流发送默认 0~1（cfg POS_VEL.flim → (n,)）
+        self._pos_kp_arm: Optional[np.ndarray] = None         # arm 电机寄存器位置环 kp 增益（cfg POS_VEL.pos_kp → (n,)，设模式时子类直取）
+        self._pos_ki_arm: Optional[np.ndarray] = None         # arm 电机寄存器位置环 ki 增益（cfg POS_VEL.pos_ki → (n,)）
+        self._vel_kp_arm: Optional[np.ndarray] = None         # arm 电机寄存器速度环 kp 增益（cfg POS_VEL.vel_kp → (n,)）
+        self._vel_ki_arm: Optional[np.ndarray] = None         # arm 电机寄存器速度环 ki 增益（cfg POS_VEL.vel_ki → (n,)）
+        self._pos_kp_end: Optional[np.ndarray] = None         # end 电机寄存器位置环 kp 增益（cfg POS_VEL.pos_kp → (n,)）
+        self._pos_ki_end: Optional[np.ndarray] = None         # end 电机寄存器位置环 ki 增益（cfg POS_VEL.pos_ki → (n,)）
+        self._vel_kp_end: Optional[np.ndarray] = None         # end 电机寄存器速度环 kp 增益（cfg POS_VEL.vel_kp → (n,)）
+        self._vel_ki_end: Optional[np.ndarray] = None         # end 电机寄存器速度环 ki 增益（cfg POS_VEL.vel_ki → (n,)）
+        self._is_connected_arm: Optional[bool] = None         # arm 连接状态（True 已连接 / False 未连接 / None 未知）
+        self._is_connected_end: Optional[bool] = None         # end 连接状态（True 已连接 / False 未连接 / None 未知）
+        self._is_abled_arm: Optional[bool] = None             # arm 使能状态（True 已使能 / False 已失能 / None 未知）
+        self._is_abled_end: Optional[bool] = None             # end 使能状态（True 已使能 / False 已失能 / None 未知）
+        self._mode_arm: Optional[ControlMode] = None          # arm 全组一致的控制模式（get_mode 读齐且一致时更新，None=未读取）
+        self._mode_end: Optional[ControlMode] = None          # end 全组一致的控制模式（get_mode 读齐且一致时更新，None=未读取）
+        self._joint_mode_arm: list = []                       # arm 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值）
+        self._joint_mode_end: list = []                       # end 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值）
+        self._joint_state_arm = JointState()                  # arm 整组实时关节状态
+        self._joint_state_end = JointState()                  # end 整组实时关节状态
         self._warn_lock = threading.Lock()                    # 告警限频锁（指令可能从控制线程与应用线程并发发来）
         self._warn_last = 0.0                                 # 上次限频告警的 monotonic 时刻
         self._warn_interval = _WARN_INTERVAL_DEFAULT          # 越限告警限频间隔（秒；cfg warn_interval 可覆盖）
-        self._write_settle = _WRITE_SETTLE_DEFAULT            # 写入读回等待间隔（秒；cfg write_settle 可覆盖）
+        self._write_settle = _WRITE_SETTLE_DEFAULT            # 写参数后的静置等待（秒；cfg write_settle 可覆盖）
         self._refresh_hz = _REFRESH_HZ_DEFAULT                # 低频状态刷新频率（Hz；cfg state_refresh_hz 可覆盖）
         self._refresh_stop = threading.Event()                # 刷新线程停止标志
         self._refresh_thread: Optional[threading.Thread] = None  # 刷新线程（daemon）
@@ -137,18 +130,25 @@ class Backend(ABC):
         self._joint_model_end = [j.get("model") for j in self._jointscfg_end]
         self._joint_limits_arm = limits_from_joint_cfgs(self._jointscfg_arm)
         self._joint_limits_end = limits_from_joint_cfgs(self._jointscfg_end)
-        n_arm, n_end = len(self._jointscfg_arm), len(self._jointscfg_end)
-        # 状态对象按关节数定维：物理量填 NaN、error 填 -1，均表示未读取；逐关节模式缓存填 None（未读取）
-        self.joint_state_arm = JointState(q=np.full(n_arm, np.nan), dq=np.full(n_arm, np.nan),
-                                          tau=np.full(n_arm, np.nan), temp_mos=np.full(n_arm, np.nan),
-                                          temp_rotor=np.full(n_arm, np.nan), error=np.full(n_arm, -1))
-        self.joint_state_end = JointState(q=np.full(n_end, np.nan), dq=np.full(n_end, np.nan),
-                                          tau=np.full(n_end, np.nan), temp_mos=np.full(n_end, np.nan),
-                                          temp_rotor=np.full(n_end, np.nan), error=np.full(n_end, -1))
-        self._joint_mode_arm = [None] * n_arm
-        self._joint_mode_end = [None] * n_end
+        self._n_joints_arm, self._n_joints_end = len(self._jointscfg_arm), len(self._jointscfg_end)
+        # 状态按关节数定维：t 填 0、物理量填 NaN、error 填 -1，表示未读取；逐关节模式缓存填 None（未读取）
+        self._joint_state_arm = JointState(t=0.0,
+                                           q=np.full(self._n_joints_arm, np.nan),
+                                           dq=np.full(self._n_joints_arm, np.nan),
+                                           tau=np.full(self._n_joints_arm, np.nan),
+                                           temp_mos=np.full(self._n_joints_arm, np.nan),
+                                           temp_rotor=np.full(self._n_joints_arm, np.nan),
+                                           error=np.full(self._n_joints_arm, -1))
+        self._joint_state_end = JointState(t=0.0,
+                                           q=np.full(self._n_joints_end, np.nan),
+                                           dq=np.full(self._n_joints_end, np.nan),
+                                           tau=np.full(self._n_joints_end, np.nan),
+                                           temp_mos=np.full(self._n_joints_end, np.nan),
+                                           temp_rotor=np.full(self._n_joints_end, np.nan),
+                                           error=np.full(self._n_joints_end, -1))
+        self._joint_mode_arm = [None] * self._n_joints_arm
+        self._joint_mode_end = [None] * self._n_joints_end
         # 提取发送默认值与 POS_VEL 增益为 (n,) 成员：缺配置的关节以 NaN 占位并 warn；
-        # 发送默认值含 NaN 时该次不发送，增益含 NaN 时 set_mode 仅提示改用电机内部增益（不拦截）
         self._kp_mit_default_arm = self._extract_joint_values("arm", "MIT", "kp")
         self._kd_mit_default_arm = self._extract_joint_values("arm", "MIT", "kd")
         self._vlim_default_arm = self._extract_joint_values("arm", "POS_VEL", "vlim")
@@ -195,69 +195,69 @@ class Backend(ABC):
     def connect_arm(self, channel: Optional[str] = None, protocol: Optional[str] = None) -> None:
         """连接 arm 硬件总线
         
-        执行前 ``is_connected_arm`` 置 ``None``；连接成功置 ``True``；中途意外则停留 ``None``。
+        执行前 ``_is_connected_arm`` 置 ``None``；连接成功置 ``True``。
 
-        :param channel: 总线通道；默认取成员 ``_channel_arm``（cfg 解析），显式传入则同步更新该成员。
-        :param protocol: 协议标识；默认取成员 ``_protocol_arm``（cfg 解析），显式传入则同步更新。
+        :param channel: 总线通道；默认取成员 ``_channel_arm``，显式传入则同步更新该成员。
+        :param protocol: 协议标识；默认取成员 ``_protocol_arm``，显式传入则同步更新。
         """
         self._connect_impl("arm", channel, protocol)
 
     def connect_end(self, channel: Optional[str] = None, protocol: Optional[str] = None) -> None:
         """连接 end 硬件总线
 
-        执行前 ``is_connected_end`` 置 ``None``；连接成功置 ``True``；中途意外则停留 ``None``。
+        执行前 ``_is_connected_end`` 置 ``None``；连接成功置 ``True``。
 
-        :param channel: 总线通道；默认取成员 ``_channel_end``（cfg 解析），显式传入则同步更新该成员。
-        :param protocol: 协议标识；默认取成员 ``_protocol_end``（cfg 解析），显式传入则同步更新。
+        :param channel: 总线通道；默认取成员 ``_channel_end``，显式传入则同步更新该成员。
+        :param protocol: 协议标识；默认取成员 ``_protocol_end``，显式传入则同步更新。
         """
         self._connect_impl("end", channel, protocol)
 
     def disconnect_arm(self) -> None:
         """断开 arm 硬件总线
         
-        执行前 ``is_connected_arm`` 置 ``None``；断开成功置 ``False``；中途意外则停留 ``None``。
+        执行前 ``_is_connected_arm`` 置 ``None``；断开成功置 ``False``。
         """
         self._disconnect_impl("arm")
 
     def disconnect_end(self) -> None:
         """断开 end 硬件总线
         
-        执行前 ``is_connected_end`` 置 ``None``；断开成功置 ``False``；中途意外则停留 ``None``。
+        执行前 ``_is_connected_end`` 置 ``None``；断开成功置 ``False``。
         """
         self._disconnect_impl("end")
 
     # ================= 使能（enable / disable） =================
     def enable_arm(self) -> int:
-        """使能 arm 全部关节电机
+        """使能 arm 全部关节电机（仅指令发送无回读验证）
 
-        逐关节调用子类实现；执行前 ``is_abled_arm`` 置 ``None``，全部成功置 ``True``，中途意外停留 ``None``。
+        逐关节调用子类实现；执行前 ``_is_abled_arm`` 置 ``None``，全部成功置 ``True``。
 
         :return: 全部使能成功返回 1；任一失败（warn 提示）返回 0。
         """
         return self._enable_impl("arm")
 
     def enable_end(self) -> int:
-        """使能 end 全部关节电机
+        """使能 end 全部关节电机（仅指令发送无回读验证）
 
-        逐关节调用子类实现；执行前 ``is_abled_end`` 置 ``None``，全部成功置 ``True``，中途意外停留 ``None``。
+        逐关节调用子类实现；执行前 ``_is_abled_end`` 置 ``None``，全部成功置 ``True``。
 
         :return: 全部使能成功返回 1；任一失败（warn 提示）返回 0。
         """
         return self._enable_impl("end")
 
     def disable_arm(self) -> int:
-        """失能 arm 全部关节电机
+        """失能 arm 全部关节电机（仅指令发送无回读验证）
 
-        逐关节调用子类实现；执行前 ``is_abled_arm`` 置 ``None``，全部成功置 ``False``，中途意外停留 ``None``。
+        逐关节调用子类实现；执行前 ``_is_abled_arm`` 置 ``None``，全部成功置 ``False``。
 
         :return: 全部失能成功返回 1；任一失败（warn 提示）返回 0。
         """
         return self._disable_impl("arm")
 
     def disable_end(self) -> int:
-        """失能 end 全部关节电机
+        """失能 end 全部关节电机（仅指令发送无回读验证）
 
-        逐关节调用子类实现；执行前 ``is_abled_end`` 置 ``None``，全部成功置 ``False``，中途意外停留 ``None``。
+        逐关节调用子类实现；执行前 ``_is_abled_end`` 置 ``None``，全部成功置 ``False``。
 
         :return: 全部失能成功返回 1；任一失败（warn 提示）返回 0。
         """
@@ -272,7 +272,7 @@ class Backend(ABC):
             setattr(self, f"_channel_{family}", channel)
         if protocol is not None:
             setattr(self, f"_protocol_{family}", protocol)
-        setattr(self, f"is_connected_{family}", None)  # 执行前置 None；中途意外则停留于此
+        setattr(self, f"_is_connected_{family}", None)  # 执行前置 None；中途意外则停留于此
         try:
             ok = getattr(self, f"_connect_{family}")(getattr(self, f"_channel_{family}"),
                                                      getattr(self, f"_protocol_{family}"))
@@ -280,50 +280,44 @@ class Backend(ABC):
             logger.warning("backend.py - Backend.connect_%s：连接内核异常：%s", family, e)
             return
         if ok:
-            setattr(self, f"is_connected_{family}", True)
+            setattr(self, f"_is_connected_{family}", True)
             logger.info("backend.py - Backend.connect_%s：连接成功（channel=%s, protocol=%s）",
-                        family, getattr(self, f"_channel_{family}"),
-                        getattr(self, f"_protocol_{family}"))
-            if self._set_mode_impl(family, ControlMode.MIT) != 1:  # 连接成功后自动尝试设默认 MIT 模式（失败仅提示，不影响连接结果）
+                        family, getattr(self, f"_channel_{family}"), getattr(self, f"_protocol_{family}"))
+            if self._set_mode_impl(family, ControlMode.MIT) != 1:  # 连接成功后自动尝试设默认 MIT 模式
                 logger.warning("backend.py - Backend.connect_%s：默认模式（MIT）设置失败", family)
         else:
             logger.warning("backend.py - Backend.connect_%s：连接失败（channel=%s, protocol=%s）",
-                           family, getattr(self, f"_channel_{family}"),
-                           getattr(self, f"_protocol_{family}"))
+                           family, getattr(self, f"_channel_{family}"), getattr(self, f"_protocol_{family}"))
 
     def _disconnect_impl(self, family: str) -> None:
-        """断开连接的共用实现：先尽力失能 → 置 ``None`` → 调用子类实现 → 成功置 ``False``。
-
-        仅当确知未连接（``is_connected`` 为 ``False``）时为空操作；未知（``None``）时也尝试断连，
-        以清理未断干净的连接。断开后 ``is_abled`` 恒为 ``None``（连接已断，使能状态无法核实）；
-        模式成员与逐关节模式缓存一并清空（防止重连后设模式失败时，过期模式放行错误指令）；
-        ``joint_state`` 保留最后一次快照供上层查看历史。
-        """
+        """断开连接的共用实现：先尽力失能 → 置 ``None`` → 调用子类实现 → 成功置 ``False``。"""
         if self._skip_empty_family(family, f"disconnect_{family}"):
             return
-        if getattr(self, f"is_connected_{family}") is False:
+        if getattr(self, f"_is_connected_{family}") is False:
             return
-        if getattr(self, f"is_abled_{family}") is not False:  # 先失能：未确知已失能才发帧；失败仅提示，不阻断断连
+        if getattr(self, f"_is_abled_{family}") is not False:  # 先失能：未确知已失能才发帧；失败仅提示，不阻断断连
             self._disable_impl(family)
-        setattr(self, f"is_connected_{family}", None)  # 执行前置 None；中途意外则停留于此
-        setattr(self, f"is_abled_{family}", None)      # 连接已断，使能状态无法核实
+            sleep_time = getattr(self, f"_write_settle") or _WRITE_SETTLE_DEFAULT
+            time.sleep(sleep_time)
+        setattr(self, f"_is_connected_{family}", None)  # 执行前置 None；中途意外则停留于此
+        setattr(self, f"_is_abled_{family}", None)      # 连接已断，使能状态无法核实
         try:
             getattr(self, f"_disconnect_{family}")()
         except Exception as e:
             logger.warning("backend.py - Backend.disconnect_%s：断连内核异常：%s", family, e)
             return
-        setattr(self, f"is_connected_{family}", False)
-        setattr(self, f"mode_{family}", None)  # 模式无法核实，清空防止过期模式放行错误指令
+        setattr(self, f"_is_connected_{family}", False)
+        setattr(self, f"_mode_{family}", None)  # 模式无法核实，清空防止过期模式放行错误指令
         setattr(self, f"_joint_mode_{family}", [None] * self._n(family))
         logger.info("backend.py - Backend.disconnect_%s：断连成功", family)
 
     def _enable_impl(self, family: str) -> int:
-        """使能的共用实现：置 ``None`` → 逐关节调用子类实现 → 全部成功置 ``True``。"""
+        """使能的共用实现: 置 ``None`` → 逐关节调用子类实现 → 全部成功置 ``True``。"""
         if self._skip_empty_family(family, f"enable_{family}"):
             return 1
         if not self._require_connected(family, f"enable_{family}"):
             return 0
-        setattr(self, f"is_abled_{family}", None)  # 执行前置 None；中途意外则停留于此
+        setattr(self, f"_is_abled_{family}", None)  # 执行前置 None；中途意外则停留于此
         ok = True
         for i in range(self._n(family)):
             try:
@@ -336,17 +330,17 @@ class Backend(ABC):
                 logger.warning("backend.py - Backend.enable_%s：joint『%s』使能异常：%s",
                                family, self._jname(family, i), e)
         if ok:
-            setattr(self, f"is_abled_{family}", True)
+            setattr(self, f"_is_abled_{family}", True)
             logger.info("backend.py - Backend.enable_%s：全部 joint 使能成功", family)
         return 1 if ok else 0
 
     def _disable_impl(self, family: str) -> int:
-        """失能的共用实现：置 ``None`` → 逐关节调用子类实现 → 全部成功置 ``False``。"""
+        """失能的共用实现（仅指令发送无回读验证）: 置 ``None`` → 逐关节调用子类实现 → 全部成功置 ``False``。"""
         if self._skip_empty_family(family, f"disable_{family}"):
             return 1
         if not self._require_connected(family, f"disable_{family}"):
             return 0
-        setattr(self, f"is_abled_{family}", None)  # 执行前置 None；中途意外则停留于此
+        setattr(self, f"_is_abled_{family}", None)  # 执行前置 None；中途意外则停留于此
         ok = True
         for i in range(self._n(family)):
             try:
@@ -359,46 +353,50 @@ class Backend(ABC):
                 logger.warning("backend.py - Backend.disable_%s：joint『%s』失能异常：%s",
                                family, self._jname(family, i), e)
         if ok:
-            setattr(self, f"is_abled_{family}", False)
+            setattr(self, f"_is_abled_{family}", False)
             logger.info("backend.py - Backend.disable_%s：全部 joint 失能成功", family)
         return 1 if ok else 0
 
     # =================== 抽象方法（子类实现） ===================
     @abstractmethod
     def _connect_arm(self, channel, protocol) -> bool:
-        """arm 连接抽象方法（子类实现）：打开 ``channel`` 总线（协议按 ``protocol`` 识别；子类协议固定时也可用自带默认）。
+        """arm 连接抽象方法（子类实现）
+        
+        打开 ``channel`` 总线（协议按 ``protocol`` 识别；子类协议固定时也可用自带默认）。
 
         :return: 成功 ``True``；失败返回 ``False`` 或上抛异常。
         """
 
     @abstractmethod
     def _connect_end(self, channel, protocol) -> bool:
-        """end 连接抽象方法（子类实现）：打开 ``channel`` 总线（协议按 ``protocol`` 识别；与 arm 同 channel 时共享总线）。
+        """end 连接抽象方法（子类实现）
+        
+        打开 ``channel`` 总线（协议按 ``protocol`` 识别；与 arm 同 channel 时共享总线）。
 
         :return: 成功 ``True``；失败返回 ``False`` 或上抛异常。
         """
     
     @abstractmethod
     def _disconnect_arm(self) -> None:
-        """arm 断开连接抽象方法（子类实现）：关闭子类协议层自建的资源（总线接收线程、串口/CAN 句柄等）。
-
-        电机失能由基类在断开前先行完成（先失能再断连），本方法只负责关资源。
+        """arm 断开连接抽象方法（子类实现）
+        
+        关闭子类协议层自建的资源（总线接收线程、串口/CAN 句柄等）。
         """
 
     @abstractmethod
     def _disconnect_end(self) -> None:
-        """end 断开连接抽象方法（子类实现）：关闭子类协议层自建的资源（总线接收线程、串口/CAN 句柄等）。
-
-        电机失能由基类在断开前先行完成（先失能再断连），本方法只负责关资源。
+        """end 断开连接抽象方法（子类实现）
+        
+        关闭子类协议层自建的资源（总线接收线程、串口/CAN 句柄等）。
         """
 
     @abstractmethod
     def _enable_joint_arm(self, i: int) -> bool:
-        """arm 单关节使能抽象方法（子类实现）：``i`` 为 ``_jointscfg_arm`` 下标。失败上抛或返回 ``False``。"""
+        """arm 单关节使能抽象方法（子类实现）, 失败上抛或返回 ``False``。"""
 
     @abstractmethod
     def _enable_joint_end(self, i: int) -> bool:
-        """end 单电机的使能抽象方法（子类实现）：``i`` 为 ``_jointscfg_end`` 下标。失败上抛或返回 ``False``。"""
+        """end 单电机的使能抽象方法（子类实现）, 失败上抛或返回 ``False``。"""
 
     @abstractmethod
     def _disable_joint_arm(self, i: int) -> bool:
@@ -406,7 +404,7 @@ class Backend(ABC):
 
     @abstractmethod
     def _disable_joint_end(self, i: int) -> bool:
-        """end 单电机的失能抽象方法（子类实现）：``i`` 为 ``_jointscfg_end`` 下标。失败上抛或返回 ``False``。"""
+        """end 单电机的失能抽象方法（子类实现）, 失败上抛或返回 ``False``。"""
 
     # ============================================================
     # 失能态读取
@@ -414,58 +412,56 @@ class Backend(ABC):
     def read_param_arm(self, key: str) -> Optional[list]:
         """读 arm 全部关节的电机参数（参数键表由子类定义）。
 
-        :param key: 参数名（子类映射到厂商寄存器，如 DM 的 ``"pos_kp"``）。
-        :return: 逐关节参数值列表（长度 = 关节数）；未连接或任一失败返回 ``None``。
+        :param key: 参数名（子类映射到厂商寄存器）。
+        :return: 逐关节参数值列表；失败返回 ``None``。
         """
         return self._read_params_impl("arm", key)
 
     def read_param_end(self, key: str) -> Optional[list]:
         """读 end 全部电机的电机参数（参数键表由子类定义）。
 
-        :param key: 参数名（子类映射到厂商寄存器，如 DM 的 ``"pos_kp"``）。
-        :return: 逐电机参数值列表（长度 = 电机关节数）；未连接或任一失败返回 ``None``。
+        :param key: 参数名（子类映射到厂商寄存器）。
+        :return: 逐电机参数值列表；失败返回 ``None``。
         """
         return self._read_params_impl("end", key)
 
-    def get_mode_arm(self) -> Union[ControlMode, bool, None]:
-        """读 arm 全部关节的控制模式，并逐关节缓存到 ``_joint_mode_arm``。
+    def get_mode_arm(self) -> Union[ControlMode, None]:
+        """读 arm 全部关节的控制模式，并存到 ``_joint_mode_arm``。
 
-        :return: 各关节模式一致：更新成员 ``mode_arm``（info）并返回该模式；不一致：warn 并返回
-            ``False``（逐关节模式仍保留在缓存）；任一读取失败：返回 ``None``。
+        :return: 各关节模式一致：更新 ``_mode_arm``并返回该模式；不一致或读取失败：返回 ``None``。
         """
         return self._get_mode_impl("arm")
 
-    def get_mode_end(self) -> Union[ControlMode, bool, None]:
-        """读 end 全部电机的控制模式，并逐电机缓存到 ``_joint_mode_end``。
+    def get_mode_end(self) -> Union[ControlMode, None]:
+        """读 end 全部电机的控制模式，并存到 ``_joint_mode_end``。
 
-        :return: 各电机模式一致：更新成员 ``mode_end``（info）并返回该模式；不一致：warn 并返回
-            ``False``（逐电机模式仍保留在缓存）；任一读取失败：返回 ``None``。
+        :return: 各电机模式一致：更新 ``_mode_end``并返回该模式；不一致或读取失败：返回 ``None``。
         """
         return self._get_mode_impl("end")
 
     def get_state_arm(self) -> Optional[JointState]:
-        """读 arm 全部关节的运动状态，已提供的字段全部读齐后整体写入并记录时间戳。
+        """读 arm 全部关节的状态，整体写入并记时间戳。
 
-        子类不提供的量（返回的字典缺该键）该字段整组置 ``None``。
+        子类未提供的量（返回的字典缺该键）该字段整组置 ``None``。
 
-        :return: 成功返回 ``joint_state_arm``（实时引用，``t`` 为本次更新时刻）；任一关节读取失败、
+        :return: 成功返回 ``_joint_state_arm``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一关节读取失败、
             或已提供的字段存在空值（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
         """
         return self._get_state_impl("arm")
 
     def get_state_end(self) -> Optional[JointState]:
-        """读 end 全部电机的运动状态，已提供的字段全部读齐后整体写入并记录时间戳。
+        """读 end 全部电机的状态，已提供的字段全部读齐后整体写入并记录时间戳。
 
-        子类不提供的量（返回的字典缺该键）该字段整组置 ``None``。
+        子类未提供的量（返回的字典缺该键）该字段整组置 ``None``。
 
-        :return: 成功返回 ``joint_state_end``（实时引用，``t`` 为本次更新时刻）；任一电机读取失败、
+        :return: 成功返回 ``_joint_state_end``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一电机读取失败、
             或已提供的字段存在空值（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
         """
         return self._get_state_impl("end")
 
     # ==================== 共用实现（arm / end） ====================
     def _read_params_impl(self, family: str, key: str) -> Optional[list]:
-        """读参数的共用实现：逐关节读寄存器 → 值列表（任一失败则全部作废，返回 ``None``）。"""
+        """读参数的共用实现：逐关节读寄存器 → 值列表（任一失败则返回 ``None``）。"""
         if self._skip_empty_family(family, f"read_param_{family}"):
             return []
         if not self._require_connected(family, f"read_param_{family}"):
@@ -484,11 +480,10 @@ class Backend(ABC):
             return None
         return vals
 
-    def _get_mode_impl(self, family: str) -> Union[ControlMode, bool, None]:
-        """读模式的共用实现：先全部读齐再整体赋值（组内各值同批，任一失败则不赋值、不更新 ``t``）。
+    def _get_mode_impl(self, family: str) -> Union[ControlMode, None]:
+        """读模式的共用实现：先全部读齐再整体赋值。
 
-        全组一致时更新成员 ``mode_{family}``（info）并返回该模式；不一致 warn 返回 ``False``；
-        任一读取失败返回 ``None``（不赋值、不更新成员）。
+        全组一致时更新 ``_mode_{family}``并返回该模式；不一致或读取失败返回 ``None``（不赋值、不更新成员）。
         """
         if self._skip_empty_family(family, f"get_mode_{family}"):
             return None
@@ -507,18 +502,20 @@ class Backend(ABC):
             return None
         setattr(self, f"_joint_mode_{family}", list(modes))  # 逐关节写入各自模式
         if len(set(modes)) == 1:
-            setattr(self, f"mode_{family}", modes[0])
-            logger.info("backend.py - Backend.get_mode_%s：全族模式一致（%s）", family, modes[0])
+            setattr(self, f"_mode_{family}", modes[0])
             return modes[0]
         logger.warning("backend.py - Backend.get_mode_%s：各 joint 模式不一致（%s），族模式成员不更新",
                        family, modes)
-        return False
+        return None
 
     def _get_state_impl(self, family: str) -> Optional[JointState]:
-        """读状态的共用实现：已提供的字段全部读齐才整体赋值并记录时间戳。
+        """读状态的共用实现：已提供的字段全部读齐后构造完整状态对象，单一原子赋值换入。
 
         子类返回的字典**缺某个键** = 子类/硬件不提供该量，该字段整组置 ``None``（合法的缺席）；
         键**存在但值为 ``None`` 或不可解析** = 数据异常，跳过本轮赋值并限频 warn，返回 ``None``。
+
+        return: 成功返回 ``_joint_state_{family}``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一关节读取失败、
+            或已提供的字段存在空值（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
         """
         if self._skip_empty_family(family, f"get_state_{family}"):
             return None
@@ -532,9 +529,8 @@ class Backend(ABC):
                 logger.warning("backend.py - Backend.get_state_%s：joint『%s』读状态失败：%s",
                                family, self._jname(family, i), e)
                 return None
-        state = getattr(self, f"joint_state_{family}")
         names = ("q", "dq", "tau", "temp_mos", "temp_rotor", "error")
-        absent = {name for name in names if any(name not in snap for snap in snaps)}  # 子类不提供该量 → 字段置 None
+        absent = {name for name in names if any(name not in snap for snap in snaps)}  # 子类未提供该量 → 字段置 None
         bad = {name for name in names if name not in absent
                and any(snap.get(name) is None for snap in snaps)}                    # 键存在但值为空 → 数据异常
         if bad:
@@ -544,18 +540,17 @@ class Backend(ABC):
             return None
         present = tuple(name for name in names if name not in absent)
         try:  # 先解析后提交：任一不可解析按数据异常跳过本轮，不产生部分赋值
-            assembled = {name: np.asarray([snap[name] for snap in snaps],
-                                           dtype=int if name == "error" else float)
+            assembled = {name: np.asarray([snap[name] for snap in snaps], dtype=int if name == "error" else float)
                          for name in present}
         except (TypeError, ValueError) as e:
             self._warn_throttled("backend.py - Backend.get_state_%s：子值解析失败（数据异常）：%s", family, e)
             return None
-        for name in absent:
-            setattr(state, name, None)
-        for name, arr in assembled.items():
-            setattr(state, name, arr)  # error 整数异常码，其余物理量 float
-        state.t = time.time()  # 记录更新时刻：低频刷新线程据此跳过仍新鲜的状态
-        return state
+        # 全部字段备齐后构造完整状态对象，单一赋值换入
+        fields = {name: None for name in absent}
+        fields.update(assembled)  # error 整数异常码，其余物理量 float
+        new_state = JointState(t=time.time(), **fields)  # t=本次更新时刻
+        setattr(self, f"_joint_state_{family}", new_state)
+        return new_state
 
     # ======================= 低频状态刷新 =======================
     def _refresh_loop(self) -> None:
@@ -570,9 +565,9 @@ class Backend(ABC):
         while not self._refresh_stop.wait(period):
             now = time.time()
             for family in ("arm", "end"):
-                if not getattr(self, f"is_connected_{family}"):
+                if not getattr(self, f"_is_connected_{family}"):
                     continue
-                if now - getattr(self, f"joint_state_{family}").t < fresh:
+                if now - getattr(self, f"_joint_state_{family}").t < fresh:
                     continue
                 if any(m is None for m in getattr(self, f"_joint_mode_{family}")):
                     getattr(self, f"get_mode_{family}")()
@@ -597,46 +592,44 @@ class Backend(ABC):
 
     @abstractmethod
     def _read_joint_state_arm(self, i: int) -> dict:
-        """arm 单关节读状态抽象方法（子类实现）：返回该关节当前可用量的字典。
+        """arm 单关节读状态抽象方法（子类实现）：返回该关节当前状态量的字典。
 
         键可含 ``q`` / ``dq`` / ``tau`` / ``temp_mos`` / ``temp_rotor`` / ``error``（rad / rad/s / N·m / ℃ / ℃ / 状态码）。
         硬件不提供的量**直接缺键**（字典不含该键）；键存在但值为 ``None`` 属数据获取异常。
         ``error`` 全库约定：``0``=失能、``1``=使能（均正常）、``≥2``=故障码（子类负责映射厂商原始码）。
+
+        return: 成功返回字典（部分缺值置none）；异常上抛。
         """
 
     @abstractmethod
     def _read_joint_state_end(self, i: int) -> dict:
-        """end 单电机读状态抽象方法（子类实现）：返回该电机当前可用量的字典。
+        """end 单电机读状态抽象方法（子类实现）：返回该电机当前状态量的字典。
 
         键可含 ``q`` / ``dq`` / ``tau`` / ``temp_mos`` / ``temp_rotor`` / ``error``（rad / rad/s / N·m / ℃ / ℃ / 状态码）。
         硬件不提供的量**直接缺键**（字典不含该键）；键存在但值为 ``None`` 属数据获取异常。
         ``error`` 全库约定：``0``=失能、``1``=使能（均正常）、``≥2``=故障码（子类负责映射厂商原始码）。
+
+        return: 成功返回字典（部分缺值置none）；异常上抛。
         """
 
     # ============================================================
     # 失能态写入
     # ============================================================
     def write_param_arm(self, key: str, values) -> int:
-        """写 arm 全部关节的电机参数并读回验证（参数键表由子类定义）。
-
-        逐关节全部写入 → 静置 ``write_settle`` 秒 → 同键逐关节读回 → 读回值与写入值**在数值容差内逐元素一致**
-        才算成功（容差适配 float32 寄存器的低位差异）。
+        """写 arm 全部关节的电机参数（参数键表由子类定义）。
 
         :param key: 参数名（子类映射到厂商寄存器）。
         :param values: 参数值列表（长度 = 关节数）。
-        :return: 写入并验证成功返回 1；值列表维度不符（warn 并跳过本次）或任一失败返回 0。
+        :return: 成功返回 1；维度不符（warn 并跳过本次）或任一失败返回 0。
         """
         return self._write_param_impl("arm", key, values)
 
     def write_param_end(self, key: str, values) -> int:
-        """写 end 全部电机的电机参数并读回验证（参数键表由子类定义）。
-
-        逐电机全部写入 → 静置 ``write_settle`` 秒 → 同键逐电机读回 → 读回值与写入值**在数值容差内逐元素一致**
-        才算成功（容差适配 float32 寄存器的低位差异）。
+        """写 end 全部电机的电机参数（参数键表由子类定义）。
 
         :param key: 参数名（子类映射到厂商寄存器）。
         :param values: 参数值列表（长度 = 电机关节数）。
-        :return: 写入并验证成功返回 1；值列表维度不符（warn 并跳过本次）或任一失败返回 0。
+        :return: 成功返回 1；维度不符（warn 并跳过本次）或任一失败返回 0。
         """
         return self._write_param_impl("end", key, values)
 
@@ -655,26 +648,24 @@ class Backend(ABC):
         return self._set_zero_impl("end")
 
     def set_mode_arm(self, mode: ControlMode = ControlMode.MIT) -> int:
-        """arm 逐关节设置控制模式，设置后读回全部核对。
+        """arm 逐关节设置控制模式。
 
         :param mode: 目标控制模式，默认 :class:`ControlMode.MIT`（默认模式）。
-        :return: 读回与目标一致返回 1（模式同步写入模式缓存）；否则（warn 提示）返回 0。
+        :return: 成功返回 1；否则（warn 提示）返回 0。
         """
         return self._set_mode_impl("arm", mode)
 
     def set_mode_end(self, mode: ControlMode = ControlMode.MIT) -> int:
-        """end 逐电机设置控制模式，设置后读回全部核对。
+        """end 逐电机设置控制模式。
 
         :param mode: 目标控制模式，默认 :class:`ControlMode.MIT`（默认模式）。
-        :return: 读回与目标一致返回 1（模式同步写入模式缓存）；否则（warn 提示）返回 0。
+        :return: 成功返回 1；否则（warn 提示）返回 0。
         """
         return self._set_mode_impl("end", mode)
 
     # ==================== 共用实现（arm / end） ====================
     def _write_param_impl(self, family: str, key: str, values) -> int:
-        """写参数的共用实现：维度自检 → 逐关节全部写入 → 静置 → 同键读回逐元素核对（容差比较）。
-
-        值列表维度 ≠ 关节数时 warn 具体原因并跳过本次写入（返回 0）。
+        """写参数的共用实现：维度自检 → 逐关节全部写入。
         """
         n = self._n(family)
         vals = self._to_float_arr(values, f"write_param_{family}")
@@ -695,21 +686,6 @@ class Backend(ABC):
                 logger.warning("backend.py - Backend.write_param_%s：joint『%s』写『%s』失败：%s",
                                family, self._jname(family, i), key, e)
                 return 0
-        time.sleep(self._write_settle)  # 写入生效静置，再读回验证
-        back = []
-        for i in range(n):
-            try:
-                back.append(getattr(self, f"_read_joint_param_{family}")(i, key))
-            except Exception as e:
-                logger.warning("backend.py - Backend.write_param_%s：joint『%s』回读『%s』失败：%s",
-                               family, self._jname(family, i), key, e)
-                return 0
-        if not np.allclose(np.asarray(back, dtype=float), vals, rtol=1e-5, atol=1e-9):
-            # 容差比较：寄存器常为 float32，读回经 float32→float64 转换后与写入值必有低位差异，严格相等会误判失败
-            logger.warning("backend.py - Backend.write_param_%s：『%s』写入验证失败：传入 %s ≠ 回读 %s",
-                           family, key, vals.tolist(), back)
-            return 0
-        logger.info("backend.py - Backend.write_param_%s：参数『%s』写入并验证成功", family, key)
         return 1
 
     def _set_zero_impl(self, family: str) -> int:
@@ -737,12 +713,6 @@ class Backend(ABC):
             return 1
         if not self._require_connected(family, f"set_mode_{family}"):
             return 0
-        if mode is not ControlMode.MIT:  # 非 MIT 模式依赖 POS_VEL 增益寄存器，先检查增益成员有无缺配置
-            holes = [k for k in ("pos_kp", "pos_ki", "vel_kp", "vel_ki")
-                     if np.isnan(getattr(self, f"_{k}_{family}")).any()]
-            if holes:
-                logger.warning("backend.py - Backend.set_mode_%s：POS_VEL 增益『%s』存在空值（cfg 未配置），采用电机内部增益",
-                               family, "、".join(holes))
         for i in range(self._n(family)):
             try:
                 getattr(self, f"_set_joint_mode_{family}")(i, mode)
@@ -750,13 +720,6 @@ class Backend(ABC):
                 logger.warning("backend.py - Backend.set_mode_%s：joint『%s』设置失败：%s",
                                family, self._jname(family, i), e)
                 return 0
-        time.sleep(self._write_settle)  # 写入生效静置，再读回验证
-        back = getattr(self, f"get_mode_{family}")()
-        if back != mode:
-            logger.warning("backend.py - Backend.set_mode_%s：读回核对不一致（期望 %s，实际 %s）",
-                           family, mode, back)
-            return 0
-        logger.info("backend.py - Backend.set_mode_%s：模式切换成功（%s）", family, mode)
         return 1
 
     # =================== 抽象方法（子类实现） ===================
@@ -773,8 +736,7 @@ class Backend(ABC):
         """arm 单关节设模式抽象方法（子类实现）：写该电机的模式寄存器，并配置所需的增益寄存器。失败上抛。
 
         切到 POSITION / VELOCITY 时须一并写入 cfg ``POS_VEL`` 的四个增益寄存器
-        （``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``，取值自基类成员 ``_pos_kp_arm`` 等）；
-        切到 MIT 不用写增益（``kp``/``kd`` 随每次指令帧下发）。
+        （``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``，取值自基类成员 ``_pos_kp_arm`` 等）。
         """
 
     @abstractmethod
@@ -782,8 +744,7 @@ class Backend(ABC):
         """end 单电机设模式抽象方法（子类实现）：写该电机的模式寄存器，并配置所需的增益寄存器。失败上抛。
 
         切到 POSITION / VELOCITY 时须一并写入 cfg ``POS_VEL`` 的四个增益寄存器
-        （``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``，取值自基类成员 ``_pos_kp_end`` 等）；
-        切到 MIT 不用写增益（``kp``/``kd`` 随每次指令帧下发）。
+        （``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``，取值自基类成员 ``_pos_kp_end`` 等）。
         """
 
     @abstractmethod
@@ -800,9 +761,6 @@ class Backend(ABC):
     def send_mit_arm(self, tau, q, dq, kp=None, kd=None) -> None:
         """arm MIT 指令（电机内部 ``τ = tau + kp·(q_d−q) + kd·(dq_d−dq)``），整组下发。
 
-        发送前自动做维度与空值检查（有空值 warn 不发送）；``tau``/``q``/``dq`` 越限就近裁剪并限频告警；
-        模式前置检查：须已处于 ``MIT`` 模式（不符或未读取时 warn 不发送）。
-
         :param tau: 前馈力矩 ``(n,)``，N·m。
         :param q: 位置目标 ``(n,)``，rad。
         :param dq: 速度目标 ``(n,)``，rad/s。
@@ -818,10 +776,6 @@ class Backend(ABC):
     def send_position_arm(self, q, vlim=None, flim=None) -> None:
         """arm 位置指令整组下发。
 
-        发送前自动做维度与空值检查（有空值 warn 不发送）；``q`` 越限就近裁剪、``vlim`` 裁到
-        ``[0, dq_max]``、``flim`` 裁到 ``[0, 1]``，均限频告警；
-        模式前置检查：须已处于 ``POSITION`` 模式（不符或未读取时 warn 不发送）。
-
         :param q: 位置目标 ``(n,)``，rad。
         :param vlim: 速度上限 ``(n,)``，rad/s；缺省用 cfg ``POS_VEL.vlim`` 提取的默认值。
         :param flim: 归一化力矩电流上限 ``(n,)``（0~1）；缺省用 cfg ``POS_VEL.flim`` 提取的默认值。
@@ -835,18 +789,12 @@ class Backend(ABC):
     def send_vel_arm(self, dq) -> None:
         """arm 速度指令整组下发。
 
-        发送前自动做维度与空值检查（有空值 warn 不发送）；``dq`` 越限裁剪到 ``±dq_max`` 并限频告警；
-        模式前置检查：须已处于 ``VELOCITY`` 模式（不符或未读取时 warn 不发送）。
-
         :param dq: 速度目标 ``(n,)``，rad/s。
         """
         self._send_vel_impl("arm", dq)
 
     def send_mit_end(self, tau, q, dq, kp=None, kd=None) -> None:
         """end MIT 指令（电机内部 ``τ = tau + kp·(q_d−q) + kd·(dq_d−dq)``），整组下发。
-
-        发送前自动做维度与空值检查（有空值 warn 不发送）；``tau``/``q``/``dq`` 越限就近裁剪并限频告警；
-        模式前置检查：须已处于 ``MIT`` 模式（不符或未读取时 warn 不发送）。
 
         :param tau: 前馈力矩 ``(n,)``，N·m。
         :param q: 位置目标 ``(n,)``，rad。
@@ -863,10 +811,6 @@ class Backend(ABC):
     def send_position_end(self, q, vlim=None, flim=None) -> None:
         """end 位置指令整组下发。
 
-        发送前自动做维度与空值检查（有空值 warn 不发送）；``q`` 越限就近裁剪、``vlim`` 裁到
-        ``[0, dq_max]``、``flim`` 裁到 ``[0, 1]``，均限频告警；
-        模式前置检查：须已处于 ``POSITION`` 模式（不符或未读取时 warn 不发送）。
-
         :param q: 位置目标 ``(n,)``，rad。
         :param vlim: 速度上限 ``(n,)``，rad/s；缺省用 cfg ``POS_VEL.vlim`` 提取的默认值。
         :param flim: 归一化力矩电流上限 ``(n,)``（0~1）；缺省用 cfg ``POS_VEL.flim`` 提取的默认值。
@@ -880,15 +824,12 @@ class Backend(ABC):
     def send_vel_end(self, dq) -> None:
         """end 速度指令整组下发。
 
-        发送前自动做维度与空值检查（有空值 warn 不发送）；``dq`` 越限裁剪到 ``±dq_max`` 并限频告警；
-        模式前置检查：须已处于 ``VELOCITY`` 模式（不符或未读取时 warn 不发送）。
-
         :param dq: 速度目标 ``(n,)``，rad/s。
         """
         self._send_vel_impl("end", dq)
 
     def send_action_end(self, action: str, **kwargs) -> None:
-        """end 离散动作（动作语义与可选配置由子类定义）。
+        """end 离散动作（子类定义）。
 
         :param action: 动作名，常见 ``"open"`` / ``"close"`` / ``"home"``。
         :param kwargs: 动作的可选配置（由子类解释）。
@@ -1023,100 +964,125 @@ class Backend(ABC):
     @abstractmethod
     def _send_joint_mit_arm(self, i: int, tau: float, q: float, dq: float,
                             kp: float, kd: float) -> None:
-        """arm 单关节 MIT 发送抽象方法（子类实现）：发一帧 MIT 指令，入参已经过越限裁剪。失败上抛。"""
+        """arm 单关节 MIT 发送抽象方法（子类实现）：发一帧 MIT 指令，入参已经过检查和越限裁剪。失败上抛。"""
 
     @abstractmethod
     def _send_joint_mit_end(self, i: int, tau: float, q: float, dq: float,
                             kp: float, kd: float) -> None:
-        """end 单电机 MIT 发送抽象方法（子类实现）：发一帧 MIT 指令，入参已经过越限裁剪。失败上抛。"""
+        """end 单电机 MIT 发送抽象方法（子类实现）：发一帧 MIT 指令，入参已经过检查和越限裁剪。失败上抛。"""
 
     @abstractmethod
     def _send_joint_position_arm(self, i: int, q: float, vlim: float, flim: float) -> None:
-        """arm 单关节位置发送抽象方法（子类实现）：发一帧位置指令，入参已经过限幅裁剪。失败上抛。"""
+        """arm 单关节位置发送抽象方法（子类实现）：发一帧位置指令，入参已经过检查和限幅裁剪。失败上抛。"""
 
     @abstractmethod
     def _send_joint_position_end(self, i: int, q: float, vlim: float, flim: float) -> None:
-        """end 单电机位置发送抽象方法（子类实现）：发一帧位置指令，入参已经过限幅裁剪。失败上抛。"""
+        """end 单电机位置发送抽象方法（子类实现）：发一帧位置指令，入参已经过检查和限幅裁剪。失败上抛。"""
 
     @abstractmethod
     def _send_joint_vel_arm(self, i: int, dq: float) -> None:
-        """arm 单关节速度发送抽象方法（子类实现）：发一帧速度指令，入参已经过幅值裁剪。失败上抛。"""
+        """arm 单关节速度发送抽象方法（子类实现）：发一帧速度指令，入参已经过检查和幅值裁剪。失败上抛。"""
 
     @abstractmethod
     def _send_joint_vel_end(self, i: int, dq: float) -> None:
-        """end 单电机速度发送抽象方法（子类实现）：发一帧速度指令，入参已经过幅值裁剪。失败上抛。"""
+        """end 单电机速度发送抽象方法（子类实现）：发一帧速度指令，入参已经过检查和幅值裁剪。失败上抛。"""
 
     @abstractmethod
     def _send_action_end(self, action: str, **kwargs) -> None:
         """end 离散动作抽象方法（子类实现）：按 ``action`` 发送对应指令（动作映射与配置由子类定义）。失败上抛。"""
 
     # ============================================================
-    # 错误与恢复
+    # 错误与恢复（get_error_* 读码 → check_error_* 判正常 → clear_error_* 失能态清错）
     # ============================================================
+    def get_error_arm(self) -> Optional[list]:
+        """获取 arm 各关节状态码。
+
+        状态码 0=失能、1=使能，均属正常；其他码为故障（含义随固件/型号定）。
+
+        :return: 逐关节状态码 list（关节按序对应；无关节为空 list）；未连接、状态快照过期或 ``error`` 段缺失返回 ``None``。
+        """
+        return self._get_error_impl("arm")
+
+    def get_error_end(self) -> Optional[list]:
+        """获取 end 各电机状态码。
+
+        状态码 0=失能、1=使能，均属正常；其他码为故障（含义随固件/型号定）。
+
+        :return: 逐电机状态码 list（电机按序对应；无电机为空 list）；未连接、状态快照过期或 ``error`` 段缺失返回 ``None``。
+        """
+        return self._get_error_impl("end")
+
     def check_error_arm(self) -> bool:
-        """检查 arm 各关节状态码（读一次整组状态）。
+        """检查 arm 各关节状态码（基于 ``get_error_arm``）。
 
-        状态码 0=失能、1=使能，均属正常：全为 0/1 → info 打印状态码并返回 ``True``；
-        存在其他码（故障）→ warn 打印状态码并返回 ``False``。
+        状态码 0=失能、1=使能，均属正常；存在其他码故障。
 
-        :return: 状态码正常返回 ``True``；存在故障码或读取失败返回 ``False``。
+        :return: 状态码正常返回 ``True``；存在故障码、未连接或状态快照过期返回 ``False``。
         """
         return self._check_error_impl("arm")
 
     def check_error_end(self) -> bool:
-        """检查 end 各电机状态码（读一次整组状态）。
+        """检查 end 各电机状态码（基于 ``get_error_end``）。
 
-        状态码 0=失能、1=使能，均属正常：全为 0/1 → info 打印状态码并返回 ``True``；
-        存在其他码（故障）→ warn 打印状态码并返回 ``False``。
+        状态码 0=失能、1=使能，均属正常；存在其他码故障。
 
-        :return: 状态码正常返回 ``True``；存在故障码或读取失败返回 ``False``。
+        :return: 状态码正常返回 ``True``；存在故障码、未连接或状态快照过期返回 ``False``。
         """
         return self._check_error_impl("end")
 
     def clear_error_arm(self) -> bool:
-        """清除 arm 各关节硬件错误并验证。
+        """清除 arm 各关节硬件错误（仅发清错指令，失能状态下执行）。
 
-        先逐关节清错 → 静置等待 → :meth:`check_error_arm` 验证。
-
-        :return: 清除并验证成功返回 ``True``；任一步失败 warn 并返回 ``False``。
+        :return: 成功返回 ``True``；门禁未过或任一发送失败（warn 提示）返回 ``False``。
         """
         return self._clear_error_impl("arm")
 
     def clear_error_end(self) -> bool:
-        """清除 end 各电机硬件错误并验证。
+        """清除 end 各电机硬件错误（仅发清错指令，失能状态下执行）。
 
-        先逐电机清错 → 静置等待 → :meth:`check_error_end` 验证。
-
-        :return: 清除并验证成功返回 ``True``；任一步失败 warn 并返回 ``False``。
+        :return: 成功返回 ``True``；门禁未过或任一发送失败（warn 提示）返回 ``False``。
         """
         return self._clear_error_impl("end")
 
     # ==================== 共用实现（arm / end） ====================
-    def _check_error_impl(self, family: str) -> bool:
-        """检查的共用实现：读一次整组状态，状态码 0=失能 / 1=使能 均正常，出现其他码即故障。"""
-        if self._skip_empty_family(family, f"check_error_{family}"):
-            return True
-        if not self._require_connected(family, f"check_error_{family}"):
-            return False
-        st = getattr(self, f"get_state_{family}")()
-        if st is None:
-            logger.warning("backend.py - Backend.check_error_%s：状态读取失败，无法检查", family)
-            return False
+    def _get_error_impl(self, family: str) -> Optional[list]:
+        """读码的共用实现：``_joint_state_{family}`` 的 ``error`` 段。"""
+        if self._skip_empty_family(family, f"get_error_{family}"):
+            return []
+        if not self._require_connected(family, f"get_error_{family}"):
+            return None
+        st = getattr(self, f"_joint_state_{family}")
+        if time.time() - st.t > 2.0 / self._refresh_hz:  # 快照过期
+            logger.warning("backend.py - Backend.get_error_%s：状态快照过期（先 get_state_%s 或等刷新），无法获取",
+                           family, family)
+            return None
         err = st.error
         if err is None:
-            logger.warning("backend.py - Backend.check_error_%s：error 字段缺失，无法检查", family)
+            logger.warning("backend.py - Backend.get_error_%s：error 段缺失，无法获取", family)
+            return None
+        return err.tolist()
+
+    def _check_error_impl(self, family: str) -> bool:
+        """检查的共用实现：基于读码结果判断，状态码 0=失能 / 1=使能 均正常，出现其他码即故障。"""
+        errs = self._get_error_impl(family)
+        if errs is None:
             return False
-        if ((err != 0) & (err != 1)).any():
-            logger.warning("backend.py - Backend.check_error_%s：存在故障状态码（%s）", family, err.tolist())
+        if any(e not in (0, 1) for e in errs):
+            logger.warning("backend.py - Backend.check_error_%s：存在故障状态码（%s）", family, errs)
             return False
-        logger.info("backend.py - Backend.check_error_%s：状态码正常（%s）", family, err.tolist())
+        logger.info("backend.py - Backend.check_error_%s：状态码正常（%s）", family, errs)
         return True
 
     def _clear_error_impl(self, family: str) -> bool:
-        """清错的共用实现：逐关节清错 → 静置 → check_error 验证。"""
+        """清错的共用实现：逐关节发送清错指令（无静置、无读回验证）。"""
         if self._skip_empty_family(family, f"clear_error_{family}"):
             return True
         if not self._require_connected(family, f"clear_error_{family}"):
+            return False
+        abled = getattr(self, f"_is_abled_{family}")
+        if abled is not False:
+            logger.warning("backend.py - Backend.clear_error_%s：%s，清错须在失能状态下执行（先 disable_%s），操作跳过",
+                           family, "已使能" if abled is True else "使能状态未知", family)
             return False
         for i in range(self._n(family)):
             jn = self._jname(family, i)
@@ -1127,8 +1093,7 @@ class Backend(ABC):
             except Exception as e:
                 logger.warning("backend.py - Backend.clear_error_%s：joint『%s』清错异常：%s", family, jn, e)
                 return False
-        time.sleep(self._write_settle)
-        return self._check_error_impl(family)
+        return True
 
     # =================== 抽象方法（子类实现） ===================
     @abstractmethod
@@ -1155,12 +1120,52 @@ class Backend(ABC):
     @property
     def n_joints_arm(self) -> int:
         """arm 关节数。"""
-        return len(self._jointscfg_arm)
+        return self._n_joints_arm
 
     @property
     def n_joints_end(self) -> int:
         """end 电机关节数（无 end 段为 0）。"""
-        return len(self._jointscfg_end)
+        return self._n_joints_end
+
+    @property
+    def is_connected_arm(self) -> Optional[bool]:
+        """arm 连接状态（True 已连接 / False 未连接 / None 未知）。"""
+        return self._is_connected_arm
+
+    @property
+    def is_connected_end(self) -> Optional[bool]:
+        """end 连接状态（True 已连接 / False 未连接 / None 未知）。"""
+        return self._is_connected_end
+
+    @property
+    def is_abled_arm(self) -> Optional[bool]:
+        """arm 使能状态（True 已使能 / False 已失能 / None 未知）。"""
+        return self._is_abled_arm
+
+    @property
+    def is_abled_end(self) -> Optional[bool]:
+        """end 使能状态（True 已使能 / False 已失能 / None 未知）。"""
+        return self._is_abled_end
+
+    @property
+    def mode_arm(self) -> Optional[ControlMode]:
+        """arm 全组一致的控制模式（get_mode 读齐且一致时更新；None=未读取）。"""
+        return self._mode_arm
+
+    @property
+    def mode_end(self) -> Optional[ControlMode]:
+        """end 全组一致的控制模式（get_mode 读齐且一致时更新；None=未读取）。"""
+        return self._mode_end
+
+    @property
+    def joint_state_arm(self) -> JointState:
+        """arm 整组实时关节状态。"""
+        return self._joint_state_arm
+
+    @property
+    def joint_state_end(self) -> JointState:
+        """end 整组实时关节状态。"""
+        return self._joint_state_end
 
     @property
     def joint_limits_arm(self) -> Optional[JointLimits]:
@@ -1176,8 +1181,8 @@ class Backend(ABC):
     # 内部助手（仅基类使用）
     # ============================================================
     def _n(self, family: str) -> int:
-        """组（``"arm"`` / ``"end"``）的关节数。"""
-        return len(getattr(self, f"_jointscfg_{family}"))
+        """组（``"arm"`` / ``"end"``）的关节数（读 ``_n_joints_{family}`` 成员）。"""
+        return getattr(self, f"_n_joints_{family}")
 
     def _skip_empty_family(self, family: str, caller: str) -> bool:
         """空组（关节数 0）跳过判定：视为成功直接返回，同时限频 warn 提示未配置任何关节。"""
@@ -1214,18 +1219,18 @@ class Backend(ABC):
 
     def _require_connected(self, family: str, caller: str) -> bool:
         """连接前置检查：未连接或状态未知（``None``）时 warn 并返回 ``False``。"""
-        if not getattr(self, f"is_connected_{family}"):
+        if not getattr(self, f"_is_connected_{family}"):
             logger.warning("backend.py - Backend.%s：%s 未连接或状态未知，操作跳过", caller, family)
             return False
         return True
 
     def _require_mode(self, family: str, mode: ControlMode, caller: str) -> bool:
-        """模式前置检查：组模式成员 ``mode_{family}`` 等于所需模式才放行，否则限频 warn。
+        """模式前置检查：组模式成员 ``_mode_{family}`` 等于所需模式才放行，否则限频 warn。
 
-        ``mode_{family}`` 与逐关节模式缓存 ``_joint_mode_{family}`` 同步更新
+        ``_mode_{family}`` 与逐关节模式缓存 ``_joint_mode_{family}`` 同步更新
         （``get_mode`` 读齐且一致时），为 ``None`` 即模式未读取。
         """
-        cur = getattr(self, f"mode_{family}")
+        cur = getattr(self, f"_mode_{family}")
         if cur == mode:
             return True
         self._warn_throttled("backend.py - Backend.%s：%s 当前模式 %s ≠ 所需 %s（先 set_mode/get_mode）",

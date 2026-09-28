@@ -66,7 +66,7 @@ class BackendTemplate(Backend):
         # self._joint_feedback_id_arm[i] / _joint_feedback_id_end[i]  应答帧标识（joints[].feedback_id）
         # self._joint_model_arm[i] / _joint_model_end[i]              电机型号（joints[].model）
         # self._pos_kp/_pos_ki/_vel_kp/_vel_ki × arm/end（8 个 (n,)）  POS_VEL 增益，设模式写增益寄存器时直取（缺配置 NaN）
-        # self.joint_state_arm / joint_state_end     公开状态对象（状态流协议整组写入后置 .t = time.time()）
+        # self._joint_state_arm / _joint_state_end   私有状态对象（属性 joint_state_* 对外只读）
 
         # ---- 子类私有成员示例（按型号删改；约定：全部 _ 前缀，不新增公开成员）----
         # self._motors_arm = self._build_motors("arm")  # arm 电机句柄表（下标 = _jointscfg_arm 下标）
@@ -451,7 +451,8 @@ class BackendTemplate(Backend):
         """清除 arm 第 ``i`` 个关节电机的硬件错误（发错误清除指令）。
 
         实现要点：
-        - 基类流程为：逐关节清错 → 静置 → ``check_error_arm`` 验证（状态码回到 0/1 即通过）；本方法只发清除帧；
+        - 基类流程为：失能门禁（须 ``is_abled`` 为 ``False``）→ 逐关节发清错帧；无静置、无读回验证，
+          清错结果由上层 ``get_error_arm`` / ``check_error_arm`` 确认；本方法只发清除帧；
         - 部分电机清错后自动失能，属正常（清错后保持失能态，何时重新使能由上层决定）。
 
         :return: 清除指令发送成功 ``True``；失败返回 ``False`` 或上抛异常。
@@ -462,7 +463,8 @@ class BackendTemplate(Backend):
         """清除 end 第 ``i`` 个电机的硬件错误（发错误清除指令）。
 
         实现要点：
-        - 基类流程为：逐关节清错 → 静置 → ``check_error_arm`` 验证（状态码回到 0/1 即通过）；本方法只发清除帧；
+        - 基类流程为：失能门禁（须 ``is_abled`` 为 ``False``）→ 逐电机发清错帧；无静置、无读回验证，
+          清错结果由上层 ``get_error_end`` / ``check_error_end`` 确认；本方法只发清除帧；
         - 部分电机清错后自动失能，属正常（清错后保持失能态，何时重新使能由上层决定）。
 
         :return: 清除指令发送成功 ``True``；失败返回 ``False`` 或上抛异常。

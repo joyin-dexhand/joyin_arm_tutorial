@@ -126,7 +126,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举 + 数据类（Pose/TrajFrame/JointState/ArmState/JointLimits/TcpLimits/IKResult…） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | 限位助手：硬/软/tcp 限位构建 + 指令裁剪 + 限位内采样（签名见 §3.3） | Ch11 | ✅ |
-| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个单 joint 抽象内核）；三模式发送（MIT 默认，connect 自动 best-effort 设定）；公开状态槽 `joint_state_arm/end`（含 `t`，纯物理量）+ `is_connected/is_abled` 三值标志 + `mode_arm/end` 族模式成员（逐 joint 模式在私有缓存，与状态读取解耦）；cfg 预解析硬限位/发送默认/POS_VEL 四增益/baud/协议标识三键（motor_id、feedback_id、model → `_joint_*`）/三运行键（state_refresh_hz、warn_interval、write_settle）为成员 | Ch2 | ✅ |
+| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个单 joint 抽象内核）；三模式发送（MIT 默认，connect 自动 best-effort 设定）；状态对象 `joint_state_arm/end`（含 `t`，纯物理量）+ `is_connected/is_abled` 三值标志 + `mode_arm/end` 组模式（均私有成员 + 只读属性；逐 joint 模式在私有缓存，与状态读取解耦）；cfg 预解析硬限位/发送默认/POS_VEL 四增益/baud/协议标识三键（motor_id、feedback_id、model → `_joint_*`）/三运行键（state_refresh_hz、warn_interval、write_settle）为成员 | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机，私有 DmMotor/DmCanBus；按新基类内核重建中） | Ch6/13 | 🟡 |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
 | `backend/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError + 逐方法实现指引注释；复制为 `backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入） | — | ✅ |
@@ -205,7 +205,7 @@ Controller(ctrl_hz=200) + MODE 类属性：纯计算内核——compute(arm, fra
 #### Backend / 限位 / 数学 / 类型 API
 
 ```python
-Backend(ABC, cfg) ✅   # 公开面：connect/enable、get_mode（一致返模式+更新 mode_arm/end，不一致 False，失败 None）、get_state（JointState 纯物理量含 t）、read/write_param（写后读回验证）、set_zero、set_mode（默认 MIT）、check/clear_error、send_action_end、属性 cfg/name/n_joints_*/joint_limits_*/joint_state_*（公开实时状态槽）+ is_connected/is_abled 三值标志；限位裁剪唯一执行点（语义见 §1.3）
+Backend(ABC, cfg) ✅   # 公开面：connect/enable、get_mode（一致返模式+更新 mode_arm/end，不一致/失败 None）、get_state（JointState 纯物理量含 t）、read/write_param（写后读回验证）、set_zero、set_mode（默认 MIT）、get/check/clear_error（读状态快照 error 码 list、不发帧 → 判 0/1 正常 → 失能态发清错指令、无回读验证）、send_action_end、属性 cfg/name/n_joints_*/joint_limits_*/joint_state_*/is_connected_*/is_abled_*/mode_*（只读，转发同名 _ 前缀私有成员；joint_state_* 返回当前引用——get_state 原子换入新对象、旧引用冻结为快照）——成员变量全私有化（含关节数 _n_joints_*）；限位裁剪唯一执行点（语义见 §1.3）
 send_mit_{arm,end}(tau,q,dq,kp=None,kd=None) · send_position_{arm,end}(q,vlim=None,flim=None) · send_vel_{arm,end}(dq)   # 三模式整组下发（①维度→②空值/越限裁剪→③连接/模式门禁→④逐 joint 内核）；缺省取 cfg 成员默认；越限告警节流每 0.5s 至多一条
 get_backend(name) · REGISTRY     # config backend.name 选型（REGISTRY 暂空，backend_dm 重建后恢复）✅
 BackendDMMujoco   # MuJoCo 仿真后端桩，待实现（详情见 §3.1）🟡

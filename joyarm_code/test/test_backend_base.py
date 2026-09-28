@@ -2,7 +2,7 @@
 
 覆盖：cfg 预解析（限位/发送默认/POS_VEL 增益/baud）、三值状态标志、族内同步读取、
 写后读回验证、三模式发送流水线（维度→空值/裁剪→连接/模式门禁→逐 joint 内核）、
-非 MIT 增益校验（空值仅 warn）、错误检查/清除、空族跳过、低频保活线程（mode 已知不重读）、断连编排。
+非 MIT 增益校验（空值仅 warn）、错误码获取/检查/清错（失能门禁）、空族跳过、低频保活线程（mode 已知不重读）、断连编排。
 
 注意：test_04 起的多数用例共享模块级主 Dummy ``b`` 的演化状态（与被移植的冒烟脚本一致），
 依赖 pytest 同文件按定义顺序执行；连续断言多类节流 warn 须逐处复位 ``b._warn_last = 0.0``。
@@ -219,6 +219,7 @@ def test_01_init(b, cfg):
     assert b._joint_motor_id_arm == [j["motor_id"] for j in arm_j] and b._joint_motor_id_end == [0x07]
     assert b._joint_feedback_id_arm == [j["feedback_id"] for j in arm_j] and b._joint_feedback_id_end == [0x17]
     assert b._joint_model_arm == [j["model"] for j in arm_j] and b._joint_model_end == ["4310"]
+    assert b._n_joints_arm == 6 and b._n_joints_end == 1
     assert b.n_joints_arm == 6 and b.n_joints_end == 1
     assert np.allclose(b.joint_limits_arm.dq_max, [5, 5, 5, 8, 8, 8])
     assert b.joint_limits_arm.q_min[0] == -2.8
@@ -293,6 +294,15 @@ def test_04_empty_family(cfg):
         bne.send_action_end("open")  # 空族判定先于连接门禁（统一顺序）
         assert len(warns("未配置任何 joint")) >= 1
         assert not any(c[0] == "send_action_end" for c in bne.calls)
+        bne._warn_last = 0.0
+        cap.msgs.clear()
+        assert bne.get_error_end() == [] and len(warns("未配置任何 joint")) >= 1
+        bne._warn_last = 0.0
+        cap.msgs.clear()
+        assert bne.check_error_end() is True and len(warns("未配置任何 joint")) >= 1
+        bne._warn_last = 0.0
+        cap.msgs.clear()
+        assert bne.clear_error_end() is True and len(warns("未配置任何 joint")) >= 1
     finally:
         bne._refresh_stop.set()
 
@@ -359,7 +369,7 @@ def test_08_get_mode(b):
     assert b.get_mode_arm() == P
     assert b._joint_mode_arm == [P] * 6 and b.mode_arm == P
     b.modes["arm"][3] = M
-    assert b.get_mode_arm() is False  # 不一致 → False + 逐 joint 模式保留
+    assert b.get_mode_arm() is None  # 不一致 → None（与读取失败同值）+ 逐 joint 模式保留
     assert b._joint_mode_arm == [P, P, P, M, P, P]
     assert b.mode_arm == P  # 族模式成员不更新
     b.modes["arm"] = [M] * 6
@@ -402,7 +412,7 @@ def test_09_get_state(b):
     assert b.get_state_arm() is None  # 失败 → None 且不部分赋值
     assert np.array_equal(st.q, q_before) and st.t == t_before
     del b.fail_at["read_joint_state_arm"]
-    assert b.get_state_arm() is b.joint_state_arm  # 返回实时引用
+    assert b.get_state_arm() is b.joint_state_arm  # 返回本次原子换入后的当前对象
 
 
 # ---- T8 read_param ----
@@ -472,36 +482,52 @@ def test_13_set_zero(b):
     del b.ret_false["set_joint_zero_arm"]
 
 
-# ---- T12 状态检查与清错 ----
-def test_14_check_clear_error(b):
-    # check_error：0=失能 / 1=使能 均正常，读一次整族状态
-    assert b.check_error_arm() is True
+# ---- T12 错误码获取 / 检查 / 清错 ----
+def test_14_get_check_clear_error(b):
+    # get_error：直接读状态快照 error 段（不发帧、不触发读取）；0=失能 / 1=使能 均正常
+    b.get_state_arm()  # 显式填槽（get_error 自身不读取，槽由刷新线程 / get_state 维护）
+    assert b.get_error_arm() == [0] * 6
     b.jstates["arm"][2]["error"] = 1  # 使能态码
+    b.jstates["arm"][4]["error"] = 8  # 故障码
+    b.get_state_arm()
+    assert b.get_error_arm() == [0, 0, 1, 0, 8, 0]
+    # check_error：基于 get_error 判断，0/1 均正常，出现其他码即故障
+    b.jstates["arm"][4]["error"] = 0
+    b.get_state_arm()
     assert b.check_error_arm() is True
     b.jstates["arm"][4]["error"] = 8  # 故障码
+    b.get_state_arm()
     cap.msgs.clear()
     assert b.check_error_arm() is False and len(warns("存在故障状态码")) >= 1
-    b.jstates["arm"][2]["error"] = 0
     b.jstates["arm"][4]["error"] = 0
-    b.jstates["arm"][0]["q"] = None  # 数据异常 → get_state None
+    b.jstates["arm"][0]["q"] = None  # 数据异常 → get_state None、槽保持上次快照
     cap.msgs.clear()
-    assert b.check_error_arm() is False and len(warns("状态读取失败")) >= 1
+    assert b.get_state_arm() is None
+    assert b.get_error_arm() == [0, 0, 1, 0, 8, 0]  # 不触发读取 → 返回保持的快照（含故障码 8）
     b.jstates["arm"][0]["q"] = 0.1
-    # clear_error：逐 joint 清错 → 静置 → check_error 验证（不自动失能/使能）
-    b.is_abled_arm = True
+    b.get_state_arm()
+    assert b.get_error_arm() == [0, 0, 1, 0, 0, 0]
+    # clear_error：失能门禁 → 逐 joint 发清错帧（无静置、无读回验证；不自动失能/使能）
+    b._is_abled_arm = True  # 已使能 → 拒绝
+    cap.msgs.clear()
+    b.calls.clear()
+    assert b.clear_error_arm() is False and len(warns("清错须在失能状态下执行")) >= 1
+    assert not any(c[0] == "clear_joint_error_arm" for c in b.calls)
+    assert b.is_abled_arm is True  # 门禁拦截，使能标志不动
+    b._is_abled_arm = None  # 未知 → 同样拒绝
+    cap.msgs.clear()
+    assert b.clear_error_arm() is False and len(warns("清错须在失能状态下执行")) >= 1
+    b._is_abled_arm = False  # 失能 → 放行
     b.calls.clear()
     assert b.clear_error_arm() is True
+    assert [c[1] for c in b.calls if c[0] == "clear_joint_error_arm"] == list(range(6))
     assert not any(c[0] == "disable_joint_arm" for c in b.calls)
-    assert b.is_abled_arm is True  # 使能标志不被清错改动
-    b.jstates["arm"][4]["error"] = 8  # 清错后仍有故障码
-    cap.msgs.clear()
-    assert b.clear_error_arm() is False and len(warns("存在故障状态码")) >= 1
-    b.jstates["arm"][4]["error"] = 0
+    assert b.is_abled_arm is False  # 使能标志不被清错改动
     b.fail_at["clear_joint_error_arm"] = {2}
     cap.msgs.clear()
     assert b.clear_error_arm() is False and len(warns("清错异常")) >= 1
     del b.fail_at["clear_joint_error_arm"]
-    b.jstates["arm"][2]["error"] = 1  # 清错后为使能码 1 亦正常
+    b.jstates["arm"][2]["error"] = 1  # 清错后为使能码 1 亦正常（Dummy 不模拟硬件清码，码表由 get/check 读）
     assert b.clear_error_arm() is True
     b.jstates["arm"][2]["error"] = 0
 
@@ -690,7 +716,7 @@ def test_22_types():
 
 # ---- T16 断连 ----
 def test_23_disconnect(b):
-    b.is_abled_arm = True  # 前置：未失能 → 断连前应先失能
+    b._is_abled_arm = True  # 前置：未失能 → 断连前应先失能
     b.disconnect_arm()
     assert b.is_connected_arm is False and b.is_abled_arm is None
     idx_disc = next((i for i, m in enumerate(cap.msgs) if "断连成功" in m), -1)
@@ -814,7 +840,7 @@ def test_31_end_get_state(e):
     e.fail_at["read_joint_state_end"] = {0}
     assert e.get_state_end() is None  # 内核异常 → None
     del e.fail_at["read_joint_state_end"]
-    assert e.get_state_end() is e.joint_state_end  # 返回实时引用
+    assert e.get_state_end() is e.joint_state_end  # 返回本次原子换入后的当前对象
 
 
 def test_32_end_mode_params(e):
@@ -846,14 +872,41 @@ def test_33_end_set_mode_zero(e):
 
 
 def test_34_end_check_clear_error(e):
-    assert e.check_error_end() is True
+    # get_error：快照过期（占位 t=0 距今远超 2 个刷新周期）→ None（e 的刷新线程已停，槽不会自行填充）
+    cap.msgs.clear()
+    assert e.get_error_end() is None and len(warns("状态快照过期")) >= 1
+    e.get_state_end()  # 填槽
+    assert e.get_error_end() == [0]
+    # get_error 不发帧、不触发读取：读前后 read_joint_state_end 调用数不变
+    e.calls.clear()
+    e.get_state_end()
+    assert len([c for c in e.calls if c[0] == "read_joint_state_end"]) == 1
+    assert e.get_error_end() == [0]
+    assert len([c for c in e.calls if c[0] == "read_joint_state_end"]) == 1
+    e._joint_state_end.t -= 0.5  # 回拨快照时刻至 2 个刷新周期之前（10Hz → 阈值 0.2s）
+    cap.msgs.clear()
+    assert e.get_error_end() is None and len(warns("状态快照过期")) >= 1
+    e.get_state_end()  # 重新填槽恢复新鲜
+    assert e.get_error_end() == [0]
     e.jstates["end"][0]["error"] = 9  # 欠压故障码
+    assert e.get_error_end() == [0]  # 槽不跟手（仍是旧快照）
+    e.get_state_end()
+    assert e.get_error_end() == [9]
     cap.msgs.clear()
     assert e.check_error_end() is False and len(warns("存在故障状态码")) >= 1
     e.jstates["end"][0]["error"] = 0
+    e.get_state_end()
+    assert e.check_error_end() is True
+    # clear_error：失能门禁 → 逐电机发清错帧
+    e._is_abled_end = True  # 已使能 → 拒绝
+    cap.msgs.clear()
+    e.calls.clear()
+    assert e.clear_error_end() is False and len(warns("清错须在失能状态下执行")) >= 1
+    assert not any(c[0] == "clear_joint_error_end" for c in e.calls)
+    e._is_abled_end = False
     e.calls.clear()
     assert e.clear_error_end() is True
-    assert any(c[0] == "clear_joint_error_end" for c in e.calls)
+    assert [c[1] for c in e.calls if c[0] == "clear_joint_error_end"] == [0]
     e.fail_at["clear_joint_error_end"] = {0}
     cap.msgs.clear()
     assert e.clear_error_end() is False and len(warns("清错异常")) >= 1
@@ -906,6 +959,8 @@ def test_38_end_disconnect(e):
 # ---- T19 属性与空段边界 ----
 def test_40_properties(b, cfg):
     assert b.name == "backend_dm" and b.n_joints_arm == 6 and b.n_joints_end == 1
+    assert b.n_joints_arm == b._n_joints_arm and b.n_joints_end == b._n_joints_end
+    assert b.joint_state_arm is b._joint_state_arm and b.joint_state_end is b._joint_state_end
     endj = cfg["end"]["joints"][0]
     assert b.joint_limits_end.q_min[0] == endj["q_min"] and b.joint_limits_end.q_max[0] == endj["q_max"]
     assert b.joint_limits_end.dq_max[0] == endj["dq_max"] and b.joint_limits_end.tau_max[0] == endj["tau_max"]
@@ -917,7 +972,7 @@ def test_41_no_arm_section(cfg):
     cfg_na.pop("arm", None)
     bna = DummyBackend(cfg_na)
     try:
-        assert bna.n_joints_arm == 0 and bna.joint_limits_arm is None
+        assert bna._n_joints_arm == 0 and bna.n_joints_arm == 0 and bna.joint_limits_arm is None
         assert bna.joint_state_arm.q.shape == (0,)
         bna._warn_last = 0.0
         cap.msgs.clear()
