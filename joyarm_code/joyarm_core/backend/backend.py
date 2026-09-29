@@ -5,7 +5,7 @@
 代码主要分三层：
   1. 公开方法（供上层调用）；
   2. 共用实现 ``_*_impl``；
-  3. 抽象方法（``@abstractmethod``，子类按型号实现；多数为单关节操作，连接/断开/末端离散动作为整组操作。
+  3. 抽象方法（``@abstractmethod``，子类按型号实现；多数为单关节操作）。
 
 主要约定：
 - 失败处理：抽象方法失败可上抛异常或返回 ``False``/``None``，基类统一转为 warn 日志；
@@ -41,19 +41,6 @@ _WARN_INTERVAL_DEFAULT = 0.5   # warn_interval（秒）：warn 日志限频间�
 _INFO_INTERVAL_DEFAULT = 0.5   # info_interval（秒）：info 日志限频间隔（按通道独立计时）
 _WRITE_SETTLE_DEFAULT = 0.1    # write_settle（秒）：写电机寄存器参数后的必要等待时间
 _REFRESH_HZ_DEFAULT = 10.0     # state_refresh_hz（Hz）：低频状态刷新频率
-
-
-def _refresh_worker(stop: threading.Event, backend_ref: weakref.ref, hz: float) -> None:
-    """低频状态刷新定时器线程体（daemon；只持 backend **弱引用**）。"""
-    period = 1.0 / hz
-    while not stop.wait(period):
-        bk = backend_ref()
-        if bk is None:
-            break
-        try:
-            bk._refresh_tick(period)
-        except Exception as e:
-            bk._warn_throttled("状态刷新", "backend.py - 低频状态刷新：单拍异常（下周期重试）：%s", e)
 
 
 class Backend(ABC):
@@ -110,6 +97,8 @@ class Backend(ABC):
         self._is_abled_end: Optional[bool] = None             # end 使能状态（True 已使能 / False 已失能 / None 未知）
         self._mode_arm: Optional[ControlMode] = None          # arm 全组一致的控制模式（get_mode 读齐且一致时更新，None=未读取）
         self._mode_end: Optional[ControlMode] = None          # end 全组一致的控制模式（get_mode 读齐且一致时更新，None=未读取）
+        self._default_mode_arm: ControlMode = ControlMode.MIT # arm 连接后自动设置的控制模式（cfg arm.default_mode，缺省 MIT）
+        self._default_mode_end: ControlMode = ControlMode.MIT # end 连接后自动设置的控制模式（cfg end.default_mode，缺省 MIT）
         self._joint_mode_arm: list = []                       # arm 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值）
         self._joint_mode_end: list = []                       # end 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值）
         self._joint_state_arm = JointState()                  # arm 整组实时关节状态
@@ -136,6 +125,9 @@ class Backend(ABC):
         self._baud_end = end_cfg.get("baud_rate")
         self._protocol_arm = str(arm_cfg.get("protocol", ""))
         self._protocol_end = str(end_cfg.get("protocol", ""))
+        # 连接后自动设置的控制模式（cfg arm/end 段 default_mode 键，缺省 MIT；无 MIT 的型号可配 position/velocity）
+        self._default_mode_arm = self._mode_from_cfg(arm_cfg.get("default_mode"), "arm")
+        self._default_mode_end = self._mode_from_cfg(end_cfg.get("default_mode"), "end")
         self._jointscfg_arm = list(arm_cfg.get("joints") or [])
         self._jointscfg_end = list(end_cfg.get("joints") or [])
         # 逐关节协议标识三键（所有子类通用，缺键 None 占位、校验留给子类协议层）
@@ -182,32 +174,12 @@ class Backend(ABC):
         self._pos_ki_end = self._extract_joint_values("end", "POS_VEL", "pos_ki")
         self._vel_kp_end = self._extract_joint_values("end", "POS_VEL", "vel_kp")
         self._vel_ki_end = self._extract_joint_values("end", "POS_VEL", "vel_ki")
-        # 可选运行参数（cfg 顶层键）：缺省或非正数沿用默认并 warn
-        val = float(cfg.get("state_refresh_hz", _REFRESH_HZ_DEFAULT))
-        if val <= 0:
-            logger.warning("backend.py - Backend.__init__：state_refresh_hz=%s 非法（须为正数），沿用默认 %s Hz",
-                           val, _REFRESH_HZ_DEFAULT)
-        else:
-            self._refresh_hz = val
-        val = float(cfg.get("warn_interval", _WARN_INTERVAL_DEFAULT))
-        if val <= 0:
-            logger.warning("backend.py - Backend.__init__：warn_interval=%s 非法（须为正数），沿用默认 %s 秒",
-                           val, _WARN_INTERVAL_DEFAULT)
-        else:
-            self._warn_interval = val
-        val = float(cfg.get("info_interval", _INFO_INTERVAL_DEFAULT))
-        if val <= 0:
-            logger.warning("backend.py - Backend.__init__：info_interval=%s 非法（须为正数），沿用默认 %s 秒",
-                           val, _INFO_INTERVAL_DEFAULT)
-        else:
-            self._info_interval = val
-        val = float(cfg.get("write_settle", _WRITE_SETTLE_DEFAULT))
-        if val <= 0:
-            logger.warning("backend.py - Backend.__init__：write_settle=%s 非法（须为正数），沿用默认 %s 秒",
-                           val, _WRITE_SETTLE_DEFAULT)
-        else:
-            self._write_settle = val
-        self._refresh_thread = threading.Thread(target=_refresh_worker,
+        # 可选运行参数（cfg 顶层键）：缺省或非法（非数值/非有限/非正）沿用默认并 warn
+        self._refresh_hz = self._pos_float(cfg, "state_refresh_hz", _REFRESH_HZ_DEFAULT)
+        self._warn_interval = self._pos_float(cfg, "warn_interval", _WARN_INTERVAL_DEFAULT)
+        self._info_interval = self._pos_float(cfg, "info_interval", _INFO_INTERVAL_DEFAULT)
+        self._write_settle = self._pos_float(cfg, "write_settle", _WRITE_SETTLE_DEFAULT)
+        self._refresh_thread = threading.Thread(target=self._refresh_worker,
                                                 args=(self._refresh_stop, weakref.ref(self), self._refresh_hz),
                                                 name="backend-state-refresh", daemon=True)
         self._refresh_thread.start()
@@ -309,8 +281,10 @@ class Backend(ABC):
             setattr(self, f"_is_connected_{family}", True)
             self._info_throttled("连接", "backend.py - Backend.connect_%s：连接成功（channel=%s, protocol=%s）",
                                  family, getattr(self, f"_channel_{family}"), getattr(self, f"_protocol_{family}"))
-            if self._set_mode_impl(family, ControlMode.MIT) != 1:  # 连接成功后自动尝试设默认 MIT 模式
-                self._warn_throttled("连接", "backend.py - Backend.connect_%s：默认模式（MIT）设置失败", family)
+            default_mode = getattr(self, f"_default_mode_{family}")
+            if self._set_mode_impl(family, default_mode) != 1:  # 连接成功后自动尝试设默认模式（cfg 可配，缺省 MIT）
+                self._warn_throttled("连接", "backend.py - Backend.connect_%s：默认模式（%s）设置失败", family, default_mode.name)
+            time.sleep(self._write_settle)  # 等模式帧生效
         else:
             self._warn_throttled("连接", "backend.py - Backend.connect_%s：连接失败（channel=%s, protocol=%s）",
                                  family, getattr(self, f"_channel_{family}"), getattr(self, f"_protocol_{family}"))
@@ -323,8 +297,7 @@ class Backend(ABC):
             return
         if getattr(self, f"_is_abled_{family}") is not False:  # 先失能：未确知已失能才发帧；失败仅提示，不阻断断连
             self._disable_impl(family)
-            sleep_time = getattr(self, f"_write_settle") or _WRITE_SETTLE_DEFAULT
-            time.sleep(sleep_time)
+            time.sleep(self._write_settle)  # 等失能帧生效再断总线
         setattr(self, f"_is_connected_{family}", None)  # 执行前置 None；中途意外则停留于此
         setattr(self, f"_is_abled_{family}", None)      # 连接已断，使能状态无法核实
         try:
@@ -433,7 +406,7 @@ class Backend(ABC):
         """end 单电机的失能抽象方法（子类实现）, 失败上抛或返回 ``False``。"""
 
     # ============================================================
-    # 失能态读取
+    # 参数与状态读取
     # ============================================================
     def read_param_arm(self, key: str) -> Optional[list]:
         """读 arm 全部关节的电机参数（参数键表由子类定义）。
@@ -471,7 +444,7 @@ class Backend(ABC):
         子类未提供的量（返回的字典缺该键）该字段整组置 ``None``。
 
         :return: 成功返回 ``_joint_state_arm``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一关节读取失败、
-            或已提供的字段存在空值（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
+            返回非字典、或已提供的字段存在空值/非标量（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
         """
         return self._get_state_impl("arm")
 
@@ -481,7 +454,7 @@ class Backend(ABC):
         子类未提供的量（返回的字典缺该键）该字段整组置 ``None``。
 
         :return: 成功返回 ``_joint_state_end``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一电机读取失败、
-            或已提供的字段存在空值（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
+            返回非字典、或已提供的字段存在空值/非标量（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
         """
         return self._get_state_impl("end")
 
@@ -500,9 +473,10 @@ class Backend(ABC):
                 self._warn_throttled("参数读写", "backend.py - Backend.read_param_%s：joint『%s』读『%s』失败：%s",
                                      family, self._jname(family, i), key, e)
                 return None
-        if len(vals) != self._n(family):  # 返回值维度校验（防子类误返回序列而非单值）
-            self._warn_throttled("参数读写", "backend.py - Backend.read_param_%s：返回维度 %d ≠ 关节数 %d",
-                                 family, len(vals), self._n(family))
+        bad = next((i for i, v in enumerate(vals) if not np.isscalar(v)), None)
+        if bad is not None:  # 返回值标量校验（防子类误返回序列而非单值）
+            self._warn_throttled("参数读写", "backend.py - Backend.read_param_%s：joint『%s』读『%s』返回非标量（%s），整族读取作废",
+                                 family, self._jname(family, bad), key, type(vals[bad]).__name__)
             return None
         return vals
 
@@ -526,6 +500,11 @@ class Backend(ABC):
         if any(m is None for m in modes):
             self._warn_throttled("模式获取", "backend.py - Backend.get_mode_%s：存在未读到模式的 joint，整族不更新", family)
             return None
+        badmode = next((i for i, m in enumerate(modes) if not isinstance(m, ControlMode)), None)
+        if badmode is not None:  # 内核误返回非枚举（int/str 等）：防毒化模式缓存（刷新线程只补读 None，毒化后永不自愈）
+            self._warn_throttled("模式获取", "backend.py - Backend.get_mode_%s：joint『%s』返回非 ControlMode 枚举（%s，数据异常），整族不更新",
+                                 family, self._jname(family, badmode), type(modes[badmode]).__name__)
+            return None
         setattr(self, f"_joint_mode_{family}", list(modes))  # 逐关节写入各自模式
         if len(set(modes)) == 1:
             setattr(self, f"_mode_{family}", modes[0])
@@ -538,7 +517,7 @@ class Backend(ABC):
         """读状态的共用实现：已提供的字段全部读齐后构造完整状态对象，单一原子赋值换入。
 
         子类返回的字典**缺某个键** = 子类/硬件不提供该量，该字段整组置 ``None``（合法的缺席）；
-        键**存在但值为 ``None`` 或不可解析** = 数据异常，跳过本轮赋值并限频 warn，返回 ``None``。
+        键**存在但值为 ``None`` / 非标量 / 不可解析**、或**返回非字典** = 数据异常，跳过本轮赋值并限频 warn，返回 ``None``。
 
         return: 成功返回 ``_joint_state_{family}``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一关节读取失败、
             或已提供的字段存在空值（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
@@ -550,11 +529,16 @@ class Backend(ABC):
         snaps = []
         for i in range(self._n(family)):
             try:
-                snaps.append(getattr(self, f"_read_joint_state_{family}")(i) or {})
+                snaps.append(getattr(self, f"_read_joint_state_{family}")(i))
             except Exception as e:
                 self._warn_throttled("状态获取", "backend.py - Backend.get_state_%s：joint『%s』读状态失败：%s",
                                      family, self._jname(family, i), e)
                 return None
+        badsnap = next((i for i, snap in enumerate(snaps) if not isinstance(snap, dict)), None)
+        if badsnap is not None:  # 子类误返回非字典：防 in 退化成成员测试 → 全字段假缺席产生全 None 假成功并毒化 t
+            self._warn_throttled("状态获取", "backend.py - Backend.get_state_%s：joint『%s』返回非字典（%s，数据异常），本轮状态跳过更新（保持上次快照）",
+                                 family, self._jname(family, badsnap), type(snaps[badsnap]).__name__)
+            return None
         names = ("q", "dq", "tau", "temp_mos", "temp_rotor", "error")
         absent = {name for name in names if any(name not in snap for snap in snaps)}  # 子类未提供该量 → 字段置 None
         bad = {name for name in names if name not in absent
@@ -564,12 +548,26 @@ class Backend(ABC):
                                  "backend.py - Backend.get_state_%s：在场子值 %s 存在空值（数据异常），本轮状态跳过更新（保持上次快照）",
                                  family, sorted(bad))
             return None
+        nonscalar = next(((i, name) for i, snap in enumerate(snaps) for name in names
+                          if name not in absent and not np.isscalar(snap[name])), None)
+        if nonscalar is not None:  # 子类误返回序列：防装配出 (n,1) 字段毒化上层（契约 (n,)）
+            i, name = nonscalar
+            self._warn_throttled("状态获取",
+                                 "backend.py - Backend.get_state_%s：joint『%s』子值『%s』非标量（%s，数据异常），本轮状态跳过更新（保持上次快照）",
+                                 family, self._jname(family, i), name, type(snaps[i][name]).__name__)
+            return None
         present = tuple(name for name in names if name not in absent)
         try:  # 先解析后提交：任一不可解析按数据异常跳过本轮，不产生部分赋值
             assembled = {name: np.asarray([snap[name] for snap in snaps], dtype=int if name == "error" else float)
                          for name in present}
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError, OverflowError) as e:  
             self._warn_throttled("状态获取", "backend.py - Backend.get_state_%s：子值解析失败（数据异常）：%s", family, e)
+            return None
+        nonfin = [name for name in present if name != "error" and not np.isfinite(assembled[name]).all()]
+        if nonfin:  # 物理量出现 NaN/inf：另一种数据异常形态，跳过本轮防毒化上层
+            self._warn_throttled("状态获取",
+                                 "backend.py - Backend.get_state_%s：在场子值 %s 存在非有限值（数据异常），本轮状态跳过更新（保持上次快照）",
+                                 family, sorted(nonfin))
             return None
         # 全部字段备齐后构造完整状态对象，单一赋值换入
         fields = {name: None for name in absent}
@@ -591,6 +589,23 @@ class Backend(ABC):
         th.join(timeout=1.0)
         if th.is_alive():
             self._warn_throttled("状态刷新", "backend.py - Backend.close：刷新定时器 1 秒内未退出（单拍可能阻塞在总线读取），将自行退出")
+
+    @staticmethod
+    def _refresh_worker(stop: threading.Event, backend_ref: weakref.ref, hz: float) -> None:
+        """低频状态刷新定时器线程体（daemon；只持 backend **弱引用**）。
+
+        须保持 ``@staticmethod`` 形态：绑定方法作 target 会持 ``self`` 强引用钉死对象，
+        弱引用永不失效 → 「随对象销毁自动退出」路径失效。
+        """
+        period = 1.0 / hz
+        while not stop.wait(period):
+            bk = backend_ref()
+            if bk is None:
+                break
+            try:
+                bk._refresh_tick(period)
+            except Exception as e:
+                bk._warn_throttled("状态刷新", "backend.py - 低频状态刷新：单拍异常（下周期重试）：%s", e)
 
     def _refresh_tick(self, period: float) -> None:
         """单拍刷新：逐族检查连接与陈旧度后读取状态，并按 ``error`` 码同步使能缓存。"""
@@ -641,7 +656,7 @@ class Backend(ABC):
         硬件不提供的量**直接缺键**（字典不含该键）；键存在但值为 ``None`` 属数据获取异常。
         ``error`` 全库约定：``0``=失能、``1``=使能（均正常）、``≥2``=故障码（子类负责映射厂商原始码）。
 
-        return: 成功返回字典（部分缺值置none）；异常上抛。
+        return: 成功返回当前可用量的字典（硬件不提供的量直接缺键）；异常上抛。
         """
 
     @abstractmethod
@@ -652,18 +667,18 @@ class Backend(ABC):
         硬件不提供的量**直接缺键**（字典不含该键）；键存在但值为 ``None`` 属数据获取异常。
         ``error`` 全库约定：``0``=失能、``1``=使能（均正常）、``≥2``=故障码（子类负责映射厂商原始码）。
 
-        return: 成功返回字典（部分缺值置none）；异常上抛。
+        return: 成功返回当前可用量的字典（硬件不提供的量直接缺键）；异常上抛。
         """
 
     # ============================================================
-    # 失能态写入
+    # 参数写入与模式/零点设置
     # ============================================================
     def write_param_arm(self, key: str, values) -> int:
         """写 arm 全部关节的电机参数（参数键表由子类定义）。
 
         :param key: 参数名（子类映射到厂商寄存器）。
         :param values: 参数值列表（长度 = 关节数）。
-        :return: 成功返回 1；维度不符（warn 并跳过本次）或任一失败返回 0。
+        :return: 成功返回 1；维度不符、存在 NaN/inf（warn 并跳过本次）或任一失败返回 0。
         """
         return self._write_param_impl("arm", key, values)
 
@@ -672,7 +687,7 @@ class Backend(ABC):
 
         :param key: 参数名（子类映射到厂商寄存器）。
         :param values: 参数值列表（长度 = 电机关节数）。
-        :return: 成功返回 1；维度不符（warn 并跳过本次）或任一失败返回 0。
+        :return: 成功返回 1；维度不符、存在 NaN/inf（warn 并跳过本次）或任一失败返回 0。
         """
         return self._write_param_impl("end", key, values)
 
@@ -708,8 +723,9 @@ class Backend(ABC):
 
     # ==================== 共用实现（arm / end） ====================
     def _write_param_impl(self, family: str, key: str, values) -> int:
-        """写参数的共用实现：维度自检 → 逐关节全部写入。
-        """
+        """写参数的共用实现：维度自检 → 数值（非有限值）自检 → 逐关节全部写入。"""
+        if self._skip_empty_family(family, f"write_param_{family}"):
+            return 1
         n = self._n(family)
         vals = self._to_float_arr(values, f"write_param_{family}")
         if vals is None:
@@ -718,8 +734,10 @@ class Backend(ABC):
             self._warn_throttled("参数读写", "backend.py - Backend.write_param_%s：『%s』值列表维度 %d ≠ 关节数 %d，本次写入跳过",
                                  family, key, vals.shape[0], n)
             return 0
-        if self._skip_empty_family(family, f"write_param_{family}"):
-            return 1
+        if not np.isfinite(vals).all():  # 寄存器值必须有限（无NaN/inf位模式），且无限位源可裁 → 拦截而非裁剪
+            self._warn_throttled("参数读写", "backend.py - Backend.write_param_%s：『%s』值列表存在 NaN/inf，无法写入寄存器，本次写入跳过",
+                                 family, key)
+            return 0
         if not self._require_connected(family, f"write_param_{family}"):
             return 0
         for i in range(n):
@@ -752,10 +770,14 @@ class Backend(ABC):
         return 1
 
     def _set_mode_impl(self, family: str, mode: ControlMode) -> int:
-        """设模式的共用实现：增益检查（缺配置仅 warn，改用电机内部增益）→ 逐关节设置 → 读回全部核对（经 ``get_mode_*``）。"""
+        """设模式的共用实现：类型检查 → 逐关节设置（无读回验证、不更新模式缓存；发送门禁经 ``get_mode_*`` 读回放行）。"""
         if self._skip_empty_family(family, f"set_mode_{family}"):
             return 1
         if not self._require_connected(family, f"set_mode_{family}"):
+            return 0
+        if not isinstance(mode, ControlMode):
+            self._warn_throttled("设模式", "backend.py - Backend.set_mode_%s：mode=%r 非 ControlMode 枚举，操作跳过",
+                                 family, mode)
             return 0
         for i in range(self._n(family)):
             try:
@@ -781,7 +803,8 @@ class Backend(ABC):
         """arm 单关节设模式抽象方法（子类实现）：写该电机的模式寄存器，并配置所需的增益寄存器。失败上抛。
 
         切到 POSITION / VELOCITY 时须一并写入 cfg ``POS_VEL`` 的四个增益寄存器
-        （``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``，取值自基类成员 ``_pos_kp_arm`` 等）。
+        （``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``，取值自基类成员 ``_pos_kp_arm`` 等；
+        缺配置为 NaN 的增益不写该寄存器、沿用电机内部值）。
         """
 
     @abstractmethod
@@ -789,7 +812,8 @@ class Backend(ABC):
         """end 单电机设模式抽象方法（子类实现）：写该电机的模式寄存器，并配置所需的增益寄存器。失败上抛。
 
         切到 POSITION / VELOCITY 时须一并写入 cfg ``POS_VEL`` 的四个增益寄存器
-        （``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``，取值自基类成员 ``_pos_kp_end`` 等）。
+        （``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``，取值自基类成员 ``_pos_kp_end`` 等；
+        缺配置为 NaN 的增益不写该寄存器、沿用电机内部值）。
         """
 
     @abstractmethod
@@ -801,7 +825,7 @@ class Backend(ABC):
         """end 单电机设零抽象方法（子类实现）：将当前位置记为零点。成功 ``True``，失败 ``False`` 或上抛。"""
 
     # ============================================================
-    # 使能态指令发送
+    # 控制指令发送（使能）
     # ============================================================
     def send_mit_arm(self, tau, q, dq, kp=None, kd=None) -> None:
         """arm MIT 指令（电机内部 ``τ = tau + kp·(q_d−q) + kd·(dq_d−dq)``），整组下发。
@@ -1037,7 +1061,7 @@ class Backend(ABC):
         """end 离散动作抽象方法（子类实现）：按 ``action`` 发送对应指令（动作映射与配置由子类定义）。失败上抛。"""
 
     # ============================================================
-    # 错误与恢复（get_error_* 读码 → check_error_* 判正常 → clear_error_* 失能态清错）
+    # 错误与恢复
     # ============================================================
     def get_error_arm(self) -> Optional[list]:
         """获取 arm 各关节状态码。
@@ -1076,16 +1100,16 @@ class Backend(ABC):
         return self._check_error_impl("end")
 
     def clear_error_arm(self) -> bool:
-        """清除 arm 各关节硬件错误（仅发清错指令，失能状态下执行）。
+        """清除 arm 各关节硬件错误（仅发清错指令）。
 
-        :return: 成功返回 ``True``；门禁未过或任一发送失败（warn 提示）返回 ``False``。
+        :return: 成功返回 ``True``；任一发送失败（warn 提示）返回 ``False``。
         """
         return self._clear_error_impl("arm")
 
     def clear_error_end(self) -> bool:
-        """清除 end 各电机硬件错误（仅发清错指令，失能状态下执行）。
+        """清除 end 各电机硬件错误（仅发清错指令）。
 
-        :return: 成功返回 ``True``；门禁未过或任一发送失败（warn 提示）返回 ``False``。
+        :return: 成功返回 ``True``；任一发送失败（warn 提示）返回 ``False``。
         """
         return self._clear_error_impl("end")
 
@@ -1122,11 +1146,6 @@ class Backend(ABC):
         if self._skip_empty_family(family, f"clear_error_{family}"):
             return True
         if not self._require_connected(family, f"clear_error_{family}"):
-            return False
-        abled = getattr(self, f"_is_abled_{family}")
-        if abled is not False:
-            self._warn_throttled("清错", "backend.py - Backend.clear_error_%s：%s，清错须在失能状态下执行（先 disable_%s），操作跳过",
-                                 family, "已使能" if abled is True else "使能状态未知", family)
             return False
         for i in range(self._n(family)):
             jn = self._jname(family, i)
@@ -1244,14 +1263,19 @@ class Backend(ABC):
     def _extract_joint_values(self, family: str, section: str, key: str) -> np.ndarray:
         """逐关节提取 cfg 段键值（``MIT.kp`` / ``POS_VEL.pos_kp`` 等）→ ``(n,)`` 数组。
 
-        缺段/缺键/非数值 → 该关节以 NaN 占位（空值）并 warn；NaN 的发送默认值会在发送时
+        **整段缺省**（该关节无 ``MIT``/``POS_VEL`` 段，如无该能力段的舵机配置）→ 静默 NaN 占位（不告警）；
+        段**存在**但键缺/非数值/段非字典 → 该关节以 NaN 占位（空值）并 warn。NaN 的发送默认值会在发送时
         被空值检查拦下（不发送），NaN 的增益在 ``set_mode`` 非 MIT 时仅提示改用电机内部增益。
         """
         vals, holes = [], []
         for i, jcfg in enumerate(getattr(self, f"_jointscfg_{family}")):
+            section_cfg = jcfg.get(section)
+            if section_cfg is None:  # 整段缺省（硬件/配置不提供该能力段）→ 静默 NaN，不告警
+                vals.append(np.nan)
+                continue
             try:
-                v = float((jcfg.get(section) or {}).get(key))
-            except (TypeError, ValueError):
+                v = float(section_cfg.get(key))
+            except (AttributeError, TypeError, ValueError):  # 段为 list 等非字典 → .get 抛 AttributeError，同按空值占位
                 v = np.nan
             if not np.isfinite(v):
                 holes.append(self._jname(family, i))
@@ -1261,6 +1285,34 @@ class Backend(ABC):
             logger.warning("backend.py - Backend.__init__：%s『%s.%s』存在空值（%s），使用处将被相应门禁拦截",
                            family, section, key, "、".join(holes))
         return np.asarray(vals, dtype=float)
+
+    @staticmethod
+    def _pos_float(cfg: dict, key: str, default: float) -> float:
+        """自 cfg 取正有限 float（``__init__`` 运行参数解析用）：缺省沿用默认；非数值 / NaN / inf / 非正 → warn 并沿用默认。"""
+        raw = cfg.get(key, default)
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            val = float("nan")
+        if not (np.isfinite(val) and val > 0):
+            logger.warning("backend.py - Backend.__init__：%s=%s 非法（须为正有限数），沿用默认 %s",
+                           key, raw, default)
+            return default
+        return val
+
+    @staticmethod
+    def _mode_from_cfg(raw, family: str) -> ControlMode:
+        """自 cfg 取默认控制模式（``__init__`` 解析用）：缺省 ``MIT``；按枚举值匹配（大小写不敏感），非法 warn 回退 ``MIT``。"""
+        if raw is None:
+            return ControlMode.MIT
+        if isinstance(raw, ControlMode):
+            return raw
+        try:
+            return ControlMode(str(raw).lower())
+        except ValueError:
+            logger.warning("backend.py - Backend.__init__：%s.default_mode=%r 非法（可选 %s），回退默认 %s",
+                           family, raw, [m.value for m in ControlMode], ControlMode.MIT.value)
+            return ControlMode.MIT
 
     def _require_connected(self, family: str, caller: str) -> bool:
         """连接前置检查：未连接或状态未知（``None``）时限频 warn 并返回 ``False``。"""
@@ -1292,12 +1344,17 @@ class Backend(ABC):
         return True
 
     def _to_float_arr(self, x, caller: str) -> Optional[np.ndarray]:
-        """指令/参数值转 ``(≥1,)`` float 数组：含 None 等非数值时限频 warn 并返回 ``None``（不向调用者抛）。"""
+        """指令/参数值转 ``(n,)`` 一维 float 数组（标量升为 ``(1,)``）：非数值或非一维时限频 warn 并返回 ``None``（不向调用者抛）。"""
         try:
-            return np.atleast_1d(np.asarray(x, dtype=float))
+            arr = np.atleast_1d(np.asarray(x, dtype=float))
         except (TypeError, ValueError) as e:
             self._warn_throttled("参数解析", "backend.py - Backend.%s：参数存在非数值（%s），本次操作跳过", caller, e)
             return None
+        if arr.ndim != 1:  # (n,1) 列向量等二维输入不属 (n,) 指令：逐关节元素会是数组而非标量
+            self._warn_throttled("参数解析", "backend.py - Backend.%s：参数需为 (n,) 一维序列，实际 shape=%s，本次操作跳过",
+                                 caller, arr.shape)
+            return None
+        return arr
 
     def _warn_throttled(self, channel: str, fmt: str, *args) -> None:
         """限频告警：同一 ``channel`` 至多每 ``_warn_interval`` 秒一条。

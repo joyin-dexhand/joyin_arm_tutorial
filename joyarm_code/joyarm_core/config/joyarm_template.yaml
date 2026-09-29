@@ -80,6 +80,7 @@ backend:
     channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
     baud_rate: 921600 # 通讯波特率
+    default_mode: mit # 连接成功后自动设置的控制模式（mit/position/velocity）
     joints:
       - name: joint1 # 关节名（状态报告 / 模式缓存的键）
         motor_id: 0x01 # CAN 指令 ID
@@ -106,6 +107,7 @@ backend:
     channel: /dev/ttyACM0 # 与 arm 相同 → 共享总线；不同 → 独立总线（互不干扰）
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
     baud_rate: 921600
+    default_mode: mit # 连接成功后自动设置的控制模式（mit/position/velocity）
     joints:
       - name: joint_end1 # 末端电机名（与 URDF 末端joint一致）
         motor_id: 0x07 

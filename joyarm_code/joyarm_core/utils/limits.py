@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 import numpy as np
@@ -14,6 +15,8 @@ from .types import JointLimits, TcpLimits
 
 __all__ = ["clamp_to_limits", "limits_from_joint_cfgs", "soft_limits_from_cfg",
            "tcp_limits_from_cfg", "rand_within_limits"]
+
+logger = logging.getLogger("joyarm_core.utils.limits")
 
 
 # ============================================================
@@ -57,6 +60,7 @@ def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
 
     ``q_min``/``q_max``/``dq_max``/``tau_max``（rad / rad/s / N·m，）。
     ``arm_limits``/``end_limits`` 均由此解析。
+    NaN/inf 键值回退为未限位（±inf）并 warn；``q_min > q_max`` 属配置错误，值保留不阻断、仅启动 warn 提示。
 
     :param joint_cfgs: ``backend.arm.joints`` / ``backend.end.joints`` 条目列表。
     """
@@ -68,12 +72,28 @@ def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
         v = j.get(key)
         return float(v) if v is not None else default
 
-    return JointLimits(
-        q_min=np.array([_num(j, "q_min", -np.inf) for j in joints]),
-        q_max=np.array([_num(j, "q_max", np.inf) for j in joints]),
-        dq_max=np.array([_num(j, "dq_max", np.inf) for j in joints]),
-        tau_max=np.array([_num(j, "tau_max", np.inf) for j in joints]),
+    def _arr(key, default):
+        vals = []
+        for idx, j in enumerate(joints):
+            v = _num(j, key, default)
+            if not np.isfinite(v):  # NaN/inf → 回退未限位，防 np.clip 产 NaN 指令下发
+                logger.warning("limits.py - limits_from_joint_cfgs：joint『%s』%s 为 NaN/inf，回退未限位 %s",
+                               j.get("name", f"joint{idx}"), key, default)
+                v = default
+            vals.append(v)
+        return np.array(vals)
+
+    out = JointLimits(
+        q_min=_arr("q_min", -np.inf),
+        q_max=_arr("q_max", np.inf),
+        dq_max=_arr("dq_max", np.inf),
+        tau_max=_arr("tau_max", np.inf),
     )
+    bad = np.where(out.q_min > out.q_max)[0]
+    if bad.size > 0:
+        logger.warning("limits.py - limits_from_joint_cfgs：q_min > q_max（关节索引 %s，值保留仅提示配置错误）",
+                       bad.tolist())
+    return out
 
 
 def rand_within_limits(limits: JointLimits, size: Optional[int] = None,
