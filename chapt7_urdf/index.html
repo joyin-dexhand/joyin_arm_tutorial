@@ -1,0 +1,3632 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://joyin-dexhand.github.io/joyin_arm_tutorial/chapt7_urdf/">
+      
+      
+        <link rel="prev" href="../chapt6_control/">
+      
+      
+        <link rel="next" href="../chapt8_dyn/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>第七章 构型结构设计与URDF导出 - JoyArm 机械臂教程</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#urdf" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href=".." title="JoyArm 机械臂教程" class="md-header__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            JoyArm 机械臂教程
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              第七章 构型结构设计与URDF导出
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至暗色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切换至暗色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至亮色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切换至亮色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="JoyArm 机械臂教程" class="md-nav__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    JoyArm 机械臂教程
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    使用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速上手
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../joint_motor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    关节电机
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../arm_6dof/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    六轴整臂
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gripper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    两指夹爪
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    基础篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    基础篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt1_intro/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第一章 机器人与机械臂初识
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt2_fkine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第二章 空间位姿与位置正运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt3_ikine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第三章 位置逆运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt4_jacobian/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第四章 速度运动学与静力学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt5_trajectory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第五章 轨迹生成
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt6_control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第六章 运动控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进阶篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    进阶篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第七章 构型结构设计与URDF导出
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第七章 构型结构设计与URDF导出
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 构型设计
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 构型设计">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 应用需求与设计指标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 自由度与运动链选择
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 关节轴线布局
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 结构设计
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 结构设计">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 载荷、强度与刚度
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 连杆轻量化与关节支撑
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 加工、装配与走线
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 关节电机选型
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3 关节电机选型">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 关节执行器与主要参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 减速比与输出特性
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 静态转矩与负载估算
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 电机选型与迭代校核
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-cad-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 CAD 与 URDF 模型描述
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4 CAD 与 URDF 模型描述">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 URDF 的作用与信息来源
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-link" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 连杆分组与 link 属性
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 关节连接与运动树
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 关节轴线与连杆坐标系
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.4 关节轴线与连杆坐标系">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#441" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4.1 关节空间与电机空间的正方向
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 关节位置与轴向表示
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#46" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.6 工具参考系
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#47" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7 质量、质心与惯性张量
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.7 质量、质心与惯性张量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#471" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7.1 质量与质心
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#472" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7.2 转动惯量与惯性张量
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#473-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7.3 URDF 中的惯性属性
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#474-cad" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7.4 从 CAD 质量属性到导出参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-solidworks-joyarm-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 本章实践：使用 SolidWorks 导出并验收 JoyArm URDF
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 本章实践：使用 SolidWorks 导出并验收 JoyArm URDF">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 准备文件与软件
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.1 准备文件与软件">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#511" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.1 确认使用同一套模型资料
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#512" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.2 安装并启用导出插件
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#513" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.3 保存零位与分组依据
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#514" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.4 设置材料与等效密度
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 找到并命名本体与夹爪的关节轴
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.2 找到并命名本体与夹爪的关节轴">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#521" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2.1 建立六个本体关节的基准轴
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#522" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2.2 建立夹爪旋转轴与两侧平移轴
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 确定坐标系原点
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.3 确定坐标系原点">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#531" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.1 建立三个定位基准面
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#532" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.2 建立基座与六个连杆原点
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#533" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.3 建立夹爪各部件的原点
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#534" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.4 确定夹持中心与闭合指尖参考点
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 建立连杆坐标系
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.4 建立连杆坐标系">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#541" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4.1 先把一个坐标系建立完整
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#542" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4.2 建立其余本体、夹爪与工具坐标系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-sw2urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 在 SW2URDF 中配置运动树
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.5 在 SW2URDF 中配置运动树">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#551" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5.1 选择本体的零件组与参考几何体
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#552" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5.2 接入末端夹爪与工具参考系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6 检查参数并导出
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#57" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.7 加载模型并检查
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt8_dyn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第八章 动力学及控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt9_force/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第九章 力控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt10_ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十章 ROS2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    应用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    应用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt11_safety/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十一章 状态监测与安全软防护
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt12_teleop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十二章 示教和遥操作
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt13_endeffector/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十三章 末端执行器
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt14_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十四章 用户接口
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt15_project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十五章 JoyArm 综合实践项目
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 构型设计
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 构型设计">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 应用需求与设计指标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 自由度与运动链选择
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 关节轴线布局
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 结构设计
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 结构设计">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 载荷、强度与刚度
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 连杆轻量化与关节支撑
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 加工、装配与走线
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 关节电机选型
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3 关节电机选型">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 关节执行器与主要参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 减速比与输出特性
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 静态转矩与负载估算
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 电机选型与迭代校核
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-cad-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 CAD 与 URDF 模型描述
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4 CAD 与 URDF 模型描述">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 URDF 的作用与信息来源
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-link" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 连杆分组与 link 属性
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 关节连接与运动树
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 关节轴线与连杆坐标系
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.4 关节轴线与连杆坐标系">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#441" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4.1 关节空间与电机空间的正方向
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 关节位置与轴向表示
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#46" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.6 工具参考系
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#47" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7 质量、质心与惯性张量
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.7 质量、质心与惯性张量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#471" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7.1 质量与质心
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#472" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7.2 转动惯量与惯性张量
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#473-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7.3 URDF 中的惯性属性
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#474-cad" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.7.4 从 CAD 质量属性到导出参数
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-solidworks-joyarm-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 本章实践：使用 SolidWorks 导出并验收 JoyArm URDF
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 本章实践：使用 SolidWorks 导出并验收 JoyArm URDF">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 准备文件与软件
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.1 准备文件与软件">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#511" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.1 确认使用同一套模型资料
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#512" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.2 安装并启用导出插件
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#513" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.3 保存零位与分组依据
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#514" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.4 设置材料与等效密度
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 找到并命名本体与夹爪的关节轴
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.2 找到并命名本体与夹爪的关节轴">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#521" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2.1 建立六个本体关节的基准轴
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#522" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2.2 建立夹爪旋转轴与两侧平移轴
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 确定坐标系原点
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.3 确定坐标系原点">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#531" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.1 建立三个定位基准面
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#532" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.2 建立基座与六个连杆原点
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#533" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.3 建立夹爪各部件的原点
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#534" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.4 确定夹持中心与闭合指尖参考点
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 建立连杆坐标系
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.4 建立连杆坐标系">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#541" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4.1 先把一个坐标系建立完整
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#542" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4.2 建立其余本体、夹爪与工具坐标系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-sw2urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 在 SW2URDF 中配置运动树
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.5 在 SW2URDF 中配置运动树">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#551" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5.1 选择本体的零件组与参考几何体
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#552" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5.2 接入末端夹爪与工具参考系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6 检查参数并导出
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#57" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.7 加载模型并检查
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="urdf">第七章 构型结构设计与 URDF 导出</h1>
+<blockquote>
+<p>📌 <strong>概述</strong>：本章介绍机械臂构型、结构与关节电机的设计考虑，再说明 CAD 装配信息如何对应 URDF 中的连杆、关节和坐标关系。最后在 SolidWorks 中建立参考几何体，完成模型导出与检查，为后续正逆运动学计算和仿真准备一致的模型。</p>
+</blockquote>
+<p>机械臂可用于搬运、装配、检测以及工具操作。不同应用对运动范围、末端姿态、负载和精度的要求不同，但设计时都需要解决两个基本问题：机械结构能否满足使用要求，以及如何把结构信息交给计算与控制程序。</p>
+<p>本章从这些共同问题出发，介绍设计方法，并以 JoyArm 的模型演示建模与导出流程。下图展示了模型查看界面：改变关节角，可以观察对应连杆及其后续部件的运动。</p>
+<p><img alt="机械臂模型的外观与关节控制界面" src="../images/chapt7_urdf/URDF_all.png" /></p>
+<p>完成本章实践后，应能够把装配体中的连接关系、关节轴线和物理属性整理为 URDF，检查模型运动，并理解这些数据如何用于后续计算。模型外观可见只是第一步，还需要核对坐标、方向和物理属性。</p>
+<p><strong>阅读说明：</strong> 第 1～3 节介绍构型、结构和电机选型；已有 CAD 装配体的读者，可以从第 4 节了解数据关系，再进入第 5 节操作。坐标系和相对位姿的基础见<a href="../chapt2_fkine/">第二章</a>。导出实践需要 SolidWorks、SW2URDF 插件和完整装配文件，不要求先连接实机。</p>
+<hr />
+<h2 id="1">1 构型设计</h2>
+<h3 id="11">1.1 应用需求与设计指标</h3>
+<p>构型设计首先需要明确末端的运动要求。例如，搬运需要覆盖取放区域，装配需要满足工具的接近方向，检测需要让传感器到达指定位置并保持合适朝向。这些是应用示例，并不限定机械臂只能执行其中某一项任务。</p>
+<p>工程设计中，可先把应用要求整理为能够检查的指标，再选择运动链和尺寸。下表给出了常见的对应关系。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">需求内容</th>
+<th style="text-align: center;">设计指标</th>
+<th style="text-align: center;">对方案的影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">末端需要覆盖哪些区域</td>
+<td style="text-align: center;">工作空间与臂展</td>
+<td style="text-align: center;">基座位置、连杆长度及轴线布局</td>
+</tr>
+<tr>
+<td style="text-align: center;">工具需要怎样接近目标</td>
+<td style="text-align: center;">位置与姿态要求</td>
+<td style="text-align: center;">自由度和关节排列</td>
+</tr>
+<tr>
+<td style="text-align: center;">工具及工件有多重，是否存在接触力</td>
+<td style="text-align: center;">负载、质心位置与外力</td>
+<td style="text-align: center;">关节转矩、支撑与结构强度</td>
+</tr>
+<tr>
+<td style="text-align: center;">动作需要多快完成</td>
+<td style="text-align: center;">速度、加速度与工作节拍</td>
+<td style="text-align: center;">电机选型与轨迹安排</td>
+</tr>
+<tr>
+<td style="text-align: center;">允许多大运动误差</td>
+<td style="text-align: center;">定位精度与重复定位精度</td>
+<td style="text-align: center;">结构刚度、传动间隙及标定</td>
+</tr>
+</tbody>
+</table>
+<p>同样的负载，离关节轴越远，可能产生越大的重力矩；同样的起终点，更短的动作时间可能需要更大的加速度。因此，不能只用一个负载数值或臂展数值决定整机方案。</p>
+<h3 id="12">1.2 自由度与运动链选择</h3>
+<p><a href="../chapt1_intro/">第一章</a>已经介绍机械臂的主要构型。本章聚焦串联旋转关节方案：关节与连杆依次连接，每个关节用 R 表示，六个、七个旋转关节组成的运动链分别记为 6R、7R。</p>
+<p>完整的空间位姿包含三个位置变量和三个姿态变量。在关节布局适当且非奇异的条件下，六个独立关节能够提供六维位姿控制所需的运动能力。增加到七个关节后，对六维末端任务便具有冗余自由度，可在维持末端位姿的同时调整部分臂身姿态。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">方案</th>
+<th style="text-align: center;">主要特点</th>
+<th style="text-align: center;">需要权衡的内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">6R</td>
+<td style="text-align: center;">以六个关节实现空间位姿控制</td>
+<td style="text-align: center;">受限于工作空间、限位和奇异位形，并非所有目标位姿都可达</td>
+</tr>
+<tr>
+<td style="text-align: center;">7R</td>
+<td style="text-align: center;">可利用冗余自由度调整臂身姿态</td>
+<td style="text-align: center;">增加质量、成本及求解和规划的复杂度</td>
+</tr>
+</tbody>
+</table>
+<p>选择 6R 还是 7R，需要结合障碍物、安装空间和姿态要求判断。额外关节可以增加调整余地，但不保证在所有场景中都能避障；还需要检查连杆之间及与环境的碰撞。</p>
+<p>关节数量确定运动变量的数量，轴线排列则决定这些变量怎样共同改变末端位姿，因此还要继续选择关节轴线布局。</p>
+<h3 id="13">1.3 关节轴线布局</h3>
+<p>比较串联机械臂时，除了外形，还应观察相邻转轴的方向。这里对比两种局部布局：<strong>相邻轴交替垂直</strong>与<strong>连续三轴平行</strong>。下图只表示三个关节的轴向关系，不表示完整机械臂，也不表示它们的市场占比。</p>
+<p><img alt="相邻轴交替垂直与连续三轴平行的局部轴线关系" src="../images/chapt7_urdf/axis_layout_comparison.png" /></p>
+<p>相邻轴交替垂直时，各关节可以提供不同方向的转动，连杆连接处也需要适应这些方向变化。连续三轴平行时，固定其上游关节后，这一段运动可按平面转动关系理解，更容易直观分析连杆的伸展与折叠；轴向偏置仍需纳入实际几何模型。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">布局</th>
+<th style="text-align: center;">运动特点</th>
+<th style="text-align: center;">结构设计中的关注点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">相邻轴交替垂直</td>
+<td style="text-align: center;">依次引入不同方向的转动</td>
+<td style="text-align: center;">不同朝向模组的安装、连接件空间与运动干涉</td>
+</tr>
+<tr>
+<td style="text-align: center;">连续三轴平行</td>
+<td style="text-align: center;">这一段的转动轴方向一致，便于分析伸展与折叠</td>
+<td style="text-align: center;">轴间距离、沿轴偏置及折叠时的连杆间隙</td>
+</tr>
+</tbody>
+</table>
+<p>连续三轴平行构型已在 UR 系列机械臂中得到工程验证，可作为机械臂构型设计的可靠起点，但具体参数仍需根据实际需求确定。</p>
+<blockquote>
+<p>📌 <strong>术语区分</strong>：轴线“平行”描述的是关节轴的方向关系，机械臂仍然可以是串联结构。“末三轴相交”描述另一种轴线几何条件，不等同于相邻轴交替垂直。</p>
+</blockquote>
+<p>平行轴布局本身不意味着整机只能在平面内运动：基座及其余关节会改变这一段的空间位置和方向。但也不能仅凭布局判断工作空间一定更大、承载一定更强或没有奇异性。</p>
+<p>形成候选方案后，可先用简化连杆检查典型目标位姿、关节余量与碰撞。<a href="../chapt2_fkine/">第二章</a>的正运动学和工作空间、<a href="../chapt3_ikine/">第三章</a>的逆运动学以及<a href="../chapt4_jacobian/">第四章</a>的奇异性分析，都是验证构型的工具。确认运动范围后，再细化支撑、连接与装配结构。</p>
+<hr />
+<h2 id="2">2 结构设计</h2>
+<h3 id="21">2.1 载荷、强度与刚度</h3>
+<p>构型确定轴线和连杆之间的几何关系，结构设计则要使这些部件能够承载并保持所需精度。工具、工件和连杆自重，以及加减速和接触产生的载荷，会沿关节、连杆传递到基座。</p>
+<p><img alt="下游部件自重与末端载荷示意" src="../images/chapt7_urdf/joint_self_weight_torque.svg" /></p>
+<p><strong>强度</strong>反映结构抵抗破坏的能力，<strong>刚度</strong>反映结构抵抗变形的能力。即使材料没有损坏，连杆弯曲或连接处变形也可能使末端偏离目标位置，因此两者都需要检查。</p>
+<p>可以用一个简化例子理解刚度。将一根连杆视为等截面悬臂梁：一端固定，另一端承受横向集中力 <span class="arithmatex">\(F\)</span>，长度为 <span class="arithmatex">\(L\)</span>。</p>
+<p><img alt="悬臂梁的末端载荷、长度与挠度" src="../images/chapt7_urdf/cantilever_deflection.png" /></p>
+<p>在小变形、线弹性条件下，忽略梁自重和剪切变形，末端挠度大小为：</p>
+<div class="arithmatex">\[
+\delta=\frac{FL^3}{3EI}
+\]</div>
+<p>其中，<span class="arithmatex">\(E\)</span> 为材料的弹性模量，<span class="arithmatex">\(I\)</span> 为截面对弯曲轴的截面二次矩，<span class="arithmatex">\(EI\)</span> 表示抗弯刚度。<span class="arithmatex">\(I\)</span> 取决于截面形状和弯曲方向，不是动力学中的质量转动惯量。</p>
+<p>保持载荷、材料和截面不变，若长度从 <span class="arithmatex">\(L\)</span> 增加到 <span class="arithmatex">\(2L\)</span>，挠度变为原来的 <span class="arithmatex">\(2^3=8\)</span> 倍。这说明增加臂展时，必须同时检查受力变形，不能只确认几何上能够到达目标。</p>
+<p>这个例子用于说明影响趋势，不能直接代替整机计算。实际机械臂还存在关节柔性、连接间隙、分布载荷和不同姿态，需要按真实支撑与载荷条件检查。</p>
+<h3 id="22">2.2 连杆轻量化与关节支撑</h3>
+<p>提高刚度并不只有加厚零件一种方法。材料、截面形状和支撑位置都会改变受力变形；增加的质量又会成为上游关节的负担。因此，轻量化需要与强度、刚度一起考虑。</p>
+<p>例如，可以先确定连杆两端的安装区域与主要载荷传递路径，再考虑中间截面的形状或减重孔。改变结构后，应重新检查连接区、孔边和整体变形，不能仅以去掉多少材料评价设计效果。</p>
+<p><img alt="机械臂结构优化前后的变形对比" src="../images/chapt7_urdf/arm_deformation_before_after_optimization.jpg" /></p>
+<p>关节模组的固定端连接上一级结构，输出端连接下一级结构。电机提供驱动力矩，轴承与支撑结构则负责约束运动并传递径向力、轴向力和倾覆力矩。电机转矩满足要求，不等于关节支撑已经满足承载要求。</p>
+<p>设计中还可以比较关节附近布置驱动部件与远置驱动：前者连接直接，后者可能减少运动末端质量，但会增加传动机构和装配工作。具体方案要结合质量分布、空间、传动刚度和维护要求选择。</p>
+<h3 id="23">2.3 加工、装配与走线</h3>
+<p>结构设计还要满足制造与使用条件。零件在 CAD 中能够连接，并不保证加工方便、螺钉能够拧紧或电机可以独立更换。应在装配体阶段检查加工方式、安装顺序和工具操作空间。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">检查内容</th>
+<th style="text-align: center;">具体关注点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">加工</td>
+<td style="text-align: center;">材料与工艺是否匹配，安装面与轴孔精度是否能够实现</td>
+</tr>
+<tr>
+<td style="text-align: center;">装配与维护</td>
+<td style="text-align: center;">轴、轴承和模组的安装顺序，紧固工具与拆换空间</td>
+</tr>
+<tr>
+<td style="text-align: center;">运动干涉</td>
+<td style="text-align: center;">伸展、折叠和转腕时，连杆、紧固件和环境是否发生碰撞</td>
+</tr>
+<tr>
+<td style="text-align: center;">走线</td>
+<td style="text-align: center;">线缆弯曲余量、固定位置，以及夹挤、摩擦和缠绕风险</td>
+</tr>
+</tbody>
+</table>
+<p>线缆应随关节运动检查，不能只看零位下长度是否足够。对候选结构，可以先使用模组的外形和质量建立装配模型，再根据下一节的电机选型结果更新安装尺寸和质量分布。</p>
+<hr />
+<h2 id="3">3 关节电机选型</h2>
+<h3 id="31">3.1 关节执行器与主要参数</h3>
+<p>在初步构型和结构方案的基础上，还需要为关节选择执行器。对旋转关节而言，电机提供驱动力矩，使下一级连杆转动；编码器反馈位置，驱动器根据指令控制电机。关节模组常把这些部件与减速器集成在一起。</p>
+<p><img alt="关节模组与参数表示例" src="../images/chapt7_urdf/dm_4340.png" /></p>
+<p>看参数表时，先找到数据对应的是<strong>电机轴端还是关节输出端</strong>。连杆接在输出端，我们需要用输出端能够提供的转矩和速度，与任务需求比较。</p>
+<p>可以先围绕三个实际问题阅读参数：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">你想知道的问题</th>
+<th style="text-align: center;">先看哪些参数</th>
+<th style="text-align: center;">怎样理解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">能否一直托住物体？</td>
+<td style="text-align: center;">额定或允许连续转矩及其条件</td>
+<td style="text-align: center;">持续工作能力受转速、散热等条件影响</td>
+</tr>
+<tr>
+<td style="text-align: center;">启动时能否加速？</td>
+<td style="text-align: center;">峰值转矩及允许持续时间</td>
+<td style="text-align: center;">短时间能达到，不代表能够一直保持</td>
+</tr>
+<tr>
+<td style="text-align: center;">动作能否按时完成？</td>
+<td style="text-align: center;">输出转速、转矩—转速曲线</td>
+<td style="text-align: center;">要在需要的速度下，仍有足够转矩</td>
+</tr>
+</tbody>
+</table>
+<p>质量也必须一起看。腕部换上更重的电机，肩部不仅要搬工件，还要把这个新增重量一起抬起来。</p>
+<h3 id="32">3.2 减速比与输出特性</h3>
+<p>电机可能转得很快，但轴端转矩不足。减速器通过降低输出转速，获得更大的输出转矩。设减速比为 <span class="arithmatex">\(i\)</span>，电机轴端转速为 <span class="arithmatex">\(\omega_m\)</span>、转矩为 <span class="arithmatex">\(\tau_m\)</span>，传动效率为 <span class="arithmatex">\(\eta\)</span>，则初步估算为：</p>
+<div class="arithmatex">\[
+\omega_j=\frac{\omega_m}{i},\qquad
+\tau_j\approx\eta i\tau_m
+\]</div>
+<p>例如，假设电机转速为 1000 r/min、转矩为 1 N·m，使用减速比 10、效率 0.9 的减速器，输出约为 100 r/min、9 N·m。若在相同输入和效率假设下把减速比增至 20，输出约为 50 r/min、18 N·m。</p>
+<p>这样就能理解取舍：更大的减速比可能让关节更有力，同时也可能使动作达不到预定速度。实际选型还要满足减速器本身的承载与转速限制。</p>
+<blockquote>
+<p>📌 如果模组参数已经给出了输出端转矩，就直接使用该数值，不能再次乘减速比。</p>
+</blockquote>
+<h3 id="33">3.3 静态转矩与负载估算</h3>
+<p>先不考虑加速，让机械臂在某个姿态托住物体。对于图中的水平关节轴，工件重力产生的力矩大小为：</p>
+<div class="arithmatex">\[
+\tau_{\mathrm{load}}=mgd
+\]</div>
+<p>这里 <span class="arithmatex">\(m\)</span> 是工件质量，<span class="arithmatex">\(g\)</span> 取 <span class="arithmatex">\(9.81\ \mathrm{m/s^2}\)</span>，<span class="arithmatex">\(d\)</span> 是该姿态下重力对关节轴的有效力臂。它不一定等于连杆长度；在图示的平面情形中，可以从侧视图读出轴心到重力作用线的水平距离。</p>
+<p><img alt="同一负载在不同姿态下的重力力臂" src="../images/chapt7_urdf/joint_gravity_moment_arm.svg" /></p>
+<p>下面以搬运工件作为独立计算示例，不代表整机的预定任务。假设工件质量为 0.5 kg，对肩部关节的重力力臂为 0.40 m，则：</p>
+<div class="arithmatex">\[
+\tau_{\mathrm{load}}=0.5\times9.81\times0.40\approx1.96\ \mathrm{N\cdot m}
+\]</div>
+<p>但肩部电机还要支撑下游的连杆、关节模组和夹爪。把这些部件分别作为质量集中在质心的物体，计算各自的力矩，再按方向相加。下面假设各项重力矩方向相同：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">下游部件</th>
+<th style="text-align: center;">质量（kg）</th>
+<th style="text-align: center;">重力力臂（m）</th>
+<th style="text-align: center;">重力矩（N·m）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">连杆及关节模组</td>
+<td style="text-align: center;">1.20</td>
+<td style="text-align: center;">0.20</td>
+<td style="text-align: center;">约 2.354</td>
+</tr>
+<tr>
+<td style="text-align: center;">夹爪与转接件</td>
+<td style="text-align: center;">0.30</td>
+<td style="text-align: center;">0.35</td>
+<td style="text-align: center;">约 1.030</td>
+</tr>
+<tr>
+<td style="text-align: center;">工件</td>
+<td style="text-align: center;">0.50</td>
+<td style="text-align: center;">0.40</td>
+<td style="text-align: center;">约 1.962</td>
+</tr>
+<tr>
+<td style="text-align: center;">合计</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">约 5.346</td>
+</tr>
+</tbody>
+</table>
+<p>若本例取裕量系数 <span class="arithmatex">\(K=1.5\)</span>，需要的连续输出转矩初估为 <span class="arithmatex">\(1.5\times5.346\approx8.02\ \mathrm{N\cdot m}\)</span>。这可以用于筛选候选电机，不能据此认定整机已经满足任务。</p>
+<p>反过来，假设某候选关节在该工况下允许连续输出 12 N·m，其余条件不变，可估计这个姿态下的工件质量上限：</p>
+<div class="arithmatex">\[
+m_{\max}=\frac{\tau_{\mathrm{avail}}/K-\tau_{\mathrm{self}}}{gd}
+=\frac{12/1.5-3.384}{9.81\times0.40}\approx1.18\ \mathrm{kg}
+\]</div>
+<p>这些质量、力臂和裕量都是算例假设，1.18 kg 也只是该关节在指定姿态下的静态估算结果。若分子已经小于零，意味着连自身重量的裕量要求都不满足，应调整候选方案。</p>
+<blockquote>
+<p>💡 <strong>先猜再算</strong>：工件重量不变，力臂从 0.40 m 变成 0.20 m，它产生的重力矩减半。但其他部件的重力矩要根据各自位置重新计算，不能把总转矩直接减半。</p>
+</blockquote>
+<h3 id="34">3.4 电机选型与迭代校核</h3>
+<p>工程上可以先从腕部向基座逐级估算：腕部候选模组确定后，其质量成为肘部的下游载荷；肘部候选确定后，再把它计入肩部。每一级都应使用自己的关节轴和质心位置，不能把肩部的力臂复制给其他关节。</p>
+<p>尤其是绕竖直轴转动的基座关节，重力可能不产生绕该轴的驱动力矩，但启动和制动仍需要转矩。一般空间姿态下，需要计算各部件力矩在关节轴上的分量，不能全部套用同一个平面公式。</p>
+<p>初选完成后，把候选部件的质量、质心和惯量更新到模型中，根据应用要求安排轨迹，再通过动力学计算或仿真检查整个动作。</p>
+<pre class="mermaid"><code>flowchart TD
+    A[确定负载、起终点与动作时间] --&gt; B[初选连杆尺寸和关节模组]
+    B --&gt; C[从末端向基座估算各关节需求]
+    C --&gt; D[更新质量、质心和惯量]
+    D --&gt; E[对任务轨迹进行动态校核]
+    E --&gt; F{转矩、速度与结构是否满足要求}
+    F --&gt;|满足| G[记录方案并继续验证]
+    F --&gt;|不满足| H[调整电机、结构或动作时间]
+    H --&gt; C</code></pre>
+<p>检查时要看转矩峰值及持续时间、持续工作工况，以及转矩和转速是否同时落在允许范围内。不能只看带正负号的平均转矩，因为正负值可能抵消，却没有消除电机发热。</p>
+<p>若腕部电机增重 0.2 kg，在肩部的重力力臂为 0.4 m 时，仅新增静态重力矩就约为 <span class="arithmatex">\(0.2\times9.81\times0.4=0.785\ \mathrm{N\cdot m}\)</span>，还没有计入运动时的惯性影响。因此，更换电机后需要重新检查上游关节。</p>
+<p>本章完成静态初选并建立这条迭代思路，完整动力学计算见<a href="../chapt8_dyn/">第八章</a>。接下来需要把 CAD 中的轴线、质量等信息交给程序，这正是机器人描述文件的作用。</p>
+<hr />
+<h2 id="4-cad-urdf">4 CAD 与 URDF 模型描述</h2>
+<h3 id="41-urdf">4.1 URDF 的作用与信息来源</h3>
+<p>CAD 装配体告诉我们零件的形状、尺寸和配合关系。要计算末端工具的位姿，程序还需要知道：哪些部件一起运动，它们按什么顺序连接，每个关节在哪里、绕什么方向转。</p>
+<p><strong>URDF（Unified Robot Description Format，统一机器人描述格式）</strong>用 XML 把这些信息组织起来。它也可以引用外观与碰撞网格，记录质量和惯量。后续的运动学程序读取关节关系，显示工具读取外观，动力学程序读取物理属性。</p>
+<p>URDF 本身不会求解逆运动学，也不会自动生成控制器；它给这些程序提供共同的机器人模型。SolidWorks 导出插件的作用，是把装配体中已有的信息提取出来，减少手工输入。</p>
+<h3 id="42-link">4.2 连杆分组与 link 属性</h3>
+<p>一根前臂可能由两块侧板、几个连接件和许多螺钉组成。它们在 CAD 中是多个零件，但运动时彼此不发生相对运动，就可以视为同一个刚性部件组，在 URDF 中称为 <code>link</code>。</p>
+<p>判断分组时，可以暂时固定其他关节，只让一个关节转动。关节两侧发生相对运动的零件，应分到不同的 link；固定在同一侧、始终一起运动的零件归为一组。</p>
+<p><img alt="在导出界面中选择属于同一连杆的零件" src="../images/chapt7_urdf/urdf_motion_tree_all.png" /></p>
+<p>这也是为什么不能把整个电机装配体不加判断地分给一个 link：如果其中既有固定端又有随输出端旋转的零件，就需要按真实运动关系分组。</p>
+<p>一个 link 可以分别记录：外观 <code>visual</code>、碰撞几何 <code>collision</code> 和物理属性 <code>inertial</code>。外观用于显示；碰撞几何可以更简洁，以降低检测开销；物理属性包含质量、质心和惯性张量。</p>
+<h3 id="43">4.3 关节连接与运动树</h3>
+<p>两个 link 之间的连接称为 <code>joint</code>。关节类型决定子 link 相对父 link 可以怎样运动。SW2URDF 的 <code>Joint Type</code> 下拉菜单包含以下选项：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">选项</th>
+<th style="text-align: center;">含义与运动方式</th>
+<th style="text-align: center;">配置要点</th>
+<th style="text-align: center;">典型用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>Automatically Detect</code>（自动识别）</td>
+<td style="text-align: center;">由插件根据装配体中的配合关系推断关节类型；这是插件选项，不是 URDF 的关节类型。</td>
+<td style="text-align: center;">导出后检查实际生成的 <code>type</code>、运动轴与限位；本教程已明确各节点的运动方式，建议手动选择。</td>
+<td style="text-align: center;">辅助识别装配体中的关节</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>continuous</code>（连续旋转）</td>
+<td style="text-align: center;">绕一条固定轴旋转，角度没有上、下限，可连续转过多圈；具有 1 个旋转自由度。</td>
+<td style="text-align: center;">设置 <code>axis</code>，角度单位为弧度；不设置角度的 <code>lower</code>、<code>upper</code>，仍需设置速度与力矩限制。</td>
+<td style="text-align: center;">可连续旋转的车轮或转盘</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>revolute</code>（有限旋转）</td>
+<td style="text-align: center;">绕一条固定轴在规定角度范围内旋转；具有 1 个旋转自由度。</td>
+<td style="text-align: center;">设置 <code>axis</code> 和 <code>limit</code>，角度上、下限单位为弧度。</td>
+<td style="text-align: center;">本体 <code>joint1</code>～<code>joint6</code>、夹爪驱动关节 <code>joint_end1</code></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>prismatic</code>（直线移动）</td>
+<td style="text-align: center;">沿一条固定轴在规定行程内平移，不产生相对旋转；具有 1 个平移自由度。</td>
+<td style="text-align: center;">设置 <code>axis</code> 和 <code>limit</code>，位移上、下限单位为米。</td>
+<td style="text-align: center;">两侧手指关节 <code>joint_end_pris1</code>、<code>joint_end_pris2</code></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>fixed</code>（固定连接）</td>
+<td style="text-align: center;">父、子 link 的相对位置和方向保持不变；具有 0 个自由度。</td>
+<td style="text-align: center;">用 <code>origin</code> 设置固定变换，不需要运动轴或运动限位。</td>
+<td style="text-align: center;">夹爪安装关节 <code>joint_end</code>、两个工具参考系的固定关节</td>
+</tr>
+</tbody>
+</table>
+<p><code>continuous</code> 不表示“转动范围恰好为一圈”，而是没有角度上、下限。即使电机本身可以连续旋转，只要机构或线缆限制了实际转角，就应使用 <code>revolute</code> 并填写对应限位。<code>fixed</code> 表示两个 link 之间没有相对运动；父 link 运动时，子 link 仍会随它一起运动。</p>
+<div style="display: flex; align-items: center; gap: 16px;">
+  <img src="../images/chapt7_urdf/move.png" alt="关节类型" style="width: calc(50% - 8px); aspect-ratio: 4 / 3; object-fit: cover; object-position: center;" />
+  <img src="../images/chapt7_urdf/link_and_joint.jpeg" alt="连杆与关节的关系" style="width: calc(50% - 8px); aspect-ratio: 4 / 3; object-fit: cover; object-position: center;" />
+</div>
+
+<p>例如 <code>joint3</code> 连接 <code>link2</code> 与 <code>link3</code>：靠近基座的一侧是父连杆 <code>parent</code>，下一侧是子连杆 <code>child</code>。按这个关系继续连接，例如六轴本体可以形成以下运动链：</p>
+<div class="highlight"><pre><span></span><code>link_base
+└── joint1 → link1
+    └── joint2 → link2
+        └── joint3 → link3
+            └── joint4 → link4
+                └── joint5 → link5
+                    └── joint6 → link6
+</code></pre></div>
+<blockquote>
+<p>💡 只改变 <code>joint3</code>，你预计哪些部件会动？<code>link3</code> 以及它后面的腕部、工具会随之运动，<code>link_base</code>、<code>link1</code>、<code>link2</code> 应保持原位。这可以直接用来检查导出分组。</p>
+</blockquote>
+<h3 id="44">4.4 关节轴线与连杆坐标系</h3>
+<p>仅知道连接顺序还不够，程序还要知道关节的位置。先在 CAD 中找出真实旋转轴：选择与输出轴同轴的圆柱面、轴孔或已有装配轴线，创建一条参考轴。</p>
+<p>接着在零件上固定一把“三维尺子”，也就是连杆坐标系。它的原点决定从哪里量，坐标轴决定向哪个方向量。转轴给出一条直线，但不能单独决定沿这条线的原点位置，也不能决定 X 轴朝向，所以还需要装配基准和建系规则。</p>
+<p>本章沿用<a href="../chapt2_fkine/">第二章</a>的 MDH 建系约定，使坐标系能够与前文运动学对应。相邻轴平行时，需要选定公共法线；相交时可用交点定位；异面时利用最短公共法线定位。实际点击哪个参考面和参考点，在第 5 节说明。</p>
+<p><strong>URDF 本身不要求使用 MDH 坐标系。</strong> 本项目保持一致，是为了让 CAD 测量、URDF 和前文计算可以逐项核对。导出时不必重新推导 MDH 公式，但需要按照约定把原点和方向放对。</p>
+<p>建立坐标系之前，要先确定装配体的零位。这里的零位是“关节角记为零时的姿态”，不一定是机械臂完全伸直的姿态。编码器读数与这个约定可以存在偏置，但必须记录对应关系。</p>
+<h4 id="441">4.4.1 关节空间与电机空间的正方向</h4>
+<p>本教程在建系和导出时统一关节角与电机反馈角的正方向，使电机反馈角增大时，对应的关节角也增大，避免在控制程序中额外增加逐关节换向。零位偏置、单位和减速比换算仍需按实际接口处理，它们与正方向约定是不同的问题。</p>
+<p>定义电机正转轴向前，必须明确观察方向：按电机资料规定的观察端，确认输出端相对定子的逆时针转动对应反馈角增大，再用右手定则确定该正转轴向。不能以屏幕上的逆时针直接判断，也不能混用电机转子角与减速器输出角。</p>
+<p>对于连接 <code>link(i-1)</code> 与 <code>linki</code> 的 <code>jointi</code>，关节运动描述的是子连杆相对父连杆的转动。定子安装在哪一侧，决定它与电机相对转动的对应关系：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">定子安装位置</th>
+<th style="text-align: center;">子连杆相对父连杆的运动</th>
+<th style="text-align: center;">关节坐标系 Z 轴正向</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">上一个连杆 <code>link(i-1)</code></td>
+<td style="text-align: center;">输出端带动子连杆，相对运动与电机正转一致</td>
+<td style="text-align: center;">取电机正转轴向</td>
+</tr>
+<tr>
+<td style="text-align: center;">同序号连杆 <code>linki</code>，输出端连接父连杆</td>
+<td style="text-align: center;">子连杆随定子运动，相对运动与输出端相对定子的转动相反</td>
+<td style="text-align: center;">取电机正转轴向的反方向</td>
+</tr>
+</tbody>
+</table>
+<p>这里的反向来自父、子连杆的相对运动关系，并不要求把电机反馈值取负。将关节 Z 轴按上表设置，并使导出的旋转轴沿本地正 Z，即 <code>&lt;axis xyz="0 0 1" /&gt;</code>，就能在模型中表达电机角增大时的实际运动方向。</p>
+<h3 id="45">4.5 关节位置与轴向表示</h3>
+<p>以 <code>joint3</code> 为例，<code>link3</code> 原点沿父坐标系 <code>link2</code> 的 X 方向偏移 264 mm，即 0.264 m。</p>
+<p><img alt="从 link2 坐标系观察 joint3 的位置，距离为 264 mm" src="../images/chapt7_urdf/urdf_joint3_origin_axis.png" /></p>
+<p>对应的零位变换为：</p>
+<div class="highlight"><pre><span></span><code><span class="nt">&lt;origin</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0.264 0 0"</span><span class="w"> </span><span class="na">rpy=</span><span class="s">"3.141592653589793 0 -2.9226"</span><span class="w"> </span><span class="nt">/&gt;</span>
+</code></pre></div>
+<p><code>xyz</code> 是零位关节原点在<strong>父 link 坐标系</strong>中的位置，单位为 m。<code>rpy</code> 表示零位时的相对朝向，单位为 rad，由 CAD 坐标系之间的方向确定，不是运行时的关节角。</p>
+<p>本体关节的正方向已与本地正 Z 统一，因此使用：</p>
+<div class="highlight"><pre><span></span><code><span class="nt">&lt;axis</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0 0 1"</span><span class="w"> </span><span class="nt">/&gt;</span>
+</code></pre></div>
+<p><code>axis</code> 用<strong>关节坐标系</strong>表达运动轴。右手拇指指向正 Z，四指弯曲方向就是关节角增大的方向。</p>
+<p><img alt="沿本地正 Z 定义关节正转方向" src="../images/chapt7_urdf/joint_axis_positive_direction.png" /></p>
+<p>加入父子关系及限位后，关节配置为：</p>
+<div class="highlight"><pre><span></span><code><span class="nt">&lt;joint</span><span class="w"> </span><span class="na">name=</span><span class="s">"joint3"</span><span class="w"> </span><span class="na">type=</span><span class="s">"revolute"</span><span class="nt">&gt;</span>
+<span class="w">  </span><span class="nt">&lt;parent</span><span class="w"> </span><span class="na">link=</span><span class="s">"link2"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;child</span><span class="w"> </span><span class="na">link=</span><span class="s">"link3"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;origin</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0.264 0 0"</span><span class="w"> </span><span class="na">rpy=</span><span class="s">"3.141592653589793 0 -2.9226"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;axis</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0 0 1"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;limit</span><span class="w"> </span><span class="na">lower=</span><span class="s">"-3.14"</span><span class="w"> </span><span class="na">upper=</span><span class="s">"0"</span><span class="w"> </span><span class="na">effort=</span><span class="s">"27"</span><span class="w"> </span><span class="na">velocity=</span><span class="s">"5"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/joint&gt;</span>
+</code></pre></div>
+<p>运行时，程序先按 <code>origin</code> 确定零位关系，再施加绕 <code>axis</code> 的关节转动。<code>limit</code> 中的 <code>lower</code>、<code>upper</code> 表示角度范围，<code>effort</code> 和 <code>velocity</code> 分别表示力矩与速度限制，旋转关节的单位为 rad、N·m 和 rad/s。</p>
+<h3 id="46">4.6 工具参考系</h3>
+<p>使用工具时，需要明确实际作用的位置，例如夹爪的夹持中心或加工工具的作用点，因此需要定义 <strong>TCP（Tool Center Point，工具中心点）</strong>及其参考坐标系。只要该参考系相对末连杆固定，就可以通过固定关节连接，程序便能从基座一路计算到工具中心。</p>
+<p>但“叫作 <code>tcp</code>”不意味着这个 link 必须没有质量。要先看模型怎样分组：如果它只是参考系，可以是空 link；如果它同时承载实际工具的几何和惯性，就需要保留这些真实属性。任何工具质量都应被计入一次，不能遗漏或重复。</p>
+<p>同样，是否描述夹爪开合取决于任务：计算本体到固定工具参考点的位姿，与模拟手指运动和接触，所需关节关系不同。如果要模拟抓取过程，应保留相应活动部件，并确认仿真工具支持其约束。不能仅为方便导出就把实际需要的运动删掉。</p>
+<p>本章最终导出的模型将继续用于后续计算。用于正逆运动学时，首先要核对关节几何、限位及末端参考系；用于动力学仿真时，还要确认质量、质心、惯量和碰撞属性，并在仿真环境中配置驱动与接触等条件。</p>
+<h3 id="47">4.7 质量、质心与惯性张量</h3>
+<p>关节轴线和连杆尺寸告诉程序机械臂怎样运动，但要计算电机需要输出多大转矩，还需要知道各个 link 有多重、质量分布在哪里。第五节导出时填写的质量和惯性属性，就是为这类计算准备的数据。</p>
+<h4 id="471">4.7.1 质量与质心</h4>
+<p><strong>质量</strong>表示一个 link 所包含部件的总质量。这里的 link 可能由壳体、连接件、紧固件等多个零件组成，导出时需要按已经确定的零件分组汇总，单位为 kg。</p>
+<p><strong>质心</strong>表示质量分布的中心。在均匀重力场中，可以把整个 link 的重力等效为作用在质心上的力。第三节计算重力矩时使用的力臂，应根据质心到关节轴的几何关系确定，而不是默认取连杆长度的一半。</p>
+<p>例如，同样长、同样重的两根连杆，其中一根的重部件集中在远离关节的一端，它的质心就更靠外。在相同水平姿态下，这根连杆对关节产生的重力矩更大。因此，只有质量数值还不足以计算重力影响。</p>
+<p>连杆坐标系原点用于描述运动关系，质心用于描述质量分布，两者不必重合。改变连杆坐标系，只会改变质心的坐标表示，不会改变质心在实体中的位置。</p>
+<h4 id="472">4.7.2 转动惯量与惯性张量</h4>
+<p>质量相同的部件，转动起来也可能需要不同的力矩。把质量集中在转轴附近，通常比把相同质量分散到远处更容易加速转动。<strong>转动惯量</strong>描述质量分布对绕指定轴转动的影响，既与质量有关，也与质量到该轴的距离有关。</p>
+<p>对于空间刚体，需要描述绕不同方向转动的惯性及其耦合，因而使用一个 <span class="arithmatex">\(3\times3\)</span> 的对称矩阵，称为<strong>惯性张量</strong>：</p>
+<div class="arithmatex">\[
+\boldsymbol{I}=\begin{bmatrix}
+I_{xx} &amp; I_{xy} &amp; I_{xz}\\
+I_{xy} &amp; I_{yy} &amp; I_{yz}\\
+I_{xz} &amp; I_{yz} &amp; I_{zz}
+\end{bmatrix}
+\]</div>
+<p>三个对角项表示绕参考坐标轴的转动惯量；非对角项描述该坐标系下质量分布带来的耦合。矩阵对称，因此 URDF 只需保存六个独立数值，单位均为 <span class="arithmatex">\(\mathrm{kg\cdot m^2}\)</span>。这里的惯量与第二节悬臂梁公式中的截面二次矩不同，后者只描述截面几何。</p>
+<p>惯性张量必须同时说明<strong>计算中心和坐标轴方向</strong>。URDF 的惯性张量以质心为中心，并在 <code>inertial</code> 所定义的坐标轴下表达。旋转坐标轴后，即使实体不变，矩阵分量也可能改变；采用主惯性轴时非对角项为零，但一般连杆坐标轴未必是主惯性轴，不能为了简化而直接删除非对角项。</p>
+<h4 id="473-urdf">4.7.3 URDF 中的惯性属性</h4>
+<p>下面是一段独立示例，表示质量为 1 kg 的均匀长方体，三个边长沿惯性坐标轴分别为 0.20、0.10、0.10 m。假设质心位于 link 原点沿 X 方向 0.10 m 处，惯性坐标轴与 link 坐标轴平行：</p>
+<div class="highlight"><pre><span></span><code><span class="cm">&lt;!-- 放在对应 link 内；数值为示例，不是实际机械臂参数 --&gt;</span>
+<span class="nt">&lt;inertial&gt;</span>
+<span class="w">  </span><span class="nt">&lt;origin</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0.10 0 0"</span><span class="w"> </span><span class="na">rpy=</span><span class="s">"0 0 0"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;mass</span><span class="w"> </span><span class="na">value=</span><span class="s">"1.0"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;inertia</span><span class="w"> </span><span class="na">ixx=</span><span class="s">"0.001666667"</span><span class="w"> </span><span class="na">ixy=</span><span class="s">"0"</span><span class="w"> </span><span class="na">ixz=</span><span class="s">"0"</span>
+<span class="w">           </span><span class="na">iyy=</span><span class="s">"0.004166667"</span><span class="w"> </span><span class="na">iyz=</span><span class="s">"0"</span><span class="w"> </span><span class="na">izz=</span><span class="s">"0.004166667"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/inertial&gt;</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">字段</th>
+<th style="text-align: center;">含义</th>
+<th style="text-align: center;">CAD 中需要取得的信息</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>mass value</code></td>
+<td style="text-align: center;">link 总质量，单位 kg</td>
+<td style="text-align: center;">该零件组的质量</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>inertial/origin xyz</code></td>
+<td style="text-align: center;">质心在 link 坐标系中的位置，单位 m</td>
+<td style="text-align: center;">相对于所选连杆坐标系的质心坐标</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>inertial/origin rpy</code></td>
+<td style="text-align: center;">惯性坐标系相对 link 坐标系的朝向，单位 rad</td>
+<td style="text-align: center;">报告惯量时采用的坐标轴方向</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>inertia</code> 的六个分量</td>
+<td style="text-align: center;">以质心为中心、在惯性坐标系下表达的惯性张量</td>
+<td style="text-align: center;">同一计算中心、同一轴向下的惯量数据</td>
+</tr>
+</tbody>
+</table>
+<p>这里的 <code>origin</code> 位于 <code>inertial</code> 内，用于定位质心和惯性坐标系；第 4.5 节的 <code>joint/origin</code> 用于描述关节连接。两个标签名称相同，所属对象和用途不同。字段定义可对照 <a href="https://docs.ros.org/en/humble/Tutorials/URDF/Adding-Physical-and-Collision-Properties-to-a-URDF-Model.html">ROS 官方物理属性教程</a>。</p>
+<h4 id="474-cad">4.7.4 从 CAD 质量属性到导出参数</h4>
+<p>CAD 根据零件几何、材料密度或指定质量属性计算这些数据。因此，导出前先核对 link 的零件分组，再检查材料和质量设置。外购电机若只有外壳模型，不能把外壳包围的体积当作实心材料，也不能认为可视外形已经包含了内部部件的质量分布。</p>
+<p>查看质量属性时，要确认报告的是质心处的惯量，还是某个指定坐标系原点处的惯量，以及它使用哪组坐标轴。若计算中心不同，需要平行轴变换；若轴向不同，需要旋转变换。使用导出器时也要核对结果，手工补录时尤其不能把不同参考条件下的数值直接拼在一起。某些 CAD 报告的惯性积符号约定也可能与张量非对角项不同，应按报告定义和导出器转换规则核实。</p>
+<p>还要检查单位：例如 <span class="arithmatex">\(1\ \mathrm{kg\cdot mm^2}=10^{-6}\ \mathrm{kg\cdot m^2}\)</span>。在前述 <code>link2</code> 坐标系方向调整后，应重新导出对应的质心坐标、惯性坐标系与张量分量，保持它们描述的是同一实体质量分布。</p>
+<p>第五节操作时，就可以按“零件分组 → 材料与质量 → 质心位置 → 惯量参考系与单位”的顺序检查。具体动力学方程及这些属性如何进入关节转矩计算，见<a href="../chapt8_dyn/">第八章</a>。</p>
+<hr />
+<h2 id="5-solidworks-joyarm-urdf">5 本章实践：使用 SolidWorks 导出并验收 JoyArm URDF</h2>
+<p>这一节把前面的对应关系落实到操作：先整理装配体，再建立轴、点和坐标系，最后将它们交给导出器。每完成一个阶段，就保存一次并检查结果。</p>
+<h3 id="51">5.1 准备文件与软件</h3>
+<h4 id="511">5.1.1 确认使用同一套模型资料</h4>
+<p>准备完整的机械臂与夹爪总装、子装配体和零件文件，保留相互引用的目录关系。打开总装后检查缺失引用和错误配合，重建并另存导出副本。确认夹爪固定本体、驱动齿轮、两侧手指及齿条齐全，旋转与导轨配合正确。</p>
+<p>下面的本体节点统一写作 <code>link_base</code>、<code>link1</code>～<code>link6</code>、<code>joint1</code>～<code>joint6</code>，末端使用 <code>link_end</code>、<code>link_end1</code>、<code>link_end_finger1/2</code>，工具参考系使用 <code>frame_end_tcp</code> 和 <code>frame_end_fingertip</code>。配置时保持节点名称一致。</p>
+<p>运行后续程序前，确认加载的模型路径、末端参考系名称和关节顺序与导出结果一致。</p>
+<h4 id="512">5.1.2 安装并启用导出插件</h4>
+<p>SW2URDF 用于将 SolidWorks 装配体转换为 URDF 模型。安装前，在<a href="https://github.com/ros/solidworks_urdf_exporter/releases">插件发布页</a>选择与 SolidWorks 版本兼容的安装包。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 获取插件</td>
+<td style="text-align: center;">在https://wiki.ros.org/sw_urdf_exporter  中找到下载入口，下载 <code>SW2URDFSetup.exe</code>。下载前应确认插件版本与所用 SolidWorks 版本兼容。</td>
+<td style="text-align: center;"><img alt="图片占位：从网站获取 SW2URDF 插件" src="../images/chapt7_urdf/sw_urdf_download_1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 本地安装</td>
+<td style="text-align: center;">关闭 SolidWorks，运行下载的安装程序，按照安装向导完成安装。</td>
+<td style="text-align: center;"><img alt="在本地安装 SW2URDF 插件" src="../images/chapt7_urdf/sw_urdf_download_2.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 在 SolidWorks 中激活</td>
+<td style="text-align: center;">重新打开 SolidWorks，依次进入“工具 → 插件（Add-Ins）”，找到 SolidWorks to URDF Exporter，并勾选“活动插件”。如需启动时自动加载，可同时勾选“启动”。</td>
+<td style="text-align: center;"><img alt="在 SolidWorks 中激活 SW2URDF 插件" src="../images/chapt7_urdf/sw_urdf_download_3.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>激活后打开一个装配体，确认“工具”菜单中出现 <code>Export as URDF</code> 命令。如果没有出现，应重新检查插件是否安装成功并已启用。</p>
+<h4 id="513">5.1.3 保存零位与分组依据</h4>
+<p>固定基座，将六个本体关节调整到约定零位。夹爪采用闭合零位：电机7角度和两侧手指位移均设为 0。保存该装配配置，后续创建参考几何体和导出时均使用这一姿态。</p>
+<p>按第 4.2 节的方法划分实体零件：夹爪固定本体归入 <code>link_end</code>，电机7转子及驱动齿轮归入 <code>link_end1</code>，两侧手指和对应齿条分别归入 <code>link_end_finger1/2</code>。检查每个实体只属于一个 link。</p>
+<p><img alt="夹爪实体零件分组" src="images/chapt7_urdf/assembly_gripper_link_groups.png" /></p>
+<p><strong>本阶段检查：</strong> 总装能够完整重建；零位可以恢复；每个实体部件只有一个归属。夹爪按第 5.5.2 节分为固定本体、旋转驱动部件和两侧平移手指，不全部并入 <code>link6</code>。</p>
+<h4 id="514">5.1.4 设置材料与等效密度</h4>
+<p>导出前需要为实体设置可信的材料和密度。铝合金等材料可以根据具体牌号查询密度，再在 SolidWorks 材料属性中选择或填写。电机、减速器和打印件的内部结构、填充率及材料组合较复杂，不能仅凭外形指定一种实体材料。对此可先称量实体质量，再结合 CAD 模型体积计算等效密度：</p>
+<div class="arithmatex">\[
+\rho_{\mathrm{eq}}=\frac{m_{\mathrm{measured}}}{V_{\mathrm{CAD}}}
+\]</div>
+<p>其中，<span class="arithmatex">\(m_{\mathrm{measured}}\)</span> 为实测质量，单位为 kg；<span class="arithmatex">\(V_{\mathrm{CAD}}\)</span> 为 CAD 实体体积，单位为 <span class="arithmatex">\(\mathrm{m^3}\)</span>；等效密度 <span class="arithmatex">\(\rho_{\mathrm{eq}}\)</span> 的单位为 <span class="arithmatex">\(\mathrm{kg/m^3}\)</span>。注意应使用“质量除以体积”，不能写成体积除以重量。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">操作说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 称量实体质量</td>
+<td style="text-align: center;">将需要设置等效密度的电机、减速器或打印件单独称重，记录质量及单位。称量组合件时，CAD 中也应使用同一组零件的总体积。</td>
+<td style="text-align: center;"><img alt="称量电机或打印件的实体质量" src="../images/chapt7_urdf/material_measure_mass.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 读取 CAD 体积</td>
+<td style="text-align: center;">在 SolidWorks 中打开对应零件或组合件，进入“评估 → 质量属性”，读取体积并换算为 <span class="arithmatex">\(\mathrm{m^3}\)</span>。</td>
+<td style="text-align: center;"><img alt="在 SolidWorks 质量属性中读取实体体积" src="../images/chapt7_urdf/material_read_cad_volume.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 计算并设置等效密度</td>
+<td style="text-align: center;">使用实测质量除以 CAD 体积，统一单位后得到等效密度。编辑材料，在材料属性中填写计算得到的密度，并将该材料应用到对应零件。不要只在质量属性窗口中覆盖质量，因为 SW2URDF 导出时不会使用该覆盖值。</td>
+<td style="text-align: center;"><img alt="在 SolidWorks 材料属性中设置等效密度" src="../images/chapt7_urdf/material_set_equivalent_density.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">4. 核对质量属性</td>
+<td style="text-align: center;">重新打开“质量属性”，确认计算质量与实测质量一致，并检查单位和零件范围。</td>
+<td style="text-align: center;"><img alt="核对设置密度后的质量属性" src="../images/chapt7_urdf/material_verify_mass_properties.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>等效密度可以使导出的总质量与实物一致，但电机等部件的内部质量分布通常不是均匀的，因此由外形和等效密度计算出的质心与惯量仍是近似值。需要进行动力学计算时，应优先使用厂家提供的质心和惯量数据，或通过测量进一步校核。</p>
+<h3 id="52">5.2 找到并命名本体与夹爪的关节轴</h3>
+<h4 id="521">5.2.1 建立六个本体关节的基准轴</h4>
+<p>先以 <code>joint1</code> 为例创建基准轴，其余本体关节按相同步骤操作。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 找到转轴几何特征</td>
+<td style="text-align: center;">找到第一关节输出轴上与实际转轴同轴的圆柱面或圆锥面。若被外壳遮挡，暂时隐藏遮挡零件。</td>
+<td style="text-align: center;"><img alt="找到关节转轴的几何特征" src="../images/chapt7_urdf/axis_prepare_assembly.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 打开基准轴工具</td>
+<td style="text-align: center;">在顶部“装配体”选项卡中，点击“参考几何体”的下拉菜单，选择“基准轴”。后续创建基准面、点和坐标系，也从“参考几何体”菜单进入。</td>
+<td style="text-align: center;"><img alt="在 SolidWorks 中打开基准轴工具" src="../images/chapt7_urdf/axis_create_reference_axis.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 选择参考面</td>
+<td style="text-align: center;">在基准轴属性面板中选择“圆柱/圆锥面”，再选中对应的圆柱面或圆锥面，确认预览轴与真实关节转轴同轴后完成创建。</td>
+<td style="text-align: center;"><img alt="选择圆柱面或圆锥面生成基准轴" src="../images/chapt7_urdf/axis_select_joint_cylindrical_face.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">4. 命名基准轴</td>
+<td style="text-align: center;">将第一条轴命名为 <code>axis_joint1</code>，再从基座向末端依次创建并命名 <code>axis_joint2</code>～<code>axis_joint6</code>。</td>
+<td style="text-align: center;"><img alt="显示并命名六个本体关节的基准轴" src="../images/chapt7_urdf/axis_name_all_joint_axes.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>选择参考面时，确认它与真实转轴同轴，不要选择偏离转轴的螺钉孔。完成后显示全部基准轴，检查各轴对应的关节。</p>
+<p><strong>最终效果：</strong></p>
+<p><img alt="六根参考轴建立后的效果" src="../images/chapt7_urdf/axis_all_joint_axes_result.png" /></p>
+<h4 id="522">5.2.2 建立夹爪旋转轴与两侧平移轴</h4>
+<p>夹爪需要电机7的一根旋转基准轴和两侧手指的两根平移基准轴，从“装配体 → 参考几何体 → 基准轴”进入。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 建立电机7旋转轴</td>
+<td style="text-align: center;">选择电机输出轴或驱动齿轮轴的同轴圆柱面，确认轴线穿过传动中心，命名为 <code>axis_joint_end1</code>。正方向沿 <code>link_end</code> 的正 X。</td>
+<td style="text-align: center;"><img alt="建立电机7旋转轴" src="../images/chapt7_urdf/axis_gripper_motor7.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 建立第一侧平移轴</td>
+<td style="text-align: center;">利用第一侧导轨中心线，或两相交基准面的交线创建轴，命名为 <code>axis_joint_end_pris1</code>。正方向沿 <code>link_end</code> 的正 Y。</td>
+<td style="text-align: center;"><img alt="建立第一侧平移轴" src="../images/chapt7_urdf/axis_gripper_pris1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 建立第二侧平移轴</td>
+<td style="text-align: center;">退出“孤立”后对另一侧重复操作，命名为 <code>axis_joint_end_pris2</code>。正方向沿 <code>link_end</code> 的负 Y。</td>
+<td style="text-align: center;"><img alt="建立第二侧平移轴" src="../images/chapt7_urdf/axis_gripper_pris2.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>两侧平移轴与各自导轨中心线重合，方向相反。关节配置时选择对应轴，并与第 5.5.2 节的同号 <code>mimic</code> 倍率配合。</p>
+<p><strong>本阶段检查：</strong> 六个本体关节和三个夹爪活动关节各有一根命名轴；旋转轴与真实转轴同轴，平移轴与导轨中心线重合。保存装配体。</p>
+<h3 id="53">5.3 确定坐标系原点</h3>
+<h4 id="531">5.3.1 建立三个定位基准面</h4>
+<p>进入“装配体 → 参考几何体 → 基准面”，依次建立以下三个基准面，用于本体原点和夹爪工具参考点的定位。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 建立 <code>基准面1</code></td>
+<td style="text-align: center;">第一参考选择 <code>axis_joint2</code>，设为“重合”；第二参考选择基座方向参考面，设为“平行”。确认平面包含该轴后创建并命名，用于定位 <code>origin_link1</code>。</td>
+<td style="text-align: center;"><img alt="建立基准面1" src="../images/chapt7_urdf/origin_create_reference_plane_1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 建立 <code>基准面2</code></td>
+<td style="text-align: center;">第一参考选择 <code>axis_joint6</code>，设为“重合”；第二参考选择基座方向参考面，设为“平行”。确认位置后创建并命名，用于定位 <code>origin_link5</code>。</td>
+<td style="text-align: center;"><img alt="建立基准面2" src="../images/chapt7_urdf/origin_create_reference_plane_2.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 建立 <code>基准面3</code></td>
+<td style="text-align: center;">第一参考选择夹爪的几何中点，设为“重合”；第二参考选择夹爪方向参考面，设为“平行”。确认位置后创建并命名，用于辅助定位夹持中心。</td>
+<td style="text-align: center;"><img alt="建立基准面3" src="../images/chapt7_urdf/origin_create_reference_plane_3.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>第一参考确定平面经过的位置，第二参考确定朝向。建立后显示三个基准面，检查名称、位置和约束，再继续创建原点。</p>
+<h4 id="532">5.3.2 建立基座与六个连杆原点</h4>
+<p>进入“装配体 → 参考几何体 → 点”，按下表选择几何参考，创建后立即命名。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">操作说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 确定基座原点</td>
+<td style="text-align: center;">装配体 → 参考几何体 → 点 → 选取基座底面安装面中心 → 圆弧中心 → 确定</td>
+<td style="text-align: center;"><img alt="确定基座原点" src="../images/chapt7_urdf/origin_link_base.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 确定 <code>origin_link1</code> 原点</td>
+<td style="text-align: center;">选择 <code>axis_joint1</code> 和 <code>基准面1</code> → 选择“交叉点” → 确定</td>
+<td style="text-align: center;"><img alt="确定 origin_link1 原点" src="../images/chapt7_urdf/origin_link_by_link1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 确定 <code>origin_link2</code> 原点</td>
+<td style="text-align: center;">选择 <code>axis_joint2</code> 和 <code>上视基准面</code> → 选择“交叉点” → 确定</td>
+<td style="text-align: center;"><img alt="确定 origin_link2 原点" src="../images/chapt7_urdf/origin_link_by_link2.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">4. 确定 <code>origin_link3</code> 原点</td>
+<td style="text-align: center;">选择 <code>axis_joint3</code> 和 <code>上视基准面</code> → 选择“交叉点” → 确定</td>
+<td style="text-align: center;"><img alt="确定 origin_link3 原点" src="../images/chapt7_urdf/origin_link_by_link3.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">5. 确定 <code>origin_link4</code> 原点</td>
+<td style="text-align: center;">选择 <code>axis_joint4</code> 和 <code>上视基准面</code> → 选择“交叉点” → 确定</td>
+<td style="text-align: center;"><img alt="确定 origin_link4 原点" src="../images/chapt7_urdf/origin_link_by_link4.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">6. 确定 <code>origin_link5</code> 原点</td>
+<td style="text-align: center;">选择 <code>axis_joint5</code> 和 <code>基准面2</code> → 选择“交叉点” → 确定</td>
+<td style="text-align: center;"><img alt="确定 origin_link5 原点" src="../images/chapt7_urdf/origin_link_by_link5.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">7. 确定 <code>origin_link6</code> 原点</td>
+<td style="text-align: center;">选择 <code>axis_joint5</code> 和 <code>axis_joint6</code> → 选择“交叉点” → 确定；按本章约定，该点与 <code>origin_link5</code> 重合</td>
+<td style="text-align: center;"><img alt="确定 origin_link6 原点" src="../images/chapt7_urdf/origin_link_by_link6.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>“上视基准面”是装配体的定位基准。完成本体原点后，继续建立夹爪原点和工具参考点，再统一检查全部原点。</p>
+<h4 id="533">5.3.3 建立夹爪各部件的原点</h4>
+<p>进入“参考几何体 → 点”，在夹爪闭合零位下建立参考点。参考被遮挡时可使用“孤立”；没有可选交点时，先建立辅助面。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 建立固定本体原点</td>
+<td style="text-align: center;">选择夹爪电机底部法兰盘的中心轴与底面的交点，命名为 <code>origin_link_end</code>。</td>
+<td style="text-align: center;"><img alt="建立固定本体原点" src="../images/chapt7_urdf/origin_link_end.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 建立传动中心原点</td>
+<td style="text-align: center;">定位齿轮齿条传动中心，即驱动齿轮旋转中心，确认点位于 <code>axis_joint_end1</code> 上，命名为 <code>origin_link_end1</code>。</td>
+<td style="text-align: center;"><img alt="建立传动中心原点" src="../images/chapt7_urdf/origin_link_end1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 建立第一侧手指原点</td>
+<td style="text-align: center;">选择第一侧夹持面与导轨中心线的交点，命名为 <code>origin_link_end_finger1</code>。该点随手指移动。</td>
+<td style="text-align: center;"><img alt="建立第一侧手指原点" src="../images/chapt7_urdf/origin_link_end_finger1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">4. 建立第二侧手指原点</td>
+<td style="text-align: center;">对另一侧重复操作，命名为 <code>origin_link_end_finger2</code>，检查两侧原点的对称关系。</td>
+<td style="text-align: center;"><img alt="建立第二侧手指原点" src="../images/chapt7_urdf/origin_link_end_finger2.png" /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="534">5.3.4 确定夹持中心与闭合指尖参考点</h4>
+<p>TCP 对应夹持物体时的约定中心。保持夹爪闭合零位，按有效夹持面与装配对称面定位。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 建立夹持中心点</td>
+<td style="text-align: center;">利用 <code>基准面3</code>、夹持面及对称基准定位夹持中心，进入“参考几何体 → 点”，命名为 <code>origin_frame_end_tcp</code>。</td>
+<td style="text-align: center;"><img alt="建立夹持中心点" src="../images/chapt7_urdf/origin_link_by_tcp.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 建立闭合指尖点</td>
+<td style="text-align: center;">在夹爪闭合时的指尖参考位置建立点，命名为 <code>origin_frame_end_fingertip</code>。</td>
+<td style="text-align: center;"><img alt="建立闭合指尖点" src="../images/chapt7_urdf/origin_frame_end_fingertip.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>两个工具参考系固定到 <code>link_end</code>，闭合指尖参考点不随当前手指开合移动。记录两点相对 <code>link_end</code> 的位置。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">操作说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">检查全部原点</td>
+<td style="text-align: center;">显示本体、夹爪和工具的全部参考点，对照建系约定检查名称、位置和几何来源。</td>
+<td style="text-align: center;"><img alt="检查全部原点" src="../images/chapt7_urdf/origin_all_frames.png" /></td>
+</tr>
+</tbody>
+</table>
+<p><strong>本阶段检查：</strong> 各原点有明确的几何来源，保存原点建立完成的配置。</p>
+<h3 id="54">5.4 建立连杆坐标系</h3>
+<h4 id="541">5.4.1 先把一个坐标系建立完整</h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 建立基座坐标系</td>
+<td style="text-align: center;">进入“参考几何体 → 坐标系”，原点选择 <code>origin_link_base</code>，Z 向上、X 沿基座前向，命名为 <code>link_base</code>。</td>
+<td style="text-align: center;"><img alt="建立基座坐标系" src="../images/chapt7_urdf/coordinate_link_base.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 建立 link3 坐标系</td>
+<td style="text-align: center;">原点选择 <code>origin_link3</code>，Z 选择 <code>axis_joint3</code>，X 使用从 <code>origin_link3</code> 指向 <code>origin_link4</code> 的公共法线参考，检查右手系并命名。</td>
+<td style="text-align: center;"><img alt="建立 link3 坐标系" src="../images/chapt7_urdf/coordinate_link3.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>使用已命名的关节轴与原点连线作为方向参考。若使用零件边作为参考，确认它与目标方向平行。</p>
+<h4 id="542">5.4.2 建立其余本体、夹爪与工具坐标系</h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">坐标系</th>
+<th style="text-align: center;">原点</th>
+<th style="text-align: center;">Z 轴线</th>
+<th style="text-align: center;">X 方向的确定依据</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>link1</code></td>
+<td style="text-align: center;"><code>origin_link1</code></td>
+<td style="text-align: center;"><code>axis_joint1</code></td>
+<td style="text-align: center;">第一、第二轴的公共法线，按前文约定选向</td>
+<td style="text-align: center;"><img alt="link1 坐标系" src="../images/chapt7_urdf/coordinate_link1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link2</code></td>
+<td style="text-align: center;"><code>origin_link2</code></td>
+<td style="text-align: center;"><code>axis_joint2</code>；电机2定子安装在子连杆 <code>link2</code>，输出端连接父连杆 <code>link1</code>，因此正 Z 与电机输出轴的正转轴向相反</td>
+<td style="text-align: center;">第二轴指向第三轴的公共法线</td>
+<td style="text-align: center;"><img alt="link2 坐标系" src="../images/chapt7_urdf/coordinate_link2.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link3</code></td>
+<td style="text-align: center;"><code>origin_link3</code></td>
+<td style="text-align: center;"><code>axis_joint3</code></td>
+<td style="text-align: center;">第三轴指向第四轴的公共法线</td>
+<td style="text-align: center;"><img alt="link3 坐标系" src="../images/chapt7_urdf/coordinate_link3.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link4</code></td>
+<td style="text-align: center;"><code>origin_link4</code></td>
+<td style="text-align: center;"><code>axis_joint4</code></td>
+<td style="text-align: center;">第四、第五轴的公共法线</td>
+<td style="text-align: center;"><img alt="link4 坐标系" src="../images/chapt7_urdf/coordinate_link4.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link5</code></td>
+<td style="text-align: center;"><code>origin_link5</code></td>
+<td style="text-align: center;"><code>axis_joint5</code></td>
+<td style="text-align: center;">第五、第六轴所成平面的法向，正向沿用第二章约定</td>
+<td style="text-align: center;"><img alt="link5 坐标系" src="../images/chapt7_urdf/coordinate_link5.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link6</code></td>
+<td style="text-align: center;">与 <code>origin_link5</code> 重合</td>
+<td style="text-align: center;"><code>axis_joint6</code></td>
+<td style="text-align: center;">零位时沿 <code>link5</code> 的正 X</td>
+<td style="text-align: center;"><img alt="link6 坐标系" src="../images/chapt7_urdf/coordinate_link6.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>相交轴的法向有两个相反方向，选择时按约定的正向设置。末连杆的方向按安装基准确定。</p>
+<p><strong>Z 轴正方向的确定：</strong> 先按电机资料确定输出轴的正转方向（反馈角增大的方向），右手四指沿正转方向弯曲，拇指所指为输出轴的正转轴向。再按定子的安装位置设置本体关节的正 Z：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">电机定子安装位置</th>
+<th style="text-align: center;">Z 轴正方向</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">父连杆，输出端连接子连杆</td>
+<td style="text-align: center;">与电机输出轴的正转轴向相同</td>
+</tr>
+<tr>
+<td style="text-align: center;">子连杆，输出端连接父连杆</td>
+<td style="text-align: center;">与电机输出轴的正转轴向相反</td>
+</tr>
+</tbody>
+</table>
+<p>在 SolidWorks 中选择对应关节轴，按上表检查 Z 轴箭头，必要时点击“反转方向”。这样本体关节正方向与电机反馈角增大的方向一致，六个关节均使用 <code>axis="0 0 1"</code>。注意，输出轴的正转轴向由转动方向确定，不一定是轴伸出电机的一侧。</p>
+<p>夹爪各坐标系的正 Z 统一朝上，负 Z 朝下；电机7和手指的运动轴另按旋转轴及导轨方向设置。</p>
+<blockquote>
+<p>📌 <strong>方向约定</strong>：“朝前、朝上”以夹爪装配基准为依据，不随观察视角改变。所有坐标系采用右手系。<code>link6</code> 的 X 与 <code>link5</code> 的 X 对齐指零位建系关系；<code>joint6</code> 转动后，<code>link6</code> 随转子运动。夹爪驱动轴按实际电机轴向设置，不要求沿 <code>link_end1</code> 的 Z。</p>
+</blockquote>
+<p><strong>建立夹爪与工具参考系</strong></p>
+<p>从“参考几何体 → 坐标系”进入。零位时以下坐标系均采用 <code>link_end</code> 的方向：X 朝前，Z 朝上，Y 按右手系确定。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 建立固定本体坐标系</td>
+<td style="text-align: center;">原点选择 <code>origin_link_end</code>，用装配基准设置 X、Z 正向，命名为 <code>link_end</code>。</td>
+<td style="text-align: center;"><img alt="建立固定本体坐标系" src="../images/chapt7_urdf/coordinate_link_end.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 建立驱动齿轮坐标系</td>
+<td style="text-align: center;">原点选择 <code>origin_link_end1</code>，方向使用与 <code>link_end</code> 相同的参考，命名为 <code>link_end1</code>。运动轴另选电机7轴，沿本地 X。</td>
+<td style="text-align: center;"><img alt="建立驱动齿轮坐标系" src="../images/chapt7_urdf/coordinate_link_end1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 建立第一侧手指坐标系</td>
+<td style="text-align: center;">原点选择 <code>origin_link_end_finger1</code>，方向与 <code>link_end</code> 相同，命名为 <code>link_end_finger1</code>。</td>
+<td style="text-align: center;"><img alt="建立第一侧手指坐标系" src="../images/chapt7_urdf/coordinate_link_end_finger1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">4. 建立第二侧手指坐标系</td>
+<td style="text-align: center;">原点选择 <code>origin_link_end_finger2</code>，方向与 <code>link_end</code> 相同，命名为 <code>link_end_finger2</code>。</td>
+<td style="text-align: center;"><img alt="建立第二侧手指坐标系" src="../images/chapt7_urdf/coordinate_link_end_finger2.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">5. 建立夹持中心坐标系</td>
+<td style="text-align: center;">原点选择 <code>origin_frame_end_tcp</code>，方向与 <code>link_end</code> 相同，命名为 <code>frame_end_tcp</code>。</td>
+<td style="text-align: center;"><img alt="建立夹持中心坐标系" src="../images/chapt7_urdf/coordinate_frame_end_tcp.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">6. 建立闭合指尖坐标系</td>
+<td style="text-align: center;">原点选择 <code>origin_frame_end_fingertip</code>，方向与 <code>link_end</code> 相同，命名为 <code>frame_end_fingertip</code>。</td>
+<td style="text-align: center;"><img alt="建立闭合指尖坐标系" src="../images/chapt7_urdf/coordinate_frame_end_fingertip.png" /></td>
+</tr>
+</tbody>
+</table>
+<p>夹爪运动时，驱动齿轮坐标系旋转、两侧手指坐标系平移，两个工具参考系相对 <code>link_end</code> 保持固定。保存坐标系完成的配置。</p>
+<p>显示全部坐标系，逐一检查原点是否位于前一步创建的参考点。本体坐标系的 Z 轴与对应关节轴重合；夹爪坐标系按统一的前向和上向设置，运动轴另外选择对应基准轴。</p>
+<p><img alt="显示全部坐标系以检查原点、方向与命名" src="../images/chapt7_urdf/coordinate_all_frames.png" /></p>
+<p><strong>本阶段检查：</strong> 本体关节正 Z 与电机反馈角增大时的实际相对转动方向一致；夹爪驱动和导轨轴分别按实际运动方向设置。完成后保存“坐标系完成”的配置。</p>
+<h3 id="55-sw2urdf">5.5 在 SW2URDF 中配置运动树</h3>
+<h4 id="551">5.5.1 选择本体的零件组与参考几何体</h4>
+<p>打开 <code>Export as URDF</code>，从根连杆开始配置。根名称填写 <code>link_base</code>，参考坐标系选择 <code>link_base</code>，选择全部固定基座零件。</p>
+<p>对于 <code>link3</code>，在树中选择父节点 <code>link2</code> 并添加子节点，依次填写：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">界面项目</th>
+<th style="text-align: center;">填写或选择</th>
+<th style="text-align: center;">它在 URDF 中决定什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">Link Name</td>
+<td style="text-align: center;"><code>link3</code></td>
+<td style="text-align: center;">子 link 的名称</td>
+</tr>
+<tr>
+<td style="text-align: center;">Joint Name</td>
+<td style="text-align: center;"><code>joint3</code></td>
+<td style="text-align: center;">连接该 link 的关节名称</td>
+</tr>
+<tr>
+<td style="text-align: center;">Reference Coordinate System</td>
+<td style="text-align: center;"><code>link3</code></td>
+<td style="text-align: center;">该节点的参考坐标系，供计算相对变换</td>
+</tr>
+<tr>
+<td style="text-align: center;">Reference Axis</td>
+<td style="text-align: center;"><code>axis_joint3</code></td>
+<td style="text-align: center;">关节转轴及方向</td>
+</tr>
+<tr>
+<td style="text-align: center;">Joint Type</td>
+<td style="text-align: center;"><code>revolute</code></td>
+<td style="text-align: center;">有限范围的旋转关节</td>
+</tr>
+<tr>
+<td style="text-align: center;">零件选择区</td>
+<td style="text-align: center;">属于 <code>link3</code> 的全部实体</td>
+<td style="text-align: center;">网格与物理属性的分组来源</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="在 SW2URDF 中配置 link3" src="../images/chapt7_urdf/urdf_motion_tree_link3.png" /></p>
+<p>其余本体节点使用相同方法，按下表核对父子关系：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">子 link</th>
+<th style="text-align: center;">父 link</th>
+<th style="text-align: center;">Joint Name</th>
+<th style="text-align: center;">坐标系</th>
+<th style="text-align: center;">参考轴</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>link1</code></td>
+<td style="text-align: center;"><code>link_base</code></td>
+<td style="text-align: center;"><code>joint1</code></td>
+<td style="text-align: center;"><code>link1</code></td>
+<td style="text-align: center;"><code>axis_joint1</code></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link2</code></td>
+<td style="text-align: center;"><code>link1</code></td>
+<td style="text-align: center;"><code>joint2</code></td>
+<td style="text-align: center;"><code>link2</code></td>
+<td style="text-align: center;"><code>axis_joint2</code></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link3</code></td>
+<td style="text-align: center;"><code>link2</code></td>
+<td style="text-align: center;"><code>joint3</code></td>
+<td style="text-align: center;"><code>link3</code></td>
+<td style="text-align: center;"><code>axis_joint3</code></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link4</code></td>
+<td style="text-align: center;"><code>link3</code></td>
+<td style="text-align: center;"><code>joint4</code></td>
+<td style="text-align: center;"><code>link4</code></td>
+<td style="text-align: center;"><code>axis_joint4</code></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link5</code></td>
+<td style="text-align: center;"><code>link4</code></td>
+<td style="text-align: center;"><code>joint5</code></td>
+<td style="text-align: center;"><code>link5</code></td>
+<td style="text-align: center;"><code>axis_joint5</code></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>link6</code></td>
+<td style="text-align: center;"><code>link5</code></td>
+<td style="text-align: center;"><code>joint6</code></td>
+<td style="text-align: center;"><code>link6</code></td>
+<td style="text-align: center;"><code>axis_joint6</code></td>
+</tr>
+</tbody>
+</table>
+<p>逐个点选节点，检查高亮零件是否符合原先的分组。若某个壳体被选到两个 link，后续可能显示重叠，也可能重复计算质量，应在这里修正。</p>
+<p><img alt="SW2URDF 中的完整运动树配置示例" src="../images/chapt7_urdf/urdf_motion_tree_all.png" /></p>
+<h4 id="552">5.5.2 接入末端夹爪与工具参考系</h4>
+<p>本体配置到 <code>link6</code> 后，继续建立夹爪分支。<code>link6</code> 只包含电机6的转子及其法兰盘；通过 <code>joint_end</code> 将夹爪固定本体 <code>link_end</code> 接到 <code>link6</code>。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1. 添加夹爪固定本体</td>
+<td style="text-align: center;">选择父节点 <code>link6</code>，添加 <code>link_end</code>；Joint Name 为 <code>joint_end</code>，类型为 <code>fixed</code>，参考坐标系为 <code>link_end</code>，选择电机7定子、连接件及其余非活动部件。</td>
+<td style="text-align: center;"><img alt="添加夹爪固定本体" src="../images/chapt7_urdf/urdf_config_link_end.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">2. 添加电机7驱动节点</td>
+<td style="text-align: center;">选择父节点 <code>link_end</code>，添加 <code>link_end1</code>；关节为 <code>joint_end1</code>、类型为 <code>revolute</code>，选择同名坐标系及 <code>axis_joint_end1</code>，分配转子与齿轮。</td>
+<td style="text-align: center;"><img alt="添加电机7驱动节点" src="../images/chapt7_urdf/urdf_config_link_end1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">3. 添加第一侧手指</td>
+<td style="text-align: center;">在 <code>link_end</code> 下添加 <code>link_end_finger1</code>；关节为 <code>joint_end_pris1</code>、类型为 <code>prismatic</code>，选择同名坐标系及 <code>axis_joint_end_pris1</code>，分配手指与齿条。</td>
+<td style="text-align: center;"><img alt="添加第一侧手指" src="../images/chapt7_urdf/urdf_config_finger1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">4. 添加第二侧手指</td>
+<td style="text-align: center;">在 <code>link_end</code> 下添加 <code>link_end_finger2</code>；关节为 <code>joint_end_pris2</code>、类型为 <code>prismatic</code>，选择同名坐标系及 <code>axis_joint_end_pris2</code>，分配另一侧手指与齿条。</td>
+<td style="text-align: center;"><img alt="添加第二侧手指" src="../images/chapt7_urdf/urdf_config_finger2.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">5. 添加夹持中心参考系</td>
+<td style="text-align: center;">插件中跳过该空参考节点；导出后按第 5.6 节“导出后补充工具参考系”手动添加。</td>
+<td style="text-align: center;"><img alt="在导出的 URDF 中添加夹持中心参考系" src="images/chapt7_urdf/urdf_config_frame_end_tcp.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">6. 添加闭合指尖参考系</td>
+<td style="text-align: center;">插件中跳过该空参考节点；导出后按第 5.6 节“导出后补充工具参考系”手动添加。</td>
+<td style="text-align: center;"><img alt="在导出的 URDF 中添加闭合指尖参考系" src="images/chapt7_urdf/urdf_config_frame_end_fingertip.png" /></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>link6
+└── joint_end (fixed) → link_end
+    ├── joint_end1 (revolute，电机7) → link_end1
+    ├── joint_end_pris1 (prismatic，mimic joint_end1) → link_end_finger1
+    ├── joint_end_pris2 (prismatic，mimic joint_end1) → link_end_finger2
+    ├── joint_frame_end_tcp (fixed) → frame_end_tcp
+    └── joint_frame_end_fingertip (fixed) → frame_end_fingertip
+</code></pre></div>
+<p>两侧手指通过 <code>mimic</code> 关联电机7，导出的标签为：</p>
+<div class="highlight"><pre><span></span><code><span class="nt">&lt;mimic</span><span class="w"> </span><span class="na">joint=</span><span class="s">"joint_end1"</span><span class="w"> </span><span class="na">multiplier=</span><span class="s">"0.00842"</span><span class="w"> </span><span class="na">offset=</span><span class="s">"0"</span><span class="w"> </span><span class="nt">/&gt;</span>
+</code></pre></div>
+<p>手指位移满足 <span class="arithmatex">\(q_{finger}=0.00842q_{end1}\)</span>，倍率单位为 m/rad。两侧倍率同号、轴向相反，实现对称开合。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">说明</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">设置两侧手指的 mimic</td>
+<td style="text-align: center;">在关节属性界面中依次配置两侧平移关节：勾选“Mimic Other Joint”，关联 <code>joint_end1</code>，设置倍率 <code>0.00842</code> 和偏置 <code>0</code>。</td>
+<td style="text-align: center;"><img alt="在 SW2URDF 关节属性界面设置手指 mimic" src="images/chapt7_urdf/urdf_gripper_mimic_settings.png" /></td>
+</tr>
+</tbody>
+</table>
+<p><strong>本阶段检查：</strong> 六轴本体连续连接；夹爪分支的父子关系、运动轴和 <code>mimic</code> 配置正确；两个工具参考节点留待导出后手动添加。保存导出配置。</p>
+<h3 id="56">5.6 检查参数并导出</h3>
+<p>点击 <code>Preview and Export</code>，按“关节参数 → 连杆质量属性 → 导出”的顺序检查。</p>
+<p><strong>1. 检查轴向与运动限制</strong></p>
+<p>逐个选择本体关节，检查关节类型、参考坐标系及 <code>Axis</code>。本教程本体各关节的本地 Z 轴与转轴对齐，因此轴向应为 <code>(0, 0, 1)</code>，即 x、y、z 分别为 <code>0</code>、<code>0</code>、<code>1</code>。若不一致，应返回检查所选基准轴及坐标系方向。</p>
+<p>在同一界面的 <code>Limit</code> 区域检查 <code>lower</code>、<code>upper</code>（位置下限与上限）、<code>effort</code>（力/力矩限制）和 <code>velocity</code>（速度限制）。图中数值仅作为界面示例，实际限制按对应关节与硬件填写。</p>
+<p><img alt="检查本体关节的轴向、位置限位、力矩与速度限制" src="../images/chapt7_urdf/axis001.png" /></p>
+<p>旋转关节使用 rad、rad/s、N·m，平移关节使用 m、m/s、N；CAD 长度由 mm 换算为 m 时除以 1000，角度换算为：</p>
+<div class="arithmatex">\[
+\theta_{\mathrm{rad}}=\theta_{\mathrm{deg}}\frac{\pi}{180}
+\]</div>
+<p>以下参数读取自配套模型 <code>joyarm_code/joyarm_core/robot_model/joyarm_dm/urdf/joyarm_dm.urdf</code>，检查时按对应关节逐项核对：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">关节</th>
+<th style="text-align: center;">类型</th>
+<th style="text-align: center;">位置范围（lower～upper）</th>
+<th style="text-align: center;">速度上限（velocity）</th>
+<th style="text-align: center;">力／力矩上限（effort）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>joint1</code></td>
+<td style="text-align: center;"><code>revolute</code></td>
+<td style="text-align: center;">-2.8～2.8 rad</td>
+<td style="text-align: center;">5 rad/s</td>
+<td style="text-align: center;">27 N·m</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>joint2</code></td>
+<td style="text-align: center;"><code>revolute</code></td>
+<td style="text-align: center;">-3.14～0 rad</td>
+<td style="text-align: center;">5 rad/s</td>
+<td style="text-align: center;">27 N·m</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>joint3</code></td>
+<td style="text-align: center;"><code>revolute</code></td>
+<td style="text-align: center;">-3.14～0 rad</td>
+<td style="text-align: center;">5 rad/s</td>
+<td style="text-align: center;">27 N·m</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>joint4</code></td>
+<td style="text-align: center;"><code>revolute</code></td>
+<td style="text-align: center;">-1.57～1.57 rad</td>
+<td style="text-align: center;">20 rad/s</td>
+<td style="text-align: center;">7 N·m</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>joint5</code></td>
+<td style="text-align: center;"><code>revolute</code></td>
+<td style="text-align: center;">-1.57～1.57 rad</td>
+<td style="text-align: center;">20 rad/s</td>
+<td style="text-align: center;">7 N·m</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>joint6</code></td>
+<td style="text-align: center;"><code>revolute</code></td>
+<td style="text-align: center;">-3.14～3.14 rad</td>
+<td style="text-align: center;">20 rad/s</td>
+<td style="text-align: center;">7 N·m</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>joint_end1</code></td>
+<td style="text-align: center;"><code>revolute</code></td>
+<td style="text-align: center;">-5.49～0 rad</td>
+<td style="text-align: center;">20 rad/s</td>
+<td style="text-align: center;">7 N·m</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>joint_end_pris1</code></td>
+<td style="text-align: center;"><code>prismatic</code></td>
+<td style="text-align: center;">-0.04625～0 m</td>
+<td style="text-align: center;">0.08 m/s</td>
+<td style="text-align: center;">7 N</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>joint_end_pris2</code></td>
+<td style="text-align: center;"><code>prismatic</code></td>
+<td style="text-align: center;">-0.04625～0 m</td>
+<td style="text-align: center;">0.08 m/s</td>
+<td style="text-align: center;">7 N</td>
+</tr>
+</tbody>
+</table>
+<p><code>joint_end</code>、<code>joint_frame_end_tcp</code> 和 <code>joint_frame_end_fingertip</code> 为固定关节，不设置运动限位。</p>
+<p>夹爪关节按各自方向检查：<code>joint_end1</code> 为 <code>revolute</code>，本地轴沿 X，角度范围为 <code>-5.49</code>～<code>0</code> rad；两侧手指为 <code>prismatic</code>，位移范围均为 <code>-0.04625</code>～<code>0</code> m，本地轴分别沿正 Y、负 Y。另确认夹爪安装关节 <code>joint_end</code> 为 <code>fixed</code>，父节点为 <code>link6</code>、子节点为 <code>link_end</code>，零位变换正确。</p>
+<p><strong>2. 检查两侧手指的 mimic 设置</strong></p>
+<p>依次选择 <code>joint_end_pris1</code> 和 <code>joint_end_pris2</code>，勾选 <code>Mimic Other Joint</code>，将 <code>Joint to Mimic</code> 设为 <code>joint_end1</code>，<code>Multiplier</code> 设为 <code>0.00842</code>，<code>Offset</code> 设为 <code>0</code>。两侧倍率同号、轴向相反，实现对称开合。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">关节</th>
+<th style="text-align: center;">操作图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">第一侧手指 <code>joint_end_pris1</code></td>
+<td style="text-align: center;"><img alt="第一侧手指的轴向、限位与 mimic 设置" src="../images/chapt7_urdf/pris1.png" /></td>
+</tr>
+<tr>
+<td style="text-align: center;">第二侧手指 <code>joint_end_pris2</code></td>
+<td style="text-align: center;"><img alt="第二侧手指的轴向、限位与 mimic 设置" src="../images/chapt7_urdf/pris2.png" /></td>
+</tr>
+</tbody>
+</table>
+<p><code>mimic</code> 只定义位置关联，两侧关节的限位、速度与力限制仍需分别设置。</p>
+<p><strong>3. 检查质量属性并导出</strong></p>
+<p>点击 <code>Next</code> 进入连杆属性界面，逐个选择 link，将 <code>Mass (kg)</code> 与第 4.7 节的质量评估结果对照。若不一致，先检查该 link 是否多选、漏选或重复分配零件，再检查材料与密度设置。同时核对质心、惯量及碰撞几何，确认外购模组使用可信的质量属性。</p>
+<p><img alt="核对各连杆的质量及其他物理属性" src="../images/chapt7_urdf/mass.png" /></p>
+<p>检查时区分 <code>link_end</code> 的固定本体、<code>link_end1</code> 的转子与齿轮，以及两侧手指与齿条，避免实体重复计入。两个空工具参考系不承载实体质量，留待导出后添加。</p>
+<p>确认参数后，点击 <code>Export URDF and Meshes</code>，选择导出目录，保存 URDF 与各实体网格。</p>
+<p>导出目录应包含 URDF 和对应网格，例如：</p>
+<div class="highlight"><pre><span></span><code>JoyArm_dm_v1_1_mdh_description/
+├── urdf/
+│   └── JoyArm_dm_v1_1_mdh.urdf
+└── meshes/
+    ├── link_base.STL
+    ├── link1.STL
+    ├── ...
+    ├── link_end.STL
+    ├── link_end1.STL
+    ├── link_end_finger1.STL
+    └── link_end_finger2.STL
+</code></pre></div>
+<p>目录名和网格名称以实际导出结果为准；移动模型时保留 URDF 与网格的完整目录关系。</p>
+<p><strong>导出后补充工具参考系</strong></p>
+<p>两个空工具参考节点不在插件中配置。导出后，打开 URDF 文件，在末尾的 <code>&lt;/robot&gt;</code> 标签之前手动添加以下内容：</p>
+<div class="highlight"><pre><span></span><code><span class="cm">&lt;!-- ============================ frame_end_tcp =========================== --&gt;</span>
+<span class="nt">&lt;link</span><span class="w"> </span><span class="na">name=</span><span class="s">"frame_end_tcp"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;joint</span><span class="w"> </span><span class="na">name=</span><span class="s">"joint_frame_end_tcp"</span><span class="w"> </span><span class="na">type=</span><span class="s">"fixed"</span><span class="nt">&gt;</span>
+<span class="w">  </span><span class="nt">&lt;origin</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0.12510 0 0"</span><span class="w"> </span><span class="na">rpy=</span><span class="s">"0 0 0"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;parent</span><span class="w"> </span><span class="na">link=</span><span class="s">"link_end"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;child</span><span class="w"> </span><span class="na">link=</span><span class="s">"frame_end_tcp"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/joint&gt;</span>
+
+<span class="cm">&lt;!-- ======================= frame_end_fingertip =========================== --&gt;</span>
+<span class="nt">&lt;link</span><span class="w"> </span><span class="na">name=</span><span class="s">"frame_end_fingertip"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;joint</span><span class="w"> </span><span class="na">name=</span><span class="s">"joint_frame_end_fingertip"</span><span class="w"> </span><span class="na">type=</span><span class="s">"fixed"</span><span class="nt">&gt;</span>
+<span class="w">  </span><span class="nt">&lt;origin</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0.15071 0 -0.00001"</span><span class="w"> </span><span class="na">rpy=</span><span class="s">"0 0 0"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;parent</span><span class="w"> </span><span class="na">link=</span><span class="s">"link_end"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;child</span><span class="w"> </span><span class="na">link=</span><span class="s">"frame_end_fingertip"</span><span class="w"> </span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/joint&gt;</span>
+</code></pre></div>
+<p>上述 <code>xyz</code> 为本模型中相对 <code>link_end</code> 坐标系的位置，单位为米；<code>rpy="0 0 0"</code> 表示两个参考系的方向与 <code>link_end</code> 一致。空 link 不添加 <code>visual</code>、<code>collision</code> 或 <code>inertial</code>，固定关节不添加 <code>axis</code>。更换夹爪或调整参考点后，需重新测量并更新对应的 <code>xyz</code>。</p>
+<p><strong>补充后检查：</strong> 打开导出的 URDF，确认 <code>frame_end_tcp</code> 和 <code>frame_end_fingertip</code> 各定义一次，对应关节均为 <code>fixed</code>，父 link 均为 <code>link_end</code>；核对上述 <code>xyz</code> 和 <code>rpy</code> 后保存文件。重新导出模型后，需再次补充这两个参考系。随后按第 5.7 节加载模型，检查它们的位置与随动关系。</p>
+<h3 id="57">5.7 加载模型并检查</h3>
+<p>将导出的 URDF 与网格加载到 <a href="https://urdf.enkeebot.com/">URDF Studio</a> （将整个文件夹拖进页面即可加载）或本地模型查看器，检查以下内容：</p>
+<p><img alt="在 URDF Studio 中加载并查看机械臂模型" src="../images/chapt7_urdf/URDF_vis.png" /></p>
+<ul>
+<li><strong>外观与零位</strong>：零件完整，连杆、夹爪及工具参考系的位置与 CAD 一致。</li>
+<li><strong>关节运动</strong>：在限位内逐个改变关节，确认运动轴与方向正确，上游连杆不动，下游连杆随动。</li>
+<li><strong>夹爪开合</strong>：确认两侧手指按 <code>mimic</code> 关系对称运动，行程正确；工具参考系随夹爪本体运动，不随手指开合移动。</li>
+<li><strong>正运动学</strong>：统一基座与末端参考系、关节顺序及零位，用相同关节角对照<a href="../chapt2_fkine/">第二章</a>的计算结果。</li>
+</ul>
+<p>发现异常时，返回检查零件分组、父子关系、坐标系、轴向及参数设置；若查看器不执行 <code>mimic</code>，应换用支持该关系的工具。检查完成后，保存 CAD、导出配置、URDF 与网格，供后续章节使用。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.expand"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/image-viewer.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
