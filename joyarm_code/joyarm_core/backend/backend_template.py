@@ -16,7 +16,7 @@
   子类只做单关节/单总线的协议操作——**不要在子类重复基类已做的检查与裁剪**；
 - 失败约定：抽象方法失败上抛异常或返回 ``False``/``None`` 即可，基类统一转限频 warn。
 
-最小可用子集（29 个抽象方法须全部**定义**以满足抽象方法强制；未实现的能力**保留本模板的``NotImplementedError``**）：
+最小可用子集（29 个抽象方法须全部**定义**以满足抽象方法强制；未实现的能力**保留本模板的 ``NotImplementedError``**）：
 - 必实现 14 个：``_connect/_disconnect_arm/end`` / ``_enable/_disable_joint_arm/end`` / ``_read_joint_state_arm/end`` / ``_read/_set_joint_mode_arm/end``
     ——任何电机/舵机型号的可用底线（协议无模式回读时 ``_read_joint_mode_*`` 须用本地镜像，恒返 ``None`` 会使 ``get_mode_*`` 核实永远失败）；
 - 按需实现 15 个：``_read/_write_joint_param_arm/end``（协议支持寄存器读写才需要）、``_set_joint_zero_arm/end``、
@@ -25,7 +25,7 @@
 
 联调自检清单（实现完成后逐项核对，每项对应一条基类保障）：
 1. 空 cfg ``{}`` 即可构造成功（基类 ``__init__`` 对缺段/缺键全部容错，构造不做任何总线 I/O）；
-2. ``connect_*`` 成功后 ``is_connected_*`` 为 ``True``；无 MIT 的型号在 yaml 配 ``default_mode: position``后连接无 warn；
+2. ``connect_*`` 成功后 ``is_connected_*`` 为 ``True``；无 MIT 的型号在 yaml 配 ``default_mode: position`` 后连接无 warn；
 3. ``get_state_*`` 返回 ``JointState``：硬件提供的字段为 ``(n,)`` 数组、硬件不提供的字段为 ``None``，``t`` 为本次读取时刻（每次成功调用都更新）；
 4. ``set_mode_*`` 成功后 ``mode_*`` 即为所设模式（乐观更新缓存，发送门禁立即放行）；``get_mode_*`` 能读回同一模式（读回以硬件真值纠正缓存）；
 5. 发送越限指令被基类就近裁剪并限频 warn（内核收到的入参必在硬限位内，子类无需自检）；
@@ -59,9 +59,13 @@ class BackendTemplate(Backend):
     ── 两类硬件的典型差异（总览，具体实施因型号而异）──
     - 总线/收发：应答式关节电机用「接收线程 + 发送锁 + 请求-应答 Event 同步」；半双工轮询舵机总线锁包住「发帧 + 等应答」整个事务；
     - 模式：关节电机通常有模式寄存器、可回读；舵机通常无模式概念 → ``_read_joint_mode_*`` 返回本地镜像，yaml 配 ``default_mode: position``；
-    - 发送面：关节电机类通常 MIT / 位置 / 速度三模式全支持；舵机通常仅位置模式，其余保留 ``NotImplementedError``桩 = 基类转 warn 优雅降级；
+    - 发送面：关节电机类通常 MIT / 位置 / 速度三模式全支持；舵机按硬件能力实现（通常位置模式，部分型号有速度/力矩模式可映射 VELOCITY/MIT），
+      未实现的模式保留 ``NotImplementedError`` 桩 = 基类转 warn 优雅降级；
     - 状态：关节电机类反馈帧含 q/dq/tau/error（协议帧不含温度则 ``temp_*`` 缺键）；舵机类轮询读位置/负载/温度，硬件没有的量直接缺键；
     - 参数：关节电机类通常为寄存器 RID 表读写；舵机通常为 RAM 表读写，键名由子类定义。
+
+    混合硬件属常态：同一子类可 arm 用关节电机 + end 用舵机——两族 ``channel`` 不同即各开各的独立总线，相同时才共享一条。
+    无 end 的型号：yaml ``end:`` 段留空（关节数 0）即可，end 系列方法仍须定义（保留桩）以满足抽象方法强制。
     """
 
     def __init__(self, cfg: dict) -> None:
@@ -142,7 +146,7 @@ class BackendTemplate(Backend):
         - 全双工协议按 ``self._joint_feedback_id_end[i]`` 分发应答帧；半双工舵机只开句柄 + 一把总线锁；
         - 返回 ``True`` 后基类**立即**自动设默认模式并静置 ``write_settle``——返回 ``True`` 时总线必须已可收发指令帧。
 
-        :param channel: 总线通道
+        :param channel: 总线通道。
         :param protocol: 协议标识。
         :return: 连接成功 ``True``；失败返回 ``False`` 或直接上抛异常。
         """
@@ -154,7 +158,7 @@ class BackendTemplate(Backend):
         实现要点：
         - 电机失能已由基类在调用本方法前完成（先失能再断连），本方法不用处理电机；
         - 需要关闭的典型资源：接收线程（置停止标志 → join（带超时）→ 关句柄）、串口/CAN 句柄（取锁/关闭同样带超时，防与卡住的总线读互等）；
-        - **共享总线的关断要谨慎**：断开 arm 时若 end 仍连接着同一条总线（``is_connected_end``不为 ``False``），只解除 arm 的关联、保留总线本体，待最后一组断开时才真正关闭；
+        - **共享总线的关断要谨慎**：断开 arm 时若 end 仍连接着同一条总线（``is_connected_end`` 不为 ``False``），只解除 arm 的关联、保留总线本体，待最后一组断开时才真正关闭；
         - 重复调用应安全（幂等）。
 
         :raises Exception: 断开失败上抛，基类转 warn（``is_connected_arm`` 停留 ``None``）。
@@ -167,7 +171,7 @@ class BackendTemplate(Backend):
         实现要点：
         - 电机失能已由基类在调用本方法前完成（先失能再断连），本方法不用处理电机；
         - 需要关闭的典型资源：接收线程（置停止标志 → join（带超时）→ 关句柄）、串口/CAN 句柄（取锁/关闭同样带超时，防与卡住的总线读互等）；
-        - **共享总线的关断要谨慎**：断开 end 时若 arm 仍连接着同一条总线（``is_connected_arm``不为 ``False``），只解除 end 的关联、保留总线本体，待最后一组断开时才真正关闭；
+        - **共享总线的关断要谨慎**：断开 end 时若 arm 仍连接着同一条总线（``is_connected_arm`` 不为 ``False``），只解除 end 的关联、保留总线本体，待最后一组断开时才真正关闭；
         - 重复调用应安全（幂等）。
 
         :raises Exception: 断开失败上抛，基类转 warn（``is_connected_end`` 停留 ``None``）。
@@ -226,7 +230,7 @@ class BackendTemplate(Backend):
         """读 arm 第 ``i`` 个关节的电机参数寄存器，返回参数值。
 
         实现要点：
-        - ``key`` 为参数名，映射到厂商寄存器由子类定义——建议维护模块级常量表``_PARAM_RIDS_arm: dict[str, int]``（参数名 → 寄存器 RID，如 ``"pos_kp"`` → 27）；若 arm 与 end 共用同一套寄存器表，统一为 ``_PARAM_RIDS``；
+        - ``key`` 为参数名，映射到厂商寄存器由子类定义——建议维护模块级常量表 ``_PARAM_RIDS_arm: dict[str, int]``（参数名 → 寄存器 RID，如 ``"pos_kp"`` → 27）；若 arm 与 end 共用同一套寄存器表，统一为 ``_PARAM_RIDS``；
           配套 ``_READONLY_KEYS``（只读参数集）与 ``_UINT_RIDS``（uint32 寄存器集，其余按 float32 解析）两个模块级常量，读写两侧共用（舵机类对应 RAM 表，组织方式相同）；
         - 寄存器值分整型（uint32）与浮点（float32）两类，按厂商手册解析；float32 读回与写入值必有低位差异，读回核对（含容差比较）由上层 JoyArm 负责，子类无需处理；
         - 请求-应答式协议建议发读帧后按 RID 等应答（Event 同步），失败/超时上抛；超时约 0.1s、重试 2~3 次为宜——本方法会被低频刷新线程间接调用，过长重试会拖慢刷新周期；
@@ -243,7 +247,7 @@ class BackendTemplate(Backend):
         """读 end 第 ``i`` 个电机的参数寄存器，返回参数值。
 
         实现要点：
-        - ``key`` 为参数名，映射到厂商寄存器由子类定义——建议维护模块级常量表``_PARAM_RIDS_end: dict[str, int]``（参数名 → 寄存器 RID，如 ``"pos_kp"`` → 27）；若 arm 与 end 共用同一套寄存器表，统一为 ``_PARAM_RIDS``；
+        - ``key`` 为参数名，映射到厂商寄存器由子类定义——建议维护模块级常量表 ``_PARAM_RIDS_end: dict[str, int]``（参数名 → 寄存器 RID，如 ``"pos_kp"`` → 27）；若 arm 与 end 共用同一套寄存器表，统一为 ``_PARAM_RIDS``；
           配套 ``_READONLY_KEYS``（只读参数集）与 ``_UINT_RIDS``（uint32 寄存器集，其余按 float32 解析）两个模块级常量，读写两侧共用（舵机类对应 RAM 表，组织方式相同）；
         - 寄存器值分整型（uint32）与浮点（float32）两类，按厂商手册解析；float32 读回与写入值必有低位差异，读回核对（含容差比较）由上层 JoyArm 负责，子类无需处理；
         - 请求-应答式协议建议发读帧后按 RID 等应答（Event 同步），失败/超时上抛；超时约 0.1s、重试 2~3 次为宜——本方法会被低频刷新线程间接调用，过长重试会拖慢刷新周期；
@@ -292,12 +296,12 @@ class BackendTemplate(Backend):
         """读 arm 第 ``i`` 个关节电机当前状态，返回可用量字典。
 
         实现要点：
-        - 返回硬件的 dict，基类按硬件能力从 ``q/dq/tau`` / ``temp_mos/rotor`` /``error`` 中选取；
+        - 返回硬件的 dict，基类按硬件能力从 ``q/dq/tau`` / ``temp_mos/temp_rotor`` / ``error`` 中选取（``rad / rad/s / N·m`` / ``℃ / ℃`` / ``状态码``）；
         - **缺键 = 该量硬件/协议不提供**（合法）；**键存在但值为 ``None`` = 可读但数据获取异常**；
         - ``error`` 必须归一化为全库约定：``0``=失能、``1``=使能（均正常）、``≥2``=故障码；厂商原始码由本方法负责映射；
         - 若协议有状态流（接收线程持续更新缓存），本方法可直接返回缓存值（不发总线帧），前提是缓存由接收线程维护且能判断新鲜度——**缓存过期须按数据异常处理**（键值置 ``None`` 或上抛，不得原样返回陈旧值：基类 ``t`` 为装配时刻）；
         - 半双工舵机（轮询式）在总线锁内发读帧等应答、解析后返回（每次调用产生总线流量）；
-        - 单温度传感器硬件把温度映射到 ``temp_rotor``，``temp_mos``键缺省即可。
+        - 单温度传感器硬件把温度映射到 ``temp_rotor``，``temp_mos`` 键缺省即可。
 
         :param i: arm 关节下标（``0 ≤ i < self._n_joints_arm``）。
         :return: 该关节当前可用量的字典（每值均为**标量**）。
@@ -309,12 +313,12 @@ class BackendTemplate(Backend):
         """读 end 第 ``i`` 个电机当前状态，返回可用量字典。
 
         实现要点：
-        - 返回硬件的 dict，基类按硬件能力从 ``q/dq/tau`` / ``temp_mos/rotor`` /``error`` 中选取；
+        - 返回硬件的 dict，基类按硬件能力从 ``q/dq/tau`` / ``temp_mos/temp_rotor`` / ``error`` 中选取；
         - **缺键 = 该量硬件/协议不提供**（合法）；**键存在但值为 ``None`` = 可读但数据获取异常**；
         - ``error`` 必须归一化为全库约定：``0``=失能、``1``=使能（均正常）、``≥2``=故障码；厂商原始码由本方法负责映射；
         - 若协议有状态流（接收线程持续更新缓存），本方法可直接返回缓存值（不发总线帧），前提是缓存由接收线程维护且能判断新鲜度——**缓存过期须按数据异常处理**（键值置 ``None`` 或上抛，不得原样返回陈旧值：基类 ``t`` 为装配时刻）；
         - 半双工舵机（轮询式）在总线锁内发读帧等应答、解析后返回（每次调用产生总线流量）；
-        - 单温度传感器硬件把温度映射到 ``temp_rotor``，``temp_mos``键缺省即可。
+        - 单温度传感器硬件把温度映射到 ``temp_rotor``，``temp_mos`` 键缺省即可。
 
         :param i: end 电机下标（``0 ≤ i < self._n_joints_end``）。
         :return: 该电机当前可用量的字典（每值均为**标量**）。
@@ -360,9 +364,9 @@ class BackendTemplate(Backend):
         - 写模式寄存器（寄存器位置 ↔ 控制模式码 ↔ MIT/POSITION/VELOCITY）；
         - 若模式存储于电机内部寄存器，本方法通常会调用 _write_joint_param_arm 方法；
         - **切到 POSITION / VELOCITY 时须一并写入 cfg ``POS_VEL`` 的电机内部增益寄存器**（``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``），
-          取值直接用基类成员``self._pos_kp_arm[i]`` / ``self._pos_ki_arm[i]`` / ``self._vel_kp_arm[i]`` / ``self._vel_ki_arm[i]``
-          （已自 cfg 逐关节解析为 ``(n,)``，缺配置为 NaN，此刻不更改增益寄存器——写前按需判断）；**切到 MIT 不用写增益**；
-        - 舵机通常无模式寄存器：按需实现 POSITION / VELOCITY 分支 和 MIT 分支（常为力矩或电流模式）；
+          取值直接用基类成员 ``self._pos_kp_arm[i]`` / ``self._pos_ki_arm[i]`` / ``self._vel_kp_arm[i]`` / ``self._vel_ki_arm[i]``
+          （已自 cfg 逐关节解析为 ``(n,)``；缺配置为 NaN 的增益不写该寄存器、沿用电机内部值——写前按需判断）；**切到 MIT 不用写增益**；
+        - 舵机通常无模式寄存器：按需实现 POSITION / VELOCITY 分支和 MIT 分支（MIT 常映射为力矩/电流模式），实现的同时更新 ``_read_joint_mode_arm`` 用的本地镜像；
         - 基类写入成功后乐观更新模式缓存并返回（无静置无读回——经 ``get_mode_arm`` 读回纠正），失败上抛即可。
 
         :param i: arm 关节下标（``0 ≤ i < self._n_joints_arm``）。
@@ -378,9 +382,9 @@ class BackendTemplate(Backend):
         - 写模式寄存器（寄存器位置 ↔ 控制模式码 ↔ MIT/POSITION/VELOCITY）；
         - 若模式存储于电机内部寄存器，本方法通常会调用 _write_joint_param_end 方法；
         - **切到 POSITION / VELOCITY 时须一并写入 cfg ``POS_VEL`` 的电机内部增益寄存器**（``pos_kp``/``pos_ki``/``vel_kp``/``vel_ki``），
-          取值直接用基类成员``self._pos_kp_end[i]`` / ``self._pos_ki_end[i]`` / ``self._vel_kp_end[i]`` / ``self._vel_ki_end[i]``
-          （已自 cfg 逐关节解析为 ``(n,)``，缺配置为 NaN，此刻不更改增益寄存器——写前按需判断）；**切到 MIT 不用写增益**；
-        - 舵机通常无模式寄存器：按需实现 POSITION / VELOCITY 分支 和 MIT 分支（常为力矩或电流模式）；
+          取值直接用基类成员 ``self._pos_kp_end[i]`` / ``self._pos_ki_end[i]`` / ``self._vel_kp_end[i]`` / ``self._vel_ki_end[i]``
+          （已自 cfg 逐关节解析为 ``(n,)``；缺配置为 NaN 的增益不写该寄存器、沿用电机内部值——写前按需判断）；**切到 MIT 不用写增益**；
+        - 舵机通常无模式寄存器：按需实现 POSITION / VELOCITY 分支和 MIT 分支（MIT 常映射为力矩/电流模式），实现的同时更新 ``_read_joint_mode_end`` 用的本地镜像；
         - 基类写入成功后乐观更新模式缓存并返回（无静置无读回——经 ``get_mode_end`` 读回纠正），失败上抛即可。
 
         :param i: end 电机下标（``0 ≤ i < self._n_joints_end``）。
