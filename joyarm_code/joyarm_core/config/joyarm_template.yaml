@@ -75,7 +75,7 @@ backend:
   state_refresh_hz: 10.0 # 低频状态刷新频率（Hz，默认 10）
   warn_interval: 0.5 # warn 同通道日志限频间隔（秒）
   info_interval: 0.5 # info 同通道日志限频间隔（秒）
-  write_settle: 0.1  # 写电机寄存器参数后的必要等待时间（秒）
+  write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
   arm: # arm 段
     channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
@@ -94,7 +94,7 @@ backend:
         MIT: # MIT 模式增益（MIT 指令未传 kp/kd 时使用）
           kp: 120.0
           kd: 8.0
-        POS_VEL: # 位置/速度两模式共用：闭环增益 + 限速 + 力矩电流上限
+        POS_VEL: # 位置/速度两模式共用：电机寄存器闭环增益+ 速度上限 + 力矩电流上限    
           pos_kp: 150.0 # 位置环 Kp
           pos_ki: 0.5 # 位置环 Ki
           vel_kp: 0.0125 # 速度环 Kp（两模式共用）

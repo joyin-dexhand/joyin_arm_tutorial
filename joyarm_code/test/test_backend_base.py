@@ -1,7 +1,7 @@
 """Backend 基类测试：上层公开调用 + 单 joint 内核调用面（Dummy 全内核模拟）。
 
 覆盖：cfg 预解析（限位/发送默认/POS_VEL 增益/baud/运行参数鲁棒回退）、三值状态标志、族内同步读取、
-写入无静置读回（验证上移 JoyArm）、set_mode 写入即返（无读回、不更新模式缓存，门禁经 get_mode 读回放行）、
+写入无静置读回（验证上移 JoyArm）、set_mode 写入即返 + 乐观更新模式缓存（门禁立即放行，一致性经 get_mode 读回纠正）、
 三模式发送流水线（维度/一维性→空值/裁剪→连接/模式门禁→逐 joint 内核）、
 状态数据异常拦截（空值/非有限值/非标量）、错误码获取/检查/清错（读快照不发帧、无失能门禁）、set_zero 无失能门禁、
 空族跳过、低频保活线程（mode 已知不重读）、断连编排、刷新 0.8 阈值与 abled 推导、定时器销毁双路径
@@ -18,6 +18,9 @@ test_52 为第十一轮审查新增（状态子值非标量拦截，防装配出
 test_53 起为第十二轮审查新增（模式读非枚举拦截防缓存毒化 / 限位 NaN 回退与 q_min>q_max 启动 warn / cfg 段非字典容错）；
 test_59 起为第十四轮基类审阅新增（未连接门禁全覆盖 / 内核异常路径 / MIT 与末端位置裁剪对称 / 空族读写断连 /
 连接编排细节 / close 慢退出与单拍重试）；test_56 因与 test_50 场景重复已删除。
+test_69 为模板冒烟新增（BackendTemplate 空 cfg 可实例化 = 29 桩满足抽象方法强制；29 桩全量按约定格式抛
+NotImplementedError，桩消息前缀自动取 cfg name → ``_name``（空回退模板文件名）+ 基类内核集漂移守护；
+函数内导入模板，模板问题不拖垮整文件收集）。
 """
 import copy
 import gc
@@ -347,7 +350,7 @@ def test_06_connect(b):
     assert ("connect_arm", "/dev/ttyACM9", "serial_can") in b.calls
     b.connect_end()
     assert b.is_connected_end
-    # connect 自动设 MIT 默认模式（写入成功即返回，模式缓存经 get_mode 读回填充）
+    # connect 自动设 MIT 默认模式（乐观填模式缓存；get_mode 读回核实）
     assert b.get_mode_arm() == ControlMode.MIT
     assert b._joint_mode_arm == [ControlMode.MIT] * 6
     assert b.get_mode_end() == ControlMode.MIT
@@ -457,12 +460,12 @@ def test_11_write_param(b):
     del b.fail_at["write_joint_param_arm"]
 
 
-# ---- T10 set_mode（写入成功即返回：无读回、不更新模式缓存；门禁经 get_mode 读回放行） ----
+# ---- T10 set_mode（写入成功即返回 + 乐观更新模式缓存：门禁立即放行；读回核实经 get_mode） ----
 def test_12_set_mode(b):
     assert b.set_mode_arm(ControlMode.MIT) == 1
-    assert b.mode_arm == ControlMode.MIT and b._joint_mode_arm == [ControlMode.MIT] * 6  # 缓存为读回值，set_mode 未动
+    assert b.mode_arm == ControlMode.MIT and b._joint_mode_arm == [ControlMode.MIT] * 6  # set_mode 乐观更新为目标模式
     assert b.set_mode_arm(ControlMode.VELOCITY) == 1
-    assert b.mode_arm == ControlMode.MIT  # set_mode 成功也不更新缓存
+    assert b.mode_arm == ControlMode.VELOCITY  # set_mode 成功即乐观更新缓存
     assert b.get_mode_arm() == ControlMode.VELOCITY  # 读回硬件真值（内核已改写 dummy）
     assert b.mode_arm == ControlMode.VELOCITY
     b.fail_at["set_joint_mode_arm"] = {0}
@@ -915,7 +918,7 @@ def test_26_disconnect_clears_mode(b):
     assert b.is_connected_end is False
     assert b.mode_end is None and b._joint_mode_end == [None]
     b.connect_end()
-    assert b.get_mode_end() == ControlMode.MIT  # 读回填充（set_mode 不写缓存）
+    assert b.get_mode_end() == ControlMode.MIT  # 重连自动设默认模式并乐观填缓存，get_mode 核实
     assert b.mode_end == ControlMode.MIT
 
 
@@ -981,7 +984,7 @@ def test_33_end_set_mode_zero(e):
     e.fail_at["set_joint_mode_end"] = {0}
     assert e.set_mode_end(ControlMode.VELOCITY) == 0  # 内核失败 → 0
     del e.fail_at["set_joint_mode_end"]
-    assert e.set_mode_end(ControlMode.VELOCITY) == 1  # 写入成功即返回（缓存不更新）
+    assert e.set_mode_end(ControlMode.VELOCITY) == 1  # 写入成功即返回 + 乐观更新缓存
     assert e.get_mode_end() == ControlMode.VELOCITY and e.mode_end == ControlMode.VELOCITY
     e._is_abled_end = False  # 设零须失能（门禁放行）
     e.ret_false["set_joint_zero_end"] = {0}
@@ -1036,7 +1039,7 @@ def test_34_end_check_clear_error(e):
 
 def test_35_end_send_mit(e, cfg):
     end_j = cfg["end"]["joints"]
-    e.get_mode_end()  # 门禁需读回放行（connect 后缓存未填充）
+    e.get_mode_end()  # 连接已乐观填缓存，get_mode 再核实
     e.calls.clear()
     e.send_mit_end([1.0], [-1.0], [0.0])
     c = [x for x in e.calls if x[0] == "send_joint_mit_end"]
@@ -1059,7 +1062,7 @@ def test_35_end_send_mit(e, cfg):
 
 def test_36_end_send_vel(e):
     assert e.set_mode_end(ControlMode.VELOCITY) == 1
-    e.get_mode_end()  # 读回放行门禁（set_mode 不写缓存）
+    e.get_mode_end()  # set_mode 已乐观填缓存，get_mode 核实
     e._warn_last = {}
     cap.msgs.clear()
     e.calls.clear()
@@ -1190,7 +1193,7 @@ def test_45_state_nonfinite(cfg):
 def test_46_set_mode_type_gate(cfg):
     b6 = DummyBackend(cfg)
     try:
-        b6._refresh_stop.set()  # 先冻结刷新线程再连接：静置期 tick 会读模式填充缓存（mode_arm 将非 None，破坏下方断言）
+        b6._refresh_stop.set()  # 先冻结刷新线程再连接，避免后台读取干扰下方调用计数断言
         b6.connect_arm()
         cap.msgs.clear()
         b6._warn_last = {}
@@ -1198,7 +1201,7 @@ def test_46_set_mode_type_gate(cfg):
         assert b6.set_mode_arm("position") == 0
         assert len(warns("非 ControlMode 枚举")) >= 1
         assert not any(c[0] == "set_joint_mode_arm" for c in b6.calls)
-        assert b6.mode_arm is None  # 缓存不动（connect 后未读回，仍为未读取）
+        assert b6.mode_arm == ControlMode.MIT  # 缓存不动（保持 connect 乐观值，类型拦截未触碰）
     finally:
         b6._refresh_stop.set()
 
@@ -1543,7 +1546,7 @@ def test_62_mit_clip_arm(cfg):
     try:
         r._refresh_stop.set()
         r.connect_arm()
-        assert r.get_mode_arm() == ControlMode.MIT  # 门禁读回放行
+        assert r.get_mode_arm() == ControlMode.MIT  # 连接已乐观填缓存，get_mode 核实
         r.calls.clear()
         cap.msgs.clear()
         r._warn_last = {}
@@ -1569,7 +1572,7 @@ def test_63_end_position_clip(cfg):
         r._refresh_stop.set()
         r.connect_end()
         r.set_mode_end(ControlMode.POSITION)
-        assert r.get_mode_end() == ControlMode.POSITION  # 门禁读回放行
+        assert r.get_mode_end() == ControlMode.POSITION  # set_mode 已乐观填缓存，get_mode 核实
         lim = r.joint_limits_end
         q_ok = float(lim.q_max[0]) - 0.1
         r.calls.clear()
@@ -1707,3 +1710,44 @@ def test_68_disconnect_despite_disable_failure(cfg):
         assert any(c[0] == "disconnect_arm" for c in r.calls)
     finally:
         r._refresh_stop.set()
+
+
+# ---- 模板冒烟：BackendTemplate 空 cfg 可实例化（29 桩满足抽象方法强制）、29 桩全量按约定格式上抛 ----
+def test_69_template_smoke():
+    from joyarm_core.backend.backend_template import BackendTemplate  # 函数内导入，模板问题不拖垮整文件收集
+
+    # 29 个抽象内核的示例入参（与 backend.py 抽象方法签名一一对应）
+    kernel_args = {
+        "_connect_arm": ("/dev/null", "demo"), "_connect_end": ("/dev/null", "demo"),
+        "_disconnect_arm": (), "_disconnect_end": (),
+        "_enable_joint_arm": (0,), "_enable_joint_end": (0,),
+        "_disable_joint_arm": (0,), "_disable_joint_end": (0,),
+        "_read_joint_param_arm": (0, "pos_kp"), "_read_joint_param_end": (0, "pos_kp"),
+        "_read_joint_mode_arm": (0,), "_read_joint_mode_end": (0,),
+        "_read_joint_state_arm": (0,), "_read_joint_state_end": (0,),
+        "_write_joint_param_arm": (0, "pos_kp", 1.0), "_write_joint_param_end": (0, "pos_kp", 1.0),
+        "_set_joint_mode_arm": (0, ControlMode.MIT), "_set_joint_mode_end": (0, ControlMode.MIT),
+        "_set_joint_zero_arm": (0,), "_set_joint_zero_end": (0,),
+        "_send_joint_mit_arm": (0, 0.0, 0.0, 0.0, 0.0, 0.0), "_send_joint_mit_end": (0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        "_send_joint_position_arm": (0, 0.0, 0.0, 0.0), "_send_joint_position_end": (0, 0.0, 0.0, 0.0),
+        "_send_joint_vel_arm": (0, 0.0), "_send_joint_vel_end": (0, 0.0),
+        "_send_action_end": ("open",),
+        "_clear_joint_error_arm": (0,), "_clear_joint_error_end": (0,),
+    }
+    assert set(kernel_args) == Backend.__abstractmethods__  # 基类增删/改名内核即红，提醒同步模板与本表
+    t = BackendTemplate({})
+    try:
+        assert t.n_joints_arm == 0 and t.n_joints_end == 0  # 空 cfg 容错构造，不做任何总线 I/O
+        assert t.is_connected_arm is None and t.is_abled_end is None
+        for name, args in kernel_args.items():  # 29 桩全量：『文件名 - 方法：』格式上抛 NotImplementedError
+            with pytest.raises(NotImplementedError, match=rf"backend_<型号>\.py - {name}"):
+                getattr(t, name)(*args)
+    finally:
+        t._refresh_stop.set()
+    t2 = BackendTemplate({"name": "backend_demo"})  # 带注册名构造：桩消息前缀自动切换为 _name
+    try:
+        assert t2.name == "backend_demo"
+        with pytest.raises(NotImplementedError, match=r"backend_demo - _connect_arm"):
+            t2._connect_arm("/dev/null", "demo")
+    finally:
+        t2._refresh_stop.set()

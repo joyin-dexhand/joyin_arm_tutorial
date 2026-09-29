@@ -39,7 +39,7 @@ logger.setLevel(logging.INFO)  # 教学库：放行 INFO，成功信息默认可
 # 四个可选运行参数的默认值（cfg ``backend:`` 段顶层同名键可覆盖，缺省或非正数沿用默认并 warn）
 _WARN_INTERVAL_DEFAULT = 0.5   # warn_interval（秒）：warn 日志限频间隔（按通道独立计时）
 _INFO_INTERVAL_DEFAULT = 0.5   # info_interval（秒）：info 日志限频间隔（按通道独立计时）
-_WRITE_SETTLE_DEFAULT = 0.1    # write_settle（秒）：写电机寄存器参数后的必要等待时间
+_WRITE_SETTLE_DEFAULT = 0.1    # write_settle（秒）：指令帧生效等待（连接后默认模式帧 / 断连前失能帧等）
 _REFRESH_HZ_DEFAULT = 10.0     # state_refresh_hz（Hz）：低频状态刷新频率
 
 
@@ -95,19 +95,19 @@ class Backend(ABC):
         self._is_connected_end: Optional[bool] = None         # end 连接状态（True 已连接 / False 未连接 / None 未知）
         self._is_abled_arm: Optional[bool] = None             # arm 使能状态（True 已使能 / False 已失能 / None 未知）
         self._is_abled_end: Optional[bool] = None             # end 使能状态（True 已使能 / False 已失能 / None 未知）
-        self._mode_arm: Optional[ControlMode] = None          # arm 全组一致的控制模式（get_mode 读齐且一致时更新，None=未读取）
-        self._mode_end: Optional[ControlMode] = None          # end 全组一致的控制模式（get_mode 读齐且一致时更新，None=未读取）
+        self._mode_arm: Optional[ControlMode] = None          # arm 全组一致的控制模式（get_mode 读齐且一致时更新 / set_mode 成功时乐观更新，None=未读取）
+        self._mode_end: Optional[ControlMode] = None          # end 全组一致的控制模式（get_mode 读齐且一致时更新 / set_mode 成功时乐观更新，None=未读取）
         self._default_mode_arm: ControlMode = ControlMode.MIT # arm 连接后自动设置的控制模式（cfg arm.default_mode，缺省 MIT）
         self._default_mode_end: ControlMode = ControlMode.MIT # end 连接后自动设置的控制模式（cfg end.default_mode，缺省 MIT）
-        self._joint_mode_arm: list = []                       # arm 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值）
-        self._joint_mode_end: list = []                       # end 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值）
+        self._joint_mode_arm: list = []                       # arm 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值 / set_mode 成功后乐观赋值）
+        self._joint_mode_end: list = []                       # end 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值 / set_mode 成功后乐观赋值）
         self._joint_state_arm = JointState()                  # arm 整组实时关节状态
         self._joint_state_end = JointState()                  # end 整组实时关节状态
         self._warn_last: dict[str, float] = {}                # 各 warn 通道上次限频输出的 monotonic 时刻（无锁）
         self._info_last: dict[str, float] = {}                # 各 info 通道上次限频输出的 monotonic 时刻（无锁）
         self._warn_interval = _WARN_INTERVAL_DEFAULT          # warn 日志限频间隔（秒；cfg warn_interval 可覆盖）
         self._info_interval = _INFO_INTERVAL_DEFAULT          # info 日志限频间隔（秒；cfg info_interval 可覆盖）
-        self._write_settle = _WRITE_SETTLE_DEFAULT            # 写电机寄存器后的必要静置等待（秒；cfg write_settle 可覆盖）
+        self._write_settle = _WRITE_SETTLE_DEFAULT            # 指令帧生效等待（秒；cfg write_settle 可覆盖）
         self._refresh_hz = _REFRESH_HZ_DEFAULT                # 低频状态刷新频率（Hz；cfg state_refresh_hz 可覆盖）
         self._refresh_stop = threading.Event()                # 刷新定时器停机标志（close() 置位；亦作测试冻结钩子）
         self._refresh_thread: Optional[threading.Thread] = None  # 刷新定时器线程（daemon，只持本对象弱引用）
@@ -708,6 +708,9 @@ class Backend(ABC):
     def set_mode_arm(self, mode: ControlMode = ControlMode.MIT) -> int:
         """arm 逐关节设置控制模式。
 
+        写入成功后乐观更新模式缓存（``mode_arm`` 即为所设模式，发送门禁立即放行）；
+        缓存与硬件的一致性经 ``get_mode_arm`` 读回核实。
+
         :param mode: 目标控制模式，默认 :class:`ControlMode.MIT`（默认模式）。
         :return: 成功返回 1；否则（warn 提示）返回 0。
         """
@@ -715,6 +718,9 @@ class Backend(ABC):
 
     def set_mode_end(self, mode: ControlMode = ControlMode.MIT) -> int:
         """end 逐电机设置控制模式。
+
+        写入成功后乐观更新模式缓存（``mode_end`` 即为所设模式，发送门禁立即放行）；
+        缓存与硬件的一致性经 ``get_mode_end`` 读回核实。
 
         :param mode: 目标控制模式，默认 :class:`ControlMode.MIT`（默认模式）。
         :return: 成功返回 1；否则（warn 提示）返回 0。
@@ -770,7 +776,7 @@ class Backend(ABC):
         return 1
 
     def _set_mode_impl(self, family: str, mode: ControlMode) -> int:
-        """设模式的共用实现：类型检查 → 逐关节设置（无读回验证、不更新模式缓存；发送门禁经 ``get_mode_*`` 读回放行）。"""
+        """设模式的共用实现：类型检查 → 逐关节设置 → 乐观更新模式缓存（门禁立即放行；无读回核实，一致性经 ``get_mode_*`` 读回纠正）。"""
         if self._skip_empty_family(family, f"set_mode_{family}"):
             return 1
         if not self._require_connected(family, f"set_mode_{family}"):
@@ -786,6 +792,9 @@ class Backend(ABC):
                 self._warn_throttled("设模式", "backend.py - Backend.set_mode_%s：joint『%s』设置失败：%s",
                                      family, self._jname(family, i), e)
                 return 0
+        # 乐观更新模式缓存：写完即视为目标模式（发送门禁立即放行）；与硬件的一致性经 get_mode_* 读回纠正
+        setattr(self, f"_joint_mode_{family}", [mode] * self._n(family))
+        setattr(self, f"_mode_{family}", mode)
         self._info_throttled("设模式", "backend.py - Backend.set_mode_%s：模式已设为 %s", family, mode)
         return 1
 
@@ -1213,12 +1222,12 @@ class Backend(ABC):
 
     @property
     def mode_arm(self) -> Optional[ControlMode]:
-        """arm 全组一致的控制模式（get_mode 读齐且一致时更新；None=未读取）。"""
+        """arm 全组一致的控制模式（get_mode 读回或 set_mode 成功时更新；None=未读取）。"""
         return self._mode_arm
 
     @property
     def mode_end(self) -> Optional[ControlMode]:
-        """end 全组一致的控制模式（get_mode 读齐且一致时更新；None=未读取）。"""
+        """end 全组一致的控制模式（get_mode 读回或 set_mode 成功时更新；None=未读取）。"""
         return self._mode_end
 
     @property
@@ -1265,7 +1274,7 @@ class Backend(ABC):
 
         **整段缺省**（该关节无 ``MIT``/``POS_VEL`` 段，如无该能力段的舵机配置）→ 静默 NaN 占位（不告警）；
         段**存在**但键缺/非数值/段非字典 → 该关节以 NaN 占位（空值）并 warn。NaN 的发送默认值会在发送时
-        被空值检查拦下（不发送），NaN 的增益在 ``set_mode`` 非 MIT 时仅提示改用电机内部增益。
+        被空值检查拦下（不发送），NaN 的增益在 ``set_mode`` 切 POSITION/VELOCITY 写增益寄存器时跳过该寄存器（沿用电机内部值）。
         """
         vals, holes = [], []
         for i, jcfg in enumerate(getattr(self, f"_jointscfg_{family}")):
@@ -1325,7 +1334,7 @@ class Backend(ABC):
         """模式前置检查：组模式成员 ``_mode_{family}`` 等于所需模式才放行，否则限频 warn。
 
         ``_mode_{family}`` 与逐关节模式缓存 ``_joint_mode_{family}`` 同步更新
-        （``get_mode`` 读齐且一致时），为 ``None`` 即模式未读取。
+        （``get_mode`` 读齐且一致时 / ``set_mode`` 成功时乐观更新），为 ``None`` 即模式未读取。
         """
         cur = getattr(self, f"_mode_{family}")
         if cur == mode:
