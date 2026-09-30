@@ -2,18 +2,17 @@
 
 继承层次（类名驼峰、文件名小写）::
 
-    Backend                  # 整机后端抽象根（backend.py）：本体+末端一体，
-    └── BackendDM            #   方法以 _arm / _end 后缀区分两组（真机；旧实现已删，
-                             #   待复制 backend_template.py 按新基类重建，重建后恢复导入注册）
+    Backend                  # 整机后端抽象根（backend.py）：本体+末端一体，方法以 _arm / _end 后缀区分
+    └── BackendDM            #   真机：DM 7 电机经U2CAN 串口转 CAN 桥，型号说明见 backend_dm.py 模块 docstring
 
 子类与机械臂型号 **1:1 对应**派生（``backend_dm`` ↔ ``joyarm_dm``，
 即每个型号一个专属整机后端）；接入新型号 = 复制 ``backend_template.py``（六步接入见该文件头）；
 ``REGISTRY`` 供 config ``backend.name`` 选型（JoyArm 解析 yaml 后经 :func:`get_backend` 构建子类实例）。
 """
 from .backend import Backend
+from .backend_dm import BackendDM
 
-# backend_dm 重建后恢复：from .backend_dm import BackendDM 并注册（重建 = 复制 backend_template.py 实现全部 29 个抽象内核）
-REGISTRY = {}
+REGISTRY = {"backend_dm": BackendDM}
 
 __all__ = ["Backend", "REGISTRY", "get_backend"]
 

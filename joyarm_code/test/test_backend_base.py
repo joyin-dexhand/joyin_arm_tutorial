@@ -21,6 +21,12 @@ test_59 起为第十四轮基类审阅新增（未连接门禁全覆盖 / 内核
 test_69 为模板冒烟新增（BackendTemplate 空 cfg 可实例化 = 29 桩满足抽象方法强制；29 桩全量按约定格式抛
 NotImplementedError，桩消息前缀自动取 cfg name → ``_name``（空回退模板文件名）+ 基类内核集漂移守护；
 函数内导入模板，模板问题不拖垮整文件收集）。
+test_70 为 backend_dm 重建新增（无硬件协议层冒烟：注册恢复、空 cfg 构造、yaml cfg 电机表/帧前缀、
+MIT 位域打包位级校验、反馈帧解码含双温度与残尾拼接、参数/指令事务自环验证、非阻塞状态读三态；
+函数内导入 backend_dm，硬件依赖问题不拖垮整文件收集）。
+test_71 为 backend_dm 审阅轮新增（总线生命周期：RX 存活判定/僵尸重建/无主清扫，防真机重连失败与泄漏）。
+test_72 为 backend_dm 末端离散动作新增（open/home/close/position：自动切 POSITION+增益序列、cfg vlim/flim
+默认、按需位置透传与越限裁硬限位、未知动作/缺参/切模式失败异常路径）。
 """
 import copy
 import gc
@@ -1751,3 +1757,281 @@ def test_69_template_smoke():
             t2._connect_arm("/dev/null", "demo")
     finally:
         t2._refresh_stop.set()
+
+
+# ---- backend_dm 冒烟：无硬件校验协议层（组帧/解码/分发/事务自环）与注册（函数内导入，硬件问题不拖垮收集） ----
+def test_70_backend_dm(cfg):
+    import struct as _struct
+
+    from joyarm_core.backend import REGISTRY, get_backend
+    from joyarm_core.backend.backend_dm import (
+        _CODE_MODE, _DMMotor, _DMBus, _MODEL_LIMITS, _MODE_CODE, _PARAM_RIDS,
+        BackendDM, _f2u, _pack_mit, _pack_pos, _pack_vel, _u2can_prefix)
+
+    # 1) 注册表恢复
+    assert REGISTRY.get("backend_dm") is BackendDM and get_backend("backend_dm") is BackendDM
+
+    # 2) 空 cfg 可构造（无总线 I/O）
+    b = BackendDM({})
+    try:
+        assert b.n_joints_arm == 0 and b.n_joints_end == 0
+    finally:
+        b._refresh_stop.set()
+
+    # 3) yaml cfg 构造：电机表 / 型号量程 / U2CAN 帧前缀（CAN id 小端嵌 13-14、DLC=8 嵌 18）
+    d = BackendDM(cfg)
+    try:
+        assert d.name == "backend_dm" and d.n_joints_arm == 6 and d.n_joints_end == 1
+        m0, m3 = d._motors_arm[0], d._motors_arm[3]
+        assert (m0.slave_id, m0.master_id) == (0x01, 0x11)
+        assert (m0.pmax, m0.vmax, m0.tmax) == _MODEL_LIMITS["4340p"]
+        assert (m3.pmax, m3.vmax, m3.tmax) == _MODEL_LIMITS["4310"]
+        assert len(_u2can_prefix(0)) == 21 and m0.prefix[13] == 0x01 and m0.prefix[18] == 0x08
+        assert m0.prefix_pos[13:15] == bytes((0x01, 0x03))  # pos_force 帧 CAN id = 0x300+SlaveID
+        assert m0.prefix_vel[13:15] == bytes((0x01, 0x02))  # vel 帧 CAN id = 0x200+SlaveID
+        assert m0.query_frame[21:24] == bytes((0x01, 0x00, 0xCC)) and len(m0.query_frame) == 30
+    finally:
+        d._refresh_stop.set()
+
+    # 4) MIT 位域打包位级校验（对照厂商 float_to_uint 公式独立重推）+ 越界就近钳位
+    def ref_f2u(x, lo, hi, bits):
+        x = lo if x <= lo else hi if x > hi else x
+        return int((x - lo) / (hi - lo) * ((1 << bits) - 1))
+
+    m = _DMMotor(0x01, 0x11, 12.5, 30.0, 10.0)
+    q_u, dq_u = ref_f2u(1.23, -12.5, 12.5, 16), ref_f2u(-4.5, -30.0, 30.0, 12)
+    kp_u, kd_u, tau_u = ref_f2u(120.0, 0, 500, 12), ref_f2u(4.9, 0, 5, 12), ref_f2u(3.3, -10.0, 10.0, 12)
+    ref = bytes(((q_u >> 8) & 0xFF, q_u & 0xFF, dq_u >> 4, ((dq_u & 0xF) << 4) | ((kp_u >> 8) & 0xF),
+                 kp_u & 0xFF, kd_u >> 4, ((kd_u & 0xF) << 4) | ((tau_u >> 8) & 0xF), tau_u & 0xFF))
+    assert _pack_mit(m, 3.3, 1.23, -4.5, 120.0, 4.9) == ref
+    assert _pack_mit(m, 999.0, 999.0, 999.0, 999.0, 999.0) == _pack_mit(m, 10.0, 12.5, 30.0, 500.0, 5.0)
+    # 负增益必须钳到 0（防位域编码成大整数 → 真机异常力矩）；上界同理钳满量程
+    assert _pack_mit(m, 3.3, 1.23, -4.5, -10.0, -0.5) == _pack_mit(m, 3.3, 1.23, -4.5, 0.0, 0.0)
+    assert _f2u(-1.0, 0.0, 500.0, 12) == 0 and _f2u(1e9, 0.0, 5.0, 12) == 4095
+
+    # 5) pos_force / vel 帧数据布局（float32 + uint16 放大 / float32 + 零填充）
+    assert _pack_pos(1.0, 5.0, 0.5) == _struct.pack("<fHH", 1.0, 500, 5000)
+    assert _pack_vel(-3.25) == _struct.pack("<f", -3.25) + b"\x00" * 4
+
+    # 6) 帧分发：状态帧 → 原子快照（err 高 4 位 + data[6]/[7] 双温度）；前置垃圾跳过 + 残尾跨读拼接
+    bus = _DMBus("/dev/null", 921600, 1000.0)  # 构造不开串口（open() 才开），直接喂字节
+    bus.register([m])
+    q_u, dq_u, tau_u = 0xBFFF, 0x800, 0x400
+    # 收帧 16B：[0]=AA [1]=CMD [3..6]=CAN id（低字节在前，见厂商公式 p[3]|p[4]<<8|…） [7..14]=数据 [15]=55
+    st_frame = bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0,
+                      0x11, q_u >> 8, q_u & 0xFF, dq_u >> 4,
+                      ((dq_u & 0xF) << 4) | (tau_u >> 8), tau_u & 0xFF, 42, 55, 0x55))
+    bus._feed(b"\x00" + st_frame)  # 前置垃圾字节被逐个跳过
+    t, q, dq, tau, err, tmos, trot = m.state
+    assert t > 0.0 and err == 1 and tmos == 42 and trot == 55
+    assert q == pytest.approx(-12.5 + 0xBFFF * 25.0 / 65535)
+    assert dq == pytest.approx(-30.0 + 0x800 * 60.0 / 4095)
+    assert tau == pytest.approx(-10.0 + 0x400 * 20.0 / 4095)
+    assert m.state_event.is_set()
+    bus._feed(st_frame[:9])  # 半帧 → 残尾保留
+    assert len(bus._rx_buf) == 9
+    bus._feed(st_frame[9:])  # 后半帧 → 拼接还原完整帧再分发
+    assert bus._rx_buf == b"" and m.state[4] == 1
+
+    # 6b) 解码边界：q_u=0/满量程 → ∓PMAX；err=0xF；温度 0/255
+    bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0xF0, 0, 0, 0, 0, 0, 0, 255, 0x55)))
+    _, q0, _, _, err0, tm0, tr0 = m.state
+    assert q0 == pytest.approx(-12.5) and err0 == 15 and tm0 == 0 and tr0 == 255
+    bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x11, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0x55)))
+    _, q1, dq1, tau1, err1, _, _ = m.state
+    assert (q1, dq1, tau1, err1) == (pytest.approx(12.5), pytest.approx(30.0), pytest.approx(10.0), 1)
+
+    # 6c) 分发隔离：data[2]∈{0x33,0x55} 的帧只进参数应答槽，绝不误写状态缓存（反向零污染）
+    st_ref = m.state
+    bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0x10, 0x55, 0, 0, 0, 0, 0, 0x55)))  # dq 高字节撞 0x55
+    assert m.state is st_ref
+    bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0x00, 0x33, 27)) + _struct.pack("<f", 9.9)
+              + bytes((0x55,)))
+    assert m.state is st_ref  # 参数应答同样不落状态缓存
+
+    # 7) 参数事务自环（write 打桩：发送即同步喂回应答帧，应答时刻 ≥ 发送前 t0，防洗白检查通过）
+    frames = []
+
+    def echo_write(frame):
+        frames.append(frame)
+        dd = frame[21:29]
+        val = dd[4:8] if dd[2] == 0x55 else (  # 写回显原值；读按 RID 造值（10=uint32 模式码 / 27=float32 增益）
+            _struct.pack("<I", 4) if dd[3] == 10 else _struct.pack("<f", 150.0))
+        bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0)) + bytes((dd[0], dd[1], dd[2], dd[3])) + val
+                  + bytes((0x55,)))
+
+    bus.write = echo_write
+    assert bus.param_read(m, 10) == 4                      # uint32 模式寄存器读
+    assert frames[-1][:21] == _u2can_prefix(0x7FF) and frames[-1][29] == 0    # U2CAN 封装 = 前缀+数据+尾
+    assert frames[-1][21:29] == bytes((0x01, 0x00, 0x33, 10, 0, 0, 0, 0))     # 0x33 读帧字节（RID10）
+    assert bus.param_read(m, 27) == pytest.approx(150.0)   # float32 增益读
+    bus.param_write(m, 27, 150.0)                          # 回显一致 → 通过
+    assert frames[-1][21:29] == bytes((0x01, 0x00, 0x55, 27)) + _struct.pack("<f", 150.0)  # float 写帧
+    bus.param_write(m, 10, 4)
+    assert frames[-1][21:29] == bytes((0x01, 0x00, 0x55, 10, 4, 0, 0, 0))     # uint32 写帧（模式码小端）
+
+    def bad_echo(frame):  # 回显值被篡改 → 重试耗尽上抛
+        dd = frame[21:29]
+        bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0)) + bytes((dd[0], dd[1], dd[2], dd[3]))
+                  + _struct.pack("<f", -1.0) + bytes((0x55,)))
+
+    bus.write = bad_echo
+    with pytest.raises(TimeoutError):
+        bus.param_write(m, 27, 150.0)
+
+    # 8) 使能/失能/设零/清错指令验证（任何帧都回 err=0 状态帧：失能/清错/设零通过，使能核对不过）
+    def ack_state(frame):
+        frames.append(frame)
+        bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x55)))
+
+    bus.write = ack_state
+    assert bus.cmd_verified(m, 0xFD, lambda e: e != 1) is True
+    assert frames[-1] == m.prefix + b"\xff" * 7 + b"\xfd" + b"\x00"  # 失能帧整帧字节（FF×7+cmd）
+    assert bus.cmd_verified(m, 0xFB, lambda e: e < 2) is True
+    assert frames[-1][28] == 0xFB                                     # 清错帧命令字节
+    assert bus.cmd_verified(m, 0xFE, None) is True
+    assert frames[-1][28] == 0xFE                                     # 设零帧命令字节
+    with pytest.raises(TimeoutError):
+        bus.cmd_verified(m, 0xFC, lambda e: e == 1)
+    assert frames[-1][28] == 0xFC                                     # 使能帧命令字节
+
+    # 8b) 指令帧无应答 → 自动补发 0xCC 查询兜底成功
+    def ack_query_only(frame):
+        frames.append(frame)
+        if frame[23] == 0xCC:  # 只应答 0xCC 查询帧（指令帧本身不回，触发兜底路径）
+            bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x11, 0, 0, 0, 0, 0, 0, 0, 0x55)))
+
+    bus.write = ack_query_only
+    assert bus.cmd_verified(m, 0xFC, lambda e: e == 1) is True
+    assert frames[-2][28] == 0xFC and frames[-1] == m.query_frame  # 先指令帧（超时）后 0xCC 查询帧
+
+    # 9) 状态读取非阻塞三态：硬陈旧先发刷新帧再上抛（恢复路径不锁死）/ 新鲜直返零帧 / 软陈旧发一帧 0xCC 即返当前快照
+    dm0 = d._motors_arm[0]
+    bus2 = _DMBus("/dev/null", 921600, 1000.0)
+    d._bus_arm = bus2
+    sent = []
+    bus2.write = sent.append
+    with pytest.raises(TimeoutError):  # 初值快照（t=0）远超硬陈旧阈值 → 上抛
+        d._read_state("arm", 0)
+    assert sent == [dm0.query_frame]  # 上抛前已发刷新帧：电机在岸则下一拍自愈
+    dm0.state = (time.monotonic(), 1.0, 2.0, 3.0, 1, 40, 41)  # 模拟刷新应答已到（新鲜快照）
+    bus2.write = lambda frame: pytest.fail("新鲜缓存读取不应发总线帧")
+    assert d._read_state("arm", 0) == {"q": 1.0, "dq": 2.0, "tau": 3.0, "error": 1,
+                                       "temp_mos": 40, "temp_rotor": 41}
+    dm0.state = (time.monotonic() - 0.06, 9.0, 8.0, 7.0, 0, 30, 31)  # 陈旧（>50ms 且 <1s）
+    sent = []
+    bus2.write = sent.append
+    snap = d._read_state("arm", 0)  # 发一帧 0CCR 后立即返回当前（陈旧）缓存，不等待
+    assert len(sent) == 1 and sent[0] == dm0.query_frame
+    assert snap["q"] == 9.0 and snap["error"] == 0
+
+    # 10) 模式映射与参数键表
+    assert _MODE_CODE[ControlMode.POSITION] == 4 and _MODE_CODE[ControlMode.VELOCITY] == 3
+    assert _CODE_MODE.get(2) is None  # DM POS_VEL 码在全库枚举外 → None
+    assert {"pos_kp", "pos_ki", "vel_kp", "vel_ki"} <= set(_PARAM_RIDS)
+
+
+# ---- backend_dm 总线生命周期：RX 存活判定 / 僵尸重建 / 无主清扫（审阅轮新增，防真机重连失败与资源泄漏） ----
+def test_71_backend_dm_bus_lifecycle():
+    from joyarm_core.backend.backend_dm import _DMBus, BackendDM
+
+    # 未 open 的总线不可用（串口/RX 均无）；close 幂等
+    bus = _DMBus("/dev/null", 921600, 1000.0)
+    assert bus.is_open is False
+    bus.close()
+    assert bus.is_open is False
+
+    d = BackendDM({})
+    try:
+        # 连接中途失败遗留的孤儿总线：断连时被清扫（不泄漏 RX 线程/串口）
+        orphan = _DMBus("/dev/null", 921600, 1000.0)
+        d._buses["/dev/null"] = orphan
+        d._disconnect_family("arm")  # 未连接（_bus_arm=None）也执行清扫
+        assert "/dev/null" not in d._buses
+
+        # 僵尸总线（串口或 RX 死亡）：重连时先关再重建（不残留、不双开）；此处新建走真串口必失败
+        zombie = _DMBus("/dev/__not_exist__", 921600, 1000.0)
+        d._buses["/dev/__not_exist__"] = zombie
+        with pytest.raises(Exception):
+            d._connect_family("arm", "/dev/__not_exist__")
+        assert "/dev/__not_exist__" not in d._buses and d._bus_arm is None
+
+        # 共享总线：对端仍持有时断连保留；最后一族断开才关停移除
+        shared = _DMBus("/dev/ttyUSBX", 921600, 1000.0)
+        d._buses["/dev/ttyUSBX"] = shared
+        d._bus_arm = d._bus_end = shared
+        d._disconnect_family("arm")
+        assert d._buses["/dev/ttyUSBX"] is shared
+        d._disconnect_family("end")
+        assert "/dev/ttyUSBX" not in d._buses
+    finally:
+        d._refresh_stop.set()
+
+
+# ---- backend_dm 末端离散动作：open/home/close/position（自动切 POSITION + cfg vlim/flim 默认 + 基类限位管道） ----
+def test_72_backend_dm_action_end(cfg):
+    import struct as _struct
+
+    from joyarm_core.backend.backend_dm import _END_ACTION_POS, _DMBus, BackendDM, _pack_pos
+
+    d = BackendDM(cfg)
+    try:
+        me = d._motors_end[0]
+        bus = _DMBus("/dev/null", 921600, 1000.0)
+        bus.register([me])
+        d._bus_end = bus
+        d._is_connected_end = True
+        frames = []
+
+        def echo_write(frame):  # 0x55 参数写即时回显（模式/增益切换事务自环），其余帧仅记录
+            frames.append(frame)
+            dd = frame[21:29]
+            if dd[2] == 0x55:
+                bus._feed(bytes((0xAA, 0x11, 0x00, me.master_id, 0, 0, 0))
+                          + bytes((dd[0], dd[1], dd[2], dd[3])) + dd[4:8] + bytes((0x55,)))
+
+        bus.write = echo_write
+
+        def pos_frames():  # 已发出的 pos_force 帧子集（CAN id = 0x300+SlaveID 唯一标识）
+            return [f for f in frames if f[13:15] == me.prefix_pos[13:15]]
+
+        # open：自动切 POSITION（RID10=4 + 4 增益共 5 个参数帧）→ 1 帧 pos_force（cfg vlim=3.0 / flim=1.0）
+        d.send_action_end("open")
+        assert d.mode_end is ControlMode.POSITION
+        assert frames[-1] == me.prefix_pos + _pack_pos(_END_ACTION_POS["open"], 3.0, 1.0) + b"\x00"
+        assert frames[-2][21:29] == bytes((0x07, 0x00, 0x55, 26)) + _struct.pack("<f", 0.002)  # 末帧增益=vel_ki
+        n = len(frames)
+
+        # 已在位模式：close/home 不再切模式，各仅 1 帧
+        d.send_action_end("close")
+        assert len(frames) == n + 1 and frames[-1] == me.prefix_pos + _pack_pos(0.0, 3.0, 1.0) + b"\x00"
+        d.send_action_end("home")
+        assert len(frames) == n + 2
+
+        # position 按需透传；越限（q_min=-5.49）被基类管道裁硬限位 + 限频 warn
+        d.send_action_end("position", position=-4.2)
+        assert frames[-1] == me.prefix_pos + _pack_pos(-4.2, 3.0, 1.0) + b"\x00"
+        cap.msgs.clear()
+        d.send_action_end("position", position=-9.0)
+        assert any("q 指令越限" in m for m in cap.msgs)
+        assert frames[-1] == me.prefix_pos + _pack_pos(-5.49, 3.0, 1.0) + b"\x00"
+
+        # 异常路径（_call 统一转限频 warn 不抛）：未知动作 / position 缺参 / 切模式失败（均逐处复位限频计时）
+        d._warn_last = {}
+        cap.msgs.clear()
+        d.send_action_end("foo")
+        assert any("未知动作" in m for m in cap.msgs)
+        d._warn_last = {}
+        cap.msgs.clear()
+        d.send_action_end("position")
+        assert any("需提供 position 参数" in m for m in cap.msgs)
+        d._mode_end = None
+        n_pos = len(pos_frames())
+        bus.write = frames.append  # 静默写（无参数回显）→ 切模式验证重试耗尽失败
+        d._warn_last = {}
+        cap.msgs.clear()
+        d.send_action_end("home")
+        assert any("切 POSITION 模式失败" in m for m in cap.msgs)
+        assert len(pos_frames()) == n_pos  # 模式切换失败绝不发位置帧
+    finally:
+        d._refresh_stop.set()

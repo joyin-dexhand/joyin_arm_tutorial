@@ -94,6 +94,7 @@ backend:
   warn_interval: 0.5 # warn 同通道日志限频间隔（秒）
   info_interval: 0.5 # info 同通道日志限频间隔（秒）
   write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
+  rx_hz: 1000.0 # RX 收取线程节拍（Hz，串口阻塞读超时=1/rx_hz；backend_dm 专用）
   arm: # arm本体后端（joints 条目四键限位 = 硬限位，数值须与 URDF limit 标定保持一致）
     channel: /dev/ttyACM0
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
