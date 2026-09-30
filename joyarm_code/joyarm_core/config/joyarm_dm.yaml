@@ -90,7 +90,7 @@ robotics:
 # ===================================================================
 backend:
   name: backend_dm # backend 类（backend/__init__.py REGISTRY 中的注册名），与 joyarm_<型号> 对应
-  state_refresh_hz: 10.0 # 低频状态刷新频率（Hz，默认 10）
+  state_refresh_hz: 50.0 # 低频状态刷新频率（Hz，默认 10）
   warn_interval: 0.5 # warn 同通道日志限频间隔（秒）
   info_interval: 0.5 # info 同通道日志限频间隔（秒）
   write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
@@ -99,7 +99,7 @@ backend:
     channel: /dev/ttyACM0
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
     baud_rate: 921600
-    default_mode: mit # 连接成功后自动设置的控制模式（mit/position/velocity）
+    default_mode: position # 连接成功后自动设置的控制模式（mit/position/velocity）
     joints:
       - name: joint1
         motor_id: 0x01
@@ -219,7 +219,7 @@ backend:
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
     baud_rate: 921600
-    default_mode: mit # 连接成功后自动设置的控制模式（mit/position/velocity）
+    default_mode: position # 连接成功后自动设置的控制模式（mit/position/velocity）
     joints:
       - name: joint_end1 # 末端电机名
         motor_id: 0x07

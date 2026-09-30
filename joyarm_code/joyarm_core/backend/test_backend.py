@@ -9,8 +9,8 @@ Backend 子类通用验收测试（上层视角）  joyarm_core/backend/test_bac
       2. 真机段（connect / read / mode / enable / write / motion / error /
          disconnect 组）：连接、读取、模式、使能、参数写入、运动发送、清错、断连。
     通用化设计（不内嵌任何子型专属知识）：
-      - 能力三分法：PASS=行为符合基类契约；SKIP=能力缺失（如舵机无速度模式、
-        无参数读写——非缺陷）；FAIL=能力存在但违反契约；
+      - 能力三分法：PASS=行为符合基类契约；SKIP=能力缺失（如某型号不支持
+        某模式、无参数读写——非缺陷）；FAIL=能力存在但违反契约；
       - 空族自动跳过：cfg 未配置 arm/end 关节的族，该族测试项自动 SKIP；
       - 参数键 / 末端离散动作名由子类定义，须经 --param / --action 显式告知。
     每项测试前打印测试项与目的，测试后打印 PASS/FAIL/SKIP 与证据；结尾输出
@@ -51,6 +51,7 @@ Backend 子类通用验收测试（上层视角）  joyarm_core/backend/test_bac
     --config  指定 yaml 配置文件（默认 joyarm_core/config/joyarm_<sub>.yaml）
     --param   参数读写测试（34/60/63）的参数键（键表由子类定义；不给则相关项 SKIP）
     --action  send_action_end 测试（74）的离散动作名，逗号分隔（不给则该项 SKIP）
+    --watch   item 25 实时状态刷新监视时长（秒，默认 10；每秒打印 arm/end 全部关节量表）
     --list    仅列出全部测试项（编号/组/风险/目的），不执行
     --yes     跳过低/中危交互确认（高危永不自动执行：仍需交互 yes，非终端自动 SKIP）
     退出码：全 PASS/SKIP=0；任一 FAIL=1；用法错误=2（便于 agent 判定）
@@ -60,6 +61,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import enum
 import importlib
 import logging
 import sys
@@ -232,6 +234,32 @@ def _trunc(text: str, k: int = 110) -> str:
     return text if len(text) <= k else text[:k] + "…"
 
 
+def _both_fams(s: Session) -> list[str]:
+    """非空族列表（cfg 未配置关节的族不参与双族测试）。"""
+    return [f for f in ("arm", "end") if _n_family_cfg(s.cfg, f) > 0]
+
+
+def _aggregate(results: list[tuple[str, str, str]]) -> tuple[str, str]:
+    """逐族结果聚合：任一 FAIL→FAIL；否则任一 PASS→PASS；全 SKIP/空→SKIP。
+
+    results: [(族, 判定, 证据), ...]；证据按「arm: …；end: …」拼接。
+    """
+    if not results:
+        return "SKIP", "arm/end 均为空族"
+    if any(v == "FAIL" for _, v, _ in results):
+        verdict = "FAIL"
+    elif any(v == "PASS" for _, v, _ in results):
+        verdict = "PASS"
+    else:
+        verdict = "SKIP"
+    return verdict, "；".join(f"{fam}: {ev}" for fam, _, ev in results)
+
+
+def _clear_throttle(b: Backend):
+    """双族循环内的限频预清除：防第二族的同通道 warn 被 0.5s 限频吞掉而误判。"""
+    b._warn_last.clear()
+
+
 # ---------------- 前置自动补齐与风险确认 ----------------
 def _prefill_fams(fam: str) -> tuple:
     return ("arm", "end") if fam == "both" else (fam,)
@@ -277,7 +305,7 @@ def _prefill(s: Session, needs: list) -> tuple[str, list[str], str]:
     无前置的项不构造会话实例（纯离线单项不应留下需收尾的硬件对象）。
     返回 (状态, 已执行的补齐动作描述, 原因)，状态：
       "ok"   全部就绪；
-      "skip" 所需模式不可用——型号能力缺失（如舵机仅位置模式），该项应判 SKIP 非缺陷；
+      "skip" 所需模式不可用——型号能力缺失（部分型号仅支持部分模式），该项应判 SKIP 非缺陷；
       "fail" 连接/使能等必实现核心前置未达成，该项判 FAIL。
     """
     if not needs:
@@ -639,23 +667,88 @@ def _it22(s: Session):
 
 def _it23(s: Session):
     b = s.backend()
-    i0 = _mark()
-    b.disconnect_arm()  # 基类先尽力失能再断连（安全方向）
-    conn, mode, abled = b.is_connected_arm, b.mode_arm, b.is_abled_arm
-    ok = conn is False and mode is None and abled is None
-    ev = (f"disconnect_arm 后 is_connected={conn}，mode={mode}（缓存清空），"
-          f"is_abled={abled}；warn：{_recent(_since(i0), 1)}")
-    return ("PASS" if ok else "FAIL"), ev
+    results = []
+    for fam in _both_fams(s):  # 基类先尽力失能再断连（安全方向）
+        _clear_throttle(b)
+        i0 = _mark()
+        getattr(b, f"disconnect_{fam}")()
+        conn = getattr(b, f"is_connected_{fam}")
+        mode = getattr(b, f"mode_{fam}")
+        abled = getattr(b, f"is_abled_{fam}")
+        ok = conn is False and mode is None and abled is None
+        results.append((fam, "PASS" if ok else "FAIL",
+                        f"is_connected={conn}，mode={mode}（缓存清空），is_abled={abled}"))
+    return _aggregate(results)
 
 
 def _it24(s: Session):
     b = s.backend()
-    b.disconnect_arm()
-    if b.is_connected_arm is not False:
-        return "FAIL", f"断连后 is_connected_arm={b.is_connected_arm}（应 False）"
-    i0 = _mark()
-    b.connect_arm()
-    return _connect_assert(b, "arm", i0)
+    results = []
+    for fam in _both_fams(s):
+        _clear_throttle(b)
+        getattr(b, f"disconnect_{fam}")()
+        if getattr(b, f"is_connected_{fam}") is not False:
+            results.append((fam, "FAIL",
+                            f"断连后 is_connected={getattr(b, f'is_connected_{fam}')}（应 False）"))
+            continue
+        i0 = _mark()
+        getattr(b, f"connect_{fam}")()
+        results.append((fam, *_connect_assert(b, fam, i0)))
+    return _aggregate(results)
+
+
+def _it25(s: Session):
+    """实时状态刷新监视：连接后每秒读**被动快照**（不主动 get_state），
+    打印 arm/end 全部关节量表格——测试点正是基类低频刷新线程在无主动读取时
+    持续更新快照；Ctrl+C 可提前结束（按已采样判定）。"""
+    b = s.backend()
+    fams = _both_fams(s)
+    secs = max(1, int(s.args.watch))
+    names = {fam: [j.get("name", f"joint{i}")
+                   for i, j in enumerate((s.cfg.get(fam) or {}).get("joints") or [])]
+             for fam in fams}
+    header = (f"{'族.关节':<14}{'q(rad)':>10}{'dq(rad/s)':>11}{'tau(N·m)':>10}"
+              f"{'T_mos(℃)':>10}{'T_rot(℃)':>10}{'error':>7}{'快照龄(ms)':>10}")
+    ages: dict[str, list[float]] = {fam: [] for fam in fams}
+    print(f"── 实时状态刷新监视（{secs}s，每秒采样被动快照 joint_state_*；Ctrl+C 提前结束）")
+    try:
+        for sec in range(1, secs + 1):
+            print(f"── {sec}/{secs}s " + "─" * 52)
+            print(header)
+            now = time.time()
+            for fam in fams:
+                st = getattr(b, f"joint_state_{fam}")  # 被动读快照（不触发主动读帧）
+                if st.t > 0:
+                    ages[fam].append(now - st.t)
+                age_ms = f"{int(max(0.0, now - st.t) * 1000)}" if st.t > 0 else "—"
+                for i, jn in enumerate(names[fam]):
+                    cells = [f"{fam}.{jn}"]
+                    for arr, nd in ((st.q, 4), (st.dq, 4), (st.tau, 4),
+                                    (st.temp_mos, 1), (st.temp_rotor, 1)):
+                        cells.append("—" if arr is None
+                                     else f"{np.asarray(arr, dtype=float)[i]:.{nd}f}")
+                    cells.append("—" if st.error is None
+                                 else str(int(np.asarray(st.error)[i])))
+                    cells.append(age_ms)
+                    print(f"{cells[0]:<14}{cells[1]:>10}{cells[2]:>11}{cells[3]:>10}"
+                          f"{cells[4]:>10}{cells[5]:>10}{cells[6]:>7}{cells[7]:>10}")
+            if sec < secs:
+                time.sleep(1.0)
+    except KeyboardInterrupt:
+        print("（用户中断监视，按已采样判定）")
+    results = []
+    for fam in fams:
+        if not ages[fam]:
+            results.append((fam, "FAIL",
+                            f"监视期间快照 t 恒为 0——低频刷新线程未更新状态（或状态读取失败，见上方 warn）"))
+        elif max(ages[fam]) < 0.5:
+            results.append((fam, "PASS",
+                            f"{len(ages[fam])} 次采样快照龄 {int(min(ages[fam]) * 1000)}"
+                            f"~{int(max(ages[fam]) * 1000)}ms"))
+        else:
+            results.append((fam, "FAIL",
+                            f"快照龄最大 {int(max(ages[fam]) * 1000)}ms ≥500ms（刷新存在停滞，见上方 warn）"))
+    return _aggregate(results)
 
 
 # ---------------- read 组（真机：只读） ----------------
@@ -701,30 +794,40 @@ def _state_item(fam: str):
 
 def _it30(s: Session):
     b = s.backend()
-    i0 = _mark()
-    ret = b.get_mode_arm()
-    if isinstance(ret, ControlMode):
-        cache = b.mode_arm
-        ev = f"get_mode_arm 读回 {ret.name}；mode_arm={cache.name if cache else None}"
-        return "PASS", ev
-    return "SKIP", f"get_mode_arm 返回 None（读失败或无模式回读——舵机类经本地镜像实现；warn：{_recent(_since(i0), 1)}）"
+    results = []
+    for fam in _both_fams(s):
+        i0 = _mark()
+        ret = getattr(b, f"get_mode_{fam}")()
+        if isinstance(ret, ControlMode):
+            cache = getattr(b, f"mode_{fam}")
+            results.append((fam, "PASS",
+                            f"读回 {ret.name}；mode_{fam}={cache.name if cache else None}"))
+        else:
+            results.append((fam, "SKIP",
+                            f"返回 None（读失败或无模式回读——部分型号经本地镜像实现回读；warn：{_recent(_since(i0), 1)}）"))
+    return _aggregate(results)
 
 
 def _it33(s: Session):
     b = s.backend()
-    st1 = b.get_state_arm()
-    if st1 is None:
-        return "SKIP", "状态不可读，快照语义无法验证"
-    old = b.joint_state_arm
-    time.sleep(0.05)
-    st2 = b.get_state_arm()
-    new = b.joint_state_arm
-    if st2 is None:
-        return "SKIP", "第二次读取失败，快照语义无法完整验证"
-    ok = (new is not old) and (old is st1) and (new is st2)
-    ev = (f"get_state 换入新对象={new is not old}；joint_state 属性与上次返回同引用={old is st1}；"
-          f"与本次返回同引用={new is st2}（旧引用冻结为快照）")
-    return ("PASS" if ok else "FAIL"), ev
+    results = []
+    for fam in _both_fams(s):
+        st1 = getattr(b, f"get_state_{fam}")()
+        if st1 is None:
+            results.append((fam, "SKIP", "状态不可读，快照语义无法验证"))
+            continue
+        old = getattr(b, f"joint_state_{fam}")
+        time.sleep(0.05)
+        st2 = getattr(b, f"get_state_{fam}")()
+        new = getattr(b, f"joint_state_{fam}")
+        if st2 is None:
+            results.append((fam, "SKIP", "第二次读取失败，快照语义无法完整验证"))
+            continue
+        ok = (new is not old) and (old is st1) and (new is st2)
+        results.append((fam, "PASS" if ok else "FAIL",
+                        f"换入新对象={new is not old}；属性与上次返回同引用={old is st1}；"
+                        f"与本次同引用={new is st2}（旧引用冻结为快照）"))
+    return _aggregate(results)
 
 
 def _it34(s: Session):
@@ -732,99 +835,114 @@ def _it34(s: Session):
     if not key:
         return "SKIP", "未提供 --param（参数键由子类定义，须显式指定）"
     b = s.backend()
-    i0 = _mark()
-    vals = b.read_param_arm(key)
-    if vals is None:
-        return "SKIP", f"read_param_arm({key!r}) 返回 None（键无效或子类未实现参数读取）；warn：{_recent(_since(i0))}"
-    n = b.n_joints_arm
-    if len(vals) != n or not all(np.isscalar(v) for v in vals):
-        return "FAIL", f"返回值非逐关节标量列表：{vals!r}（长度 {len(vals)} ≠ {n}）"
-    return "PASS", f"read_param_arm({key!r}) = {vals}"
+    results = []
+    for fam in _both_fams(s):
+        _clear_throttle(b)
+        i0 = _mark()
+        vals = getattr(b, f"read_param_{fam}")(key)
+        if vals is None:
+            results.append((fam, "SKIP",
+                            f"read_param({key!r}) 返回 None（键对该族无效或未实现参数读取）"))
+            continue
+        n = getattr(b, f"n_joints_{fam}")
+        if len(vals) != n or not all(np.isscalar(v) for v in vals):
+            results.append((fam, "FAIL", f"返回非逐关节标量列表：{vals!r}（长度 {len(vals)} ≠ {n}）"))
+            continue
+        results.append((fam, "PASS", f"read_param({key!r}) = {vals}"))
+    return _aggregate(results)
 
 
 def _it35(s: Session):
+    """错误码读取与检查：逐族完整执行 get_error（逐关节码）与 check_error（bool）并都输出结果，
+    断言两者一致性（全 0/1→True；读到 None→check 应 False）。"""
     b = s.backend()
     time.sleep(0.3)  # 等低频刷新更新状态快照
-    i0 = _mark()
-    errs = b.get_error_arm()
-    if errs is None:
-        return "SKIP", (f"get_error_arm 返回 None（快照过期或 error 段缺失——部分硬件不提供状态码）；"
-                        f"warn：{_recent(_since(i0), 1)}")
-    ev = f"get_error_arm = {errs}（0=失能、1=使能，均正常）"
-    if any(e >= 2 for e in errs):
-        ev += "；⚠ 存在故障码（硬件状态，非 backend 缺陷）"
-    return "PASS", ev
-
-
-def _it36(s: Session):
-    b = s.backend()
-    errs = b.get_error_arm()
-    ret = b.check_error_arm()
-    if not isinstance(ret, bool):
-        return "FAIL", f"返回非 bool：{ret!r}"
-    if errs is None:
-        ok = ret is False  # 契约：读不到状态码 → False
-        ev = f"get_error=None（error 段不可用），check_error={ret}（应为 False）"
-    else:
-        expect = all(e in (0, 1) for e in errs)
-        ok = (ret == expect)
-        ev = f"get_error={errs}，check_error={ret}（与状态码一致性={'OK' if ok else '矛盾'}）"
-    return ("PASS" if ok else "FAIL"), ev
+    results = []
+    for fam in _both_fams(s):
+        _clear_throttle(b)
+        i0 = _mark()
+        errs = getattr(b, f"get_error_{fam}")()
+        ret = getattr(b, f"check_error_{fam}")()
+        if errs is None:
+            # 契约：读不到状态码（快照过期或 error 段缺失）时 get 返回 None、check 应 False
+            ok = (ret is False)
+            ev = (f"get_error 返回 None（快照过期或 error 段缺失——部分硬件不提供状态码）；"
+                  f"check_error={ret}（契约：读不到应 False，{'符合' if ok else '违反'}）")
+            results.append((fam, "PASS" if ok else "FAIL", ev))
+            continue
+        fault = any(e >= 2 for e in errs)
+        expect = not fault
+        ok = isinstance(ret, bool) and (ret == expect)
+        ev = f"get_error={errs}（0=失能、1=使能，均正常）；check_error={ret}"
+        if fault:
+            ev += "；⚠ 存在故障码（硬件状态，非 backend 缺陷）"
+        ev += f"（一致性={'OK' if ok else '矛盾'}）"
+        results.append((fam, "PASS" if ok else "FAIL", ev))
+    return _aggregate(results)
 
 
 # ---------------- mode 组（真机：模式设置） ----------------
-def _set_mode_item(fam: str, mode: ControlMode):
+def _mode_name(m):
+    """模式显示名（None=无回读能力）。"""
+    return m.name if isinstance(m, ControlMode) else "None"
+
+
+def _modes_item(fam: str):
+    """三模式循环设置：逐模式「先读（设前真值）→ 设 → 再读（设后真值）」，回读验证。"""
     def fn(s: Session):
         b = s.backend()
-        i0 = _mark()
-        ret = getattr(b, f"set_mode_{fam}")(mode)
-        msgs = _since(i0)
-        if ret != 1:
-            return "SKIP", (f"set_mode_{fam}({mode.name}) 返回 0（该模式不可用/设置失败——"
-                            f"能力缺失不算缺陷，如舵机通常仅位置模式）；warn：{_recent(msgs)}")
-        cache = getattr(b, f"mode_{fam}")
-        if cache != mode:
-            return "FAIL", f"返回 1 但乐观缓存未更新：mode_{fam}={cache}"
-        rd = getattr(b, f"get_mode_{fam}")()
-        if rd is not None and rd != mode:
-            return "FAIL", f"读回模式 {rd.name} ≠ 所设 {mode.name}（设置未生效于硬件）"
-        ev = (f"返回 1；mode_{fam}={mode.name}（乐观缓存）；get_mode 读回 "
-              f"{rd.name if rd else 'None（无回读能力，非缺陷）'}")
-        return "PASS", ev
+        lines, fails, any_ok = [], [], False
+        for mode in ALL_MODES:
+            before = getattr(b, f"get_mode_{fam}")()  # 先读
+            _clear_throttle(b)
+            i0 = _mark()
+            ret = getattr(b, f"set_mode_{fam}")(mode)  # 再设
+            cache = getattr(b, f"mode_{fam}")
+            after = getattr(b, f"get_mode_{fam}")()  # 再读
+            if ret == 1:
+                any_ok = True
+                bad = []
+                if cache != mode:
+                    bad.append(f"缓存={_mode_name(cache)}")
+                if after is not None and after != mode:
+                    bad.append(f"读回={_mode_name(after)}")
+                if bad:
+                    fails.append(f"set {mode.name}：" + "、".join(bad))
+                lines.append(f"{mode.name}: 先读{_mode_name(before) if before is not None else 'None'}"
+                             f"→设(1)→再读{_mode_name(after) if after is not None else 'None'}")
+            else:
+                lines.append(f"{mode.name}: 不可用（先读{_mode_name(before) if before is not None else 'None'}；"
+                             f"{_recent(_since(i0), 1)}）")
+        if not any_ok:
+            return "SKIP", f"{fam} 族三种模式均设置失败（能力缺失或连接异常）；" + "；".join(lines)
+        return ("FAIL" if fails else "PASS"), "；".join(lines) + (f"；异常：{fails}" if fails else "")
     return fn
 
 
+class _UndefMode(enum.Enum):
+    """未被 ControlMode 定义的模式（模拟新型号可能具备的额外模式，如力矩/步进）。"""
+    UNDEFINED = "undefined"
+
+
+def _it42(s: Session):
+    b = s.backend()
+    results = []
+    for fam in _both_fams(s):
+        parts, ok_all = [], True
+        for label, bad in (("字符串入参", "mit"), ("未定义模式", _UndefMode.UNDEFINED)):
+            _clear_throttle(b)
+            i0 = _mark()
+            ret = getattr(b, f"set_mode_{fam}")(bad)
+            hit = any(GATE_TYPE in m for m in _since(i0))
+            ok = ret == 0 and hit
+            ok_all = ok_all and ok
+            parts.append(f"{label}→返回{ret}/门禁warn={hit}")
+        results.append((fam, "PASS" if ok_all else "FAIL",
+                        "、".join(parts) + "（均不达内核）"))
+    return _aggregate(results)
+
+
 def _it43(s: Session):
-    b = s.backend()
-    lines, fails, any_ok = [], [], False
-    for mode in ALL_MODES:
-        i0 = _mark()
-        ret = b.set_mode_end(mode)
-        cache = b.mode_end
-        if ret == 1:
-            any_ok = True
-            lines.append(f"{mode.name}:OK")
-            if cache != mode:
-                fails.append(f"set {mode.name} 后缓存 {cache}")
-        else:
-            lines.append(f"{mode.name}:不可用（{_recent(_since(i0), 1)}）")
-    if not any_ok:
-        return "SKIP", "end 三种模式均设置失败（能力缺失或连接异常）；" + "；".join(lines)
-    return ("FAIL" if fails else "PASS"), "；".join(lines) + (f"；异常：{fails}" if fails else "")
-
-
-def _it44(s: Session):
-    b = s.backend()
-    i0 = _mark()
-    ret = b.set_mode_arm("mit")  # 非枚举类型
-    msgs = _since(i0)
-    hit = any("非 ControlMode 枚举" in m for m in msgs)
-    ok = ret == 0 and hit
-    ev = f"set_mode_arm('mit') 返回 {ret}；类型门禁 warn={hit}"
-    return ("PASS" if ok else "FAIL"), ev
-
-
-def _it45(s: Session):
     b = s.backend()
     lines, fails = [], []
     for fam in ("arm", "end"):
@@ -860,12 +978,22 @@ def _power_item(fam: str, enable: bool):
 
 def _it54(s: Session):
     b = s.backend()
-    r1, r2 = b.enable_arm(), b.enable_arm()
-    d1, d2 = b.disable_arm(), b.disable_arm()
-    rets = [r1, r2, d1, d2]
-    ok = all(isinstance(r, int) for r in rets) and r1 == 1 and d2 == 1 and b.is_abled_arm is False
-    ev = f"enable×2→({r1},{r2})，disable×2→({d1},{d2})；最终 is_abled_arm={b.is_abled_arm}"
-    return ("PASS" if ok else "FAIL"), ev
+    results = []
+    for fam in _both_fams(s):
+        _clear_throttle(b)
+        r1 = r2 = d1 = d2 = None
+        try:
+            r1, r2 = getattr(b, f"enable_{fam}")(), getattr(b, f"enable_{fam}")()
+            d1, d2 = getattr(b, f"disable_{fam}")(), getattr(b, f"disable_{fam}")()
+            abled = getattr(b, f"is_abled_{fam}")
+            ok = (all(isinstance(r, int) for r in (r1, r2, d1, d2))
+                  and r1 == 1 and d2 == 1 and abled is False)
+            results.append((fam, "PASS" if ok else "FAIL",
+                            f"enable×2→({r1},{r2})，disable×2→({d1},{d2})；最终 is_abled={abled}"))
+        except Exception as e:
+            results.append((fam, "FAIL",
+                            f"重复调用异常（enable×2→({r1},{r2})，disable×2→({d1},{d2})）：{e!r}"))
+    return _aggregate(results)
 
 
 # ---------------- write 组（真机：参数写入与设零） ----------------
@@ -874,19 +1002,28 @@ def _it60(s: Session):
     if not key:
         return "SKIP", "未提供 --param，无法做写回核对"
     b = s.backend()
-    orig = b.read_param_arm(key)
-    if orig is None:
-        return "SKIP", f"read_param_arm({key!r}) 不可用（无法获取原值，写回核对无从做起）"
-    i0 = _mark()
-    ret = b.write_param_arm(key, orig)  # 写回原值：无实际副作用的写入验证
-    if ret != 1:
-        return "FAIL", f"写回原值失败（返回 {ret}）；warn：{_recent(_since(i0))}"
-    back = b.read_param_arm(key)
-    if back is None:
-        return "FAIL", "写后读回失败（返回 None）"
-    same = all(np.allclose(float(a), float(v), rtol=1e-6, atol=1e-9) for a, v in zip(orig, back))
-    ev = f"读原值 {orig} → 写回 → 读回 {back}（一致={same}）"
-    return ("PASS" if same else "FAIL"), ev
+    results = []
+    for fam in _both_fams(s):
+        _clear_throttle(b)
+        orig = getattr(b, f"read_param_{fam}")(key)
+        if orig is None:
+            results.append((fam, "SKIP",
+                            f"read_param({key!r}) 不可用（键对该族无效或未实现——无法获取原值）"))
+            continue
+        i0 = _mark()
+        ret = getattr(b, f"write_param_{fam}")(key, orig)  # 写回原值：无实际副作用的写入验证
+        if ret != 1:
+            results.append((fam, "FAIL", f"写回原值失败（返回 {ret}）；warn：{_recent(_since(i0))}"))
+            continue
+        back = getattr(b, f"read_param_{fam}")(key)
+        if back is None:
+            results.append((fam, "FAIL", "写后读回失败（返回 None）"))
+            continue
+        same = all(np.allclose(float(a), float(v), rtol=1e-6, atol=1e-9)
+                   for a, v in zip(orig, back))
+        results.append((fam, "PASS" if same else "FAIL",
+                        f"读原值 {orig} → 写回 → 读回 {back}（一致={same}）"))
+    return _aggregate(results)
 
 
 def _set_zero_item(fam: str):
@@ -904,36 +1041,47 @@ def _set_zero_item(fam: str):
 
 
 def _it63(s: Session):
-    b = s.backend()
-    n = b.n_joints_arm
     key = s.args.param or "__probe__"
-    i0 = _mark()
-    ret = b.write_param_arm(key, [0.0] * (n + 1))  # 维度门禁在连接门禁之前，无帧发出
-    msgs = _since(i0)
-    hit = any("维度" in m for m in msgs)
-    ok = ret == 0 and hit
-    ev = f"write_param_arm({key!r}, n+1 值) 返回 {ret}；维度 warn={hit}"
-    return ("PASS" if ok else "FAIL"), ev
+    results = []
+    for fam in _both_fams(s):
+        b = s.fresh()  # 未连接实例：维度门禁在连接门禁之前触发，无帧发出
+        try:
+            n = getattr(b, f"n_joints_{fam}")
+            i0 = _mark()
+            ret = getattr(b, f"write_param_{fam}")(key, [0.0] * (n + 1))
+            hit = any("维度" in m for m in _since(i0))
+            results.append((fam, "PASS" if (ret == 0 and hit) else "FAIL",
+                            f"write_param({key!r}, n+1 值) 返回 {ret}；维度 warn={hit}"))
+        finally:
+            b.close()
+    return _aggregate(results)
 
 
 # ---------------- motion 组（真机：运动发送，高风险） ----------------
 def _it70(s: Session):
     b = s.backend()
-    n = b.n_joints_arm
-    q0, src = _current_q(b, "arm")
-    if q0 is None:
-        return "SKIP", f"{src}——无法自实际位置小幅出发，盲发目标有大幅运动风险，跳过"
-    target = _clip_target(b.joint_limits_arm, q0, MIT_AMP)
-    i0 = _mark()
-    b.send_mit_arm(np.zeros(n), target, np.zeros(n), np.full(n, SAFE_KP), np.full(n, SAFE_KD))
-    verdict = _classify_send(_since(i0))
-    time.sleep(SETTLE)
-    st = b.get_state_arm()
-    ev = (f"目标 q={np.round(target, 4).tolist()}（自{src} +{MIT_AMP} rad，"
-          f"kp={SAFE_KP}/kd={SAFE_KD}，tau=0）")
-    if st is not None and st.q is not None:
-        ev += f"；{SETTLE}s 后实测 q={np.round(np.asarray(st.q, dtype=float), 4).tolist()}"
-    return verdict, ev
+    results = []
+    for fam in _both_fams(s):
+        n = getattr(b, f"n_joints_{fam}")
+        q0, src = _current_q(b, fam)
+        if q0 is None:
+            results.append((fam, "SKIP",
+                            f"{src}——无法自实际位置小幅出发，盲发目标有大幅运动风险"))
+            continue
+        _clear_throttle(b)
+        target = _clip_target(getattr(b, f"joint_limits_{fam}"), q0, MIT_AMP)
+        i0 = _mark()
+        getattr(b, f"send_mit_{fam}")(np.zeros(n), target, np.zeros(n),
+                                      np.full(n, SAFE_KP), np.full(n, SAFE_KD))
+        verdict = _classify_send(_since(i0))
+        time.sleep(SETTLE)
+        st = getattr(b, f"get_state_{fam}")()
+        ev = (f"目标 q={np.round(target, 4).tolist()}（自{src} +{MIT_AMP} rad，"
+              f"kp={SAFE_KP}/kd={SAFE_KD}，tau=0）")
+        if st is not None and st.q is not None:
+            ev += f"；{SETTLE}s 后实测 q={np.round(np.asarray(st.q, dtype=float), 4).tolist()}"
+        results.append((fam, verdict, ev))
+    return _aggregate(results)
 
 
 def _it71(s: Session):
@@ -956,24 +1104,29 @@ def _it71(s: Session):
 
 def _it72(s: Session):
     b = s.backend()
-    n = b.n_joints_arm
-    q0, src = _current_q(b, "arm")
-    if q0 is None:
-        return "SKIP", f"{src}——电机反馈异常时不宜做速度测试，跳过"
-    i0 = _mark()
-    b.send_vel_arm(np.full(n, VEL_TEST))
-    m1 = _since(i0)
-    time.sleep(VEL_DUR)
-    st = b.get_state_arm()
-    i1 = _mark()
-    b.send_vel_arm(np.zeros(n))  # 停止
-    m2 = _since(i1)
-    verdict = _classify_send(m1 + m2)
-    time.sleep(0.2)
-    ev = f"dq={VEL_TEST} rad/s 持续 {VEL_DUR}s 后已发 dq=0 停止"
-    if st is not None and st.dq is not None:
-        ev += f"；运动中实测 dq={np.round(np.asarray(st.dq, dtype=float), 3).tolist()}"
-    return verdict, ev
+    results = []
+    for fam in _both_fams(s):
+        n = getattr(b, f"n_joints_{fam}")
+        q0, src = _current_q(b, fam)
+        if q0 is None:
+            results.append((fam, "SKIP", f"{src}——电机反馈异常时不宜做速度测试"))
+            continue
+        _clear_throttle(b)
+        i0 = _mark()
+        getattr(b, f"send_vel_{fam}")(np.full(n, VEL_TEST))
+        m1 = _since(i0)
+        time.sleep(VEL_DUR)
+        st = getattr(b, f"get_state_{fam}")()
+        i1 = _mark()
+        getattr(b, f"send_vel_{fam}")(np.zeros(n))  # 停止
+        m2 = _since(i1)
+        verdict = _classify_send(m1 + m2)
+        time.sleep(0.2)
+        ev = f"dq={VEL_TEST} rad/s 持续 {VEL_DUR}s 后已发 dq=0 停止"
+        if st is not None and st.dq is not None:
+            ev += f"；运动中实测 dq={np.round(np.asarray(st.dq, dtype=float), 3).tolist()}"
+        results.append((fam, verdict, ev))
+    return _aggregate(results)
 
 
 def _it73(s: Session):
@@ -995,15 +1148,20 @@ def _it73(s: Session):
 
 
 def _it74(s: Session):
-    acts = s.args.action
-    if not acts:
-        return "SKIP", "未提供 --action（离散动作名由子类定义，须显式指定）"
+    acts = s.args.action or ["home"]  # 默认仅测 home（--action 可覆盖为子类定义的其他动作）
     b = s.backend()
     worst, lines = "PASS", []
     for a in acts:
         i0 = _mark()
         b.send_action_end(a)
-        v = _classify_send(_since(i0))
+        msgs = _since(i0)
+        # 离散动作集由子类自定义：未定义该动作（内核异常，如 KeyError）与未实现内核均属能力缺失 → SKIP
+        if any(GATE_CONN in m for m in msgs):
+            v = "FAIL"
+        elif _cap_missing(msgs) or any(KERN_EXC in m for m in msgs):
+            v = "SKIP"
+        else:
+            v = "PASS"
         lines.append(f"{a}: {v}")
         if v == "FAIL":
             worst = "FAIL"
@@ -1013,38 +1171,45 @@ def _it74(s: Session):
 
 
 def _it75(s: Session):
-    b = s.fresh()  # 未连接实例：裁剪 warn 在连接门禁之前触发，无帧发出
-    try:
-        n = b.n_joints_arm
-        hi = np.asarray(b.joint_limits_arm.q_max, dtype=float)
-        if not np.isfinite(hi).any():
-            return "SKIP", "q_max 均未配置（±inf），裁剪行为不可观测"
-        q_bad = np.where(np.isfinite(hi), hi + 10.0, 0.0)
-        i0 = _mark()
-        b.send_mit_arm(np.zeros(n), q_bad, np.zeros(n), np.zeros(n), np.zeros(n))
-        msgs = _since(i0)
-        clip = any(CLIP_Q in m for m in msgs)
-        gate = any(GATE_CONN in m for m in msgs)
-        ok = clip and gate
-        ev = (f"越限 q（q_max+10）触发裁剪 warn={clip}；"
-              f"未连接被门禁拦截（无帧发出）={gate}；tau=0/kp=0/kd=0 物理无输出")
-        return ("PASS" if ok else "FAIL"), ev
-    finally:
-        b.close()
+    results = []
+    for fam in _both_fams(s):
+        b = s.fresh()  # 未连接实例：裁剪 warn 在连接门禁之前触发，无帧发出
+        try:
+            n = getattr(b, f"n_joints_{fam}")
+            hi = np.asarray(getattr(b, f"joint_limits_{fam}").q_max, dtype=float)
+            if not np.isfinite(hi).any():
+                results.append((fam, "SKIP", "q_max 均未配置（±inf），裁剪行为不可观测"))
+                continue
+            q_bad = np.where(np.isfinite(hi), hi + 10.0, 0.0)
+            i0 = _mark()
+            getattr(b, f"send_mit_{fam}")(np.zeros(n), q_bad, np.zeros(n),
+                                          np.zeros(n), np.zeros(n))
+            msgs = _since(i0)
+            clip = any(CLIP_Q in m for m in msgs)
+            gate = any(GATE_CONN in m for m in msgs)
+            results.append((fam, "PASS" if (clip and gate) else "FAIL",
+                            f"越限 q（q_max+10）触发裁剪 warn={clip}；未连接被门禁拦截={gate}"
+                            f"（无帧发出；tau=0/kp=0/kd=0 物理无输出）"))
+        finally:
+            b.close()
+    return _aggregate(results)
 
 
 def _it76(s: Session):
-    b = s.fresh()  # 维度门禁最先触发，无需连接、无帧发出
-    try:
-        n = b.n_joints_arm
-        i0 = _mark()
-        b.send_mit_arm(*[np.zeros(n + 1)] * 5)  # 全参数错误维度
-        msgs = _since(i0)
-        hit = any("指令维度" in m for m in msgs)
-        ev = f"错误维度（n+1）被拒绝且 warn 指令维度={hit}（无帧发出）"
-        return ("PASS" if hit else "FAIL"), ev
-    finally:
-        b.close()
+    results = []
+    for fam in _both_fams(s):
+        b = s.fresh()  # 维度门禁最先触发，无需连接、无帧发出
+        try:
+            n = getattr(b, f"n_joints_{fam}")
+            i0 = _mark()
+            getattr(b, f"send_mit_{fam}")(np.zeros(n + 1), np.zeros(n + 1), np.zeros(n + 1),
+                                          np.zeros(n + 1), np.zeros(n + 1))
+            hit = any(DIM_SEND in m for m in _since(i0))
+            results.append((fam, "PASS" if hit else "FAIL",
+                            f"错误维度（n+1）被拒绝且 warn 指令维度={hit}（无帧发出）"))
+        finally:
+            b.close()
+    return _aggregate(results)
 
 
 # ---------------- error 组（真机：清错） ----------------
@@ -1057,7 +1222,7 @@ def _clear_error_item(fam: str):
         if ret is True:
             return "PASS", f"clear_error_{fam} 返回 True（正常状态下清错指令已发送）"
         if _cap_missing(msgs):
-            return "SKIP", "子类未实现清错内核（如舵机通常无清错命令）"
+            return "SKIP", "子类未实现清错内核（该型号无清错命令属能力缺失）"
         return "FAIL", f"返回 False；warn：{_recent(msgs)}"
     return fn
 
@@ -1143,41 +1308,41 @@ _item(21, "connect_end 连接", "connect", "中", "end",
       "验证末端族连接成功后 is_connected_end=True 且默认模式回填", [], _connect_item("end"))
 _item(22, "重复 connect 幂等", "connect", "中", None,
       "验证已连接状态下重复 connect 不崩溃、连接标志保持 True", [("connected", "both")], _it22)
-_item(23, "disconnect_arm 断连", "connect", "中", "arm",
-      "验证断连后 is_connected=False、模式缓存清空（防过期模式放行错误指令）、is_abled 置 None", [("connected", "arm")], _it23)
-_item(24, "断连后重连恢复", "connect", "中", "arm",
-      "验证断连后重连可恢复（默认模式重新乐观回填）", [("connected", "arm")], _it24)
+_item(23, "断连（arm/end 双族）", "connect", "中", None,
+      "验证断连后 is_connected=False、模式缓存清空（防过期模式放行错误指令）、is_abled 置 None", [("connected", "both")], _it23)
+_item(24, "断连后重连恢复（双族）", "connect", "中", None,
+      "验证断连后重连可恢复（默认模式重新乐观回填）", [("connected", "both")], _it24)
+_item(25, "实时状态刷新监视", "connect", "低", None,
+      "验证 connect 后基类低频刷新线程持续更新快照：每秒打印 arm/end 全部关节量表（被动快照，"
+      "--watch 秒，默认 10；全程快照龄 <500ms 判 PASS）", [("connected", "both")], _it25)
 
 # —— read 组（真机：只读）——
-_item(30, "get_mode_arm 读回", "read", "低", "arm",
-      "验证模式读回返回 ControlMode 枚举（无回读能力则 SKIP）", [("connected", "arm")], _it30)
+_item(30, "get_mode 读回（双族）", "read", "低", None,
+      "验证模式读回返回 ControlMode 枚举（无回读能力则 SKIP）", [("connected", "both")], _it30)
 _item(31, "get_state_arm 状态契约", "read", "低", "arm",
       "验证 JointState 在场字段为 (n,) 且有限、t>0 且随调用更新（缺字段=None 合法）", [("connected", "arm")], _state_item("arm"))
 _item(32, "get_state_end 状态契约", "read", "低", "end",
       "验证末端族 JointState 契约（与 31 对称）", [("connected", "end")], _state_item("end"))
-_item(33, "状态快照引用语义", "read", "低", "arm",
-      "验证 get_state 原子换入新 JointState 对象、joint_state 属性实时引用、旧引用冻结为快照", [("connected", "arm")], _it33)
-_item(34, "read_param_arm 参数读取", "read", "低", "arm",
+_item(33, "状态快照引用语义（双族）", "read", "低", None,
+      "验证 get_state 原子换入新 JointState 对象、joint_state 属性实时引用、旧引用冻结为快照", [("connected", "both")], _it33)
+_item(34, "read_param 参数读取（双族）", "read", "低", None,
       "验证参数读取返回逐关节标量 list（须 --param 指定子类定义的键；不可用则 SKIP）",
-      [("connected", "arm")], _it34, requires_args=("param",))
-_item(35, "get_error_arm 状态码", "read", "低", "arm",
-      "验证状态码读取返回逐关节 list（0/1 正常；error 段缺失则 SKIP）", [("connected", "arm")], _it35)
-_item(36, "check_error_arm 一致性", "read", "低", "arm",
-      "验证检查结果与状态码一致（全 0/1→True；读不到→False）", [("connected", "arm")], _it36)
+      [("connected", "both")], _it34, requires_args=("param",))
+_item(35, "错误码读取与检查（双族）", "read", "低", None,
+      "验证 get_error 逐关节状态码（0/1 正常、≥2 故障）与 check_error 一致性（全 0/1→True；"
+      "读不到→False）；两者结果均输出", [("connected", "both")], _it35)
 
-# —— mode 组（真机）——
-_item(40, "set_mode_arm(MIT)", "mode", "中", "arm",
-      "验证 MIT 模式设置成功后乐观缓存立即生效且可读回（不支持则 SKIP）", [("connected", "arm")], _set_mode_item("arm", ControlMode.MIT))
-_item(41, "set_mode_arm(POSITION)", "mode", "中", "arm",
-      "验证位置模式设置契约（不支持则 SKIP，如舵机）", [("connected", "arm")], _set_mode_item("arm", ControlMode.POSITION))
-_item(42, "set_mode_arm(VELOCITY)", "mode", "中", "arm",
-      "验证速度模式设置契约（不支持则 SKIP）", [("connected", "arm")], _set_mode_item("arm", ControlMode.VELOCITY))
-_item(43, "set_mode_end 三模式", "mode", "中", "end",
-      "验证末端族三种模式的设置契约（至少一种可用即 PASS，全部不可用 SKIP）", [("connected", "end")], _it43)
-_item(44, "set_mode 类型门禁", "mode", "中", "arm",
-      "验证非 ControlMode 枚举入参被拒绝（返回 0 + 类型门禁 warn，不达内核）", [("connected", "arm")], _it44)
-_item(45, "恢复默认模式", "mode", "中", None,
-      "收尾：将 arm/end 恢复 cfg 默认模式（后续组的模式前置由此兜底）", [("connected", "both")], _it45)
+# —— mode 组（真机；原 40/41/42 三模式拆分项已合并入 40）——
+_item(40, "set_mode 三模式（arm）", "mode", "中", "arm",
+      "循环设 MIT/POSITION/VELOCITY：逐模式先读→设→再读（回读验证；切换 POSITION/VELOCITY 随模式写增益寄存器）",
+      [("connected", "arm")], _modes_item("arm"))
+_item(41, "set_mode 三模式（end）", "mode", "中", "end",
+      "末端族三模式循环设置（与 40 对称；至少一种可用即 PASS）", [("connected", "end")], _modes_item("end"))
+_item(42, "set_mode 非法/未定义模式门禁（双族）", "mode", "中", None,
+      "验证非法入参（字符串）与未被 ControlMode 定义的模式（伪枚举）均被类型门禁拒绝"
+      "（返回 0 + warn，不达内核）", [("connected", "both")], _it42)
+_item(43, "恢复默认模式", "mode", "中", None,
+      "收尾：将 arm/end 恢复 cfg 默认模式（后续组的模式前置由此兜底）", [("connected", "both")], _it43)
 
 # —— enable 组（真机：高风险）——
 _item(50, "enable_arm 使能", "enable", "高", "arm",
@@ -1188,40 +1353,43 @@ _item(52, "disable_arm 失能", "enable", "高", "arm",
       "验证失能全部关节返回 1 且 is_abled_arm=False（安全方向）", [("connected", "arm")], _power_item("arm", False))
 _item(53, "disable_end 失能", "enable", "高", "end",
       "验证末端族失能契约（与 52 对称）", [("connected", "end")], _power_item("end", False))
-_item(54, "enable/disable 重复调用", "enable", "高", "arm",
-      "验证使能/失能重复调用安全（返回 int、最终失能态）", [("connected", "arm")], _it54)
+_item(54, "enable/disable 重复调用（双族）", "enable", "高", None,
+      "验证使能/失能重复调用安全（返回 int、最终失能态）", [("connected", "both")], _it54)
 
 # —— write 组（真机：高风险；61/62 极高危仅显式编号执行）——
-_item(60, "write_param 写回核对", "write", "高", "arm",
+_item(60, "write_param 写回核对（双族）", "write", "高", None,
       "验证参数写入：读原值→写回原值→读回核对（无副作用；须 --param）",
-      [("connected", "arm")], _it60, requires_args=("param",))
+      [("connected", "both")], _it60, requires_args=("param",))
 _item(61, "set_zero_arm 设零", "write", "极高", "arm",
       "【永久改写零位标定，不可逆】验证 arm 逐关节设零返回 1（仅显式 --step=61 执行）", [("connected", "arm")], _set_zero_item("arm"))
 _item(62, "set_zero_end 设零", "write", "极高", "end",
       "【永久改写零位标定，不可逆】验证 end 逐电机设零返回 1（仅显式 --step=62 执行）", [("connected", "end")], _set_zero_item("end"))
-_item(63, "write_param 维度拒绝", "write", "低", "arm",
+_item(63, "write_param 维度拒绝（双族）", "write", "低", None,
       "验证维度不符的写入被拒绝（返回 0 + 维度 warn；维度门禁最先触发，无帧发出）", [], _it63)
 
 # —— motion 组（真机：高风险；75/76 为基类管线探测，无帧发出）——
-_item(70, "send_mit_arm 小幅", "motion", "高", "arm",
-      "验证 MIT 指令小幅下发（自当前位置 +0.02 rad、低增益、tau=0）", [("connected", "arm"), ("mode", "arm", ControlMode.MIT), ("enabled", "arm")], _it70)
+_item(70, "send_mit 小幅（双族）", "motion", "高", None,
+      "验证 MIT 指令小幅下发（自当前位置 +0.02 rad、低增益、tau=0；arm/end 双族）",
+      [("connected", "both"), ("mode", "both", ControlMode.MIT), ("enabled", "both")], _it70)
 _item(71, "send_position_arm 小幅", "motion", "高", "arm",
       "验证位置指令小幅下发（+0.05 rad、限速 0.5 rad/s）", [("connected", "arm"), ("mode", "arm", ControlMode.POSITION), ("enabled", "arm")], _it71)
-_item(72, "send_vel_arm 低速短时", "motion", "高", "arm",
-      "验证速度指令低速短时下发（0.2 rad/s × 0.5s 后发 dq=0 停止）", [("connected", "arm"), ("mode", "arm", ControlMode.VELOCITY), ("enabled", "arm")], _it72)
+_item(72, "send_vel 低速短时（双族）", "motion", "高", None,
+      "验证速度指令低速短时下发（0.2 rad/s × 0.5s 后发 dq=0 停止；arm/end 双族）",
+      [("connected", "both"), ("mode", "both", ControlMode.VELOCITY), ("enabled", "both")], _it72)
 _item(73, "send_position_end 小幅", "motion", "高", "end",
-      "验证末端位置指令小幅下发（舵机类最常用能力；不支持则 SKIP）", [("connected", "end"), ("mode", "end", ControlMode.POSITION), ("enabled", "end")], _it73)
+      "验证末端位置指令小幅下发（末端最常用能力；不支持则 SKIP）", [("connected", "end"), ("mode", "end", ControlMode.POSITION), ("enabled", "end")], _it73)
 _item(74, "send_action_end 离散动作", "motion", "高", "end",
-      "验证末端离散动作下发（须 --action 指定子类定义的动作名）",
-      [("connected", "end")], _it74, requires_args=("action",))
-_item(75, "越限裁剪管线", "motion", "低", "arm",
+      "验证末端离散动作下发（默认仅测 home；子类未定义该动作则 SKIP 属能力缺失；"
+      "--action 可覆盖；离散动作通常为位置语义，故前置 POSITION 模式）",
+      [("connected", "end"), ("mode", "end", ControlMode.POSITION), ("enabled", "end")], _it74)
+_item(75, "越限裁剪管线（双族）", "motion", "低", None,
       "验证越限指令被基类就近裁剪并 warn（未连接实例探测，tau=0/kp=0 无物理输出）", [], _it75)
-_item(76, "发送维度拒绝", "motion", "低", "arm",
+_item(76, "发送维度拒绝（双族）", "motion", "低", None,
       "验证错误维度指令被拒绝（维度 warn，无帧发出）", [], _it76)
 
 # —— error 组（真机）——
 _item(80, "clear_error_arm 清错", "error", "中", "arm",
-      "验证正常状态下清错指令发送返回 True（未实现则 SKIP，如舵机）", [("connected", "arm")], _clear_error_item("arm"))
+      "验证正常状态下清错指令发送返回 True（未实现则 SKIP，属能力缺失）", [("connected", "arm")], _clear_error_item("arm"))
 _item(81, "clear_error_end 清错", "error", "中", "end",
       "验证末端族清错契约（与 80 对称）", [("connected", "end")], _clear_error_item("end"))
 
@@ -1238,9 +1406,9 @@ _BY_NUM = {it["num"]: it for it in ITEMS}
 GROUPS: dict[str, list[int]] = {
     "init": [1, 2, 3, 4, 5, 6, 7],
     "gate": [10, 11, 12, 13, 14, 15, 16, 17, 18],
-    "connect": [20, 21, 22, 23, 24],
-    "read": [30, 31, 32, 33, 34, 35, 36],
-    "mode": [40, 41, 42, 43, 44, 45],
+    "connect": [20, 21, 22, 23, 24, 25],
+    "read": [30, 31, 32, 33, 34, 35],
+    "mode": [40, 41, 42, 43],
     "enable": [50, 51, 52, 53, 54],
     "write": [60, 63],
     "motion": [70, 71, 72, 73, 74, 75, 76],
@@ -1409,6 +1577,7 @@ EPILOG = """\
   python joyarm_core/backend/test_backend.py --sub=dm --step=all        # 全部（不含 set_zero 61/62）
   python joyarm_core/backend/test_backend.py --sub=dm --step=40         # 单项
   python joyarm_core/backend/test_backend.py --sub=dm --step=init,20,30 # 混选
+  python joyarm_core/backend/test_backend.py --sub=dm --step=25 --watch 30   # 刷新监视 30s
   python joyarm_core/backend/test_backend.py --sub=dm --step=online --param=<键> --action=open,close
 
 风险与确认策略：
@@ -1439,7 +1608,10 @@ def parse_args(argv=None) -> argparse.Namespace:
                         "motion/error/disconnect/offline/online/all）；逗号分隔混选；缺省 offline")
     p.add_argument("--config", help="yaml 配置文件路径（默认 joyarm_core/config/joyarm_<sub>.yaml）")
     p.add_argument("--param", help="参数读写测试（34/60/63）的参数键（键表由子类定义；缺省相关项 SKIP）")
-    p.add_argument("--action", help="send_action_end 测试（74）的离散动作名（逗号分隔；缺省该项 SKIP）")
+    p.add_argument("--action", help="send_action_end 测试（74）的离散动作名（逗号分隔；默认仅测 home，"
+                                    "子类动作名不同时可覆盖）")
+    p.add_argument("--watch", type=float, default=10.0,
+                   help="item 25 实时状态刷新监视时长（秒，默认 10；每秒打印 arm/end 全部关节量表）")
     p.add_argument("--list", action="store_true", help="仅列出全部测试项（编号/组/风险/目的），不执行")
     p.add_argument("--yes", action="store_true",
                    help="跳过低/中危交互确认（高危永不自动执行：仍需交互 yes，非终端自动 SKIP）")

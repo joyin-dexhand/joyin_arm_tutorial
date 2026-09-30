@@ -249,7 +249,7 @@ def test_01_init(b, cfg):
     assert all(getattr(b, a) is None for a in
                ("is_connected_arm", "is_connected_end", "is_abled_arm", "is_abled_end"))
     assert b.mode_arm is None and b.mode_end is None
-    assert b._refresh_hz == 10.0
+    assert b._refresh_hz == cfg.get("state_refresh_hz", 10.0)  # 跟随 yaml 配置（默认 10）
     # 状态槽（公开成员）已定维：物理量 NaN / error -1 占位 / t=0；模式缓存逐 joint None
     assert b.joint_state_arm.q.shape == (6,) and np.isnan(b.joint_state_arm.q).all()
     assert b.joint_state_arm.error.dtype.kind == "i" and np.all(b.joint_state_arm.error == -1)
