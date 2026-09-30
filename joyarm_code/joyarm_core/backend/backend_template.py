@@ -8,8 +8,6 @@
 5. ``joyarm_<型号>.yaml`` 的 ``backend.name`` 填子类 backend 的注册名；
 6. 子类实现后更新注释 docstring：由「子类型号模板和实现约束」改为「子类型号的介绍说明」—— 包括文件头 docstring、类 docstring、各方法 docstring。
 
-参考实现：``backend_dm.py`` 的 ``BackendDM`` 。
-
 架构约束：
 - 子类**不得新增公开方法/属性**：JoyArm 上层只面向 ``Backend`` 基类编程，子型号专属功能一律放私有层；
 - 基类负责全部编排（逐关节循环、维度/空值检查、越限裁剪、连接与模式前置检查、限频日志、异常降级），

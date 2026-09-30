@@ -3,16 +3,16 @@
 继承层次（类名驼峰、文件名小写）::
 
     Backend                  # 整机后端抽象根（backend.py）：本体+末端一体，
-    └── BackendDM            #   方法以 _arm / _end 后缀区分两组（真机；按新基类重建中，
-                             #   重建后恢复导入注册；backend_dm_mujoco.py 为 MuJoCo 仿真后端占位）
+    └── BackendDM            #   方法以 _arm / _end 后缀区分两组（真机；旧实现已删，
+                             #   待复制 backend_template.py 按新基类重建，重建后恢复导入注册）
 
-子类与机械臂型号 **1:1 对应**派生（``backend(_joyarm)_dm`` ↔ ``joyarm_dm``，
-即每个型号一个专属整机后端）；``REGISTRY`` 供 config ``backend.name`` 选型
-（JoyArm 解析 yaml 后经 :func:`get_backend` 构建子类实例）。
+子类与机械臂型号 **1:1 对应**派生（``backend_dm`` ↔ ``joyarm_dm``，
+即每个型号一个专属整机后端）；接入新型号 = 复制 ``backend_template.py``（六步接入见该文件头）；
+``REGISTRY`` 供 config ``backend.name`` 选型（JoyArm 解析 yaml 后经 :func:`get_backend` 构建子类实例）。
 """
 from .backend import Backend
 
-# backend_dm 按新基类（29 个单 joint 抽象内核）重建后恢复：from .backend_dm import BackendDM 并注册
+# backend_dm 重建后恢复：from .backend_dm import BackendDM 并注册（重建 = 复制 backend_template.py 实现全部 29 个抽象内核）
 REGISTRY = {}
 
 __all__ = ["Backend", "REGISTRY", "get_backend"]

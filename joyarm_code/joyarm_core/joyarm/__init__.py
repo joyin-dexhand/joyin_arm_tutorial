@@ -16,7 +16,8 @@ JoyArmFactory：按型号名创建（命名链一致：工厂入参 = config/<�
 
     ① 创建配置文件：config/<型号>.yaml（复制 joyarm_template.yaml 模板填写）
     ② 放置模型资产：robot_model/<型号名>/urdf + meshes（目录名 = 型号名；建议参考已有urdf命名规范并由 sw_urdf_exporter 导出）
-    ③ 新写通信后端：backend/backend_<型号>.py（backend子包注册表加一行；型号↔后端一一对应，如 joyarm_dm ↔ backend_dm）
+    ③ 新写通信后端：复制 backend/backend_template.py 为 backend_<型号>.py 实现（六步接入见该文件头；
+       backend 子包注册表加一行；型号↔后端一一对应，如 joyarm_dm ↔ backend_dm）
 """
 from __future__ import annotations
 

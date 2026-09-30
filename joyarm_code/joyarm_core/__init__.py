@@ -15,7 +15,7 @@
 接入新型号：
     1. 复制 ``config/joyarm_template.yaml`` 填写；
     2. 放入``robot_model/<型号名>/`` 资产；
-    3. 新写 ``backend/backend_<型号>.py``（注册表一行注册）；
+    3. 新写 ``backend/backend_<型号>.py``（复制 ``backend/backend_template.py`` 起步，注册表一行注册）；
 
 命名约定：类名驼峰，文件名小写 snake_case。用法::
 

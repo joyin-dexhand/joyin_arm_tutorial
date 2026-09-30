@@ -1502,9 +1502,8 @@ class JoyArm:
         依次做：切 MIT 模式 → 发阻尼指令 → 尽力使能 → 再发一帧。每步都
         尽力执行：某步失败只告警，不影响其他电机收到指令。
 
-        :param kd: 阻尼强度（N·m·s/rad），默认 5.0（当前 DM 型号表 MIT 帧 kd
-            编码量程上限，见 backend_dm 的 ``_MOTOR_LIMITS``；越大越"黏"，
-            给更大的值会被后端钳到量程并告警）。
+        :param kd: 阻尼强度（N·m·s/rad），默认 5.0（当前 DM 型号 MIT 帧 kd
+            编码量程上限；越大越"黏"，给更大的值会被后端钳到量程并告警）。
         :raises RuntimeError: 未连接真机。
         """
         self._require_connected()
