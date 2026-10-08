@@ -222,7 +222,11 @@ class DummyBackend(Backend):
 @pytest.fixture(scope="module")
 def cfg():
     with open(ROOT / "joyarm_core" / "config" / "joyarm_dm.yaml", encoding="utf-8") as f:
-        return yaml.safe_load(f)["backend"]
+        out = yaml.safe_load(f)["backend"]
+    # 默认模式相关断言与 yaml 当前值解耦（单测控制变量；专门用例自改副本不受影响）
+    out["arm"]["default_mode"] = "mit"
+    out["end"]["default_mode"] = "mit"
+    return out
 
 
 @pytest.fixture(scope="module")

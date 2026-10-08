@@ -1,10 +1,10 @@
 """
 ==============================================================================
-Backend 子类通用验收测试（上层视角）  joyarm_core/backend/test_backend.py
+Backend 子类通用验收测试（上层视角）  joyarm_core/backend/verify_backend.py
 ==============================================================================
 【功能概要】
-    从上层视角（只调 Backend 基类公开方法与属性，不触碰子类私有层）对**任意**
-    backend 子类（关节电机 / 舵机 / 混合硬件 / 无 end 型号）做分类分项逐级验收：
+    从上层视角（只调 Backend 基类公开方法与属性，不触碰子类私有层）对**任意** backend 子类
+    （关节电机 / 舵机 / 混合硬件 / 无 end 型号）做分类分项逐级验收：
       1. 离线段（init / gate 组）：构造、属性初值、限位解析、未连接门禁——无需硬件；
       2. 真机段（connect / read / mode / enable / write / motion / error /
          disconnect 组）：连接、读取、模式、使能、参数写入、运动发送、清错、断连。
@@ -32,13 +32,13 @@ Backend 子类通用验收测试（上层视角）  joyarm_core/backend/test_bac
     source .venv/bin/activate
 
     # 3. 运行本脚本（在 joyarm_code/ 目录下）
-    python joyarm_code/joyarm_core/backend/test_backend.py --help                        # 完整用法与说明
-    python joyarm_code/joyarm_core/backend/test_backend.py --list                        # 全部测试项清单
-    python joyarm_code/joyarm_core/backend/test_backend.py --sub=dm --step=offline       # 离线段（缺省 --step 即 offline）
-    python joyarm_code/joyarm_core/backend/test_backend.py --sub=dm --step=all           # 全部（不含 set_zero 61/62）
-    python joyarm_code/joyarm_core/backend/test_backend.py --sub=dm --step=40            # 单项
-    python joyarm_code/joyarm_core/backend/test_backend.py --sub=dm --step=init,20,30    # 逗号混选
-    python joyarm_code/joyarm_core/backend/test_backend.py --sub=dm --step=online \
+    python joyarm_code/joyarm_core/backend/verify_backend.py --help                        # 完整用法与说明
+    python joyarm_code/joyarm_core/backend/verify_backend.py --list                        # 全部测试项清单
+    python joyarm_code/joyarm_core/backend/verify_backend.py --sub=dm --step=offline       # 离线段（缺省 --step 即 offline）
+    python joyarm_code/joyarm_core/backend/verify_backend.py --sub=dm --step=all           # 全部（不含 set_zero 61/62）
+    python joyarm_code/joyarm_core/backend/verify_backend.py --sub=dm --step=40            # 单项
+    python joyarm_code/joyarm_core/backend/verify_backend.py --sub=dm --step=init,20,30    # 逗号混选
+    python joyarm_code/joyarm_core/backend/verify_backend.py --sub=dm --step=online \
         --param=<参数键> --action=open,close                                 # 真机段（补齐参数/动作项）
 
 【命令行参数】
@@ -229,6 +229,24 @@ def _current_q(b: Backend, fam: str):
     return None, "状态不可读（get_state 返回 None 或缺 q）"
 
 
+def _safe_vel_dirs(lim, q: np.ndarray, v: float) -> np.ndarray:
+    """速度测试的逐关节限位保护选向。
+
+    基类对速度指令只裁幅值（±dq_max），不做位置-限位联动——本测试自选方向：
+    每关节在「正向剩余行程 q_max−q」与「负向剩余行程 q−q_min」中选裕量大的一侧，
+    裕量不足（测试行程 v×VEL_DUR + 0.1 rad 余量内）的方向不选；两端皆不足取 0（不动）。
+    已在限位外（如零位偏移）的关节会自动选往行程内的一侧。
+    """
+    lo = np.asarray(lim.q_min, dtype=float)
+    hi = np.asarray(lim.q_max, dtype=float)
+    room_hi = hi - q
+    room_lo = q - lo
+    margin = v * VEL_DUR + 0.1  # 测试行程 + 安全余量
+    can_hi = room_hi > margin
+    can_lo = room_lo > margin
+    return np.where(can_hi & (room_hi >= room_lo), v, np.where(can_lo, -v, 0.0))
+
+
 def _trunc(text: str, k: int = 110) -> str:
     text = " ".join(str(text).split())
     return text if len(text) <= k else text[:k] + "…"
@@ -272,29 +290,40 @@ def _plan_prefill(s: Session, needs: list) -> list[tuple[str, str]]:
     """干跑：计算将补齐哪些前置（不动状态），返回 [(动作描述, 风险)]。
 
     用于确认等级计算（前置风险并入该项确认）与确认文案。
+    已计划的动作记入 planned_*（干跑不改真实状态，后续需求据此去重，
+    防同一 connect 在文案中重复列出）。
     """
     plans: list[tuple[str, str]] = []
+    planned_conn: set = set()
+    planned_mode: dict = {}
+    planned_abled: set = set()
     b = s.b  # 可能尚未构造（视为全部前置缺失）
     for nd in needs:
         kind = nd[0]
         for fam in _prefill_fams(nd[1]):
             if _n_family_cfg(s.cfg, fam) == 0:
                 continue
-            conn = getattr(b, f"is_connected_{fam}", None) if b is not None else None
+            conn = ((getattr(b, f"is_connected_{fam}", None) if b is not None else None) is True
+                    or fam in planned_conn)
             if kind == "connected":
-                if conn is not True:
+                if not conn:
                     plans.append((f"connect_{fam}", "中"))
+                    planned_conn.add(fam)
             elif kind == "mode":
                 mode = nd[2]
                 mode_cur = getattr(b, f"mode_{fam}", None) if b is not None else None
-                if mode_cur != mode:
-                    if conn is not True:
+                if mode_cur != mode and planned_mode.get(fam) != mode:
+                    if not conn:
                         plans.append((f"connect_{fam}", "中"))
+                        planned_conn.add(fam)
                     plans.append((f"set_mode_{fam}({mode.name})", "中"))
+                    planned_mode[fam] = mode
             elif kind == "enabled":
-                abled = getattr(b, f"is_abled_{fam}", None) if b is not None else None
-                if abled is not True:
+                abled = ((getattr(b, f"is_abled_{fam}", None) if b is not None else None) is True
+                         or fam in planned_abled)
+                if not abled:
                     plans.append((f"enable_{fam}", "高"))
+                    planned_abled.add(fam)
     return plans
 
 
@@ -1102,6 +1131,21 @@ def _it71(s: Session):
     return verdict, ev
 
 
+def _preview72(s: Session):
+    """速度测试的运动参数预览：前置就绪后列出当前位置 / 期望速度（限位选向）/ 期望到达位置。"""
+    b = s.backend()
+    for fam in _both_fams(s):
+        q0, src = _current_q(b, fam)
+        if q0 is None:
+            print(f"  预览[{fam}]：{src}，无法预览")
+            continue
+        dq = _safe_vel_dirs(getattr(b, f"joint_limits_{fam}"), q0, VEL_TEST)
+        q_pred = q0 + dq * VEL_DUR
+        print(f"  预览[{fam}] 当前位置 q = {np.round(q0, 4).tolist()}（{src}）")
+        print(f"           期望速度 dq = {np.round(dq, 2).tolist()} rad/s（按限位裕量逐关节选向）")
+        print(f"           期望到达 q ≈ {np.round(q_pred, 4).tolist()}（{VEL_DUR}s 后，估算值）")
+
+
 def _it72(s: Session):
     b = s.backend()
     results = []
@@ -1112,8 +1156,9 @@ def _it72(s: Session):
             results.append((fam, "SKIP", f"{src}——电机反馈异常时不宜做速度测试"))
             continue
         _clear_throttle(b)
+        dq_cmd = _safe_vel_dirs(getattr(b, f"joint_limits_{fam}"), q0, VEL_TEST)
         i0 = _mark()
-        getattr(b, f"send_vel_{fam}")(np.full(n, VEL_TEST))
+        getattr(b, f"send_vel_{fam}")(dq_cmd)
         m1 = _since(i0)
         time.sleep(VEL_DUR)
         st = getattr(b, f"get_state_{fam}")()
@@ -1122,7 +1167,8 @@ def _it72(s: Session):
         m2 = _since(i1)
         verdict = _classify_send(m1 + m2)
         time.sleep(0.2)
-        ev = f"dq={VEL_TEST} rad/s 持续 {VEL_DUR}s 后已发 dq=0 停止"
+        ev = (f"dq 指令={np.round(dq_cmd, 2).tolist()} rad/s（按限位裕量逐关节选向，"
+              f"裕量不足侧不发、两端皆近为 0）持续 {VEL_DUR}s 后已发 dq=0 停止")
         if st is not None and st.dq is not None:
             ev += f"；运动中实测 dq={np.round(np.asarray(st.dq, dtype=float), 3).tolist()}"
         results.append((fam, verdict, ev))
@@ -1162,7 +1208,27 @@ def _it74(s: Session):
             v = "SKIP"
         else:
             v = "PASS"
-        lines.append(f"{a}: {v}")
+        ev = v
+        if v == "PASS":
+            # 动作目标由子类定义（上层不可知），以位置连续稳定判到位：每 0.2s 采样，
+            # 连续 3 拍变化 <0.01 rad 且至少 1s 后提前结束，最长 4s——防止收尾失能打断运动
+            prev, trace, stable = None, [], 0
+            for _ in range(20):
+                time.sleep(0.2)
+                st = b.get_state_end()
+                q = None if (st is None or st.q is None) else np.asarray(st.q, dtype=float)
+                if q is not None:
+                    trace.append(np.round(q, 3).tolist())
+                    moved = prev is not None and np.max(np.abs(q - prev)) >= 0.01
+                    stable = 0 if moved else stable + 1
+                    prev = q
+                    if stable >= 3 and len(trace) >= 5:
+                        break
+            if trace:
+                ev += f"；执行监测 {len(trace)}×0.2s：q 起 {trace[0]} → 末 {trace[-1]}"
+            else:
+                ev += "；执行期间状态不可读（未监测到位置）"
+        lines.append(f"{a}: {ev}")
         if v == "FAIL":
             worst = "FAIL"
         elif v == "SKIP" and worst == "PASS":
@@ -1260,9 +1326,10 @@ def _it91(s: Session):
 ITEMS: list[dict] = []
 
 
-def _item(num, name, group, risk, family, purpose, needs, fn, requires_args=()):
+def _item(num, name, group, risk, family, purpose, needs, fn, requires_args=(), preview=None):
     ITEMS.append(dict(num=num, name=name, group=group, risk=risk, family=family,
-                      purpose=purpose, needs=needs, fn=fn, requires_args=tuple(requires_args)))
+                      purpose=purpose, needs=needs, fn=fn, requires_args=tuple(requires_args),
+                      preview=preview))
 
 
 # —— init 组（离线）——
@@ -1374,8 +1441,10 @@ _item(70, "send_mit 小幅（双族）", "motion", "高", None,
 _item(71, "send_position_arm 小幅", "motion", "高", "arm",
       "验证位置指令小幅下发（+0.05 rad、限速 0.5 rad/s）", [("connected", "arm"), ("mode", "arm", ControlMode.POSITION), ("enabled", "arm")], _it71)
 _item(72, "send_vel 低速短时（双族）", "motion", "高", None,
-      "验证速度指令低速短时下发（0.2 rad/s × 0.5s 后发 dq=0 停止；arm/end 双族）",
-      [("connected", "both"), ("mode", "both", ControlMode.VELOCITY), ("enabled", "both")], _it72)
+      "验证速度指令低速短时下发（逐关节按限位裕量选向 0.2 rad/s × 0.5s 后发 dq=0 停止；"
+      "发送前预览当前位置/期望速度/期望位置并二次确认）",
+      [("connected", "both"), ("mode", "both", ControlMode.VELOCITY), ("enabled", "both")], _it72,
+      preview=_preview72)
 _item(73, "send_position_end 小幅", "motion", "高", "end",
       "验证末端位置指令小幅下发（末端最常用能力；不支持则 SKIP）", [("connected", "end"), ("mode", "end", ControlMode.POSITION), ("enabled", "end")], _it73)
 _item(74, "send_action_end 离散动作", "motion", "高", "end",
@@ -1537,6 +1606,24 @@ def run_item(it: dict, s: Session) -> tuple[str, str]:
         print(f"（已自动补齐前置：{'；'.join(actions)}）")
     if s.b is not None:
         s.b._warn_last.clear()  # 测试基建：重置 warn 限频时间戳，防上一项同通道 0.5s 限频吞掉本项 warn（判定依赖 warn 文本）
+    if it.get("preview"):
+        # 运动参数预览 + 二次确认：前置就绪后列出当前/期望值，用户确认才发送
+        try:
+            it["preview"](s)
+        except Exception as e:
+            print(f"（预览失败：{type(e).__name__}: {e}）")
+        if not sys.stdin.isatty():
+            ans2 = "skip"
+        else:
+            ans2 = input("⚠ 以上为即将下发的运动参数，输入 yes 执行发送（回车/s=跳过  q=退出）: ").strip().lower()
+        if ans2 in ("q", "quit", "退出"):
+            ev = "用户在预览后退出（q）"
+            print(f"[{num}] SKIP —— {ev}")
+            return "QUIT", ev
+        if ans2 not in ("yes", "y"):
+            ev = "用户在预览后跳过发送"
+            print(f"[{num}] SKIP —— {ev}")
+            return "SKIP", ev
     try:
         verdict, evidence = it["fn"](s)
     except Exception as e:
@@ -1551,6 +1638,7 @@ def _cleanup(s: Session):
         return
     for call in (s.b.disable_arm, s.b.disable_end, s.b.disconnect_arm, s.b.disconnect_end, s.b.close):
         try:
+            s.b._info_last.clear()  # 收尾安全信号不合并：清 info 限频，各族成功 INFO 均完整显示（防"end 未收尾"误读）
             call()
         except Exception:
             pass
@@ -1571,14 +1659,14 @@ def print_list():
 
 EPILOG = """\
 示例：
-  python joyarm_core/backend/test_backend.py --help                     # 本说明
-  python joyarm_core/backend/test_backend.py --list                     # 全部测试项
-  python joyarm_core/backend/test_backend.py --sub=dm                   # 离线段（缺省 --step=offline）
-  python joyarm_core/backend/test_backend.py --sub=dm --step=all        # 全部（不含 set_zero 61/62）
-  python joyarm_core/backend/test_backend.py --sub=dm --step=40         # 单项
-  python joyarm_core/backend/test_backend.py --sub=dm --step=init,20,30 # 混选
-  python joyarm_core/backend/test_backend.py --sub=dm --step=25 --watch 30   # 刷新监视 30s
-  python joyarm_core/backend/test_backend.py --sub=dm --step=online --param=<键> --action=open,close
+  python joyarm_core/backend/verify_backend.py --help                     # 本说明
+  python joyarm_core/backend/verify_backend.py --list                     # 全部测试项
+  python joyarm_core/backend/verify_backend.py --sub=dm                   # 离线段（缺省 --step=offline）
+  python joyarm_core/backend/verify_backend.py --sub=dm --step=all        # 全部（不含 set_zero 61/62）
+  python joyarm_core/backend/verify_backend.py --sub=dm --step=40         # 单项
+  python joyarm_core/backend/verify_backend.py --sub=dm --step=init,20,30 # 混选
+  python joyarm_core/backend/verify_backend.py --sub=dm --step=25 --watch 30   # 刷新监视 30s
+  python joyarm_core/backend/verify_backend.py --sub=dm --step=online --param=<键> --action=open,close
 
 风险与确认策略：
   低危：直接执行（离线构造 / 只读 / 无帧管线探测）。
@@ -1596,7 +1684,7 @@ EPILOG = """\
 
 def parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="test_backend.py",
+        prog="verify_backend.py",
         description=("Backend 子类通用验收测试（上层视角）：只调 Backend 基类公开 API，"
                      "对任意子类（关节电机/舵机/混合硬件）做分类分项逐级测试。"
                      "能力三分法（能力缺失=SKIP）+ 空族自动跳过 + 风险分级确认。"),
