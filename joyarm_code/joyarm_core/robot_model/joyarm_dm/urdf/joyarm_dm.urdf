@@ -91,7 +91,7 @@
 
   <!-- ============================ joint2 =========================== -->
   <joint name="joint2" type="revolute">
-    <origin xyz="0.02 0 0" rpy="-1.570792653589793 0 3.1416" />
+    <origin xyz="0.02 0 0" rpy="-1.5707963267948966 0 3.141592653589793" />
     <parent link="link1" />
     <child link="link2" />
     <axis xyz="0 0 1" />
@@ -157,7 +157,8 @@
 
   <!-- ============================ joint4 =========================== -->
   <joint name="joint4" type="revolute">
-    <origin xyz="0.24854 0 0" rpy="0 -0.030795 0.21913" />
+   <!--  <origin xyz="0.24854 0 0" rpy="0 -0.030795 0.21913" />-->
+    <origin xyz="0.24854 0 0" rpy="0 0 0.21913" />
     <parent link="link3" />
     <child link="link4" />
     <axis xyz="0 0 1" />
@@ -223,7 +224,8 @@
 
   <!-- ============================ joint6 =========================== -->
   <joint name="joint6" type="revolute">
-    <origin xyz="0.00076939 -1.1537E-05 0" rpy="1.5707 0 0" />
+   <!-- <origin xyz="0.00076939 -1.1537E-05 0" rpy="1.5707 0 0" />-->
+    <origin xyz="0 0 0" rpy="1.5707963267948966 0 0" />
     <parent link="link5" />
     <child link="link6" />
     <axis xyz="0 0 1" />

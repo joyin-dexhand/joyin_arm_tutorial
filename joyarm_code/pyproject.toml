@@ -16,6 +16,7 @@ dependencies = [
     "pyside6>=6.5.2",
     "numpy>=2.0.1",
     "pyserial>=3.5",
+    "mujoco>=3.13.0",
 ]
 
 [tool.setuptools.packages.find] # 平铺布局多顶层目录，显式只打包核心 SDK

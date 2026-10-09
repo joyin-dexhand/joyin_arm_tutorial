@@ -73,8 +73,8 @@ from .joyarm.fakearm import FakeArm
 from .joyarm import JoyArmFactory, joyarm_factory
 
 # ---- 算法层（robotics；只按属性约定调用 arm，不 import joyarm）----
-from .robotics.fkine import FkineSolver, PinFkineSolver
-from .robotics.ikine import IkineSolver, PinIkineSolver
+from .robotics.fkine import FkineSolver, PinFkineSolver, MdhFkineSolver
+from .robotics.ikine import AnalyticIkineSolver, IkineSolver, PinIkineSolver
 from .robotics.jacobian import JacobianSolver, PinJacobianSolver
 from .robotics.dynamics import DynamicsSolver, PinDynamicsSolver
 from .robotics.trajectory import TrajPlanner, ToJointTrajPlanner
@@ -144,7 +144,9 @@ __all__ = [
     "Controller",
     # 六域默认实现（Pin 系列 / 到关节目标规划 / 关节位置控制）
     "PinFkineSolver",
+    "MdhFkineSolver",
     "PinIkineSolver",
+    "AnalyticIkineSolver",
     "PinJacobianSolver",
     "PinDynamicsSolver",
     "ToJointTrajPlanner",

@@ -6,9 +6,11 @@
 """
 from .fkine_solver import FkineSolver
 from .fkine_solver_pin import PinFkineSolver
+from .fkine_solver_mdh import MdhFkineSolver
 
 REGISTRY: dict = {
     "pin_fkine_solver": PinFkineSolver,   # 默认实现（首位）
+    "mdh_fkine_solver": MdhFkineSolver,  # MDH 解析实现
 }
 
-__all__ = ["FkineSolver", "PinFkineSolver", "REGISTRY"]
+__all__ = ["FkineSolver", "PinFkineSolver","MdhFkineSolver", "REGISTRY"]
