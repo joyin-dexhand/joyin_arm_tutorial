@@ -220,7 +220,7 @@ transforms.py（23 函数，清单见 §3.1）✅ · types.py 枚举+数据类�
 - 离线轨迹可视化：`test/visualize_fk_trajectory.py`，调用 `ToJointTrajPlanner.plan_once` 一次并经 `sample_frame` 离线采样五次关节插补 + MDH/Pin FK 对比，输出关节曲线、TCP 路径/线速度与位姿误差图，以及含前后各 1 秒静止段的三次/五次单关节加速度对比图；运行参数见 `test/README.md`。
 
 - `test/visualize_ik_trajectory.py`：IK 轨迹可视化实验，使用 `PinFkineSolver` 构造可达目标，解析 IK 求目标关节角后以五次关节插补和 Pin FK 回代绘图。
-- `test/benchmark_ik.py`：在每场景独立的 Pin FK 可达目标上，分别计时解析 IK 与 Pin 数值 IK 的 `solve()`，同时报告全部尝试与仅成功解的平均耗时；支持 q0 近目标、远目标、近肘/腕奇异三场景，默认每场景各 10,000 次。
+- `test/benchmark_ik.py`：随机生成 Pin FK 可达目标及 0～2 rad 邻域初值，分别计时解析 IK 与 Pin 数值 IK；默认 1,000 个目标 × 每目标 100 个初值，并保存成功率、累计迭代数、耗时散点及分段统计。
 
 ## 4. 文档同步维护
 

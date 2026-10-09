@@ -33,7 +33,7 @@ def _frame_id(model, frame) -> int:
 class PinIkineSolver(IkineSolver):
     """逆运动学默认实现：LM 数值迭代 + 多起点重启（pinocchio FK/雅可比）。"""
 
-    def __init__(self, damping: float = 1e-3, step_max: float = 0.5,
+    def __init__(self, damping: float = 1e-4, step_max: float = 0.5,
                  restarts: int = 3):
         """求解参数经 config ``robotics.ikine`` 的 ``**params`` 注入。
 
