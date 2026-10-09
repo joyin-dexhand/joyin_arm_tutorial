@@ -106,9 +106,9 @@ ZERO_TOL = 0.05       # item 38 设零后回读关节位置归零容差 rad
 CAP_MISSING = "功能缺失"
 CAP_MISSING2 = "未实现"
 
-# 基类 warn 消息文本标记（注意：限频通道名不出现在消息文本中，须按消息内容匹配；
-# 且须选取在消息中唯一的子串——如"存在空值"同时出现在发送空值门禁与状态数据异常两种
-# 消息里，须用发送门禁独有的尾部"，本次不发送"区分，防刷新线程的并发 warn 误判）
+# 基类 warn 消息文本标记（注意：须按消息内容匹配，且须选取在消息中唯一的子串——如"存在空值"
+# 同时出现在发送空值门禁与状态数据异常两种消息里，须用发送门禁独有的尾部"，本次不发送"区分，
+# 防刷新线程的并发 warn 误判）
 GATE_CONN = "未连接或状态未知"      # 连接门禁（_require_connected 唯一）
 GATE_MODE = "≠ 所需"               # 模式门禁（_require_mode 唯一）
 GATE_TYPE = "非 ControlMode 枚举"   # set_mode 类型门禁（唯一）
@@ -274,11 +274,6 @@ def _aggregate(results: list[tuple[str, str, str]]) -> tuple[str, str]:
     else:
         verdict = "SKIP"
     return verdict, "；".join(f"{fam}: {ev}" for fam, _, ev in results)
-
-
-def _clear_throttle(b: Backend):
-    """双族循环内的限频预清除：防第二族的同通道 warn 被 0.5s 限频吞掉而误判。"""
-    b._warn_last.clear()
 
 
 def _cap_missing(msgs: list[str]) -> bool:
@@ -628,7 +623,6 @@ def _seq_item(seq: list):
         for op, fam in seq:
             other = "end" if fam == "arm" else "arm"
             prev = _snap(b, other) if _n_family_cfg(s.cfg, other) > 0 else None
-            _clear_throttle(b)
             i0 = _mark()
             if op == "connect":
                 getattr(b, f"connect_{fam}")()
@@ -657,7 +651,6 @@ def _it16(s: Session):
         print(f"（已复位到全断开态：{'、'.join(acts)}）")
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         i0 = _mark()
         getattr(b, f"connect_{fam}")()
         getattr(b, f"connect_{fam}")()  # 重复连接
@@ -683,13 +676,11 @@ def _it17(s: Session):
         print(f"（已复位到全断开态：{'、'.join(acts)}）")
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         i0 = _mark()
         getattr(b, f"connect_{fam}")()
         c1 = getattr(b, f"is_connected_{fam}")
         getattr(b, f"disconnect_{fam}")()
         ev_d, ok_d = _check_disconnected(b, fam)
-        _clear_throttle(b)
         i1 = _mark()
         getattr(b, f"connect_{fam}")()
         ev_c, ok_c = _check_connected(b, fam)
@@ -721,7 +712,6 @@ def _it20(s: Session):
     b = s.backend()
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         st1 = getattr(b, f"get_state_{fam}")()
         if st1 is None:
             results.append((fam, "SKIP", "get_state 返回 None（读失败/数据异常——见上方 warn）"))
@@ -817,7 +807,6 @@ def _it22(s: Session):
     b = s.backend()
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         i0 = _mark()
         ret = getattr(b, f"get_mode_{fam}")()
         # 测试基建：逐 joint 模式无公开访问器，读私有缓存 _joint_mode_* 仅作结果展示
@@ -843,7 +832,6 @@ def _it23(s: Session):
     b = s.backend()
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         i0 = _mark()
         vals = getattr(b, f"read_param_{fam}")(key)
         if vals is None:
@@ -864,7 +852,6 @@ def _it24(s: Session):
     time.sleep(0.3)  # 等低频刷新更新状态快照（get_error 读槽不发帧）
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         errs = getattr(b, f"get_error_{fam}")()
         if errs is None:
             results.append((fam, "SKIP",
@@ -889,7 +876,6 @@ def _it25(s: Session):
     time.sleep(0.3)  # 等低频刷新更新状态快照
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         errs = getattr(b, f"get_error_{fam}")()
         ret = getattr(b, f"check_error_{fam}")()
         if not isinstance(ret, bool):
@@ -917,7 +903,6 @@ def _modes_item(fam: str):
         lines, fails, any_ok = [], [], False
         for mode in ALL_MODES:
             before = getattr(b, f"get_mode_{fam}")()  # 先读
-            _clear_throttle(b)
             i0 = _mark()
             ret = getattr(b, f"set_mode_{fam}")(mode)  # 再设
             cache = getattr(b, f"mode_{fam}")
@@ -955,7 +940,6 @@ def _it32(s: Session):
     for fam in _both_fams(s):
         parts, ok_all = [], True
         for label, bad in (("字符串入参", "mit"), ("未定义模式", _UndefMode.UNDEFINED)):
-            _clear_throttle(b)
             i0 = _mark()
             ret = getattr(b, f"set_mode_{fam}")(bad)
             hit = any(GATE_TYPE in m for m in _since(i0))
@@ -1001,7 +985,6 @@ def _it35(s: Session):
     b = s.backend()
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         i0 = _mark()
         try:
             r1, r2 = getattr(b, f"enable_{fam}")(), getattr(b, f"enable_{fam}")()
@@ -1021,7 +1004,6 @@ def _it36(s: Session):
     b = s.backend()
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         i0 = _mark()
         try:
             r1, r2 = getattr(b, f"disable_{fam}")(), getattr(b, f"disable_{fam}")()
@@ -1043,7 +1025,6 @@ def _it37(s: Session):
     b = s.backend()
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         orig = getattr(b, f"read_param_{fam}")(key)
         if orig is None:
             results.append((fam, "SKIP",
@@ -1129,7 +1110,6 @@ def _it40(s: Session):
     results = []
     for fam in _both_fams(s):
         n = getattr(b, f"n_joints_{fam}")
-        _clear_throttle(b)
         i0 = _mark()
         getattr(b, f"send_mit_{fam}")(np.zeros(n), np.zeros(n), np.zeros(n),
                                       np.zeros(n), np.zeros(n))
@@ -1149,7 +1129,6 @@ def _it41(s: Session):
             results.append((fam, "SKIP", f"{src}——无法取当前位置作保持目标"))
             continue
         n = getattr(b, f"n_joints_{fam}")
-        _clear_throttle(b)
         i0 = _mark()
         getattr(b, f"send_mit_{fam}")(np.zeros(n), q0, np.zeros(n),
                                       np.full(n, SAFE_KP), np.full(n, SAFE_KD))
@@ -1177,7 +1156,6 @@ def _it42(s: Session):
             continue
         lim = getattr(b, f"joint_limits_{fam}")
         target = _safe_target(lim, q0, POS_AMP)
-        _clear_throttle(b)
         i0 = _mark()
         getattr(b, f"send_position_{fam}")(target, np.full(n, SAFE_VLIM), np.full(n, SAFE_FLIM))
         verdict = _classify_send(_since(i0))
@@ -1202,7 +1180,6 @@ def _it43(s: Session):
         if q0 is None:
             results.append((fam, "SKIP", f"{src}——电机反馈异常时不宜做速度测试"))
             continue
-        _clear_throttle(b)
         dq_cmd = _safe_vel_dirs(getattr(b, f"joint_limits_{fam}"), q0, VEL_TEST)
         i0 = _mark()
         getattr(b, f"send_vel_{fam}")(dq_cmd)
@@ -1272,7 +1249,6 @@ def _it50(s: Session):
     b = s.backend()
     results = []
     for fam in _both_fams(s):
-        _clear_throttle(b)
         i0 = _mark()
         lines: list[str] = []
         fails: list[str] = []
@@ -1655,8 +1631,6 @@ def run_item(it: dict, s: Session) -> tuple[str, str]:
         return "SKIP", ev
     if actions:
         print(f"（已自动补齐前置：{'；'.join(actions)}）")
-    if s.b is not None:
-        s.b._warn_last.clear()  # 测试基建：重置 warn 限频时间戳，防上一项同通道 0.5s 限频吞掉本项 warn（判定依赖 warn 文本）
     if it.get("preview"):
         # 运动参数预览 + 二次确认：前置就绪后列出当前/期望值，用户确认才发送
         try:
@@ -1693,7 +1667,6 @@ def _cleanup(s: Session):
         return
     for call in (s.b.disable_arm, s.b.disable_end, s.b.disconnect_arm, s.b.disconnect_end, s.b.close):
         try:
-            s.b._info_last.clear()  # 收尾安全信号不合并：清 info 限频，各族成功 INFO 均完整显示
             call()
         except Exception:
             pass

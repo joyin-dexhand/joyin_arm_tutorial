@@ -10,9 +10,9 @@
 
 架构约束：
 - 子类**不得新增公开方法/属性**：JoyArm 上层只面向 ``Backend`` 基类编程，子型号专属功能一律放私有层；
-- 基类负责全部编排（逐关节循环、维度/空值检查、越限裁剪、连接与模式前置检查、限频日志、异常降级），
+- 基类负责全部编排（逐关节循环、维度/空值检查、越限裁剪、连接与模式前置检查、统一日志、异常降级），
   子类只做单关节/单总线的协议操作——**不要在子类重复基类已做的检查与裁剪**；
-- 失败约定：抽象方法失败上抛异常或返回 ``False``/``None`` 即可，基类统一转限频 warn。
+- 失败约定：抽象方法失败上抛异常或返回 ``False``/``None`` 即可，基类统一转 warn。
 
 最小可用子集（29 个抽象方法须全部**定义**以满足抽象方法强制；未实现的能力**保留本模板的 ``NotImplementedError``**）：
 - 必实现 14 个：``_connect/_disconnect_arm/end`` / ``_enable/_disable_joint_arm/end`` / ``_read_joint_state_arm/end`` / ``_read/_set_joint_mode_arm/end``
@@ -26,7 +26,7 @@
 2. ``connect_*`` 成功后 ``is_connected_*`` 为 ``True``；无 MIT 的型号在 yaml 配 ``default_mode: position`` 后连接无 warn；
 3. ``get_state_*`` 返回 ``JointState``：硬件提供的字段为 ``(n,)`` 数组、硬件不提供的字段为 ``None``，``t`` 为本次读取时刻（每次成功调用都更新）；
 4. ``set_mode_*`` 成功后 ``mode_*`` 即为所设模式（乐观更新缓存，发送门禁立即放行）；``get_mode_*`` 能读回同一模式（读回以硬件真值纠正缓存）；
-5. 发送越限指令被基类就近裁剪并限频 warn（内核收到的入参必在硬限位内，子类无需自检）；
+5. 发送越限指令被基类就近裁剪并 warn（内核收到的入参必在硬限位内，子类无需自检）；
 6. ``read_param_*`` 返回逐关节**标量** list（子类返回非标量会被基类拦截、整组作废返 ``None``）；
 7. ``disconnect_*`` 后重连可恢复（断连清空模式缓存，重连自动设默认模式并乐观回填）。
 """
@@ -94,8 +94,7 @@ class BackendTemplate(Backend):
         # self._mode_arm/end、_joint_mode_arm/end           模式缓存（get_mode 读齐且一致时更新 / set_mode 成功时乐观更新）
         # self._default_mode_arm/end                        连接后基类自动设的模式（cfg default_mode）
         # self._write_settle / _refresh_hz                  指令帧生效等待（秒）/ 低频刷新频率（Hz）（cfg 可覆盖）
-        # self._warn_interval / _info_interval              限频日志间隔（秒）
-        # 勿动：_warn_last/_info_last（限频计时字典）、_refresh_stop/_refresh_thread（基类刷新线程）——
+        # 勿动：_refresh_stop/_refresh_thread（基类刷新线程）——
         # 子类接收线程自建停止标志（断连即停），勿复用 _refresh_stop。
         # 型号自定义键只从 _cfg 顶层与 _jointscfg_*[i] 取，其余键值勿重复解析。
 

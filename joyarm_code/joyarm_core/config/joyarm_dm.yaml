@@ -90,9 +90,7 @@ robotics:
 # ===================================================================
 backend:
   name: backend_dm # backend 类（backend/__init__.py REGISTRY 中的注册名），与 joyarm_<型号> 对应
-  state_refresh_hz: 50.0 # 低频状态刷新频率（Hz，默认 10）
-  warn_interval: 0.5 # warn 同通道日志限频间隔（秒）
-  info_interval: 0.5 # info 同通道日志限频间隔（秒）
+  state_refresh_hz: 50.0 # 低频状态刷新频率（Hz，默认 20）
   write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
   rx_hz: 1000.0 # RX 收取线程节拍（Hz，串口阻塞读超时=1/rx_hz；backend_dm 专用）
   arm: # arm本体后端（joints 条目四键限位 = 硬限位，数值须与 URDF limit 标定保持一致）
@@ -230,10 +228,8 @@ backend:
         dq_max: 8.0 # 速度上限（rad/s）
         tau_max: 1.5 # 力矩上限（N·m）
         MIT:                                                                                  # ！ 待标定 
-          # kp: 8.0
-          # kd: 1.0
-          kp: 0.0     # max=500
-          kd: 0.0     # max=5
+          kp: 8.0     # max=500
+          kd: 1.0     # max=5
         POS_VEL:                                                                              # ！ 待标定
           pos_kp: 50.0
           pos_ki: 1.0

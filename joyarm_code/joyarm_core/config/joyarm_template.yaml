@@ -72,9 +72,7 @@ backend:
   name: backend_dm # backend 类（backend/__init__.py REGISTRY 中的注册名），与 joyarm_<型号> 对应
 
   # 可选运行参数（缺省或非正数时沿用默认并 warn）
-  state_refresh_hz: 10.0 # 低频状态刷新频率（Hz，默认 10）
-  warn_interval: 0.5 # warn 同通道日志限频间隔（秒）
-  info_interval: 0.5 # info 同通道日志限频间隔（秒）
+  state_refresh_hz: 20.0 # 低频状态刷新频率（Hz，默认 20）
   write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
   arm: # arm 段
     channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）

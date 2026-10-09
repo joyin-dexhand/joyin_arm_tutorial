@@ -440,7 +440,7 @@ class BackendDM(Backend):
                 b.close()
 
     def _rid_of(self, key: str) -> int:
-        """参数键 → RID（未知键上抛，基类转限频 warn）。"""
+        """参数键 → RID（未知键上抛，基类转 warn）。"""
         try:
             return _PARAM_RIDS[key]
         except (KeyError, TypeError):
@@ -602,13 +602,13 @@ class BackendDM(Backend):
         动作集：``"open"``→-5.0、``"home"``→-3.0、``"close"``→0.0（rad 固定行程位）、
         ``"position"``→按需目标位置（kwarg ``position``，rad，JoyArm 层透传）。
         模式不一致时自动切 POSITION（随写增益寄存器）；运动限速/限流取 cfg ``POS_VEL`` 的
-        ``vlim/flim`` 发送默认成员（缺配置被基类空值门禁拦截、限频 warn 不发送）；
-        位置经 ``send_position_end`` 基类管道裁硬限位（越限就近裁剪 + 限频 warn）后整组下发。
+        ``vlim/flim`` 发送默认成员（缺配置被基类空值门禁拦截、warn 不发送）；
+        位置经 ``send_position_end`` 基类管道裁硬限位（越限就近裁剪 + warn）后整组下发。
 
         :param action: 动作名（open / home / close / position）。
         :param kwargs: ``position`` 动作的目标位置（rad）。
-        :raises ValueError: 未知动作、或 position 动作缺 ``position`` 参数（基类转限频 warn）。
-        :raises RuntimeError: 切 POSITION 模式失败（基类转限频 warn）。
+        :raises ValueError: 未知动作、或 position 动作缺 ``position`` 参数（基类转 warn）。
+        :raises RuntimeError: 切 POSITION 模式失败（基类转 warn）。
         """
         if action == "position":
             pos = kwargs.get("position")

@@ -8,8 +8,7 @@
 （close() 显式 / 随对象销毁自动）。
 
 注意：test_04 起的多数用例共享模块级主 Dummy ``b`` 的演化状态（与被移植的冒烟脚本一致），
-依赖 pytest 同文件按定义顺序执行；warn/info 按语义通道独立限频（``_warn_last``/``_info_last`` 字典），
-连续断言多类节流日志须逐处复位 ``b._warn_last = {}``（需要处补 ``b._info_last = {}``）。
+依赖 pytest 同文件按定义顺序执行。
 test_24 起为本轮审阅新增（修复回归 / end 族对称 / 属性与边界），均用独立实例，不依赖 ``b`` 的演化状态；
 test_42 起为五轴审查新增（指令一维性 / 读参数标量校验 / cfg 参数鲁棒回退 / 状态非有限值 / 设模式类型门禁 / 空族写入一致性）；
 test_48 起为第九轮审查新增（写参数非有限值拦截 / 状态非字典拦截）；
@@ -292,11 +291,9 @@ def test_02_extract_holes(cfg):
 
 # ---- T2 维度校验（先于连接门禁） ----
 def test_03_dims(b):
-    b._warn_last = {}
     cap.msgs.clear()
     b.send_vel_arm([1, 2, 3, 4, 5])
     assert warns("dq=5") and not any(c[0] == "send_joint_vel_arm" for c in b.calls)
-    b._warn_last = {}  # 复位节流配额，独立验证 end 族
     cap.msgs.clear()
     b.send_vel_end([1, 2])
     assert warns("dq=2")
@@ -312,22 +309,17 @@ def test_04_empty_family(cfg):
     try:
         cap.msgs.clear()
         assert bne.enable_end() == 1 and len(warns("未配置任何 joint")) >= 1
-        bne._info_last = {}  # 复位节流时钟（空族提示为 info 通道），独立验证发送路径
         cap.msgs.clear()
         bne.send_vel_end(np.zeros(1))
         assert len(warns("未配置任何 joint")) >= 1
-        bne._info_last = {}
         cap.msgs.clear()
         bne.send_action_end("open")  # 空族判定先于连接门禁（统一顺序）
         assert len(warns("未配置任何 joint")) >= 1
         assert not any(c[0] == "send_action_end" for c in bne.calls)
-        bne._info_last = {}
         cap.msgs.clear()
         assert bne.get_error_end() == [] and len(warns("未配置任何 joint")) >= 1
-        bne._info_last = {}
         cap.msgs.clear()
         assert bne.check_error_end() is True and len(warns("未配置任何 joint")) >= 1
-        bne._info_last = {}
         cap.msgs.clear()
         assert bne.clear_error_end() is True and len(warns("未配置任何 joint")) >= 1
     finally:
@@ -339,12 +331,10 @@ def test_05_unconnected_gates(b):
     cap.msgs.clear()
     assert b.get_state_arm() is None
     assert len(warns("未连接")) >= 1
-    b._warn_last = {}  # 复位通道时钟，逐操作独立验证门禁告警（连接门禁同通道限频）
     cap.msgs.clear()
     assert b.send_vel_arm(np.zeros(6)) is None
     assert not any(c[0] == "send_joint_vel_arm" for c in b.calls)
     assert len(warns("未连接")) >= 1
-    b._warn_last = {}
     cap.msgs.clear()
     assert b.enable_arm() == 0
     assert len(warns("未连接")) >= 1
@@ -429,9 +419,8 @@ def test_09_get_state(b):
     assert np.allclose(st.q, [0.1 * (i + 1) for i in range(6)])
     b.jstates["arm"][3]["temp_mos"] = None
     q_prev, t_prev = st.q.copy(), st.t
-    b._warn_last = {}  # 复位节流配额，独立验证数据异常节流 warn
     cap.msgs.clear()
-    assert b.get_state_arm() is None  # 键在值空=数据异常 → 跳过本轮并节流 warn
+    assert b.get_state_arm() is None  # 键在值空=数据异常 → 跳过本轮并 warn
     assert np.array_equal(st.q, q_prev) and st.t == t_prev
     assert len(warns("跳过更新")) >= 1
     b.jstates["arm"][3]["temp_mos"] = 33.0
@@ -555,7 +544,6 @@ def test_14_get_check_clear_error(b):
     assert not any(c[0] == "disable_joint_arm" for c in b.calls)
     assert b.is_abled_arm is False  # 使能标志不被清错改动
     b.fail_at["clear_joint_error_arm"] = {2}
-    b._warn_last = {}  # 清错通道同上，复位后再验异常告警
     cap.msgs.clear()
     assert b.clear_error_arm() is False and len(warns("清错异常")) >= 1
     del b.fail_at["clear_joint_error_arm"]
@@ -569,7 +557,6 @@ def test_15_send_vel_guard(b):
     b.modes["arm"] = [ControlMode.VELOCITY] * 6
     b.get_mode_arm()
     cap.msgs.clear()
-    b._warn_last = {}
     b.calls.clear()
     b.send_vel_arm(np.full(6, 100.0))
     c13 = [c for c in b.calls if c[0] == "send_joint_vel_arm"]
@@ -578,7 +565,7 @@ def test_15_send_vel_guard(b):
     assert np.allclose([c[2] for c in c13], exp13)
     for _ in range(9):
         b.send_vel_arm(np.full(6, 100.0))
-    assert 1 <= len(warns("越限")) <= 2  # 越限 warn 节流 2Hz
+    assert len(warns("越限")) == 10  # 10 次越限发送，每次均 warn
 
 
 # ---- T13 守卫与发送：位置 ----
@@ -625,7 +612,6 @@ def test_17_send_mit(b, cfg):
     c13e = [c for c in b.calls if c[0] == "send_joint_mit_arm"]
     assert np.allclose([c[5] for c in c13e], 7.0) and np.allclose([c[6] for c in c13e], 0.7)
     cap.msgs.clear()
-    b._warn_last = {}
     b.calls.clear()
     b.send_mit_arm(np.full(6, 3.0), np.zeros(6), np.full(6, 2.0), kp=[1, 2])
     assert warns("kp=2") and not [c for c in b.calls if c[0] == "send_joint_mit_arm"]
@@ -634,7 +620,6 @@ def test_17_send_mit(b, cfg):
 # ---- T13d 发送空值门禁与模式门禁 ----
 def test_18_send_gates(b):
     cap.msgs.clear()
-    b._warn_last = {}
     b.calls.clear()
     saved_kp = b._kp_mit_default_arm.copy()
     b._kp_mit_default_arm = saved_kp.copy()
@@ -644,13 +629,11 @@ def test_18_send_gates(b):
     assert warns("空值")
     b._kp_mit_default_arm = saved_kp
     cap.msgs.clear()
-    b._warn_last = {}
     b.calls.clear()
     b.send_mit_arm(np.full(6, np.nan), np.zeros(6), np.full(6, 2.0))
     assert not [c for c in b.calls if c[0] == "send_joint_mit_arm"]  # 指令含 NaN → 不发送
     assert warns("参数『tau』")
     cap.msgs.clear()
-    b._warn_last = {}
     b.calls.clear()
     b.send_vel_arm(np.zeros(6))  # 当前 MIT ≠ 所需 VELOCITY → 模式门禁拦下
     assert not any(c[0] == "send_joint_vel_arm" for c in b.calls)
@@ -846,7 +829,6 @@ def test_22_types():
 # ---- T16 断连 ----
 def test_23_disconnect(b):
     b._is_abled_arm = True  # 前置：未失能 → 断连前应先失能
-    b._info_last = {}  # 复位通道时钟，保证失能/断连成功 info 均可见（顺序断言）
     b.disconnect_arm()
     assert b.is_connected_arm is False and b.is_abled_arm is None
     idx_disc = next((i for i, m in enumerate(cap.msgs) if "断连成功" in m), -1)
@@ -898,19 +880,16 @@ def test_24_write_param_float32(cfg):
         bf32._refresh_stop.set()
 
 
-# ---- T17b 修复回归：非数值输入节流 warn，不向用户抛 ----
+# ---- T17b 修复回归：非数值输入 warn，不向用户抛 ----
 def test_25_none_input_no_raise(b):
     cap.msgs.clear()
-    b._warn_last = {}
     b.calls.clear()
-    b.send_vel_arm(["a"] * 6)  # 非数值 → 节流 warn，不抛
+    b.send_vel_arm(["a"] * 6)  # 非数值 → warn，不抛
     assert not any(c[0] == "send_joint_vel_arm" for c in b.calls)
     assert len(warns("非数值")) >= 1
-    b._warn_last = {}
     cap.msgs.clear()
     b.send_mit_arm([None] * 6, np.zeros(6), np.zeros(6))  # 含 None 同样不抛、不触内核
     assert not any(c[0] == "send_joint_mit_arm" for c in b.calls)
-    b._warn_last = {}
     cap.msgs.clear()
     assert b.write_param_end("pos_kp", ["a"]) == 0
     assert len(warns("非数值")) >= 1
@@ -963,7 +942,6 @@ def test_31_end_get_state(e):
     st = e.get_state_end()
     assert st is not None and st.temp_rotor is None  # 缺键=结构性缺席，其余照常装配
     e.jstates["end"][0]["temp_rotor"] = None
-    e._warn_last = {}
     cap.msgs.clear()
     q_prev, t_prev = st.q.copy(), st.t
     assert e.get_state_end() is None  # 键在值空=数据异常 → 跳过本轮，保留上次快照
@@ -1016,7 +994,6 @@ def test_34_end_check_clear_error(e):
     assert e.get_error_end() == [0]
     assert len([c for c in e.calls if c[0] == "read_joint_state_end"]) == 1
     e._joint_state_end.t -= 0.5  # 回拨快照时刻至 2 个刷新周期之前（10Hz → 阈值 0.2s）
-    e._warn_last = {}  # 状态检查通道刚发过过期告警，复位后再验
     cap.msgs.clear()
     assert e.get_error_end() is None and len(warns("状态快照过期")) >= 1
     e.get_state_end()  # 重新填槽恢复新鲜
@@ -1025,7 +1002,6 @@ def test_34_end_check_clear_error(e):
     assert e.get_error_end() == [0]  # 槽不跟手（仍是旧快照）
     e.get_state_end()
     assert e.get_error_end() == [9]
-    e._warn_last = {}  # 状态检查通道同上，复位后验故障告警
     cap.msgs.clear()
     assert e.check_error_end() is False and len(warns("存在故障状态码")) >= 1
     e.jstates["end"][0]["error"] = 0
@@ -1041,7 +1017,6 @@ def test_34_end_check_clear_error(e):
     assert e.clear_error_end() is True
     assert [c[1] for c in e.calls if c[0] == "clear_joint_error_end"] == [0]
     e.fail_at["clear_joint_error_end"] = {0}
-    e._warn_last = {}  # 清错通道复位后验异常告警
     cap.msgs.clear()
     assert e.clear_error_end() is False and len(warns("清错异常")) >= 1
     del e.fail_at["clear_joint_error_end"]
@@ -1061,7 +1036,6 @@ def test_35_end_send_mit(e, cfg):
     e.send_mit_end([1.0], [-1.0], [0.0], kp=[3.0], kd=[0.3])
     c = [x for x in e.calls if x[0] == "send_joint_mit_end"]
     assert np.allclose([x[5] for x in c], 3.0) and np.allclose([x[6] for x in c], 0.3)
-    e._warn_last = {}
     cap.msgs.clear()
     e.calls.clear()
     e.send_mit_end([99.0], [-1.0], [0.0])
@@ -1073,7 +1047,6 @@ def test_35_end_send_mit(e, cfg):
 def test_36_end_send_vel(e):
     assert e.set_mode_end(ControlMode.VELOCITY) == 1
     e.get_mode_end()  # set_mode 已乐观填缓存，get_mode 核实
-    e._warn_last = {}
     cap.msgs.clear()
     e.calls.clear()
     e.send_vel_end([99.0])
@@ -1110,7 +1083,6 @@ def test_41_no_arm_section(cfg):
     try:
         assert bna._n_joints_arm == 0 and bna.n_joints_arm == 0 and bna.joint_limits_arm is None
         assert bna.joint_state_arm.q.shape == (0,)
-        bna._warn_last = {}
         cap.msgs.clear()
         assert bna.enable_arm() == 1 and len(warns("未配置任何 joint")) >= 1  # 空族视为成功
     finally:
@@ -1128,12 +1100,10 @@ def test_42_cmd_2d_blocked(cfg):
         b2.connect_arm()
         b2._refresh_stop.set()
         cap.msgs.clear()
-        b2._warn_last = {}
         b2.calls.clear()
         b2.send_vel_arm(np.arange(6).reshape(6, 1))  # len==6 溜过长度检查，须被一维性拦下
         assert not any(c[0] == "send_joint_vel_arm" for c in b2.calls)
         assert len(warns("需为 (n,) 一维序列")) >= 1
-        b2._warn_last = {}
         cap.msgs.clear()
         assert b2.write_param_arm("pos_kp", np.arange(6).reshape(6, 1)) == 0  # 写参数路径同样拦截
         assert len(warns("需为 (n,) 一维序列")) >= 1
@@ -1142,7 +1112,7 @@ def test_42_cmd_2d_blocked(cfg):
         b2._refresh_stop.set()
 
 
-# ---- read_param 子类误返回序列（非标量）→ 指名 joint 限频 warn + 整族作废 ----
+# ---- read_param 子类误返回序列（非标量）→ 指名 joint warn + 整族作废 ----
 def test_43_read_param_nonscalar(cfg):
     b3 = DummyBackend(cfg)
     try:
@@ -1151,7 +1121,6 @@ def test_43_read_param_nonscalar(cfg):
         orig = b3._read_joint_param_arm
         b3._read_joint_param_arm = lambda i, key: [orig(i, key)] if i == 2 else orig(i, key)
         cap.msgs.clear()
-        b3._warn_last = {}
         assert b3.read_param_arm("pos_kp") is None
         assert len(warns("返回非标量")) >= 1
         assert b3._jname("arm", 2) in warns("返回非标量")[0]  # 指名 joint
@@ -1163,15 +1132,12 @@ def test_43_read_param_nonscalar(cfg):
 def test_44_cfg_pos_float_fallback(cfg):
     cfg_bad = copy.deepcopy(cfg)
     cfg_bad["state_refresh_hz"] = "abc"
-    cfg_bad["warn_interval"] = float("nan")
-    cfg_bad["info_interval"] = float("inf")
     cfg_bad["write_settle"] = -1
     cap.msgs.clear()
     b4 = DummyBackend(cfg_bad)
     try:
-        assert b4._refresh_hz == 10.0 and b4._warn_interval == 0.5
-        assert b4._info_interval == 0.5 and b4._write_settle == 0.1
-        for k in ("state_refresh_hz", "warn_interval", "info_interval", "write_settle"):
+        assert b4._refresh_hz == 20.0 and b4._write_settle == 0.1
+        for k in ("state_refresh_hz", "write_settle"):
             assert any(k in m and "非法" in m for m in cap.msgs), k
     finally:
         b4._refresh_stop.set()
@@ -1188,7 +1154,6 @@ def test_45_state_nonfinite(cfg):
         b5.jstates["arm"][1]["q"] = float("nan")
         b5.jstates["arm"][4]["tau"] = float("inf")
         cap.msgs.clear()
-        b5._warn_last = {}
         assert b5.get_state_arm() is None
         assert len(warns("非有限值")) >= 1
         assert np.array_equal(b5.joint_state_arm.q, q_prev)  # 快照保持
@@ -1206,7 +1171,6 @@ def test_46_set_mode_type_gate(cfg):
         b6._refresh_stop.set()  # 先冻结刷新线程再连接，避免后台读取干扰下方调用计数断言
         b6.connect_arm()
         cap.msgs.clear()
-        b6._warn_last = {}
         b6.calls.clear()
         assert b6.set_mode_arm("position") == 0
         assert len(warns("非 ControlMode 枚举")) >= 1
@@ -1222,7 +1186,6 @@ def test_47_write_param_empty_family(cfg):
     cfg_ne.pop("end", None)
     bne = DummyBackend(cfg_ne)
     try:
-        bne._info_last = {}
         cap.msgs.clear()
         assert bne.write_param_end("pos_kp", [1, 2, 3]) == 1
         assert len(warns("未配置任何 joint")) >= 1
@@ -1242,12 +1205,10 @@ def test_48_write_param_nonfinite(cfg):
         b7.connect_arm()
         b7._refresh_stop.set()
         cap.msgs.clear()
-        b7._warn_last = {}
         b7.calls.clear()
         assert b7.write_param_arm("pos_kp", [1.0, np.nan, 3, 4, 5, 6]) == 0
         assert len(warns("NaN/inf")) >= 1
         assert not any(c[0] == "write_joint_param_arm" for c in b7.calls)
-        b7._warn_last = {}  # 参数读写通道节流复位后再验 inf
         cap.msgs.clear()
         assert b7.write_param_arm("pos_kp", np.full(6, np.inf)) == 0
         assert len(warns("NaN/inf")) >= 1
@@ -1268,7 +1229,6 @@ def test_49_state_nondict(cfg):
         orig = b8._read_joint_state_arm
         b8._read_joint_state_arm = lambda i: [0.1, 0.0, 0] if i == 2 else orig(i)  # joint3 误返回 list
         cap.msgs.clear()
-        b8._warn_last = {}
         assert b8.get_state_arm() is None
         assert len(warns("返回非字典")) >= 1
         assert b8._jname("arm", 2) in warns("返回非字典")[0]  # 指名 joint
@@ -1295,7 +1255,6 @@ def test_50_state_none_return(cfg):
         orig = b9._read_joint_state_arm
         b9._read_joint_state_arm = lambda i: None if i == 4 else orig(i)  # joint5 误返回 None
         cap.msgs.clear()
-        b9._warn_last = {}
         assert b9.get_state_arm() is None
         assert len(warns("返回非字典")) >= 1
         assert b9._jname("arm", 4) in warns("返回非字典")[0]   # 指名 joint
@@ -1317,7 +1276,6 @@ def test_51_error_inf_no_raise(cfg):
         q_prev, t_prev = b10.joint_state_arm.q.copy(), b10.joint_state_arm.t
         b10.jstates["arm"][1]["error"] = float("inf")
         cap.msgs.clear()
-        b10._warn_last = {}
         st = b10.get_state_arm()  # 不得上抛（NumPy ≥1.24 的 OverflowError 须被拦截转 warn）
         assert st is None
         assert len(warns("解析失败")) >= 1
@@ -1343,7 +1301,6 @@ def test_52_state_value_nonscalar(cfg):
         orig = b11._read_joint_state_arm
         b11._read_joint_state_arm = lambda i: {**orig(i), "q": [0.1]} if i == 3 else orig(i)  # joint4 子值误返回 list
         cap.msgs.clear()
-        b11._warn_last = {}
         assert b11.get_state_arm() is None
         assert len(warns("非标量")) >= 1
         assert b11._jname("arm", 3) in warns("非标量")[0]       # 指名 joint
@@ -1370,7 +1327,6 @@ def test_53_mode_nonenum(cfg):
         orig = b12._read_joint_mode_arm
         b12._read_joint_mode_arm = lambda i: 2 if i == 3 else orig(i)  # joint4 误返回 int
         cap.msgs.clear()
-        b12._warn_last = {}
         assert b12.get_mode_arm() is None
         assert len(warns("非 ControlMode 枚举")) >= 1
         assert b12._jname("arm", 3) in warns("非 ControlMode 枚举")[0]  # 指名 joint
@@ -1479,7 +1435,6 @@ def test_59_unconnected_gate_sweep(cfg):
     try:
         r._refresh_stop.set()
         cap.msgs.clear()
-        r._warn_last = {}
         assert r.read_param_arm("pos_kp") is None
         assert r.write_param_arm("pos_kp", np.arange(6)) == 0
         assert r.set_mode_arm(ControlMode.MIT) == 0
@@ -1505,19 +1460,16 @@ def test_60_kernel_exception_paths(cfg):
         r.connect_arm()
         r.fail_at["enable_joint_arm"] = {2}
         cap.msgs.clear()
-        r._warn_last = {}
         assert r.enable_arm() == 0 and r.is_abled_arm is None
         assert len(warns("使能异常")) >= 1
         del r.fail_at["enable_joint_arm"]
         r.fail_at["disable_joint_arm"] = {3}
         cap.msgs.clear()
-        r._warn_last = {}
         assert r.disable_arm() == 0
         assert len(warns("失能异常")) >= 1
         del r.fail_at["disable_joint_arm"]
         r.fail_at["set_joint_zero_arm"] = {1}
         cap.msgs.clear()
-        r._warn_last = {}
         assert r.set_zero_arm() == 0
         assert len(warns("设零异常")) >= 1
     finally:
@@ -1532,7 +1484,6 @@ def test_61_clear_retfalse_and_connect_exc(cfg):
         r.connect_arm()
         r.ret_false["clear_joint_error_arm"] = {4}
         cap.msgs.clear()
-        r._warn_last = {}
         assert r.clear_error_arm() is False
         assert len(warns("清错失败")) >= 1 and r._jname("arm", 4) in warns("清错失败")[0]
     finally:
@@ -1542,7 +1493,6 @@ def test_61_clear_retfalse_and_connect_exc(cfg):
         r2._refresh_stop.set()
         r2.fail_at["connect_arm"] = {0}
         cap.msgs.clear()
-        r2._warn_last = {}
         r2.connect_arm()
         assert r2.is_connected_arm is None  # 异常与返回 False 同待遇：停留未知态
         assert len(warns("连接内核异常")) >= 1
@@ -1559,7 +1509,6 @@ def test_62_mit_clip_arm(cfg):
         assert r.get_mode_arm() == ControlMode.MIT  # 连接已乐观填缓存，get_mode 核实
         r.calls.clear()
         cap.msgs.clear()
-        r._warn_last = {}
         lim = r.joint_limits_arm
         tau = np.array([99.0, -99.0, 0, 0, 0, 0])
         q = np.array([99.0, -99.0, 0, 0, 0, 0])
@@ -1575,7 +1524,7 @@ def test_62_mit_clip_arm(cfg):
         r._refresh_stop.set()
 
 
-# ---- end 位置裁剪 + vlim/flim 显式覆盖：三者越限各自就近裁剪（限频同通道，逐次复位验证） ----
+# ---- end 位置裁剪 + vlim/flim 显式覆盖：三者越限各自就近裁剪（各自独立 warn） ----
 def test_63_end_position_clip(cfg):
     r = DummyBackend(cfg)
     try:
@@ -1587,13 +1536,11 @@ def test_63_end_position_clip(cfg):
         q_ok = float(lim.q_max[0]) - 0.1
         r.calls.clear()
         cap.msgs.clear()
-        r._warn_last = {}
         r.send_position_end([99.0])  # q 越限（vlim/flim 用 cfg 缺省）
         c = next(c for c in r.calls if c[0] == "send_joint_position_end")
         assert np.isclose(c[2], lim.q_max[0]) and 0.0 <= c[3] <= lim.dq_max[0] and 0.0 <= c[4] <= 1.0
         assert len(warns("q 指令越限")) >= 1
         r.calls.clear()
-        r._warn_last = {}
         cap.msgs.clear()
         v_ok = float(lim.dq_max[0]) * 0.5
         r.send_position_end([q_ok], vlim=[99.0], flim=[0.5])  # 仅 vlim 越限
@@ -1601,7 +1548,6 @@ def test_63_end_position_clip(cfg):
         assert np.isclose(c[3], lim.dq_max[0]) and np.isclose(c[2], q_ok) and np.isclose(c[4], 0.5)  # 显式 flim 原样透传
         assert len(warns("vlim 超出")) >= 1
         r.calls.clear()
-        r._warn_last = {}
         cap.msgs.clear()
         r.send_position_end([q_ok], vlim=[v_ok], flim=[5.0])  # 仅 flim 越限
         c = next(c for c in r.calls if c[0] == "send_joint_position_end")
@@ -1636,7 +1582,6 @@ def test_65_connect_default_mode_fail_and_protocol(cfg):
         r._refresh_stop.set()
         r.fail_at["set_joint_mode_arm"] = {0}
         cap.msgs.clear()
-        r._warn_last = {}
         r.connect_arm()
         assert r.is_connected_arm is True  # 默认模式失败不影响连接成功
         assert len(warns("默认模式（MIT）设置失败")) >= 1
@@ -1663,7 +1608,6 @@ def test_66_close_slow_exit_warn(cfg):
     try:
         assert tick_entered.wait(1.0)  # 等线程进入单拍（阻塞在总线读取的场景模拟）
         cap.msgs.clear()
-        r._warn_last = {}
         r.close()
         assert len(warns("1 秒内未退出")) >= 1
         release.set()
@@ -1674,7 +1618,7 @@ def test_66_close_slow_exit_warn(cfg):
         r._refresh_stop.set()
 
 
-# ---- 刷新单拍异常 → 限频 warn 且下周期重试（线程不死、恢复后状态照常装配） ----
+# ---- 刷新单拍异常 → warn 且下周期重试（线程不死、恢复后状态照常装配） ----
 def test_67_refresh_tick_exception_retry(cfg):
     r = DummyBackend(cfg)
     boom = {"on": False}
@@ -1691,7 +1635,6 @@ def test_67_refresh_tick_exception_retry(cfg):
         r.joint_state_arm.t = 0.0  # 人为陈旧，保证恢复后的拍会真正读状态
         boom["on"] = True
         cap.msgs.clear()
-        r._warn_last = {}
         time.sleep(0.25)  # 10Hz：至少 2 拍异常
         assert len(warns("单拍异常")) >= 1
         boom["on"] = False
@@ -1713,7 +1656,6 @@ def test_68_disconnect_despite_disable_failure(cfg):
         r.enable_arm()
         r.ret_false["disable_joint_arm"] = {2}
         cap.msgs.clear()
-        r._warn_last = {}
         r.disconnect_arm()
         assert r.is_connected_arm is False  # 断连仍完成
         assert len(warns("失能失败")) >= 1
@@ -2012,7 +1954,7 @@ def test_72_backend_dm_action_end(cfg):
         d.send_action_end("home")
         assert len(frames) == n + 2
 
-        # position 按需透传；越限（q_min=-5.49）被基类管道裁硬限位 + 限频 warn
+        # position 按需透传；越限（q_min=-5.49）被基类管道裁硬限位 + warn
         d.send_action_end("position", position=-4.2)
         assert frames[-1] == me.prefix_pos + _pack_pos(-4.2, 3.0, 1.0) + b"\x00"
         cap.msgs.clear()
@@ -2020,19 +1962,16 @@ def test_72_backend_dm_action_end(cfg):
         assert any("q 指令越限" in m for m in cap.msgs)
         assert frames[-1] == me.prefix_pos + _pack_pos(-5.49, 3.0, 1.0) + b"\x00"
 
-        # 异常路径（_call 统一转限频 warn 不抛）：未知动作 / position 缺参 / 切模式失败（均逐处复位限频计时）
-        d._warn_last = {}
+        # 异常路径（_call 统一转 warn 不抛）：未知动作 / position 缺参 / 切模式失败
         cap.msgs.clear()
         d.send_action_end("foo")
         assert any("未知动作" in m for m in cap.msgs)
-        d._warn_last = {}
         cap.msgs.clear()
         d.send_action_end("position")
         assert any("需提供 position 参数" in m for m in cap.msgs)
         d._mode_end = None
         n_pos = len(pos_frames())
         bus.write = frames.append  # 静默写（无参数回显）→ 切模式验证重试耗尽失败
-        d._warn_last = {}
         cap.msgs.clear()
         d.send_action_end("home")
         assert any("切 POSITION 模式失败" in m for m in cap.msgs)

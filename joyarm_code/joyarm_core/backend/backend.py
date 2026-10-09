@@ -11,7 +11,7 @@
 - 失败处理：抽象方法失败可上抛异常或返回 ``False``/``None``，基类统一转为 warn 日志；
 - 生命周期标志 ``is_connected_*`` / ``is_abled_*``：``None`` 未知、``True``/``False`` 已确定；
         操作执行前置 ``None``，成功后确定，中途意外停留 ``None``；
-- 发送指令自动做模式检查、维度/空值检查与越限裁剪（就近裁剪 + 限频告警）；
+- 发送指令自动做模式检查、维度/空值检查与越限裁剪（就近裁剪 + 告警）；
 - 状态码统一 ``0``=失能、``1``=使能（均正常）、``≥2``=故障（子类负责映射厂商原始码）。
 
 子类：实现全部 ``@abstractmethod``。
@@ -36,11 +36,9 @@ __all__ = ["Backend"]
 logger = logging.getLogger("joyarm_core.backend")
 logger.setLevel(logging.INFO)  # 教学库：放行 INFO，成功信息默认可见（不依赖应用层日志配置）
 
-# 四个可选运行参数的默认值（cfg ``backend:`` 段顶层同名键可覆盖，缺省或非正数沿用默认并 warn）
-_WARN_INTERVAL_DEFAULT = 0.5   # warn_interval（秒）：warn 日志限频间隔（按通道独立计时）
-_INFO_INTERVAL_DEFAULT = 0.5   # info_interval（秒）：info 日志限频间隔（按通道独立计时）
+# 两个可选运行参数的默认值（cfg ``backend:`` 段顶层同名键可覆盖，缺省或非正数沿用默认并 warn）
 _WRITE_SETTLE_DEFAULT = 0.1    # write_settle（秒）：指令帧生效等待（连接后默认模式帧 / 断连前失能帧等）
-_REFRESH_HZ_DEFAULT = 10.0     # state_refresh_hz（Hz）：低频状态刷新频率
+_REFRESH_HZ_DEFAULT = 20.0     # state_refresh_hz（Hz）：低频状态刷新频率
 
 
 class Backend(ABC):
@@ -103,10 +101,6 @@ class Backend(ABC):
         self._joint_mode_end: list = []                       # end 逐关节控制模式（None=未读取；get_mode 读齐后整体赋值 / set_mode 成功后乐观赋值）
         self._joint_state_arm = JointState()                  # arm 整组实时关节状态
         self._joint_state_end = JointState()                  # end 整组实时关节状态
-        self._warn_last: dict[str, float] = {}                # 各 warn 通道上次限频输出的 monotonic 时刻（无锁）
-        self._info_last: dict[str, float] = {}                # 各 info 通道上次限频输出的 monotonic 时刻（无锁）
-        self._warn_interval = _WARN_INTERVAL_DEFAULT          # warn 日志限频间隔（秒；cfg warn_interval 可覆盖）
-        self._info_interval = _INFO_INTERVAL_DEFAULT          # info 日志限频间隔（秒；cfg info_interval 可覆盖）
         self._write_settle = _WRITE_SETTLE_DEFAULT            # 指令帧生效等待（秒；cfg write_settle 可覆盖）
         self._refresh_hz = _REFRESH_HZ_DEFAULT                # 低频状态刷新频率（Hz；cfg state_refresh_hz 可覆盖）
         self._refresh_stop = threading.Event()                # 刷新定时器停机标志（close() 置位；亦作测试冻结钩子）
@@ -176,15 +170,13 @@ class Backend(ABC):
         self._vel_ki_end = self._extract_joint_values("end", "POS_VEL", "vel_ki")
         # 可选运行参数（cfg 顶层键）：缺省或非法（非数值/非有限/非正）沿用默认并 warn
         self._refresh_hz = self._pos_float(cfg, "state_refresh_hz", _REFRESH_HZ_DEFAULT)
-        self._warn_interval = self._pos_float(cfg, "warn_interval", _WARN_INTERVAL_DEFAULT)
-        self._info_interval = self._pos_float(cfg, "info_interval", _INFO_INTERVAL_DEFAULT)
         self._write_settle = self._pos_float(cfg, "write_settle", _WRITE_SETTLE_DEFAULT)
         self._refresh_thread = threading.Thread(target=self._refresh_worker,
                                                 args=(self._refresh_stop, weakref.ref(self), self._refresh_hz),
                                                 name="backend-state-refresh", daemon=True)
         self._refresh_thread.start()
         logger.info("backend.py - Backend.__init__：低频状态刷新定时器已启动（%s Hz，arm=%d 关节，end=%d 关节）",
-                    self._refresh_hz, self._n_joints_arm, self._n_joints_end)  # 单次，无限频
+                    self._refresh_hz, self._n_joints_arm, self._n_joints_end)
 
     # ============================================================
     # 生命周期管理（连接与使能）
@@ -275,19 +267,19 @@ class Backend(ABC):
             ok = getattr(self, f"_connect_{family}")(getattr(self, f"_channel_{family}"),
                                                      getattr(self, f"_protocol_{family}"))
         except Exception as e:
-            self._warn_throttled("连接", "backend.py - Backend.connect_%s：连接内核异常：%s", family, e)
+            logger.warning("backend.py - Backend.connect_%s：连接内核异常：%s", family, e)
             return
         if ok:
             setattr(self, f"_is_connected_{family}", True)
-            self._info_throttled("连接", "backend.py - Backend.connect_%s：连接成功（channel=%s, protocol=%s）",
-                                 family, getattr(self, f"_channel_{family}"), getattr(self, f"_protocol_{family}"))
+            logger.info("backend.py - Backend.connect_%s：连接成功（channel=%s, protocol=%s）",
+                        family, getattr(self, f"_channel_{family}"), getattr(self, f"_protocol_{family}"))
             default_mode = getattr(self, f"_default_mode_{family}")
             if self._set_mode_impl(family, default_mode) != 1:  # 连接成功后自动尝试设默认模式（cfg 可配，缺省 MIT）
-                self._warn_throttled("连接", "backend.py - Backend.connect_%s：默认模式（%s）设置失败", family, default_mode.name)
+                logger.warning("backend.py - Backend.connect_%s：默认模式（%s）设置失败", family, default_mode.name)
             time.sleep(self._write_settle)  # 等模式帧生效
         else:
-            self._warn_throttled("连接", "backend.py - Backend.connect_%s：连接失败（channel=%s, protocol=%s）",
-                                 family, getattr(self, f"_channel_{family}"), getattr(self, f"_protocol_{family}"))
+            logger.warning("backend.py - Backend.connect_%s：连接失败（channel=%s, protocol=%s）",
+                           family, getattr(self, f"_channel_{family}"), getattr(self, f"_protocol_{family}"))
 
     def _disconnect_impl(self, family: str) -> None:
         """断开连接的共用实现：先尽力失能 → 置 ``None`` → 调用子类实现 → 成功置 ``False``。"""
@@ -303,12 +295,12 @@ class Backend(ABC):
         try:
             getattr(self, f"_disconnect_{family}")()
         except Exception as e:
-            self._warn_throttled("断连", "backend.py - Backend.disconnect_%s：断连内核异常：%s", family, e)
+            logger.warning("backend.py - Backend.disconnect_%s：断连内核异常：%s", family, e)
             return
         setattr(self, f"_is_connected_{family}", False)
         setattr(self, f"_mode_{family}", None)  # 模式无法核实，清空防止过期模式放行错误指令
         setattr(self, f"_joint_mode_{family}", [None] * self._n(family))
-        self._info_throttled("断连", "backend.py - Backend.disconnect_%s：断连成功", family)
+        logger.info("backend.py - Backend.disconnect_%s：断连成功", family)
 
     def _enable_impl(self, family: str) -> int:
         """使能的共用实现: 置 ``None`` → 逐关节调用子类实现 → 全部成功置 ``True``。"""
@@ -322,15 +314,15 @@ class Backend(ABC):
             try:
                 if not getattr(self, f"_enable_joint_{family}")(i):
                     ok = False
-                    self._warn_throttled("使能", "backend.py - Backend.enable_%s：joint『%s』使能失败",
-                                         family, self._jname(family, i))
+                    logger.warning("backend.py - Backend.enable_%s：joint『%s』使能失败",
+                                   family, self._jname(family, i))
             except Exception as e:
                 ok = False
-                self._warn_throttled("使能", "backend.py - Backend.enable_%s：joint『%s』使能异常：%s",
-                                     family, self._jname(family, i), e)
+                logger.warning("backend.py - Backend.enable_%s：joint『%s』使能异常：%s",
+                               family, self._jname(family, i), e)
         if ok:
             setattr(self, f"_is_abled_{family}", True)
-            self._info_throttled("使能", "backend.py - Backend.enable_%s：全部 joint 使能成功", family)
+            logger.info("backend.py - Backend.enable_%s：全部 joint 使能成功", family)
         return 1 if ok else 0
 
     def _disable_impl(self, family: str) -> int:
@@ -345,15 +337,15 @@ class Backend(ABC):
             try:
                 if not getattr(self, f"_disable_joint_{family}")(i):
                     ok = False
-                    self._warn_throttled("失能", "backend.py - Backend.disable_%s：joint『%s』失能失败",
-                                         family, self._jname(family, i))
+                    logger.warning("backend.py - Backend.disable_%s：joint『%s』失能失败",
+                                   family, self._jname(family, i))
             except Exception as e:
                 ok = False
-                self._warn_throttled("失能", "backend.py - Backend.disable_%s：joint『%s』失能异常：%s",
-                                     family, self._jname(family, i), e)
+                logger.warning("backend.py - Backend.disable_%s：joint『%s』失能异常：%s",
+                               family, self._jname(family, i), e)
         if ok:
             setattr(self, f"_is_abled_{family}", False)
-            self._info_throttled("失能", "backend.py - Backend.disable_%s：全部 joint 失能成功", family)
+            logger.info("backend.py - Backend.disable_%s：全部 joint 失能成功", family)
         return 1 if ok else 0
 
     # =================== 抽象方法（子类实现） ===================
@@ -444,7 +436,7 @@ class Backend(ABC):
         子类未提供的量（返回的字典缺该键）该字段整组置 ``None``。
 
         :return: 成功返回 ``_joint_state_arm``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一关节读取失败、
-            返回非字典、或已提供的字段存在空值/非标量（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
+            返回非字典、或已提供的字段存在空值/非标量（数据异常）时，跳过本轮更新（warn 提示）并返回 ``None``。
         """
         return self._get_state_impl("arm")
 
@@ -454,7 +446,7 @@ class Backend(ABC):
         子类未提供的量（返回的字典缺该键）该字段整组置 ``None``。
 
         :return: 成功返回 ``_joint_state_end``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一电机读取失败、
-            返回非字典、或已提供的字段存在空值/非标量（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
+            返回非字典、或已提供的字段存在空值/非标量（数据异常）时，跳过本轮更新（warn 提示）并返回 ``None``。
         """
         return self._get_state_impl("end")
 
@@ -470,13 +462,13 @@ class Backend(ABC):
             try:
                 vals.append(getattr(self, f"_read_joint_param_{family}")(i, key))
             except Exception as e:
-                self._warn_throttled("参数读写", "backend.py - Backend.read_param_%s：joint『%s』读『%s』失败：%s",
-                                     family, self._jname(family, i), key, e)
+                logger.warning("backend.py - Backend.read_param_%s：joint『%s』读『%s』失败：%s",
+                               family, self._jname(family, i), key, e)
                 return None
         bad = next((i for i, v in enumerate(vals) if not np.isscalar(v)), None)
         if bad is not None:  # 返回值标量校验（防子类误返回序列而非单值）
-            self._warn_throttled("参数读写", "backend.py - Backend.read_param_%s：joint『%s』读『%s』返回非标量（%s），整族读取作废",
-                                 family, self._jname(family, bad), key, type(vals[bad]).__name__)
+            logger.warning("backend.py - Backend.read_param_%s：joint『%s』读『%s』返回非标量（%s），整族读取作废",
+                           family, self._jname(family, bad), key, type(vals[bad]).__name__)
             return None
         return vals
 
@@ -494,33 +486,33 @@ class Backend(ABC):
             try:
                 modes.append(getattr(self, f"_read_joint_mode_{family}")(i))
             except Exception as e:
-                self._warn_throttled("模式获取", "backend.py - Backend.get_mode_%s：joint『%s』读模式失败：%s",
-                                     family, self._jname(family, i), e)
+                logger.warning("backend.py - Backend.get_mode_%s：joint『%s』读模式失败：%s",
+                               family, self._jname(family, i), e)
                 return None
         if any(m is None for m in modes):
-            self._warn_throttled("模式获取", "backend.py - Backend.get_mode_%s：存在未读到模式的 joint，整族不更新", family)
+            logger.warning("backend.py - Backend.get_mode_%s：存在未读到模式的 joint，整族不更新", family)
             return None
         badmode = next((i for i, m in enumerate(modes) if not isinstance(m, ControlMode)), None)
         if badmode is not None:  # 内核误返回非枚举（int/str 等）：防毒化模式缓存（刷新线程只补读 None，毒化后永不自愈）
-            self._warn_throttled("模式获取", "backend.py - Backend.get_mode_%s：joint『%s』返回非 ControlMode 枚举（%s，数据异常），整族不更新",
-                                 family, self._jname(family, badmode), type(modes[badmode]).__name__)
+            logger.warning("backend.py - Backend.get_mode_%s：joint『%s』返回非 ControlMode 枚举（%s，数据异常），整族不更新",
+                           family, self._jname(family, badmode), type(modes[badmode]).__name__)
             return None
         setattr(self, f"_joint_mode_{family}", list(modes))  # 逐关节写入各自模式
         if len(set(modes)) == 1:
             setattr(self, f"_mode_{family}", modes[0])
             return modes[0]
-        self._warn_throttled("模式获取", "backend.py - Backend.get_mode_%s：各 joint 模式不一致（%s），族模式成员不更新",
-                             family, modes)
+        logger.warning("backend.py - Backend.get_mode_%s：各 joint 模式不一致（%s），族模式成员不更新",
+                       family, modes)
         return None
 
     def _get_state_impl(self, family: str) -> Optional[JointState]:
         """读状态的共用实现：已提供的字段全部读齐后构造完整状态对象，单一原子赋值换入。
 
         子类返回的字典**缺某个键** = 子类/硬件不提供该量，该字段整组置 ``None``（合法的缺席）；
-        键**存在但值为 ``None`` / 非标量 / 不可解析**、或**返回非字典** = 数据异常，跳过本轮赋值并限频 warn，返回 ``None``。
+        键**存在但值为 ``None`` / 非标量 / 不可解析**、或**返回非字典** = 数据异常，跳过本轮赋值并 warn，返回 ``None``。
 
         return: 成功返回 ``_joint_state_{family}``（本次装配并原子换入的对象，``t`` 为本次更新时刻）；任一关节读取失败、
-            或已提供的字段存在空值（数据异常）时，跳过本轮更新（限频 warn）并返回 ``None``。
+            或已提供的字段存在空值（数据异常）时，跳过本轮更新（warn 提示）并返回 ``None``。
         """
         if self._skip_empty_family(family, f"get_state_{family}"):
             return None
@@ -531,43 +523,40 @@ class Backend(ABC):
             try:
                 snaps.append(getattr(self, f"_read_joint_state_{family}")(i))
             except Exception as e:
-                self._warn_throttled("状态获取", "backend.py - Backend.get_state_%s：joint『%s』读状态失败：%s",
-                                     family, self._jname(family, i), e)
+                logger.warning("backend.py - Backend.get_state_%s：joint『%s』读状态失败：%s",
+                               family, self._jname(family, i), e)
                 return None
         badsnap = next((i for i, snap in enumerate(snaps) if not isinstance(snap, dict)), None)
         if badsnap is not None:  # 子类误返回非字典：防 in 退化成成员测试 → 全字段假缺席产生全 None 假成功并毒化 t
-            self._warn_throttled("状态获取", "backend.py - Backend.get_state_%s：joint『%s』返回非字典（%s，数据异常），本轮状态跳过更新（保持上次快照）",
-                                 family, self._jname(family, badsnap), type(snaps[badsnap]).__name__)
+            logger.warning("backend.py - Backend.get_state_%s：joint『%s』返回非字典（%s，数据异常），本轮状态跳过更新（保持上次快照）",
+                           family, self._jname(family, badsnap), type(snaps[badsnap]).__name__)
             return None
         names = ("q", "dq", "tau", "temp_mos", "temp_rotor", "error")
         absent = {name for name in names if any(name not in snap for snap in snaps)}  # 子类未提供该量 → 字段置 None
         bad = {name for name in names if name not in absent
                and any(snap.get(name) is None for snap in snaps)}                    # 键存在但值为空 → 数据异常
         if bad:
-            self._warn_throttled("状态获取",
-                                 "backend.py - Backend.get_state_%s：在场子值 %s 存在空值（数据异常），本轮状态跳过更新（保持上次快照）",
-                                 family, sorted(bad))
+            logger.warning("backend.py - Backend.get_state_%s：在场子值 %s 存在空值（数据异常），本轮状态跳过更新（保持上次快照）",
+                           family, sorted(bad))
             return None
         nonscalar = next(((i, name) for i, snap in enumerate(snaps) for name in names
                           if name not in absent and not np.isscalar(snap[name])), None)
         if nonscalar is not None:  # 子类误返回序列：防装配出 (n,1) 字段毒化上层（契约 (n,)）
             i, name = nonscalar
-            self._warn_throttled("状态获取",
-                                 "backend.py - Backend.get_state_%s：joint『%s』子值『%s』非标量（%s，数据异常），本轮状态跳过更新（保持上次快照）",
-                                 family, self._jname(family, i), name, type(snaps[i][name]).__name__)
+            logger.warning("backend.py - Backend.get_state_%s：joint『%s』子值『%s』非标量（%s，数据异常），本轮状态跳过更新（保持上次快照）",
+                           family, self._jname(family, i), name, type(snaps[i][name]).__name__)
             return None
         present = tuple(name for name in names if name not in absent)
         try:  # 先解析后提交：任一不可解析按数据异常跳过本轮，不产生部分赋值
             assembled = {name: np.asarray([snap[name] for snap in snaps], dtype=int if name == "error" else float)
                          for name in present}
         except (TypeError, ValueError, OverflowError) as e:  
-            self._warn_throttled("状态获取", "backend.py - Backend.get_state_%s：子值解析失败（数据异常）：%s", family, e)
+            logger.warning("backend.py - Backend.get_state_%s：子值解析失败（数据异常）：%s", family, e)
             return None
         nonfin = [name for name in present if name != "error" and not np.isfinite(assembled[name]).all()]
         if nonfin:  # 物理量出现 NaN/inf：另一种数据异常形态，跳过本轮防毒化上层
-            self._warn_throttled("状态获取",
-                                 "backend.py - Backend.get_state_%s：在场子值 %s 存在非有限值（数据异常），本轮状态跳过更新（保持上次快照）",
-                                 family, sorted(nonfin))
+            logger.warning("backend.py - Backend.get_state_%s：在场子值 %s 存在非有限值（数据异常），本轮状态跳过更新（保持上次快照）",
+                           family, sorted(nonfin))
             return None
         # 全部字段备齐后构造完整状态对象，单一赋值换入
         fields = {name: None for name in absent}
@@ -588,7 +577,7 @@ class Backend(ABC):
             return
         th.join(timeout=1.0)
         if th.is_alive():
-            self._warn_throttled("状态刷新", "backend.py - Backend.close：刷新定时器 1 秒内未退出（单拍可能阻塞在总线读取），将自行退出")
+            logger.warning("backend.py - Backend.close：刷新定时器 1 秒内未退出（单拍可能阻塞在总线读取），将自行退出")
 
     @staticmethod
     def _refresh_worker(stop: threading.Event, backend_ref: weakref.ref, hz: float) -> None:
@@ -605,7 +594,7 @@ class Backend(ABC):
             try:
                 bk._refresh_tick(period)
             except Exception as e:
-                bk._warn_throttled("状态刷新", "backend.py - 低频状态刷新：单拍异常（下周期重试）：%s", e)
+                logger.warning("backend.py - 低频状态刷新：单拍异常（下周期重试）：%s", e)
 
     def _refresh_tick(self, period: float) -> None:
         """单拍刷新：逐族检查连接与陈旧度后读取状态，并按 ``error`` 码同步使能缓存。"""
@@ -737,12 +726,12 @@ class Backend(ABC):
         if vals is None:
             return 0
         if vals.shape[0] != n:
-            self._warn_throttled("参数读写", "backend.py - Backend.write_param_%s：『%s』值列表维度 %d ≠ 关节数 %d，本次写入跳过",
-                                 family, key, vals.shape[0], n)
+            logger.warning("backend.py - Backend.write_param_%s：『%s』值列表维度 %d ≠ 关节数 %d，本次写入跳过",
+                           family, key, vals.shape[0], n)
             return 0
         if not np.isfinite(vals).all():  # 寄存器值必须有限（无NaN/inf位模式），且无限位源可裁 → 拦截而非裁剪
-            self._warn_throttled("参数读写", "backend.py - Backend.write_param_%s：『%s』值列表存在 NaN/inf，无法写入寄存器，本次写入跳过",
-                                 family, key)
+            logger.warning("backend.py - Backend.write_param_%s：『%s』值列表存在 NaN/inf，无法写入寄存器，本次写入跳过",
+                           family, key)
             return 0
         if not self._require_connected(family, f"write_param_{family}"):
             return 0
@@ -750,10 +739,10 @@ class Backend(ABC):
             try:
                 getattr(self, f"_write_joint_param_{family}")(i, key, vals[i])
             except Exception as e:
-                self._warn_throttled("参数读写", "backend.py - Backend.write_param_%s：joint『%s』写『%s』失败：%s",
-                                     family, self._jname(family, i), key, e)
+                logger.warning("backend.py - Backend.write_param_%s：joint『%s』写『%s』失败：%s",
+                               family, self._jname(family, i), key, e)
                 return 0
-        self._info_throttled("参数读写", "backend.py - Backend.write_param_%s：『%s』全部写入成功", family, key)
+        logger.info("backend.py - Backend.write_param_%s：『%s』全部写入成功", family, key)
         return 1
 
     def _set_zero_impl(self, family: str) -> int:
@@ -765,14 +754,14 @@ class Backend(ABC):
         for i in range(self._n(family)):
             try:
                 if not getattr(self, f"_set_joint_zero_{family}")(i):
-                    self._warn_throttled("设零", "backend.py - Backend.set_zero_%s：joint『%s』设零失败",
-                                         family, self._jname(family, i))
+                    logger.warning("backend.py - Backend.set_zero_%s：joint『%s』设零失败",
+                                   family, self._jname(family, i))
                     return 0
             except Exception as e:
-                self._warn_throttled("设零", "backend.py - Backend.set_zero_%s：joint『%s』设零异常：%s",
-                                     family, self._jname(family, i), e)
+                logger.warning("backend.py - Backend.set_zero_%s：joint『%s』设零异常：%s",
+                               family, self._jname(family, i), e)
                 return 0
-        self._info_throttled("设零", "backend.py - Backend.set_zero_%s：全部 joint 设零成功", family)
+        logger.info("backend.py - Backend.set_zero_%s：全部 joint 设零成功", family)
         return 1
 
     def _set_mode_impl(self, family: str, mode: ControlMode) -> int:
@@ -782,20 +771,20 @@ class Backend(ABC):
         if not self._require_connected(family, f"set_mode_{family}"):
             return 0
         if not isinstance(mode, ControlMode):
-            self._warn_throttled("设模式", "backend.py - Backend.set_mode_%s：mode=%r 非 ControlMode 枚举，操作跳过",
-                                 family, mode)
+            logger.warning("backend.py - Backend.set_mode_%s：mode=%r 非 ControlMode 枚举，操作跳过",
+                           family, mode)
             return 0
         for i in range(self._n(family)):
             try:
                 getattr(self, f"_set_joint_mode_{family}")(i, mode)
             except Exception as e:
-                self._warn_throttled("设模式", "backend.py - Backend.set_mode_%s：joint『%s』设置失败：%s",
-                                     family, self._jname(family, i), e)
+                logger.warning("backend.py - Backend.set_mode_%s：joint『%s』设置失败：%s",
+                               family, self._jname(family, i), e)
                 return 0
         # 乐观更新模式缓存：写完即视为目标模式（发送门禁立即放行）；与硬件的一致性经 get_mode_* 读回纠正
         setattr(self, f"_joint_mode_{family}", [mode] * self._n(family))
         setattr(self, f"_mode_{family}", mode)
-        self._info_throttled("设模式", "backend.py - Backend.set_mode_%s：模式已设为 %s", family, mode)
+        logger.info("backend.py - Backend.set_mode_%s：模式已设为 %s", family, mode)
         return 1
 
     # =================== 抽象方法（子类实现） ===================
@@ -930,28 +919,27 @@ class Backend(ABC):
             return
         tau, q, dq, kp, kd = arrs
         if len(tau) != n or len(q) != n or len(dq) != n or len(kp) != n or len(kd) != n:
-            self._warn_throttled("指令维度",
-                                 "backend.py - Backend.send_mit_%s：指令维度（tau=%d, q=%d, dq=%d, kp=%d, kd=%d）≠ 关节数 %d，本次发送跳过",
-                                 family, len(tau), len(q), len(dq), len(kp), len(kd), n)
+            logger.warning("backend.py - Backend.send_mit_%s：指令维度（tau=%d, q=%d, dq=%d, kp=%d, kd=%d）≠ 关节数 %d，本次发送跳过",
+                           family, len(tau), len(q), len(dq), len(kp), len(kd), n)
             return
-        # ② 空值检查（有空值 → warn 不发送）+ 裁剪（越限 → 就近裁剪 + 限频告警）
+        # ② 空值检查（有空值 → warn 不发送）+ 裁剪（越限 → 就近裁剪 + 告警）
         if not self._require_present(f"send_mit_{family}", tau=tau, q=q, dq=dq, kp=kp, kd=kd):
             return
         lim = getattr(self, f"_joint_limits_{family}")  # 空组已在前跳过，限位必已解析
         clipped = np.clip(tau, -lim.tau_max, lim.tau_max)
         if not np.array_equal(tau, clipped):
-            self._warn_throttled("限位裁剪", "backend.py - Backend.send_mit_%s：tau 指令越限，已就近裁剪 %s → %s",
-                                 family, np.round(tau, 4).tolist(), np.round(clipped, 4).tolist())
+            logger.warning("backend.py - Backend.send_mit_%s：tau 指令越限，已就近裁剪 %s → %s",
+                           family, np.round(tau, 4).tolist(), np.round(clipped, 4).tolist())
             tau = clipped
         clipped = np.clip(q, lim.q_min, lim.q_max)
         if not np.array_equal(q, clipped):
-            self._warn_throttled("限位裁剪", "backend.py - Backend.send_mit_%s：q 指令越限，已就近裁剪 %s → %s",
-                                 family, np.round(q, 4).tolist(), np.round(clipped, 4).tolist())
+            logger.warning("backend.py - Backend.send_mit_%s：q 指令越限，已就近裁剪 %s → %s",
+                           family, np.round(q, 4).tolist(), np.round(clipped, 4).tolist())
             q = clipped
         clipped = np.clip(dq, -lim.dq_max, lim.dq_max)
         if not np.array_equal(dq, clipped):
-            self._warn_throttled("限位裁剪", "backend.py - Backend.send_mit_%s：dq 指令越限，已就近裁剪 %s → %s",
-                                 family, np.round(dq, 4).tolist(), np.round(clipped, 4).tolist())
+            logger.warning("backend.py - Backend.send_mit_%s：dq 指令越限，已就近裁剪 %s → %s",
+                           family, np.round(dq, 4).tolist(), np.round(clipped, 4).tolist())
             dq = clipped
         # ③ 连接/模式前置检查 → ④ 逐关节调用子类实现下发
         if not self._require_connected(family, f"send_mit_{family}"):
@@ -974,28 +962,27 @@ class Backend(ABC):
             return
         q, vlim, flim = arrs
         if len(q) != n or len(vlim) != n or len(flim) != n:
-            self._warn_throttled("指令维度",
-                                 "backend.py - Backend.send_position_%s：指令维度（q=%d, vlim=%d, flim=%d）≠ 关节数 %d，本次发送跳过",
-                                 family, len(q), len(vlim), len(flim), n)
+            logger.warning("backend.py - Backend.send_position_%s：指令维度（q=%d, vlim=%d, flim=%d）≠ 关节数 %d，本次发送跳过",
+                           family, len(q), len(vlim), len(flim), n)
             return
-        # ② 空值检查（有空值 → warn 不发送）+ 裁剪（越限 → 就近裁剪 + 限频告警）
+        # ② 空值检查（有空值 → warn 不发送）+ 裁剪（越限 → 就近裁剪 + 告警）
         if not self._require_present(f"send_position_{family}", q=q, vlim=vlim, flim=flim):
             return
         lim = getattr(self, f"_joint_limits_{family}")  # 空组已在前跳过，限位必已解析
         clipped = np.clip(q, lim.q_min, lim.q_max)
         if not np.array_equal(q, clipped):
-            self._warn_throttled("限位裁剪", "backend.py - Backend.send_position_%s：q 指令越限，已就近裁剪 %s → %s",
-                                 family, np.round(q, 4).tolist(), np.round(clipped, 4).tolist())
+            logger.warning("backend.py - Backend.send_position_%s：q 指令越限，已就近裁剪 %s → %s",
+                           family, np.round(q, 4).tolist(), np.round(clipped, 4).tolist())
             q = clipped
         clipped = np.clip(vlim, 0.0, lim.dq_max)
         if not np.array_equal(vlim, clipped):
-            self._warn_throttled("限位裁剪", "backend.py - Backend.send_position_%s：vlim 超出 [0, dq_max]，已就近裁剪 %s → %s",
-                                 family, np.round(vlim, 4).tolist(), np.round(clipped, 4).tolist())
+            logger.warning("backend.py - Backend.send_position_%s：vlim 超出 [0, dq_max]，已就近裁剪 %s → %s",
+                           family, np.round(vlim, 4).tolist(), np.round(clipped, 4).tolist())
             vlim = clipped
         clipped = np.clip(flim, 0.0, 1.0)
         if not np.array_equal(flim, clipped):
-            self._warn_throttled("限位裁剪", "backend.py - Backend.send_position_%s：flim 超出归一化范围 [0, 1]，已就近裁剪 %s → %s",
-                                 family, np.round(flim, 4).tolist(), np.round(clipped, 4).tolist())
+            logger.warning("backend.py - Backend.send_position_%s：flim 超出归一化范围 [0, 1]，已就近裁剪 %s → %s",
+                           family, np.round(flim, 4).tolist(), np.round(clipped, 4).tolist())
             flim = clipped
         # ③ 连接/模式前置检查 → ④ 逐关节调用子类实现下发
         if not self._require_connected(family, f"send_position_{family}"):
@@ -1017,17 +1004,17 @@ class Backend(ABC):
         if dq is None:
             return
         if len(dq) != n:
-            self._warn_throttled("指令维度", "backend.py - Backend.send_vel_%s：指令维度（dq=%d）≠ 关节数 %d，本次发送跳过",
-                                 family, len(dq), n)
+            logger.warning("backend.py - Backend.send_vel_%s：指令维度（dq=%d）≠ 关节数 %d，本次发送跳过",
+                           family, len(dq), n)
             return
-        # ② 空值检查（有空值 → warn 不发送）+ 裁剪（越限 → 就近裁剪 + 限频告警）
+        # ② 空值检查（有空值 → warn 不发送）+ 裁剪（越限 → 就近裁剪 + 告警）
         if not self._require_present(f"send_vel_{family}", dq=dq):
             return
         lim = getattr(self, f"_joint_limits_{family}")  # 空组已在前跳过，限位必已解析
         clipped = np.clip(dq, -lim.dq_max, lim.dq_max)
         if not np.array_equal(dq, clipped):
-            self._warn_throttled("限位裁剪", "backend.py - Backend.send_vel_%s：dq 指令越限，已就近裁剪 %s → %s",
-                                 family, np.round(dq, 4).tolist(), np.round(clipped, 4).tolist())
+            logger.warning("backend.py - Backend.send_vel_%s：dq 指令越限，已就近裁剪 %s → %s",
+                           family, np.round(dq, 4).tolist(), np.round(clipped, 4).tolist())
             dq = clipped
         # ③ 连接/模式前置检查 → ④ 逐关节调用子类实现下发
         if not self._require_connected(family, f"send_vel_{family}"):
@@ -1131,12 +1118,12 @@ class Backend(ABC):
             return None
         st = getattr(self, f"_joint_state_{family}")
         if time.time() - st.t > 2.0 / self._refresh_hz:  # 快照过期
-            self._warn_throttled("状态检查", "backend.py - Backend.get_error_%s：状态快照过期（先 get_state_%s 或等刷新），无法获取",
-                                 family, family)
+            logger.warning("backend.py - Backend.get_error_%s：状态快照过期（先 get_state_%s 或等刷新），无法获取",
+                           family, family)
             return None
         err = st.error
         if err is None:
-            self._warn_throttled("状态检查", "backend.py - Backend.get_error_%s：error 段缺失，无法获取", family)
+            logger.warning("backend.py - Backend.get_error_%s：error 段缺失，无法获取", family)
             return None
         return err.tolist()
 
@@ -1146,7 +1133,7 @@ class Backend(ABC):
         if errs is None:
             return False
         if any(e not in (0, 1) for e in errs):
-            self._warn_throttled("状态检查", "backend.py - Backend.check_error_%s：存在故障状态码（%s）", family, errs)
+            logger.warning("backend.py - Backend.check_error_%s：存在故障状态码（%s）", family, errs)
             return False
         return True
 
@@ -1160,12 +1147,12 @@ class Backend(ABC):
             jn = self._jname(family, i)
             try:
                 if not getattr(self, f"_clear_joint_error_{family}")(i):
-                    self._warn_throttled("清错", "backend.py - Backend.clear_error_%s：joint『%s』清错失败", family, jn)
+                    logger.warning("backend.py - Backend.clear_error_%s：joint『%s』清错失败", family, jn)
                     return False
             except Exception as e:
-                self._warn_throttled("清错", "backend.py - Backend.clear_error_%s：joint『%s』清错异常：%s", family, jn, e)
+                logger.warning("backend.py - Backend.clear_error_%s：joint『%s』清错异常：%s", family, jn, e)
                 return False
-        self._info_throttled("清错", "backend.py - Backend.clear_error_%s：全部 joint 清错指令已发送", family)
+        logger.info("backend.py - Backend.clear_error_%s：全部 joint 清错指令已发送", family)
         return True
 
     # =================== 抽象方法（子类实现） ===================
@@ -1258,11 +1245,11 @@ class Backend(ABC):
         return getattr(self, f"_n_joints_{family}")
 
     def _skip_empty_family(self, family: str, caller: str) -> bool:
-        """空组（关节数 0）跳过判定：视为成功直接返回，同时限频 info 提示未配置任何关节。"""
+        """空组（关节数 0）跳过判定：视为成功直接返回，同时 info 提示未配置任何关节。"""
         if self._n(family) != 0:
             return False
-        self._info_throttled("空族", "backend.py - Backend.%s：%s 未配置任何 joint（n=0），本次操作视为成功跳过",
-                             caller, family)
+        logger.info("backend.py - Backend.%s：%s 未配置任何 joint（n=0），本次操作视为成功跳过",
+                    caller, family)
         return True
 
     def _jname(self, family: str, i: int):
@@ -1324,14 +1311,14 @@ class Backend(ABC):
             return ControlMode.MIT
 
     def _require_connected(self, family: str, caller: str) -> bool:
-        """连接前置检查：未连接或状态未知（``None``）时限频 warn 并返回 ``False``。"""
+        """连接前置检查：未连接或状态未知（``None``）时 warn 并返回 ``False``。"""
         if not getattr(self, f"_is_connected_{family}"):
-            self._warn_throttled("连接门禁", "backend.py - Backend.%s：%s 未连接或状态未知，操作跳过", caller, family)
+            logger.warning("backend.py - Backend.%s：%s 未连接或状态未知，操作跳过", caller, family)
             return False
         return True
 
     def _require_mode(self, family: str, mode: ControlMode, caller: str) -> bool:
-        """模式前置检查：组模式成员 ``_mode_{family}`` 等于所需模式才放行，否则限频 warn。
+        """模式前置检查：组模式成员 ``_mode_{family}`` 等于所需模式才放行，否则 warn。
 
         ``_mode_{family}`` 与逐关节模式缓存 ``_joint_mode_{family}`` 同步更新
         （``get_mode`` 读齐且一致时 / ``set_mode`` 成功时乐观更新），为 ``None`` 即模式未读取。
@@ -1339,54 +1326,35 @@ class Backend(ABC):
         cur = getattr(self, f"_mode_{family}")
         if cur == mode:
             return True
-        self._warn_throttled("模式门禁", "backend.py - Backend.%s：%s 当前模式 %s ≠ 所需 %s（先 set_mode/get_mode）",
-                             caller, family, cur if cur is not None else "未读取", mode)
+        logger.warning("backend.py - Backend.%s：%s 当前模式 %s ≠ 所需 %s（先 set_mode/get_mode）",
+                       caller, family, cur if cur is not None else "未读取", mode)
         return False
 
     def _require_present(self, caller: str, **vals) -> bool:
-        """发送前空值检查：各参数须全不为空（非 ``None`` 且无 NaN），否则限频 warn 并不发送。"""
+        """发送前空值检查：各参数须全不为空（非 ``None`` 且无 NaN），否则 warn 并不发送。"""
         for name, v in vals.items():
             if v is None or np.isnan(np.asarray(v, dtype=float)).any():
-                self._warn_throttled("参数空值", "backend.py - Backend.%s：参数『%s』存在空值（未传入或 cfg 未配置），本次不发送",
-                                     caller, name)
+                logger.warning("backend.py - Backend.%s：参数『%s』存在空值（未传入或 cfg 未配置），本次不发送",
+                               caller, name)
                 return False
         return True
 
     def _to_float_arr(self, x, caller: str) -> Optional[np.ndarray]:
-        """指令/参数值转 ``(n,)`` 一维 float 数组（标量升为 ``(1,)``）：非数值或非一维时限频 warn 并返回 ``None``（不向调用者抛）。"""
+        """指令/参数值转 ``(n,)`` 一维 float 数组（标量升为 ``(1,)``）：非数值或非一维时 warn 并返回 ``None``（不向调用者抛）。"""
         try:
             arr = np.atleast_1d(np.asarray(x, dtype=float))
         except (TypeError, ValueError) as e:
-            self._warn_throttled("参数解析", "backend.py - Backend.%s：参数存在非数值（%s），本次操作跳过", caller, e)
+            logger.warning("backend.py - Backend.%s：参数存在非数值（%s），本次操作跳过", caller, e)
             return None
         if arr.ndim != 1:  # (n,1) 列向量等二维输入不属 (n,) 指令：逐关节元素会是数组而非标量
-            self._warn_throttled("参数解析", "backend.py - Backend.%s：参数需为 (n,) 一维序列，实际 shape=%s，本次操作跳过",
-                                 caller, arr.shape)
+            logger.warning("backend.py - Backend.%s：参数需为 (n,) 一维序列，实际 shape=%s，本次操作跳过",
+                           caller, arr.shape)
             return None
         return arr
 
-    def _warn_throttled(self, channel: str, fmt: str, *args) -> None:
-        """限频告警：同一 ``channel`` 至多每 ``_warn_interval`` 秒一条。
-
-        无锁：咨询性日志不值得加锁。
-        """
-        now = time.monotonic()
-        if now - self._warn_last.get(channel, 0.0) < self._warn_interval:
-            return
-        self._warn_last[channel] = now
-        logger.warning(fmt, *args)
-
-    def _info_throttled(self, channel: str, fmt: str, *args) -> None:
-        """限频信息：同一 ``channel`` 至多每 ``_info_interval`` 秒一条（机制同 ``_warn_throttled``）。"""
-        now = time.monotonic()
-        if now - self._info_last.get(channel, 0.0) < self._info_interval:
-            return
-        self._info_last[channel] = now
-        logger.info(fmt, *args)
-
     def _call(self, caller: str, fn, *args, **kwargs) -> None:
-        """安全调用子类实现：异常统一转为限频 warn，不向调用者抛。"""
+        """安全调用子类实现：异常统一转为 warn，不向调用者抛。"""
         try:
             fn(*args, **kwargs)
         except Exception as e:
-            self._warn_throttled("内核异常", "backend.py - Backend.%s：内核异常：%s", caller, e)
+            logger.warning("backend.py - Backend.%s：内核异常：%s", caller, e)
