@@ -54,7 +54,7 @@ _URDF_LIMIT_TOL = 1e-4
 
 
 def _soft_beyond_hard(soft, hard) -> bool:
-    """软限位是否越出硬限位（JoyArm / FakeArm 共用，同一份 config 两侧同判定）。
+    """软限位是否越出硬限位。
 
     软限位某键为 ±∞（缺省键，``soft_limits_from_cfg`` 兜底值）表示该维度
     **不设软限**，跳过比较——只比对显式给出的有限值。
@@ -164,12 +164,11 @@ _CTRL_HZ_DEFAULT = 200.0           # ctrl_hz
 
 def _split_pacing(spec, pops: dict) -> tuple:
     """从 ``robotics.<域>`` 规格中剥离管线键（规划器/控制器已去参数化，
-    这些键改由 JoyArm 运动管线消费；``dt_min_required`` 等旧键随基类管线
-    删除而失效，静默忽略）。
+    这些键改由 JoyArm 运动管线消费；``dt_min_required``/``mode`` 等旧键已
+    失效——电机模式改由控制器 ``MODE`` 类属性声明——静默忽略）。
 
     :param spec: config 域规格（注册名字符串 / 参数字典 / 二者的列表）。
-    :param pops: {键: 缺省值}——要剥离并收集的键（原值透传，数值/枚举
-        转换由调用侧做）。
+    :param pops: {键: 缺省值}——要剥离并收集的键（原值透传，数值转换由调用侧做）。
     :return: ``(剥离后的规格, {注册名: {键: 值}})``。
     """
     pacing: dict = {}
@@ -177,7 +176,7 @@ def _split_pacing(spec, pops: dict) -> tuple:
         return spec, pacing
     specs = spec if isinstance(spec, (list, tuple)) else [spec]
     out = []
-    legacy = {"dt_min_required"}       # 已失效旧键，静默忽略
+    legacy = {"dt_min_required", "mode"}   # 已失效旧键，静默忽略（mode → 控制器 MODE 类属性）
     for s in specs:
         if isinstance(s, dict):
             d = dict(s)
@@ -188,21 +187,6 @@ def _split_pacing(spec, pops: dict) -> tuple:
         else:
             out.append(s)
     return out, pacing
-
-
-def _as_ctrl_mode(name, raw) -> ControlMode:
-    """config 值 → :class:`ControlMode` 枚举（``None`` 缺省 ``MIT``；字符串按
-    名匹配，非法值抛错列出可用项）。"""
-    if raw is None:
-        return ControlMode.MIT
-    if isinstance(raw, ControlMode):
-        return raw
-    key = str(raw).upper()
-    if key not in ControlMode.__members__:
-        raise ValueError(
-            f"joyarm.py - _as_ctrl_mode：robotics.control『{name}』"
-            f"mode={raw!r} 非法；可用：{sorted(ControlMode.__members__)}")
-    return ControlMode.__members__[key]
 
 
 # ============================================================
@@ -539,8 +523,8 @@ class JoyArm:
         robotics_cfg = cfg.get("robotics") or {}
         # {注册名: (plan_hz, sample_hz)}——traj 管线起搏频率（源自 config 规格键）
         self._traj_pacing: dict = {}
-        # {注册名: (ctrl_hz, ControlMode)}——ctrl 管线起搏频率与电机控制模式
-        # （源自 config 规格键 ctrl_hz / mode，启动/热切换时消费）
+        # {注册名: ctrl_hz}——ctrl 管线起搏频率（源自 config 规格键 ctrl_hz；
+        # 电机控制模式取控制器 MODE 类属性，启动/热切换时消费）
         self._ctrl_pacing: dict = {}
         for domain, registry in _DOMAIN_REGISTRIES.items():
             spec = robotics_cfg.get(domain)
@@ -550,17 +534,14 @@ class JoyArm:
                 self._traj_pacing = {n: (float(v["plan_hz"]), float(v["sample_hz"]))
                                      for n, v in pacing.items()}
             elif domain == "control":
-                spec, pacing = _split_pacing(
-                    spec, {"ctrl_hz": _CTRL_HZ_DEFAULT, "mode": None})
-                self._ctrl_pacing = {n: (float(v["ctrl_hz"]),
-                                         _as_ctrl_mode(n, v["mode"]))
-                                     for n, v in pacing.items()}
+                spec, pacing = _split_pacing(spec, {"ctrl_hz": _CTRL_HZ_DEFAULT})
+                self._ctrl_pacing = {n: float(v["ctrl_hz"]) for n, v in pacing.items()}
             members = _build_domain(domain, registry, spec)
             self._members(domain).update(members)
             self._active_name[domain] = next(iter(members), None)
         # 当前控制频率（公开：控制器 step 内步长上限等计算要用，随 set_solver 更新）
         self.ctrl_hz: float = self._ctrl_pacing.get(
-            self._active_name.get("control"), (_CTRL_HZ_DEFAULT, ControlMode.MIT))[0]
+            self._active_name.get("control"), _CTRL_HZ_DEFAULT)
 
     # ============================================================
     # 初始化助手（内部）：URDF 查找 / 关节数统计 / 限位解析与核对 / 末端空间限位
@@ -750,8 +731,8 @@ class JoyArm:
 
         用于运动/下发指令前（move_j、safe_*、hold_position 等）；
         急停类操作（damping_mode/lock_position）不需要先使能。
-        标志由 enable/disable_arm 维护、connect 时复位（对齐 FakeArm 的
-        ``_enabled`` 设计；电机故障另经 ``joint.error`` / ``check_hardware`` 暴露）。
+        标志由 enable/disable_arm 维护、connect 时复位（电机故障另经
+        ``joint.error`` / ``check_hardware`` 暴露）。
         """
         if not bool(self._arm_enabled.all()):
             bad = np.where(~self._arm_enabled)[0].tolist()
@@ -1861,9 +1842,9 @@ class JoyArm:
         self._active("control")                # 校验 control 域已配置（缺配置即抛错）
         plan_hz, sample_hz = self._traj_pacing.get(
             self._active_name.get("traj"), _TRAJ_HZ_DEFAULTS)
-        self.ctrl_hz, ctrl_mode = self._ctrl_pacing.get(
-            self._active_name.get("control"), (_CTRL_HZ_DEFAULT, ControlMode.MIT))
-        self.set_mode_arm(ctrl_mode)           # 按 config control 段 mode 自动切电机模式
+        self.ctrl_hz = self._ctrl_pacing.get(
+            self._active_name.get("control"), _CTRL_HZ_DEFAULT)
+        self.set_mode_arm(self._active("control").MODE)   # 按激活控制器 MODE 自动切电机模式
         self._traj_planned_by = None
         self._motion_threads = {
             "traj-plan": _PeriodicThread(self._tick_plan, plan_hz, name="traj-plan"),
@@ -1923,8 +1904,8 @@ class JoyArm:
             self._require_connected()     # 切电机模式需在线
             self._switching.set()
             try:
-                hz, mode = self._ctrl_pacing.get(name, (_CTRL_HZ_DEFAULT, ControlMode.MIT))
-                self.set_mode_arm(mode)           # 先切模式（暂停期间不发指令）
+                hz = self._ctrl_pacing.get(name, _CTRL_HZ_DEFAULT)
+                self.set_mode_arm(inst.MODE)      # 先按新控制器 MODE 切模式（暂停期间不发指令）
                 self._active_name[domain] = name
                 self.ctrl_hz = hz
                 worker = self._motion_threads.get("ctrl-step")

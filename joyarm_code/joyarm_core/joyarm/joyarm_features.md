@@ -9,7 +9,7 @@
 | `_CONFIG_DIR` | `config/` 目录（包根下；按型号名找 `<model>.yaml`） |
 | `_ROBOT_MODEL_DIR` | `robot_model/` 目录（URDF + meshes 资产，运行期加载） |
 | `_ARM_JOINT_NAMES` | 本体关节名集合 `{joint1…joint9}`——URDF 里叫这些名字才算本体关节，其余（末端/手指）不参与关节数与顺序校验 |
-| `_URDF_LIMIT_TOL` | config 四键限位与 URDF limit 核对容差（1e-3；超出只告警，数值以 config 为准） |
+| `_URDF_LIMIT_TOL` | config 四键限位与 URDF limit 核对容差（1e-4；超出只告警，数值以 config 为准） |
 | `_ERR_LOG_INTERVAL` / `_JOIN_TIMEOUT` | 周期线程：同故障日志最小间隔 0.5 s / `stop()` 等待上限 1 s |
 | `_DOMAIN_REGISTRIES` | 六域 → 各域 `REGISTRY` 映射（fkine / ikine / jacobian / dynamics / traj / control） |
 
@@ -18,7 +18,7 @@
 | 函数 | 简介 |
 |:--|:--|
 | `load_config(model, strict=False)` | **公开**（`__all__`）：读 `config/<model>.yaml`；`strict=True` 时缺失/解析错抛 `ValueError`（列可用型号），默认返 `None`（交工厂软化） |
-| `_soft_beyond_hard(soft, hard)` | 判软限位是否越出硬限位（某键 ±∞ = 该维度不设软限，跳过比较；JoyArm/FakeArm 共用） |
+| `_soft_beyond_hard(soft, hard)` | 判软限位是否越出硬限位（某键 ±∞ = 该维度不设软限，跳过比较） |
 | `_parse_domain_specs(domain, spec)` | config `robotics.<域>` 段 → `[(注册名, 参数字典), …]`（单项为注册名字符串或 `{name, …, **构造参数}`，非法抛错） |
 | `_build_domain(domain, registry, spec)` | 按规格实例化一域成员 → `{注册名: 实例}`；域未配置返空；注册名无效/实例化失败硬失败 `ValueError` |
 | `_as_hz(hz)` | 频率参数归一：数值，或"返回数值的无参函数" |
@@ -225,7 +225,7 @@ config 缺省自动加载 `config/<model>.yaml`；缺失或 `check_config` 不�
 | `set_target_traj(targets)` | 写运动目标（`TrajFrame` 单帧或帧列表；写深拷贝；`None`/空 = 清空 → 规划器回退规划回 q_home） |
 | `get_target_traj()` | 读当前目标序列（返回内部快照引用，规划期间勿改动） |
 | `set_current_frame(frame)` / `get_current_frame()` | 写/读当前轨迹帧（规划线程写、控制线程读；首帧发布前 `None`） |
-| `start_motion()` | 启动管线三线程 traj-plan / traj-sample / ctrl-step（规划/采样频率取 config traj 段 `plan_hz`/`sample_hz`，控制频率取 config control 段 `ctrl_hz`）；按 config control 段 `mode` 自动切电机模式 + 同步算出首帧；已在跑无副作用；traj/control 域未配置抛 `RuntimeError` |
+| `start_motion()` | 启动管线三线程 traj-plan / traj-sample / ctrl-step（规划/采样频率取 config traj 段 `plan_hz`/`sample_hz`，控制频率取 config control 段 `ctrl_hz`）；按激活控制器 `MODE` 类属性自动切电机模式 + 同步算出首帧；已在跑无副作用；traj/control 域未配置抛 `RuntimeError` |
 | `stop_motion(damping=True)` | 停三线程（卡住 1 s 抛 `RuntimeError` 列出卡者）；清当前帧回初始态；默认紧接着切纯阻尼防下坠（`damping=False` 关闭） |
-| `set_solver(domain, name)` | 切某域激活算法（每域有且仅一个激活），返回算法实例；管线运行中切 control / traj 走**热切换**：暂停一拍 → 切换（control 先按新 `mode` 键切电机模式）→ 立即用新算法算一拍 → 调线程频率 → 恢复 |
+| `set_solver(domain, name)` | 切某域激活算法（每域有且仅一个激活），返回算法实例；管线运行中切 control / traj 走**热切换**：暂停一拍 → 切换（control 先按新控制器 `MODE` 切电机模式）→ 立即用新算法算一拍 → 调线程频率 → 恢复 |
 | `list_solvers(domain)` | 列某域已加载算法名（当前激活排第一，其余按字母序） |
