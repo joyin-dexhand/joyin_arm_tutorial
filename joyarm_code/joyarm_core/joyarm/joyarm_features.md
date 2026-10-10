@@ -103,10 +103,10 @@ config 缺省自动加载 `config/<model>.yaml`；缺失或 `check_config` 不�
 | 状态保活线程 | `_start_state_keepalive()` | 启动保活线程（connect 自动调；已在跑不重复启动） |
 | | `_stop_state_keepalive()` | 停止保活线程（disconnect 自动调） |
 | | `_keepalive_step()` | 保活单步：缓存陈旧（说明无指令在发）才主动查电机——发指令期间零总线占用；后端不支持查数据新旧时静默跳过 |
-| 运动管线单步 | `_tick_plan()` | 规划线程单步：`plan_once` **成功**才记录 `_traj_planned_by` |
+| 运动管线单步 | `_tick_plan()` | 规划线程单步：把桥内目标交给 `plan`，**成功**才记录 `_traj_planned_by` |
 | | `_tick_sample()` | 采样线程单步：当前规划器 = 最近完成规划者才发布帧（换规划器过渡保护） |
 | | `_tick_ctrl()` | 控制线程单步：`_switching` 置位期间先不发（切换流程自己补一拍） |
-| | `_dispatch_ctrl()` | 控制派发一步：`is_normal` → 读当前帧 → 控制器 `compute` → `set_arm_command` |
+| | `_dispatch_ctrl()` | 控制派发一步：`is_normal` → 读当前帧 → 控制器 `step` 自行算指令并下发 |
 | | `_sync_traj_tick()` | 同步跑一拍"规划 + 采样发布"（启动/换算法时当前帧立即可用；失败沿用旧帧不抛错，线程按节拍重试自愈） |
 | 紧急阻尼 | `_damping_frames(kd=5.0)` | 阻尼指令序列：切 MIT → 发阻尼帧 → 尽力使能 → 再发一帧（arm + end，每步尽力、失败只告警） |
 | 直连运动内核 | `_paced_send(ts, send)` | 按时间表逐帧下发：sleep + 自旋精确定时；某帧迟了跳过等待不追赶（`move_j`/`_safe_move` 共用） |
@@ -209,14 +209,12 @@ config 缺省自动加载 `config/<model>.yaml`；缺失或 `check_config` 不�
 
 | 方法 | 简介 |
 |:--|:--|
-| `fkine(q, frame, rep="pose")` | 正运动学（`frame` 必填：帧名或编号；`rep`：pose / T / se3） |
-| `ikine(target, frame, q0, **kw)` | 逆运动学单解（`q0` 必填 = 数值法迭代起点） |
-| `ikine_all(target, frame, **kw)` | 逆运动学全解 `(K, n_arm)`（逐解 ±2π 平移尽量落进限位；数值法不支持抛 `RuntimeError`） |
-| `jac(q, frame, ref="base")` | 雅可比（`ref`：local 末端系 / base 基座系） |
-| `manipulability(q, frame)` | 可操作度（越大离奇异越远） |
-| `statics(q, F, frame)` | 静力学 `τ = JᵀF`（`F` 六维：力 N + 力矩 N·m） |
+| `fkine(q, frame)` | 正运动学（`frame` 必填：帧名或编号；返回 `Pose` = xyz+四元数） |
+| `ikine(pose, frame, q0, **kw)` | 逆运动学单解（`q0` 必填 = 数值法迭代起点） |
+| `ikine_all(pose, **kw)` | 逆运动学全解 `(K, n_arm)`（逐解 ±2π 平移尽量落进限位；数值法不支持抛 `RuntimeError`） |
+| `jac(q, frame)` | 雅可比（基座系） |
 | `mass_matrix(q)` / `gravity(q)` | 关节空间惯量矩阵 M(q) / 重力项 G(q) |
-| （不设门面） | idyn / coriolis / cartesian_inertia / fkine_vel / ikine_vel——经激活求解器实例调用（实例由 `set_solver` 返回值取得） |
+| （不设门面） | idyn / coriolis / jac_pinv_damped——经激活求解器实例调用（实例由 `set_solver` 返回值取得） |
 
 #### 十二、进阶：运动管线与运行中换算法
 
@@ -227,7 +225,7 @@ config 缺省自动加载 `config/<model>.yaml`；缺失或 `check_config` 不�
 | `set_target_traj(targets)` | 写运动目标（`TrajFrame` 单帧或帧列表；写深拷贝；`None`/空 = 清空 → 规划器回退规划回 q_home） |
 | `get_target_traj()` | 读当前目标序列（返回内部快照引用，规划期间勿改动） |
 | `set_current_frame(frame)` / `get_current_frame()` | 写/读当前轨迹帧（规划线程写、控制线程读；首帧发布前 `None`） |
-| `start_motion()` | 启动管线三线程 traj-plan / traj-sample / ctrl-step（频率取规划器 `plan_hz`/`sample_hz` 与控制器 `ctrl_hz`）；按 `Controller.MODE` 自动切电机模式 + 同步算出首帧；已在跑无副作用；traj/control 域未配置抛 `RuntimeError` |
+| `start_motion()` | 启动管线三线程 traj-plan / traj-sample / ctrl-step（规划/采样频率取 config traj 段 `plan_hz`/`sample_hz`，控制频率取 config control 段 `ctrl_hz`）；按 config control 段 `mode` 自动切电机模式 + 同步算出首帧；已在跑无副作用；traj/control 域未配置抛 `RuntimeError` |
 | `stop_motion(damping=True)` | 停三线程（卡住 1 s 抛 `RuntimeError` 列出卡者）；清当前帧回初始态；默认紧接着切纯阻尼防下坠（`damping=False` 关闭） |
-| `set_solver(domain, name)` | 切某域激活算法（每域有且仅一个激活），返回算法实例；管线运行中切 control / traj 走**热切换**：暂停一拍 → 切换（control 先按新 `MODE` 切电机模式）→ 立即用新算法算一拍 → 调线程频率 → 恢复 |
+| `set_solver(domain, name)` | 切某域激活算法（每域有且仅一个激活），返回算法实例；管线运行中切 control / traj 走**热切换**：暂停一拍 → 切换（control 先按新 `mode` 键切电机模式）→ 立即用新算法算一拍 → 调线程频率 → 恢复 |
 | `list_solvers(domain)` | 列某域已加载算法名（当前激活排第一，其余按字母序） |

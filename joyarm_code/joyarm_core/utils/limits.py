@@ -1,8 +1,4 @@
-"""关节/末端限位守卫（指令路径防护底层）+ 限位构建/采样辅助。
-
-``clamp_to_limits``：指令下发前逐元素裁剪到关节限位（backend 传**硬限位**）；
-``limits_from_joint_cfgs``：硬限位解析；``soft_limits_from_cfg``：软限位解析；
-``tcp_limits_from_cfg``：末端空间限位解析；``rand_within_limits``：限位内均匀采样。
+"""关节/末端限位守卫 + 限位构建/采样辅助
 """
 from __future__ import annotations
 

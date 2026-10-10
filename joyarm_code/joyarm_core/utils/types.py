@@ -1,8 +1,7 @@
 """共享数据类型与枚举。
 
-本模块定义全篇复用的数据类型（可变 ``@dataclass`` 快照）与枚举（``enum``），
+定义全库复用的数据类型（可变 ``@dataclass`` 快照）与枚举（``enum``），
 所有模块统一引用此处定义的类型，杜绝重复定义。
-数据类继承 :class:`_ArrayEqMixin`，提供 ndarray 字段安全的相等性比较。
 
 """
 from __future__ import annotations

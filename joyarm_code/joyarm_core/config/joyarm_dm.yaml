@@ -81,9 +81,9 @@ robotics:
   dynamics:
     - { name: pin_dynamics_solver }
   traj:
-    - { name: to_joint_traj_planner, plan_hz: 5.0, sample_hz: 200.0, dt_min_required: 1.0 }
+    - { name: to_joint_traj_planner, plan_hz: 10.0 }
   control:
-    - { name: joint_position_controller, ctrl_hz: 200.0 }
+    - { name: joint_position_controller, ctrl_hz: 200.0, mode: POSITION }
 
 # ===================================================================
 # 电机硬件层（backend）：arm与end的硬件通讯

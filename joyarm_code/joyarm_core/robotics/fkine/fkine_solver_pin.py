@@ -30,10 +30,16 @@ def _frame_id(model, frame) -> int:
 class PinFkineSolver(FkineSolver):
     """正运动学默认实现：``q`` → 指定帧在基座系下的位姿（pinocchio）。"""
 
-    def frame_pose(self, arm, q: np.ndarray, frame) -> Pose:
-        """内核：``forwardKinematics`` + ``updateFramePlacement`` → ``Pose``。
+    def solve(self, arm, q: np.ndarray, frame: str) -> Pose:
+        """求单帧位姿。
 
-        每次计算新建私有 ``pin.Data``（~5 µs）——无共享可变状态，线程安全。
+        :param arm: 机械臂对象。
+        :param q: ``(n,)`` 关节角，弧度。
+        :param frame: 目标帧名（``str``）。
+        :return: `Pose`（xyz+四元数），该帧在基坐标系下的位姿。
+
+        **实现**：``forwardKinematics`` + ``updateFramePlacement``；每次计算
+        新建私有 ``pin.Data``（~5 µs）——无共享可变状态，线程安全。
         """
         model = arm.pin_model
         data = pin.Data(model)

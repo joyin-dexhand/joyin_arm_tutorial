@@ -1,17 +1,17 @@
-"""``BackendTemplate`` —— Backend 子类实现模板（复制本文件为 ``backend_<型号>.py`` 后填写）。
+"""``BackendTemplate`` —— Backend 子类实现模板
 
-与 ``config/joyarm_template.yaml`` 配套使用，六步接入新型号：
-1. 复制本文件为 ``backend_<型号>.py``，类名为``Backend<型号>``，全文替换 ``BackendTemplate`` / logger 名；
-2. 复制 ``config/joyarm_template.yaml`` 为 ``config/joyarm_<型号>.yaml``，填好 ``backend:`` 段；
-3. 按本文件各方法的注释实现全部 29 个抽象方法（最小可用子集见下方说明），可分步实现、逐步联调；
-4. 在 ``backend/__init__.py`` 顶部导入子类，并在 ``REGISTRY`` 加一行注册；
-5. ``joyarm_<型号>.yaml`` 的 ``backend.name`` 填子类 backend 的注册名；
-6. 子类实现后更新注释 docstring：由「子类型号模板和实现约束」改为「子类型号的介绍说明」—— 包括文件头 docstring、类 docstring、各方法 docstring。
+接入新硬件后端的步骤：
+    1. 拷贝本文件并重命名为 ``backend_<型号>.py``，类名为``Backend<型号>``，全文改名（替换 ``BackendTemplate`` / logger 名）；
+    2. 若不存在 ``config/joyarm_<型号>.yaml``配置文件，则拷贝 ``config/joyarm_template.yaml`` 重命名为 ``config/joyarm_<型号>.yaml``
+    3. 完善``config/joyarm_<型号>.yaml`` 的 ``backend:`` 段的配置；
+    4. 遵循本文件各方法的注释说明实现 backend 的全部 29 个抽象方法（最小可用子集见下方说明）；
+    5. 在 ``backend/__init__.py`` 顶部导入该子类，并在 ``REGISTRY`` 注册表加一行注册；
+    6. ``joyarm_<型号>.yaml`` 的 ``backend.name`` 填如该子类 backend 的注册名；
+    7. 子类实现完毕后更新本文件的注释 docstring（由「子类型号模板和实现约束」风格改为「子类型号的介绍说明」风格，包括文件头 docstring、类 docstring、各方法 docstring）。
 
 架构约束：
 - 子类**不得新增公开方法/属性**：JoyArm 上层只面向 ``Backend`` 基类编程，子型号专属功能一律放私有层；
-- 基类负责全部编排（逐关节循环、维度/空值检查、越限裁剪、连接与模式前置检查、统一日志、异常降级），
-  子类只做单关节/单总线的协议操作——**不要在子类重复基类已做的检查与裁剪**；
+- 基类负责全部编排，子类只做单关节/单总线的协议操作——**不在子类重复基类已做的操作**；
 - 失败约定：抽象方法失败上抛异常或返回 ``False``/``None`` 即可，基类统一转 warn。
 
 最小可用子集（29 个抽象方法须全部**定义**以满足抽象方法强制；未实现的能力**保留本模板的 ``NotImplementedError``**）：
@@ -44,9 +44,9 @@ logger = logging.getLogger("joyarm_core.backend_<型号>")  # 改型号时同步
 
 
 class BackendTemplate(Backend):
-    """Backend<型号> 硬件后端模板。
+    """Backend<型号> 硬件后端子类模板
 
-    ── 子类自建成员（协议层私有资源，``__init__`` 内初始化，全部 ``_`` 前缀）按协议需要自建，典型三件：
+    ── 子类特有成员（协议层私有资源，``__init__`` 内初始化，全部 ``_`` 前缀）按协议需要自建，典型三件：
         电机句柄表（下标对齐 ``_jointscfg_arm/end``）、总线封装（``dict[channel → bus]``，arm/end 同 channel 则共享一条）、接收线程 + 发送锁 + 请求-应答同步 Event。
 
     ── 线程模型（并发调用方，总线访问务必线程安全）──

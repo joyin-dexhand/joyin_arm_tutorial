@@ -1,13 +1,13 @@
-"""``joyarm_core.backend`` —— 整机硬件通信后端子包（两层继承 + 注册表）。
+"""``joyarm_core.backend`` —— 整机硬件通信后端
 
-继承层次（类名驼峰、文件名小写）::
+继承层次（类名驼峰、文件名小写）：
 
-    Backend                  # 整机后端抽象根（backend.py）：本体+末端一体，方法以 _arm / _end 后缀区分
-    └── BackendDM            #   真机：DM 7 电机经U2CAN 串口转 CAN 桥，型号说明见 backend_dm.py 模块 docstring
+    Backend
+    └── Backend<型号1>
+    └── Backend<...>
 
-子类与机械臂型号 **1:1 对应**派生（``backend_dm`` ↔ ``joyarm_dm``，
-即每个型号一个专属整机后端）；接入新型号 = 复制 ``backend_template.py``（六步接入见该文件头）；
-``REGISTRY`` 供 config ``backend.name`` 选型（JoyArm 解析 yaml 后经 :func:`get_backend` 构建子类实例）。
+每个机械臂型号对应一个单独的硬件后端子类（``backend_<型号>`` ↔ ``joyarm_<型号>``）；
+新后端创建流程见 ``backend_template.py``文件头 docstring。
 """
 from .backend import Backend
 from .backend_dm import BackendDM

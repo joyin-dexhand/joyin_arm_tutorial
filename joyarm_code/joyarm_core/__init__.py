@@ -1,32 +1,31 @@
-"""``joyarm_core`` —— JoyArm 机械臂核心 SDK 库。
+"""``joyarm_core`` —— JoyArm 机械臂核心代码库。
 
-分层结构（依赖只允许自上而下，下层不知道上层存在）::
+代码库分层结构：
 
-    joyarm/     JoyArm：唯一组装入口（读config配置，把算法、通信各部分装配成一个
-                可用的机械臂对象）；JoyArmFactory：按型号名创建joyarm对象
+    joyarm/       上层应用 JoyArm 类：读`config`配置，将`robot_model`、`robotics`、`backend`装配成机械臂对象
     ─────────────────────────────────────────────
-    robotics/   算法层：六个子域（fkine / ikine / jacobian / trajectory / dynamics / control），
-                    每域 = 接口 + 注册表；（只调用 ``arm`` 公开属性/方法，不反向依赖 joyarm）
-    backend/    通信层：Backend（整机接口）→ Backend*（具体后端实现）
+    config/       型号配置层：每个型号一份 YAML 配置文件
+    robot_model/  数字模型层：机械臂 URDF + Mesh资产
+    backend/      硬件通信层：Backend（整机硬件后端接口）→ Backend<型号>（具体型号后端）
+    robotics/     核心算法层：fkine / ikine / jacobian / dynamics / trajectory / control
     ─────────────────────────────────────────────
-    utils/      数学 / 共享数据类型 / 限位裁剪
-    robot_model/ config/    URDF+网格资产 / 每型号一份 YAML 配置
+    utils/        共享工具层：数学 / 共享数据类型 / 限位裁剪 等
 
-接入新型号：
-    1. 复制 ``config/joyarm_template.yaml`` 填写；
-    2. 放入``robot_model/<型号名>/`` 资产；
-    3. 新写 ``backend/backend_<型号>.py``（复制 ``backend/backend_template.py`` 起步，注册表一行注册）；
+命名约定：类名驼峰，文件名小写 snake_case。
 
-命名约定：类名驼峰，文件名小写 snake_case。用法::
+机械臂对象创建方式：
+```
+    from joyarm_core import joyArm   # 导入创建入口
 
-    from joyarm_core import joyarm_factory   # 推荐入口：型号名唯一参数
-
-    arm = joyarm_factory("joyarm_dm")  # 读配置+URDF 完成组装（默认不连接真机）
-    # 等价直用：from joyarm_core import JoyArm; arm = JoyArm("joyarm_dm")
+    arm1 = joyArm("joyarm_<型号>")  # 创建对象
+``` 
 """
+
 from __future__ import annotations
 
-# ---- 共享类型 / 数学（基础层）----
+__version__ = "0.1.0"
+
+# ---- 共享工具 ----
 from .utils.types import (
     ArmState,
     TcpState,
@@ -66,13 +65,15 @@ from .utils.transforms import (
     adT,
     slerp,
 )
+from .utils.limits import (
+    clamp_to_limits,
+    limits_from_joint_cfgs,
+    rand_within_limits,
+    soft_limits_from_cfg,
+    tcp_limits_from_cfg,
+)
 
-# ---- 设备模型层（JoyArm 单类 + FakeArm 无硬件替身 + 型号工厂）----
-from .joyarm.joyarm import JoyArm
-from .joyarm.fakearm import FakeArm
-from .joyarm import JoyArmFactory, joyarm_factory
-
-# ---- 算法层（robotics；只按属性约定调用 arm，不 import joyarm）----
+# ---- 核心算法层（robotics）----
 from .robotics.fkine import FkineSolver, PinFkineSolver
 from .robotics.ikine import IkineSolver, PinIkineSolver
 from .robotics.jacobian import JacobianSolver, PinJacobianSolver
@@ -80,20 +81,21 @@ from .robotics.dynamics import DynamicsSolver, PinDynamicsSolver
 from .robotics.trajectory import TrajPlanner, ToJointTrajPlanner
 from .robotics.control import Controller, JointPositionController
 
-# ---- 指令路径守卫（clamp_to_limits）+ 限位构建辅助 ----
-from .utils.limits import clamp_to_limits, limits_from_joint_cfgs, rand_within_limits, soft_limits_from_cfg, tcp_limits_from_cfg
-
-# ---- 通信层（整机后端，两层继承 + name 选型注册表）----
+# ---- 整机后端通信层 ----
 from . import backend
 from .backend import (
     Backend,
     get_backend,
 )
 
-__version__ = "0.1.0"
+# ---- JoyArm 类 + 对象创建入口 ----
+from .joyarm.joyarm import JoyArm
+from .joyarm import JoyArmFactory, joyArm
 
 __all__ = [
-    # 基础：类型
+    # 版本
+    "__version__",
+    # 共享工具：类型
     "ArmState",
     "TcpState",
     "JointState",
@@ -106,7 +108,7 @@ __all__ = [
     "IKResult",
     "ComplianceParams",
     "ControlMode",
-    # 基础：数学 / 接口
+    # 共享工具：数学 / 接口
     "rot_x",
     "rot_y",
     "rot_z",
@@ -130,35 +132,32 @@ __all__ = [
     "T_mul",
     "adT",
     "slerp",
-    # 设备模型层
+    # 共享工具：指令路径守卫 + 限位构建辅助
+    "clamp_to_limits",
+    "limits_from_joint_cfgs",
+    "soft_limits_from_cfg",
+    "tcp_limits_from_cfg",
+    "rand_within_limits",
+    # ---- JoyArm 类 + 对象创建入口 ----
     "JoyArm",
-    "FakeArm",
     "JoyArmFactory",
-    "joyarm_factory",
-    # 求解器策略接口
+    "joyArm",
+    # 求解器接口
     "FkineSolver",
     "IkineSolver",
     "JacobianSolver",
     "DynamicsSolver",
     "TrajPlanner",
     "Controller",
-    # 六域默认实现（Pin 系列 / 到关节目标规划 / 关节位置控制）
+    # 求解器默认实现
     "PinFkineSolver",
     "PinIkineSolver",
     "PinJacobianSolver",
     "PinDynamicsSolver",
     "ToJointTrajPlanner",
     "JointPositionController",
-    # 指令路径守卫 + 限位构建辅助
-    "clamp_to_limits",
-    "limits_from_joint_cfgs",
-    "soft_limits_from_cfg",
-    "tcp_limits_from_cfg",
-    "rand_within_limits",
     # 通信层（整机后端）
     "backend",
     "Backend",
     "get_backend",
-    # 版本
-    "__version__",
 ]
