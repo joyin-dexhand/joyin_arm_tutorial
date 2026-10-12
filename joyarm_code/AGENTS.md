@@ -56,7 +56,7 @@ joyarm_code/
 │       └── joyarm_template.yaml     #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 list_models）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性；基础设施优先复用 joyarm_core，章节算法可自行实现）
-├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟）
+├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；test_robotics.py：robotics 六域离线回归；benchmark_ik.py / visualize_fk·ik_trajectory.py：IK 性能基准与可视化脚本）
 ├── quickstart/                      # 快速上手示例（占位待补；CLI/GUI 入口规划见 §2.3）
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
 ├── README.md                        # 用户向入口
@@ -129,20 +129,10 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个抽象内核：24 单 joint + 4 总线级 + 1 整组动作）；三模式发送（cfg `default_mode` 可配、缺省 MIT，connect 自动 best-effort 设定）；状态对象 `joint_state_arm/end`（含 `t`，纯物理量）+ `is_connected/is_abled` 三值标志 + `mode_arm/end` 组模式（均私有成员 + 只读属性；逐 joint 模式在私有缓存，与状态读取解耦）；cfg 预解析硬限位/发送默认/POS_VEL 四增益（切 POSITION/VELOCITY 时随模式写入寄存器）/baud/协议标识三键（motor_id、feedback_id、model → `_joint_*`）/两运行键（state_refresh_hz、write_settle）为成员；运行期 warn/info 直接输出 | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机经 U2CAN 串口转 CAN 桥，模块私有 `_DMMotor`/`_DMBus`：RX 收取线程纯收取默认 1000Hz（cfg `rx_hz`，上限 5000）、状态快照单一 tuple 原子换入、状态读非阻塞（新鲜直返/陈旧发 0xCC 即返当前快照/硬陈旧 >1s 先发刷新帧再上抛防洗白且可自愈）；模式寄存器 RID10 MIT/VEL/Torque_Pos=1/3/4（POSITION 走 0x300+id pos_force 帧）、切 POSITION/VELOCITY 随写 4 增益（RID25-28，NaN 跳过）；反馈帧含双温度（data[6]=T_MOS、data[7]=T_Rotor）；全操作内核验证+重试（参数 0x55 回显核对/0x33 应答、使能/失能/设零/清错 0xFC/FD/FE/FB 新状态帧核对 err，应答按电机+RID+时刻配对防洗白）；僵尸总线重连先关再重建、断连清扫无主总线；组帧/解码与厂商库比特级一致（联调前可跑临时交叉脚本）；无 save；末端离散动作 open/home/close/position（-5.0/-3.0/0.0 rad/kwarg ``position`` 透传：自动切 POSITION 随写增益 + cfg vlim/flim 发送默认 + 位置经基类管道裁硬限位） | Ch6/13 | ✅ |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；文件待创建，实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
-| `robotics/fkine/` | `FkineSolver(ABC)`（批量/rep 模板在 ABC）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御）✅；`MdhFkineSolver` 从 `joyarm_core.robotics` 与包顶层导出；MDH 白盒 FK 位于 `fkine_solver_mdh.py`，调用方读取 MDH 参数快照后传入，解析 IK 从该模块复用计算函数 | Ch2 | ✅ |
-| `robotics/ikine/` | `IkineSolver(ABC)`（solve_all 全解 + `_shift_2pi`/`_select_nearest` 助手）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启）+ `AnalyticIkineSolver`（JoyArm 2/3/4 轴平行、5/6 轴相交构型；枚举肩/胘/腕分支 + MDH FK 回代；腕部奇异以 q6 参考角选取代表解；首次求解缓存 MDH/TCP 逆变换，切换 arm 实例重建，配置修改须重建实例） | Ch3 | ✅ |
-| `robotics/jacobian/` | `JacobianSolver(ABC)`（衍生量模板）+ `PinJacobianSolver`（computeFrameJacobian，base/local 双参考系）✅ | Ch4 | ✅ |
-| `robotics/trajectory/` | `TrajPlanner(ABC)`（校验/剔除/回退管线）+ `ToJointTrajPlanner`（到关节目标点，五次多项式六边界条件，采样出 q/dq/ddq；目标可带 dq/ddq；**仅支持单帧目标**——检查/剔除前后均恰一帧才有效，多帧告警并回退规划 q_home）✅ | Ch5 | ✅ |
-| `robotics/dynamics/` | `DynamicsSolver(ABC)`（fdyn/Λ 模板）+ `PinDynamicsSolver`（rnea/crba 对称化/nonLinearEffects，f_ext 待力控章节）✅ | Ch8 | ✅ |
-| `robotics/control/` | `Controller(ABC)`（compute 内核 + MODE 声明）+ `JointPositionController` 关节位置控制器（步长 ≤ dq_max/ctrl_hz 裁剪+节流告警）✅；运行防护 is_normal 在 JoyArm 管线 | Ch6 | ✅ |
-| `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典组装 + 公开门面 + 自检 + tcp_limits 解析 + `load_config`/`_build_domain`/`_parse_domain_specs` + `_build_pin_model`（URDF 解析并锁定非本体关节 → nq=n_arm 计算模型）+ 私有周期线程机制 `_run_periodic`/`_PeriodicThread`（保活+运动三线程，单消费者，不入 utils）+ `_cubic_traj` 三次插值（move_j/safe_* 直连路径）；硬件路径待按新 backend API 重构对接（见 §3.2）） | — | ✅ |
-| `joyarm/fakearm.py` | `FakeArm`（无硬件最小替身：arm 协议鸭子类型实现——config/URDF/限位解析复用 JoyArm 助手 + 理想执行器语义；算法测试/章节示例/CI 用） | — | ✅ |
-| `joyarm/__init__.py` | `JoyArmFactory`/`joyarm_factory`（型号工厂，软化规则见约束4；`list_models` 扫描 config/） | — | ✅ |
-| `config/joyarm_dm.yaml` | 型号 YAML 三段（结构与限位语义见 §1.3；`arm_mdh` 为理想化 URDF 生成的名义值，实体需标定） | — | ✅ |
 | `backend/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError，桩消息前缀自动取 `self._name`（cfg `backend.name` 注册名，未传回退占位前缀 `backend_<型号>.py`，复制后无需手改）+ 逐方法实现指引注释 + 统一 `:param:/:return:/:raises:` 契约块（类型/单位/范围/维度与基类已做校验）+ 全量私有成员台账（直接消费 / 按需借用 / 勿动分档）+ 最小可用子集说明：必实现 14（连接/断连/使能/失能/读状态/读模式/设模式 ×2 族）、按需 15（参数读写/设零/三模式发送/离散动作/清错），不支持的能力保留桩由基类转 warn 降级；复制为 `backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入；含 DM 类关节电机/Feetech 类舵机双家族差异指引（覆盖混合硬件 arm 电机 + end 舵机、无 end 型号适配）、联调自检清单与「实现后 docstring 改写为型号介绍说明」指引（七步接入），受 test_69 冒烟保护：29 桩全量消息格式校验（含前缀随 name 自动切换）+ 基类内核集漂移守护） | — | ✅ |
 | `backend/backend_verify.py` | Backend 子类真机验收 CLI（上层视角只调基类公开面；00~50 六组分项 = 初始化/连接/只读/控制/运动/清错，PASS/SKIP/FAIL 三分 + 高危交互确认；`--param`/`--action` 适配子类） | — | ✅ |
-| `robotics/fkine/` | `FkineSolver(ABC)`（solve 单内核）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御）✅；MDH 白盒 FK 为 Ch2 教学 | Ch2 | ✅ |
-| `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 / solve_all 全解默认 ``NotImplementedError``）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅；解析 IK 为 Ch3 教学 | Ch3 | ✅ |
+| `robotics/fkine/` | `FkineSolver(ABC)`（solve 单内核）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御）✅ + `MdhFkineSolver`（fkine_solver_mdh.py：MDH 白盒 FK——config `arm_mdh` 逐关节连乘 + `T_linkn_endtcp` 右乘，仅末端帧；已与 URDF 标定一致至 1e-13，解析 IK 复用其计算函数）✅ | Ch2 | ✅ |
+| `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 / solve_all 全解默认 ``NotImplementedError``）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅ + `AnalyticIkineSolver`（ikine_solver_analytic.py：2/3/4 轴平行、5/6 轴相交构型解析解——枚举肩/肘/腕分支 ≤8 组候选、MDH FK 回代剔伪解去重、±2π 限位内归位；solve 软限位剔除后取距 q0 最近，solve_all 不剔越限且 frame 可缺省=末端帧；首次求解缓存 MDH/TCP 逆变换，按 arm 身份复用、配置变更须重建实例）✅ | Ch3 | ✅ |
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（衍生量模板）+ `PinJacobianSolver`（computeFrameJacobian，基座系）✅ | Ch4 | ✅ |
 | `robotics/trajectory/` | `TrajPlanner(ABC)`（plan/sample 两内核：目标单点/序列 → 轨迹存对象内、按绝对时间采样产帧）+ 双实现：`SingleJointHoldTrajPlanner`（单点直传：仅取单帧 q 恒定输出、dq/ddq=0，限速由控制器步长裁剪；q 空/维度不符/多帧回退 q_home）与 `SingleJointCubicTrajPlanner`（单点三次多项式：当前 q/dq 起点 + 目标 q/dq 终点四约束，T=目标时刻−当前、τ 钳位超末保持；无效回退恒定 q_home、已过期直接恒定发布目标），config 默认激活直传 ✅ | Ch5 | ✅ |
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（idyn/M/C/G 四内核）+ `PinDynamicsSolver`（rnea/crba 对称化/nonLinearEffects）✅ | Ch8 | ✅ |
@@ -159,7 +149,7 @@ JoyArm（单类组合根：_backend + 六域成员字典 + config/_config）
    │  robotics:→各域 REGISTRY 字典化组装（首个激活；域未配置=空，门面显性报错）
    │  教学数据（MDH 等）：算法层经 arm.get_config() 读类内 config（约束8）
 Backend(ABC) ──▶ BackendDM ✅（U2CAN 串口转 CAN 桥；joyarm 硬件路径仍调旧 backend API，待按新整族 API 对接重构）
-六域 ABC + 内置默认实现（Pin 四域 / single_joint_hold+single_joint_cubic 双规划器 / joint_position_controller）──▶
+六域 ABC + 内置默认实现（Pin 四域 + MDH FK + 解析 IK / single_joint 双规划器 hold+cubic / joint_position_controller）──▶
    章节自定义实现显式入表后并列选配（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
    traj Ch5 / control Ch6/8/9 / dynamics Ch8）
 ```
@@ -178,7 +168,7 @@ JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件自�
 # 成员字典
 JoyArm.set_solver(domain, name) · list_solvers(domain)   # 运行期切换/查询（有且仅一个激活） ✅
 # 计算门面（已配置域可用；参数排序见约束5）
-JoyArm.fkine(q, frame) · ikine(pose, frame, q0, **kw) → IKResult 单解（数值法自 q0 迭代，未识别 kwargs 忽略） · ikine_all(pose) → 全解 (K,n)（需解析法实现，数值法抛 RuntimeError）
+JoyArm.fkine(q, frame) · ikine(pose, frame, q0, **kw) → IKResult 单解（随激活实现：Pin 数值法自 q0 迭代 / Analytic 解析法限位剔除后取最近；未识别 kwargs 忽略） · ikine_all(pose) → 全解 (K,n)（仅 AnalyticIkineSolver 支持，frame 缺省末端帧；数值法抛 RuntimeError）
 JoyArm.jac(q, frame)；求解统一经 _solve 纯派发——内置 Pin 求解器每次计算新建私有 pin.Data，无共享可变状态、多线程天然安全
 JoyArm.mass_matrix(q) / gravity(q)（idyn / coriolis / jac_pinv_damped 不设门面——经激活求解器调用：求解器实例.method(arm, ...)，实例可由 set_solver 返回值取得）
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
@@ -220,9 +210,9 @@ clamp_to_limits(targets, limits) · limits_from_joint_cfgs(joint_cfgs) · soft_l
 transforms.py（23 函数，清单见 §3.1）✅ · types.py 枚举+数据类（见 §3.1）✅
 ```
 
-- 离线轨迹可视化：`test/visualize_fk_trajectory.py`，调用 `ToJointTrajPlanner.plan_once` 一次并经 `sample_frame` 离线采样五次关节插补 + MDH/Pin FK 对比，输出关节曲线、TCP 路径/线速度与位姿误差图，以及含前后各 1 秒静止段的三次/五次单关节加速度对比图；运行参数见 `test/README.md`。
+- 离线轨迹可视化：`test/visualize_fk_trajectory.py`（五次关节插补 + 手写 MDH/Pin FK 对比，输出关节曲线、TCP 路径/线速度与位姿误差图及三次/五次单关节加速度对比图；⚠️ 按旧规划器 API 编写——`ToJointTrajPlanner`/`plan_once`/`sample_frame` 已删，待适配 single_joint 双规划器后方可运行）；运行参数见 `test/README.md`。
 
-- `test/visualize_ik_trajectory.py`：IK 轨迹可视化实验，使用 `PinFkineSolver` 构造可达目标，解析 IK 求目标关节角后以五次关节插补和 Pin FK 回代绘图。
+- `test/visualize_ik_trajectory.py`：IK 轨迹可视化实验，使用 `PinFkineSolver` 构造可达目标，解析 IK 求目标关节角后以五次关节插补和 Pin FK 回代绘图（⚠️ 同按旧规划器 API 编写，待适配）。
 - `test/benchmark_ik.py`：随机生成 Pin FK 可达目标及 0～2 rad 邻域初值，分别计时解析 IK 与 Pin 数值 IK；默认 1,000 个目标 × 每目标 100 个初值，并保存成功率、累计迭代数、耗时散点及分段统计。
 
 ## 4. 文档同步维护

@@ -270,6 +270,45 @@ class AnalyticIkineSolver(IkineSolver):
             self._prepared = prepared
         return prepared[1], prepared[2]
 
+    @staticmethod
+    def _shift_2pi(q: np.ndarray, q_min: np.ndarray, q_max: np.ndarray) -> np.ndarray:
+        """逐关节加 ``k·2π``（k 取最优整数），使 ``q`` 尽量落入 ``[q_min, q_max]``。
+
+        关节限位区间窄于 ``2π`` 时可能无整数 k 可入界，此时取离区间最近的等价角。
+        """
+        q = np.asarray(q, dtype=float).reshape(-1)
+        q_min = np.asarray(q_min, dtype=float).reshape(-1)
+        q_max = np.asarray(q_max, dtype=float).reshape(-1)
+        two_pi = 2.0 * np.pi
+        out = q.copy()
+        for j in range(q.size):
+            best, best_d = q[j], np.inf
+            # 以区间中心圆整出基准 k，最优解必在其 ±1 邻域内
+            k0 = int(round(((q_min[j] + q_max[j]) / 2.0 - q[j]) / two_pi))
+            for k in (k0 - 1, k0, k0 + 1):
+                s = q[j] + k * two_pi
+                d = max(0.0, q_min[j] - s, s - q_max[j])   # 与限位区间的距离
+                if d < best_d:
+                    best, best_d = s, d
+            out[j] = best
+        return out
+
+    @staticmethod
+    def _select_nearest(sols: np.ndarray, q0: np.ndarray,
+                        q_min: np.ndarray, q_max: np.ndarray) -> IKResult:
+        """限位剔除 + 选最近解（解析法 :meth:`solve` 的收尾逻辑）。
+
+        ``sols`` 为 ``(K,n)`` 候选解：剔除任一关节超出 ``[q_min, q_max]`` 的行，剩余行中
+        取与 ``q0`` 各关节角偏差平方和最小的一组；全部越限返回``success=False``、``q`` 为 ``None``。
+        """
+        sols = np.atleast_2d(np.asarray(sols, dtype=float))
+        q0 = np.asarray(q0, dtype=float).reshape(-1)
+        feas = sols[((sols >= q_min) & (sols <= q_max)).all(axis=1)]
+        if feas.size == 0:
+            return IKResult(success=False, err=float("inf"))
+        k = int(np.argmin(((feas - q0) ** 2).sum(axis=1)))
+        return IKResult(q=feas[k], success=True, err=0.0, n_iter=0)
+
     def solve(
         self,
         arm,
@@ -291,7 +330,9 @@ class AnalyticIkineSolver(IkineSolver):
         :param iters: 为兼容统一接口保留，解析法不使用。
         :return: IKResult；无可行解时 success=False。
         """
-        result = self.solve_all(arm, target, frame, tol=tol,q6_ref=float(np.asarray(q0, dtype=float)[5]), **kwargs)
+        result = self.solve_all(arm, target, frame, tol=tol,
+                                q6_ref=float(np.asarray(q0, dtype=float)[5]),
+                                **kwargs)
         if not result.success:
             return result
         limits = arm.arm_limits_soft
@@ -306,7 +347,7 @@ class AnalyticIkineSolver(IkineSolver):
         self,
         arm,
         target: Pose,
-        frame,
+        frame=None,
         *,
         tol: float = 1e-6,
         **kwargs,
@@ -316,12 +357,15 @@ class AnalyticIkineSolver(IkineSolver):
         计算顺序：移除 TCP 固定变换 → q1 → (phi, q5, q6) → (q2, q3, q4)。
         逐关节加减整圈，尽量将角度移入硬限位；本方法不剔除越限解。
         :param target: TCP 目标位姿。
-        :param frame: 配置的末端帧名称或索引，其他帧不支持。
+        :param frame: 配置的末端帧名称或索引（缺省取 `arm.ee_frame_name`），
+            其他帧不支持。
         :param tol: 位置误差范数与姿态误差角之和的允许上限。
         :return: IKResult，q 为 (K,6)，K <= 8；无解时为 (0,6)。
         :raises ValueError: 请求的帧不是配置的末端帧。
         """
         q6_ref = float(kwargs.pop("q6_ref", 0.0))
+        if frame is None:
+            frame = arm.ee_frame_name   # 基类契约 solve_all(arm, pose, **kw) 不传 frame
         model = arm.pin_model
         end_id = model.getFrameId(arm.ee_frame_name)
         frame_id = int(frame) if isinstance(frame, (int, np.integer)) \

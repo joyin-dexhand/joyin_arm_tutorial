@@ -16,4 +16,4 @@ REGISTRY: dict = {
     "mdh_fkine_solver": MdhFkineSolver,  # MDH 解析实现
 }
 
-__all__ = ["FkineSolver", "PinFkineSolver","MdhFkineSolver", "REGISTRY"]
+__all__ = ["FkineSolver", "REGISTRY", "PinFkineSolver", "MdhFkineSolver"]

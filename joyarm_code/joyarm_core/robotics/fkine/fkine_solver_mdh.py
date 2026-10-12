@@ -1,3 +1,8 @@
+"""MdhFkineSolver —— MDH 参数白盒正运动学（教学实现）。
+
+1. 由 config `arm_mdh`（6×4：α/a/d/θ）逐关节连乘齐次变换得 T_06，再右乘 `T_linkn_endtcp` 得末端位姿；
+2. 仅支持末端帧（`frame` 须为 `arm.ee_frame_name`），其余帧抛 ``ValueError``。
+"""
 from __future__ import annotations
 
 import numpy as np
@@ -41,8 +46,8 @@ def _fkine_mdh(mdh: np.ndarray, q: np.ndarray) -> np.ndarray:
     return T_06
 
 class MdhFkineSolver(FkineSolver):
-    def frame_pose(self, arm, q: np.ndarray, frame) -> Pose:
-        """计算 frame_end_tcp 相对于基座的位姿。"""
+    def solve(self, arm, q: np.ndarray, frame) -> Pose:
+        """正运动学求解：frame_end_tcp 相对于基座的位姿。"""
         model = arm.pin_model
 
         frame_id = (
