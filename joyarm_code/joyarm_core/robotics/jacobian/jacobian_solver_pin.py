@@ -1,8 +1,6 @@
 """PinJacobianSolver —— 基于 pinocchio 的雅可比默认实现。
 
-直接调用 ``pin.computeFrameJacobian``（LOCAL_WORLD_ALIGNED 基座系），
-按属性约定消费``arm.pin_model``，适配任意构型。
-config ``robotics.jacobian`` 段写注册名 ``pin_jacobian_solver`` 即选用。
+直接调用 `pin.computeFrameJacobian`，按属性约定消费 `arm.pin_model`。
 """
 from __future__ import annotations
 
@@ -26,15 +24,15 @@ def _frame_id(model, frame) -> int:
 
 
 class PinJacobianSolver(JacobianSolver):
-    """雅可比默认实现：``J(q) = ∂x/∂q``（pinocchio 帧雅可比）。"""
+    """雅可比默认实现：`J(q) = ∂x/∂q`（pinocchio 帧雅可比）。"""
 
     def jac(self, arm, q: np.ndarray, frame: str) -> np.ndarray:
         """求雅可比矩阵。
 
         :param arm: 机械臂对象。
-        :param q: ``(n,)`` 关节角，弧度。
+        :param q: `(n,)` 关节角，弧度。
         :param frame: 目标帧名（``str``）。
-        :return: ``(6,n)`` 基座系雅可比矩阵 ``J(q)``（LOCAL_WORLD_ALIGNED）。
+        :return: `(6,n)` 基座系雅可比矩阵 `J(q)`（LOCAL_WORLD_ALIGNED）。
         """
         model = arm.pin_model
         data = pin.Data(model)                  # 私有草稿纸：无共享可变状态

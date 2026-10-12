@@ -81,7 +81,8 @@ robotics:
   dynamics:
     - { name: pin_dynamics_solver }
   traj:
-    - { name: to_joint_traj_planner, plan_hz: 10.0 }
+    - { name: single_joint_hold_traj_planner, plan_hz: 10.0 } # 首位 = 默认激活（直传）
+    - { name: single_joint_cubic_traj_planner, plan_hz: 10.0 } # 三次多项式（可 set_solver 切换）
   control:
     - { name: joint_position_controller, ctrl_hz: 200.0 } # 电机模式由控制器 MODE 类属性指定
 

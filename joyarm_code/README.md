@@ -6,7 +6,7 @@
 joyarm_code/
 ├── joyarm_core/     # ★ 核心 SDK ：joyarm / robotics / backend / utils / robot_model / config
 ├── joyarm_ros2_ws/  # ROS2 工作空间（规划）
-├── chapt/           # 章节教学示例脚本（一次性，不复用）
+├── chapt/           # 章节教学示例脚本（一次性演示）
 ├── test/            # 测试套件
 ├── quickstart/      # 快速上手（待补）
 └── pyproject.toml   # 工程配置与依赖

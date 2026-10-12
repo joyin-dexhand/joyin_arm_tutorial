@@ -1,7 +1,9 @@
 """Controller —— 控制律内核基类接口（ABC）
 
-基于目标帧与当前状态，计算控制指令 cmd 并下发（子类实现）；
-类属性`Controller.MODE` 声明本控制律需要的电机控制模式（子类覆写）。
+已知：目标轨迹帧与当前关节状态；求解：单步控制指令并下发。
+
+基于目标帧与当前状态，计算控制指令并下发（子类实现）；
+类属性 `Controller.MODE` 声明本控制律需要的电机控制模式（子类覆写）。
 
 外部调用：
     - :meth:`step(arm, target, jointstate)` —— 算一步控制指令并经 arm 下发。
@@ -23,9 +25,8 @@ class Controller(ABC):
     MODE: ControlMode = ControlMode.MIT
 
     @abstractmethod
-    def step(self, arm, target: TrajFrame,
-             jointstate: JointState) -> bool:
-        """步进cmd：基于目标与当前状态计算单步控制指令并经 arm 下发。
+    def step(self, arm, target: TrajFrame, jointstate: JointState) -> bool:
+        """步进指令：基于目标与当前状态计算单步控制指令并经 arm 下发。
 
         :param arm: 机械臂对象。
         :param target: 目标轨迹帧（`TrajFrame`，采样产出的轨迹帧）。

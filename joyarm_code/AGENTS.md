@@ -56,7 +56,7 @@ joyarm_code/
 │       └── joyarm_template.yaml     #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 list_models）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性；基础设施优先复用 joyarm_core，章节算法可自行实现）
-├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；旧套件见 git 历史 35b765f）
+├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟）
 ├── quickstart/                      # 快速上手示例（占位待补；CLI/GUI 入口规划见 §2.3）
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
 ├── README.md                        # 用户向入口
@@ -134,7 +134,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `robotics/fkine/` | `FkineSolver(ABC)`（solve 单内核）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御）✅；MDH 白盒 FK 为 Ch2 教学 | Ch2 | ✅ |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 / solve_all 全解默认 ``NotImplementedError``）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅；解析 IK 为 Ch3 教学 | Ch3 | ✅ |
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（衍生量模板）+ `PinJacobianSolver`（computeFrameJacobian，基座系）✅ | Ch4 | ✅ |
-| `robotics/trajectory/` | `TrajPlanner(ABC)`（plan/sample 两内核：目标单点/序列 + 当前状态 → 时间平滑轨迹存对象内、按绝对时间采样产帧）+ `ToJointTrajPlanner`（到关节目标点，五次多项式六边界条件，采样出 q/dq/ddq；目标可带 dq/ddq；**仅支持单帧目标**——空/多帧告警并回退规划 q_home）✅ | Ch5 | ✅ |
+| `robotics/trajectory/` | `TrajPlanner(ABC)`（plan/sample 两内核：目标单点/序列 → 轨迹存对象内、按绝对时间采样产帧）+ 双实现：`SingleJointHoldTrajPlanner`（单点直传：仅取单帧 q 恒定输出、dq/ddq=0，限速由控制器步长裁剪；q 空/维度不符/多帧回退 q_home）与 `SingleJointCubicTrajPlanner`（单点三次多项式：当前 q/dq 起点 + 目标 q/dq 终点四约束，T=目标时刻−当前、τ 钳位超末保持；无效回退恒定 q_home、已过期直接恒定发布目标），config 默认激活直传 ✅ | Ch5 | ✅ |
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（idyn/M/C/G 四内核）+ `PinDynamicsSolver`（rnea/crba 对称化/nonLinearEffects）✅ | Ch8 | ✅ |
 | `robotics/control/` | `Controller(ABC)`（step 内核 + `MODE` 类属性声明所需电机模式：基类缺省 MIT、子类覆写，管线据此 set_mode_arm）+ `JointPositionController` 关节位置控制器（`MODE=POSITION`；步长 ≤ dq_max/arm.ctrl_hz 裁剪+节流告警）✅；运行防护 is_normal 在 JoyArm 管线 | Ch6 | ✅ |
 | `joyarm/joyarm.py` | `JoyArm`（单类组合根：config 驱动构造 + 六域字典组装 + 公开门面 + 自检 + tcp_limits 解析 + `load_config`/`_build_domain`/`_parse_domain_specs` + `_build_pin_model`（URDF 解析并锁定非本体关节 → nq=n_arm 计算模型）+ 私有周期线程机制 `_run_periodic`/`_PeriodicThread`（保活+运动三线程，单消费者，不入 utils）+ `_cubic_traj` 三次插值（move_j/safe_* 直连路径）；硬件路径待按新 backend API 重构对接（见 §3.2）） | — | ✅ |
@@ -149,7 +149,7 @@ JoyArm（单类组合根：_backend + 六域成员字典 + config/_config）
    │  robotics:→各域 REGISTRY 字典化组装（首个激活；域未配置=空，门面显性报错）
    │  教学数据（MDH 等）：算法层经 arm.get_config() 读类内 config（约束8）
 Backend(ABC) ──▶ BackendDM ✅（U2CAN 串口转 CAN 桥；joyarm 硬件路径仍调旧 backend API，待按新整族 API 对接重构）
-六域 ABC + 内置默认实现（Pin 四域 / to_joint_traj_planner / joint_position_controller）──▶
+六域 ABC + 内置默认实现（Pin 四域 / single_joint_hold+single_joint_cubic 双规划器 / joint_position_controller）──▶
    章节自定义实现显式入表后并列选配（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
    traj Ch5 / control Ch6/8/9 / dynamics Ch8）
 ```
@@ -168,7 +168,7 @@ JoyArm.check_hardware() → None（异常 RuntimeError）           # 硬件自�
 # 成员字典
 JoyArm.set_solver(domain, name) · list_solvers(domain)   # 运行期切换/查询（有且仅一个激活） ✅
 # 计算门面（已配置域可用；参数排序见约束5）
-JoyArm.fkine(q, frame) · ikine(pose, frame, q0, **kw) → IKResult 单解（限位剔除+q0 最近） · ikine_all(pose) → 全解 (K,n)（±2π 归位）
+JoyArm.fkine(q, frame) · ikine(pose, frame, q0, **kw) → IKResult 单解（数值法自 q0 迭代，未识别 kwargs 忽略） · ikine_all(pose) → 全解 (K,n)（需解析法实现，数值法抛 RuntimeError）
 JoyArm.jac(q, frame)；求解统一经 _solve 纯派发——内置 Pin 求解器每次计算新建私有 pin.Data，无共享可变状态、多线程天然安全
 JoyArm.mass_matrix(q) / gravity(q)（idyn / coriolis / jac_pinv_damped 不设门面——经激活求解器调用：求解器实例.method(arm, ...)，实例可由 set_solver 返回值取得）
 # 连接 / 执行 / 参数 / 末端 ✅（read_mode_arm/end 为本地缓存离线可查；set_arm_command(..., joint=None) 单关节）
@@ -192,7 +192,7 @@ JoyArm.start_motion() / stop_motion(damping=True)   # 运动管线公共启停�
 
 ```python
 FkineSolver / IkineSolver / JacobianSolver / DynamicsSolver / TrajPlanner / Controller   # ABC 契约 🟡
-TrajPlanner：纯计算——plan(arm, target)（当前状态+目标单点/序列→时间平滑轨迹，结果存对象内、打包不可变原子发布）/ sample(t)（按绝对时间采样产帧）；管线起搏 plan_hz/sample_hz 为 config traj 规格键、由 JoyArm 提取消费（_split_pacing）🟡
+TrajPlanner：纯计算——plan(arm, target)（目标单点/序列→轨迹存对象内、打包不可变原子发布）/ sample(t)（按绝对时间采样产帧）；内置双实现 SingleJointHoldTrajPlanner（单点直传恒定输出）/ SingleJointCubicTrajPlanner（单点三次多项式，详见 §3.1）；管线起搏 plan_hz/sample_hz 为 config traj 规格键、由 JoyArm 提取消费（_split_pacing）🟡
 # 并发契约：_plan 系数打包为单一不可变对象原子赋值发布（发布即不可变，同轨迹桥约定）；arm 按属性约定调用：get_arm_state/arm_home（目标经 plan 入参直传）
 Controller——step(arm, target, jointstate)→bool（目标帧+JointState，算 cmd 并下发）；门控（is_normal/无帧）在管线 ctrl 线程 🟡
 # 门控仅作用控制循环，直连 set_arm_command/move_j/safe_* 永不受门控；arm 鸭子契约（控制器 step）：arm_limits/set_arm_command/ctrl_hz；电机模式由控制器子类类属性 MODE 声明（基类缺省 MIT、子类覆写，如 JointPositionController=POSITION），起搏为 config control 规格键 ctrl_hz（缺省 200，DM 串口桥带宽 ~39%，500 近饱和）由 JoyArm 提取消费（_split_pacing → _ctrl_pacing）：启动/热切换按 MODE 自动 set_mode_arm、ctrl 线程节拍与 arm.ctrl_hz（公开当前值、随 set_solver 更新）
@@ -215,7 +215,7 @@ transforms.py（23 函数，清单见 §3.1）✅ · types.py 枚举+数据类�
 本文件与 [`README.md`](README.md) 是子库两大入口文档，**受众不同、须随代码同步维护**：README 给**使用者**，本文件给 **agent / 开发者**；新内容按受众分流，不互相重复。
 
 - 两份 md 只写**精简概述**；详细规则写进代码 docstring（各包 `__init__.py` 一句话职责 + `:param:`/`:return:`/`:raises:`/章节标记）。
-- **每次 `joyarm_code/` 任何变化后必须同步更新本文件**：公开 API 变 → §3；目录变 → §1.1；安装/用法/章节状态变 → README；架构/约定变 → §0-2。**架构约束（§0）变更须人工确认后先改本节再动代码。**
+- **每次代码或注释发生变动，均须同步更新一遍本文件与 [`README.md`](README.md)**：公开 API/行为语义变 → §3；目录/文件变 → §1.1；安装/用法/章节状态变 → README；架构/约定变 → §0-2。**架构约束（§0）变更须人工确认后先改本节再动代码。**
 - 提交前自检：新增公开符号已收录、已补 docstring；删除符号已移除；目录树一致。
 
 ### 行数上限：≤ 300 行

@@ -8,14 +8,13 @@
 
 子类需实现：
     - :meth:`solve(arm, pose, frame, q0, tol, iters)` —— 单解，数值法迭代 或 解析法选解；
-    - :meth:`solve_all` —— 解析法可选实现，求解全部解析解；默认抛 ``NotImplementedError``。
+    - :meth:`solve_all(arm, pose)` —— 解析法可选实现，求解全部解析解；默认抛 ``NotImplementedError``。
 
-- 参数排序：**通用参数在前**，**特有参数在后**。
+参数排序：**通用参数在前**，**特有参数在后**。
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Union
 
 import numpy as np
 
@@ -45,7 +44,7 @@ class IkineSolver(ABC):
         :param q0: `(n,)` 关节角参考，弧度——数值法作**迭代起点**；解析法作**选解参考**：先剔超软限位者，再取最接近 `q0` 的解。
         :param tol: 残差范数收敛容差（数值法特有，默认 ``1e-3``）。
         :param iters: 迭代次数上限（数值法特有，默认 ``200``）。
-        :return: `IKResult`，`q` 为 `(n,)` 单解；无可行解时``success=False``。
+        :return: `IKResult`，`q` 为 `(n,)` 单解；无可行解时 ``success=False``。
         """
 
     def solve_all(self,
