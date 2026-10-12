@@ -42,7 +42,7 @@ import numpy as np
 import pinocchio as pin
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装时也可直接运行
-from joyarm_core import joyarm_factory  # noqa: E402
+from joyarm_core import joyArm  # noqa: E402
 
 POINT_SIZE = 0.003   # MeshCat 点大小（m）
 
@@ -70,7 +70,7 @@ def fk_positions(arm, Q: np.ndarray) -> np.ndarray:
 def main() -> None:
     args = parse_args()
 
-    arm = joyarm_factory("joyarm_dm")
+    arm = joyArm("joyarm_dm")
     if arm is None:
         raise SystemExit("JoyArm 创建失败：请在 joyarm_code/ 下安装依赖（uv sync）")
     print(f"模型就绪：{arm}\n")

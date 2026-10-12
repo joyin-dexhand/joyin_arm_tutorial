@@ -1,15 +1,6 @@
-"""``JoyArm`` —— 机械臂类
+"""``JoyArm`` —— 机械臂类（应用层交互入口）
 
-推荐用工厂创建（见 ``joyarm/__init__.py``）：``joyarm_factory("joyarm_dm")``。
-
-快速上手：
-
-    from joyarm_core import joyarm_factory
-    arm = joyarm_factory("joyarm_dm")   # 创建（默认不连真机）
-    arm.connect()                       # 连接（见"二、连接与断开"）
-    arm.enable_arm()                    # 使能本体电机（见"三、使能与控制模式"）
-    arm.move_j(q)                       # 关节运动到目标角（见"七、运动"）
-    arm.disconnect()                    # 断开
+按 `config/joyarm_<型号>.yaml` 的配置组合各个功能模块（backend、robotics、robot_model）。
 
 """
 from __future__ import annotations
@@ -63,7 +54,7 @@ _URDF_LIMIT_TOL = 1e-4
 
 
 def _soft_beyond_hard(soft, hard) -> bool:
-    """软限位是否越出硬限位（JoyArm / FakeArm 共用，同一份 config 两侧同判定）。
+    """软限位是否越出硬限位。
 
     软限位某键为 ±∞（缺省键，``soft_limits_from_cfg`` 兜底值）表示该维度
     **不设软限**，跳过比较——只比对显式给出的有限值。
@@ -164,6 +155,38 @@ def _build_domain(domain: str, registry: dict, spec) -> dict:
                 f"joyarm.py - _build_domain：robotics.{domain}『{name}』实例化失败：{e}"
             ) from e
     return members
+
+
+# 管线起搏频率缺省（config 规格未写对应键时使用）
+_TRAJ_HZ_DEFAULTS = (5.0, 200.0)   # plan_hz / sample_hz
+_CTRL_HZ_DEFAULT = 200.0           # ctrl_hz
+
+
+def _split_pacing(spec, pops: dict) -> tuple:
+    """从 ``robotics.<域>`` 规格中剥离管线键（规划器/控制器已去参数化，
+    这些键改由 JoyArm 运动管线消费；``dt_min_required``/``mode`` 等旧键已
+    失效——电机模式改由控制器 ``MODE`` 类属性声明——静默忽略）。
+
+    :param spec: config 域规格（注册名字符串 / 参数字典 / 二者的列表）。
+    :param pops: {键: 缺省值}——要剥离并收集的键（原值透传，数值转换由调用侧做）。
+    :return: ``(剥离后的规格, {注册名: {键: 值}})``。
+    """
+    pacing: dict = {}
+    if not spec:
+        return spec, pacing
+    specs = spec if isinstance(spec, (list, tuple)) else [spec]
+    out = []
+    legacy = {"dt_min_required", "mode"}   # 已失效旧键，静默忽略（mode → 控制器 MODE 类属性）
+    for s in specs:
+        if isinstance(s, dict):
+            d = dict(s)
+            pacing[d.get("name")] = {k: d.pop(k, dv) for k, dv in pops.items()}
+            for k in legacy:
+                d.pop(k, None)
+            out.append(d)
+        else:
+            out.append(s)
+    return out, pacing
 
 
 # ============================================================
@@ -498,10 +521,27 @@ class JoyArm:
 
         # ---- 创建六域算法成员（任一创建失败即构造失败；第一个设为激活）----
         robotics_cfg = cfg.get("robotics") or {}
+        # {注册名: (plan_hz, sample_hz)}——traj 管线起搏频率（源自 config 规格键）
+        self._traj_pacing: dict = {}
+        # {注册名: ctrl_hz}——ctrl 管线起搏频率（源自 config 规格键 ctrl_hz；
+        # 电机控制模式取控制器 MODE 类属性，启动/热切换时消费）
+        self._ctrl_pacing: dict = {}
         for domain, registry in _DOMAIN_REGISTRIES.items():
-            members = _build_domain(domain, registry, robotics_cfg.get(domain))
+            spec = robotics_cfg.get(domain)
+            if domain == "traj":
+                spec, pacing = _split_pacing(spec, dict(
+                    zip(("plan_hz", "sample_hz"), _TRAJ_HZ_DEFAULTS)))
+                self._traj_pacing = {n: (float(v["plan_hz"]), float(v["sample_hz"]))
+                                     for n, v in pacing.items()}
+            elif domain == "control":
+                spec, pacing = _split_pacing(spec, {"ctrl_hz": _CTRL_HZ_DEFAULT})
+                self._ctrl_pacing = {n: float(v["ctrl_hz"]) for n, v in pacing.items()}
+            members = _build_domain(domain, registry, spec)
             self._members(domain).update(members)
             self._active_name[domain] = next(iter(members), None)
+        # 当前控制频率（公开：控制器 step 内步长上限等计算要用，随 set_solver 更新）
+        self.ctrl_hz: float = self._ctrl_pacing.get(
+            self._active_name.get("control"), _CTRL_HZ_DEFAULT)
 
     # ============================================================
     # 初始化助手（内部）：URDF 查找 / 关节数统计 / 限位解析与核对 / 末端空间限位
@@ -691,8 +731,8 @@ class JoyArm:
 
         用于运动/下发指令前（move_j、safe_*、hold_position 等）；
         急停类操作（damping_mode/lock_position）不需要先使能。
-        标志由 enable/disable_arm 维护、connect 时复位（对齐 FakeArm 的
-        ``_enabled`` 设计；电机故障另经 ``joint.error`` / ``check_hardware`` 暴露）。
+        标志由 enable/disable_arm 维护、connect 时复位（电机故障另经
+        ``joint.error`` / ``check_hardware`` 暴露）。
         """
         if not bool(self._arm_enabled.all()):
             bad = np.where(~self._arm_enabled)[0].tolist()
@@ -762,10 +802,10 @@ class JoyArm:
     # 运动管线内部（三个后台线程的单步逻辑）
     # ============================================================
     def _tick_plan(self) -> None:
-        """规划线程单步：交给当前规划器；**规划成功**才记下这个规划器
-        （plan_once 返回 False 表示本周期跳过，不更新记录）。"""
+        """规划线程单步：把桥内目标交给当前规划器；**规划成功**才记下这个规划器
+        （plan 返回 False 表示本周期跳过，不更新记录）。"""
         planner = self._active("traj")
-        if planner.plan_once(self):
+        if planner.plan(self, self.get_target_traj() or []):
             self._traj_planned_by = planner
 
     def _tick_sample(self) -> None:
@@ -774,7 +814,7 @@ class JoyArm:
         planner = self._active("traj")
         if self._traj_planned_by is not planner:
             return
-        self.set_current_frame(planner.sample_frame(time.time()))
+        self.set_current_frame(planner.sample(time.time()))
 
     def _tick_ctrl(self) -> None:
         """控制线程单步：换算法的暂停开关置位期间先不发（切换流程自己补一拍）。"""
@@ -784,15 +824,13 @@ class JoyArm:
 
     def _dispatch_ctrl(self) -> None:
         """控制派发一步（不带线程语义，运行中换算法时同步调用也用它）：
-        运行正常？→ 读当前帧 → 控制器算指令 → 下发。"""
+        运行正常？→ 读当前帧 → 控制器算指令并经本对象下发。"""
         if not self.is_normal:
             return
         frame = self.get_current_frame()
         if frame is None:
             return
-        state = self.get_arm_state()
-        mode, cmd = self._active("control").compute(self, frame, state)
-        self.set_arm_command(mode, **cmd)
+        self._active("control").step(self, frame, self.get_arm_state().joint)
 
     def _sync_traj_tick(self) -> None:
         """同步跑一次"规划 + 采样发布"（启动/运行中换算法时用，当前帧立刻可用）。
@@ -801,7 +839,7 @@ class JoyArm:
         """
         planner = self._active("traj")
         try:
-            ok = planner.plan_once(self)
+            ok = planner.plan(self, self.get_target_traj() or [])
         except Exception as e:
             logger.warning("joyarm.py - _sync_traj_tick：同步规划失败，沿用现有帧"
                            "（plan 线程将按节拍重试）：%s", e)
@@ -810,7 +848,7 @@ class JoyArm:
             return                             # 本周期跳过（如回退帧构造失败）
         self._traj_planned_by = planner
         try:
-            self.set_current_frame(planner.sample_frame(time.time()))
+            self.set_current_frame(planner.sample(time.time()))
         except Exception as e:
             logger.warning("joyarm.py - _sync_traj_tick：同步采样发布失败，沿用"
                            "现有帧（sample 线程将按节拍重试）：%s", e)
@@ -1277,7 +1315,7 @@ class JoyArm:
             # 污染缓存（joint 不动、保持共享）
             state = copy.copy(state)
             state.tcp = copy.copy(state.tcp)
-            state.tcp.pose = self.fkine(state.joint.q, self.ee_frame_name)   # 默认 rep="pose" → Pose
+            state.tcp.pose = self.fkine(state.joint.q, self.ee_frame_name)   # → Pose
         return state
 
     def get_end_state(self, joint: Optional[int] = None) -> dict:
@@ -1721,41 +1759,31 @@ class JoyArm:
     # ============================================================
     # 十一、数学计算（不连真机也能用）：给关节角算位姿、给位姿算关节角等
     # ============================================================
-    def fkine(self, q: np.ndarray, frame: Union[str, int], rep: str = "pose"):
+    def fkine(self, q: np.ndarray, frame: Union[str, int]):
         """正运动学：给关节角，算 ``frame`` 帧的位姿（``frame`` 必填，帧名或
-        编号；``rep`` 取 ``pose``（默认，xyz+四元数）/ ``T``（4×4 矩阵）/
-        ``se3``（pin.SE3））。"""
-        return self._solve("fkine", "solve", self, q, frame=frame, rep=rep)
+        编号；返回 ``Pose`` = xyz+四元数）。"""
+        return self._solve("fkine", "solve", self, q, frame=frame)
 
-    def ikine(self, target: Pose, frame: Union[str, int], q0: np.ndarray, **kw):
+    def ikine(self, pose: Pose, frame: Union[str, int], q0: np.ndarray, **kw):
         """逆运动学单解：给目标位姿，算关节角。``q0`` ``(n_arm,)`` 必填
         （数值法的迭代起点；``tol``/``iters`` 等为求解器特有参数）。"""
-        return self._solve("ikine", "solve", self, target, frame, q0, **kw)
+        return self._solve("ikine", "solve", self, pose, frame, q0, **kw)
 
-    def ikine_all(self, target: Pose, frame: Union[str, int], **kw):
+    def ikine_all(self, pose: Pose, **kw):
         """逆运动学全部解（``q`` 为 ``(K, n_arm)``，逐解尝试 ±2π 平移尽量落
         进限位；数值法求不了多解，会抛 ``RuntimeError``）。"""
         try:
-            return self._solve("ikine", "solve_all", self, target, frame, **kw)
+            return self._solve("ikine", "solve_all", self, pose, **kw)
         except NotImplementedError as e:
             raise RuntimeError(
                 f"joyarm.py - ikine_all：当前激活的 ikine 成员不支持求全部解"
                 f"（数值法/未实现 solve_all）：{e}") from e
 
-    def jac(self, q: np.ndarray, frame: Union[str, int], ref: str = "base"):
-        """雅可比 J(q)（``ref`` 取 ``local``/``base``：末端坐标系 / 基座系）。"""
-        return self._solve("jacobian", "jac", self, q, frame=frame, ref=ref)
+    def jac(self, q: np.ndarray, frame: Union[str, int]):
+        """雅可比 J(q)（基座系）。"""
+        return self._solve("jacobian", "jac", self, q, frame=frame)
 
-    def manipulability(self, q: np.ndarray, frame: Union[str, int]) -> float:
-        """可操作度（衡量当前位形离奇异有多远，越大越灵活）。"""
-        return self._solve("jacobian", "manipulability", self, q, frame=frame)
-
-    def statics(self, q: np.ndarray, F: np.ndarray, frame: Union[str, int]):
-        """静力学 ``τ = JᵀF``：给末端六维力 ``F``（力 N + 力矩 N·m），
-        算平衡所需的各关节力矩。"""
-        return self._solve("jacobian", "statics", self, q, F, frame=frame)
-
-    # （idyn / coriolis / cartesian_inertia / fkine_vel / ikine_vel 不设门面——
+    # （idyn / coriolis / jac_pinv_damped 不设门面——
     #   经激活求解器调用：求解器实例.method(arm, ...)，实例可由 set_solver 返回值取得）
     def mass_matrix(self, q):
         """关节空间惯量矩阵 M(q)。"""
@@ -1810,14 +1838,18 @@ class JoyArm:
         if self._motion_running:
             return
         self._require_connected()
-        planner = self._active("traj")
-        controller = self._active("control")
-        self.set_mode_arm(controller.MODE)      # 按控制器声明自动切电机模式
+        self._active("traj")                   # 校验 traj 域已配置（缺配置即抛错）
+        self._active("control")                # 校验 control 域已配置（缺配置即抛错）
+        plan_hz, sample_hz = self._traj_pacing.get(
+            self._active_name.get("traj"), _TRAJ_HZ_DEFAULTS)
+        self.ctrl_hz = self._ctrl_pacing.get(
+            self._active_name.get("control"), _CTRL_HZ_DEFAULT)
+        self.set_mode_arm(self._active("control").MODE)   # 按激活控制器 MODE 自动切电机模式
         self._traj_planned_by = None
         self._motion_threads = {
-            "traj-plan": _PeriodicThread(self._tick_plan, planner.plan_hz, name="traj-plan"),
-            "traj-sample": _PeriodicThread(self._tick_sample, planner.sample_hz, name="traj-sample"),
-            "ctrl-step": _PeriodicThread(self._tick_ctrl, controller.ctrl_hz, name="ctrl-step"),
+            "traj-plan": _PeriodicThread(self._tick_plan, plan_hz, name="traj-plan"),
+            "traj-sample": _PeriodicThread(self._tick_sample, sample_hz, name="traj-sample"),
+            "ctrl-step": _PeriodicThread(self._tick_ctrl, self.ctrl_hz, name="ctrl-step"),
         }
         self._switching.set()                   # 先置暂停开关再启线程（与运行中换算法的时序一致）
         try:                                    # 线程起步期间同步算出首帧
@@ -1872,11 +1904,13 @@ class JoyArm:
             self._require_connected()     # 切电机模式需在线
             self._switching.set()
             try:
-                self.set_mode_arm(inst.MODE)      # 先切模式（暂停期间不发指令）
+                hz = self._ctrl_pacing.get(name, _CTRL_HZ_DEFAULT)
+                self.set_mode_arm(inst.MODE)      # 先按新控制器 MODE 切模式（暂停期间不发指令）
                 self._active_name[domain] = name
+                self.ctrl_hz = hz
                 worker = self._motion_threads.get("ctrl-step")
                 if worker is not None:            # 并发 stop 极端下优雅降级
-                    worker.set_hz(inst.ctrl_hz)
+                    worker.set_hz(hz)
                 try:
                     self._dispatch_ctrl()          # 新控制器立即下发首拍指令
                 except Exception as e:
@@ -1888,7 +1922,8 @@ class JoyArm:
             try:
                 self._active_name[domain] = name
                 self._sync_traj_tick()             # 当前帧立即来自新规划器
-                for wname, hz in (("traj-plan", inst.plan_hz), ("traj-sample", inst.sample_hz)):
+                plan_hz, sample_hz = self._traj_pacing.get(name, _TRAJ_HZ_DEFAULTS)
+                for wname, hz in (("traj-plan", plan_hz), ("traj-sample", sample_hz)):
                     worker = self._motion_threads.get(wname)
                     if worker is not None:
                         worker.set_hz(hz)

@@ -1,32 +1,31 @@
-"""``joyarm_core.joyarm`` —— JoyArm 机械臂类 + 型号工厂。
+"""``joyarm_core.joyarm`` —— JoyArm 机械臂类 + 对象创建入口。
 
 JoyArm：机械臂类（负责把各子功能按config装配起来，对外提供统一调用入口，见 :mod:`joyarm_core.joyarm.joyarm`）；
-FakeArm：JoyArm 的无硬件最小替身（鸭子类型满足"arm 协议"，供 robotics 算法测试与教程章节
-        最小示例使用，见 :mod:`joyarm_core.joyarm.fakearm`）——``from joyarm_core import FakeArm``；
-JoyArmFactory：按型号名创建（命名链一致：工厂入参 = config/<型号>.yaml 文件名；URDF 目录 robot_model/<型号>/ 同名）
-                ——外部推荐入口::
+JoyArmFactory：按型号名创建机械臂对象（命名链：工厂入参 = config/<型号>.yaml 文件名 = robot_model/<型号>/ 文件夹及URDF文件名）
 
-    from joyarm_core import joyarm_factory
-    arm = joyarm_factory("joyarm_dm")   # config/joyarm_dm.yaml → JoyArm
+创建 JoyArm 对象方式：
+    from joyarm_core import joyArm
+    
+    arm1 = joyArm("joyarm_<型号>") 
 
-工厂创建对象的流程：
-① 传入型号名 → ② 加载对应 config 文件（config/<型号>.yaml）→ ③ 按 config 配置初始化并创建 JoyArm 对象（默认不连接真机）。
+对象的创建流程：
+① 传入型号名 → ② 加载对应 config 文件 → ③ 按 config 配置初始化并创建 JoyArm 对象。
 
-**joyarm 新型号机械臂接入**：
+命名约定：类名驼峰，文件名小写 snake_case。
 
-    ① 创建配置文件：config/<型号>.yaml（复制 joyarm_template.yaml 模板填写）
-    ② 放置模型资产：robot_model/<型号名>/urdf + meshes（目录名 = 型号名；建议参考已有urdf命名规范并由 sw_urdf_exporter 导出）
-    ③ 新写通信后端：复制 backend/backend_template.py 为 backend_<型号>.py 实现（六步接入见该文件头；
-       backend 子包注册表加一行；型号↔后端一一对应，如 joyarm_dm ↔ backend_dm）
+**新型号接入步骤**：
+
+    1. 完善配置文件：拷贝 ``config/joyarm_template.yaml`` 为 `joyarm_<型号>.yaml` 并完成型号的配置填写；
+    2. 放置模型资产：按照本库约定，将导出或修复后的机械臂URDF和Mesh资产放入到``robot_model/joyarm_<型号>/`` ；
+    3. 连接硬件后端：拷贝 ``backend/backend_template.py`` 为 `backend/backend_<型号>.py`，并实现子类(详见``backend/backend_template.py``)。
 """
 from __future__ import annotations
 
 import logging
 
 from .joyarm import JoyArm, load_config
-from .fakearm import FakeArm
 
-__all__ = ["JoyArm", "FakeArm", "JoyArmFactory", "joyarm_factory", "load_config"]
+__all__ = ["JoyArm", "JoyArmFactory", "joyArm", "load_config"]
 
 logger = logging.getLogger("joyarm_core.joyarm")
 
@@ -73,5 +72,4 @@ class JoyArmFactory:
         except OSError:
             return []
 
-
-joyarm_factory = JoyArmFactory()
+joyArm = JoyArmFactory()

@@ -1,14 +1,16 @@
-"""FkineSolver —— 正运动学求解器接口（ABC）
+"""FkineSolver —— 正运动学求解器基类接口（ABC）
 
-求解器子类只需实现
-- :meth:`frame_pose(arm, q, frame)`     # 算出该帧的位姿（Pose：xyz + 四元数）
+已知：各关节角 q ；求解：末端位姿 pose（xyz+四元数）。
 
-config的``robotics.fkine``段写注册名，即按名实例化装入 ``_fkine_solvers`` 成员字典。
+外部调用：
+    - :meth:`solve(arm, q, frame)` —— `q` 为 `(n,)` ，返回 `Pose`（xyz+四元数）。
+
+子类需实现：
+    - :meth:`solve(arm, q, frame)` —— 正运动学位姿求解。
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Union
 
 import numpy as np
 
@@ -18,62 +20,13 @@ __all__ = ["FkineSolver"]
 
 
 class FkineSolver(ABC):
-    """正运动学策略接口：关节角 → 末端（或任意帧）位姿。"""
 
-    # ----------------------------------------------------------
-    # fkine 抽象内核（frame_pose：单帧位姿）
-    # ----------------------------------------------------------
     @abstractmethod
-    def frame_pose(self, arm, q: np.ndarray, frame: Union[str, int]) -> Pose:
-        """内核：指定帧在基坐标系下的位姿。"""
+    def solve(self, arm, q: np.ndarray, frame: str) -> Pose:
+        """正运动学求解。
 
-    # ----------------------------------------------------------
-    # fkine 模板：solve（单点/批量分发 + rep 三态 pose/T/se3）
-    # ----------------------------------------------------------
-    def solve(self,
-        arm,
-        q: np.ndarray,
-        frame: Union[str, int],
-        rep: str = "pose",
-    ):
-        """模板：``frame`` 为目标帧；``q`` 为 ``(n,)`` 单点 / ``(N,n)`` 批量；``rep``
-        取 ``"pose"``（默认，xyz+四元数）/``"T"``(4×4)/``"se3"``（pinocchio 对象）。
-        批量时 ``"pose"``/``"se3"`` 返回长度 N 的 list，``"T"`` 返回 ``(N,4,4)`` ndarray。"""
-        if rep not in ("pose", "T", "se3"):
-            raise ValueError(
-                f"fkine_solver.py - FkineSolver.solve：未知 rep={rep!r}（仅支持 'pose'/'T'/'se3'）")
-
-        q_arr = np.asarray(q, dtype=float)
-        if q_arr.ndim == 1:
-            return self._to_rep(self.frame_pose(arm, q_arr, frame), rep)
-        elif q_arr.ndim == 2:
-            return self._solve_batch(arm, q_arr, frame, rep)
-        else:
-            raise ValueError(
-                f"fkine_solver.py - FkineSolver.solve：q 维度需为 1 或 2，"
-                f"收到 q.shape={q_arr.shape}")
-
-    # ----------------------------------------------------------
-    # fkine 内部助手（_to_rep 表示转换 / _solve_batch 批量）
-    # ----------------------------------------------------------
-    @staticmethod
-    def _to_rep(pose: Pose, rep: str):
-        """``Pose`` → 指定表示。"""
-        if rep == "pose":
-            return pose
-        elif rep == "T":
-            return pose.T
-        else:  
-            import pinocchio as pin
-            T = pose.T
-            return pin.SE3(T[:3, :3], T[:3, 3])
-
-    def _solve_batch(self, arm, Q: np.ndarray, frame: Union[str, int], rep: str = "pose"):
-        """批量 FK：逐组调内核。"""
-        N = Q.shape[0]
-        if rep == "T":
-            out = np.empty((N, 4, 4))
-            for i in range(N):
-                out[i] = self.frame_pose(arm, Q[i], frame).T
-            return out
-        return [self._to_rep(self.frame_pose(arm, Q[i], frame), rep) for i in range(N)]
+        :param arm: 机械臂对象。
+        :param q: `(n,)` 关节角，弧度。
+        :param frame: 末端帧名（``str``，如 ``link6``）。
+        :return: `Pose`（xyz+四元数），末端在基坐标系下的位姿。
+        """

@@ -1,19 +1,22 @@
-"""DynamicsSolver —— 动力学求解器接口（ABC）
+"""DynamicsSolver —— 动力学求解器基类接口（ABC）
 
-求解器子类只需实现
-- :meth:`idyn`（逆动力学：状态+加速度 → τ）
-- :meth:`mass_matrix`（惯量 M）
-- :meth:`coriolis`（科氏/向心 C 项）
-- :meth:`gravity`（重力 G 项）
+已知：关节状态 q/dq/ddq；求解：关节力矩 τ 及 M/C/G 各项。
 
-派生量：正动力学 / 笛卡尔惯量
+外部调用：
+    - :meth:`idyn(arm, q, dq, ddq)` —— 逆动力学：状态+加速度 → τ；
+    - :meth:`mass_matrix(arm, q)` —— 关节空间惯量矩阵 M；
+    - :meth:`coriolis(arm, q, dq)` —— 科氏/向心项 C；
+    - :meth:`gravity(arm, q)` —— 重力项 G。
 
-config ``robotics.dynamics`` 段写注册名，即按名实例化装入 ``_dynamics_solvers`` 成员字典。
+子类需实现：
+    - :meth:`idyn(arm, q, dq, ddq)` —— 由关节状态与加速度计算关节力矩 τ；
+    - :meth:`mass_matrix(arm, q)` —— 计算关节空间惯量矩阵 M(q)；
+    - :meth:`coriolis(arm, q, dq)` —— 计算科氏/向心项 C(q,dq)；
+    - :meth:`gravity(arm, q)` —— 计算重力项 G(q)。
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional, Union
 
 import numpy as np
 
@@ -21,51 +24,48 @@ __all__ = ["DynamicsSolver"]
 
 
 class DynamicsSolver(ABC):
-    """动力学策略接口：``M(q)q̈ + C(q,q̇)q̇ + G(q) = τ``。"""
 
-    # ----------------------------------------------------------
-    # dynamics 抽象内核（idyn/mass_matrix/coriolis/gravity等）
-    # ----------------------------------------------------------
     @abstractmethod
     def idyn(self,
         arm,
         q: np.ndarray,
         dq: np.ndarray,
         ddq: np.ndarray,
-        f_ext: Optional[np.ndarray] = None,
     ) -> np.ndarray:
-        """逆动力学（RNEA）：状态 + 加速度 → ``τ``，返回 ``(n,)`` N·m。"""
+        """求逆动力学（RNEA）。
+
+        :param arm: 机械臂对象。
+        :param q: `(n,)` 关节角，弧度。
+        :param dq: `(n,)` 关节速度，rad/s。
+        :param ddq: `(n,)` 关节加速度，rad/s²。
+        :return: `(n,)` 实现该运动所需的各关节力矩 `τ`，N·m。
+        """
 
     @abstractmethod
     def mass_matrix(self, arm, q: np.ndarray) -> np.ndarray:
-        """关节空间惯量矩阵 ``M(q)``（CRBA），返回 ``(n,n)``。"""
+        """求关节空间惯量矩阵。
+
+        :param arm: 机械臂对象。
+        :param q: `(n,)` 关节角，弧度。
+        :return: `(n,n)` 惯量矩阵 `M(q)`。
+        """
 
     @abstractmethod
     def coriolis(self, arm, q: np.ndarray, dq: np.ndarray) -> np.ndarray:
-        """科氏 + 向心力项 ``C(q,q̇)q̇``（向量形式），返回 ``(n,)``。"""
+        """求科氏/向心项。
+
+        :param arm: 机械臂对象。
+        :param q: `(n,)` 关节角，弧度。
+        :param dq: `(n,)` 关节速度，rad/s。
+        :return: `(n,)` 科氏/向心项 `C(q,q̇)q̇`（向量形式），N·m。
+        """
 
     @abstractmethod
     def gravity(self, arm, q: np.ndarray) -> np.ndarray:
-        """重力项 ``G(q)``，返回 ``(n,)``。"""
+        """求重力项。
 
-    # ----------------------------------------------------------
-    # dynamics 派生量：正动力学 / 笛卡尔惯量
-    #（基于四个抽象内核；cartesian_inertia 经 ``arm.jac`` 门面取 J）
-    # ----------------------------------------------------------
-    def fdyn(self, arm, q: np.ndarray, dq: np.ndarray,
-             tau: np.ndarray) -> np.ndarray:
-        """正动力学 ``q̈ = M⁻¹(τ − h)``（``h = C(q,q̇)q̇ + G(q)`` 偏置力），
-        返回 ``(n,)``。末端外力旋量 ``F`` 请先并入力矩（``τ ← τ − JᵀF``）。"""
-        M = self.mass_matrix(arm, q)
-        h = self.coriolis(arm, q, dq) + self.gravity(arm, q)
-        return np.linalg.solve(M, np.asarray(tau, dtype=float) - h)
-
-    def cartesian_inertia(self, arm, q: np.ndarray,
-            frame: Union[str, int], ref: str = "base") -> np.ndarray:
-        """笛卡尔惯量 ``Λ = J⁺ᵀ M J⁺``，返回 ``(6,6)``（J 经 ``arm.jac``）。
-
-        ``J⁺`` 为截断 SVD 伪逆（``pinv``）：奇异附近按低秩截断，Λ 有限有界
-        （精确奇异方向被丢弃，与速度逆解的阻尼正则化含义不同）。
+        :param arm: 机械臂对象。
+        :param q: `(n,)` 关节角，弧度。
+        :return: `(n,)` 重力项 `G(q)`，N·m。
         """
-        J_pinv = np.linalg.pinv(arm.jac(q, frame, ref=ref))
-        return J_pinv.T @ self.mass_matrix(arm, q) @ J_pinv
+

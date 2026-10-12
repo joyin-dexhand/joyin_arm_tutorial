@@ -61,9 +61,9 @@ robotics:
   dynamics:
     - { name: pin_dynamics_solver }
   traj:
-    - { name: to_joint_traj_planner, plan_hz: 5.0, sample_hz: 200.0, dt_min_required: 1.0 }
+    - { name: single_joint_cubic_traj_planner, plan_hz: 10.0 } # 三次多项式
   control:
-    - { name: joint_position_controller, ctrl_hz: 200.0 }
+    - { name: joint_position_controller, ctrl_hz: 200.0 } # 电机模式由控制器 MODE 类属性指定
 
 # -------------------------------------------------------------------
 # 通信层（backend）：arm 与 end 的硬件通讯（以 DM 实现为参照）
