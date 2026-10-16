@@ -356,7 +356,7 @@ class JoyArm:
         self._config: dict = cfg                         # 配置快照（get_config 返回它的深拷贝）
         self._urdf_path: str = ""                        # URDF 文件路径
         self.connected: bool = False                     # 是否已连真机（创建后默认不连）
-        self.ee_frame_name: str = str(jcfg.get("end_frame") or "ee")  # 末端坐标系名
+        self.ee_frame_name: str = str(jcfg.get("frame_end") or "ee")  # 末端坐标系名
 
         # ---- 运动学模型（pinocchio，由 URDF 解析而来）----
         self.pin_model: Optional[pin.Model] = None       # 构型模型（只读共享）
@@ -991,7 +991,7 @@ class JoyArm:
     def check_config(model: str, config: dict) -> None:
         """检查配置内容是否合格（不接硬件；``__init__`` 第一步自动调用）。
 
-        检查项：joyarm 段齐全（``end_frame``）、URDF 文件存在（按型号名）、
+        检查项：joyarm 段齐全（``frame_end``）、URDF 文件存在（按型号名）、
         backend 必配且 arm/end 关节四键限位齐全且 ``q_min ≤ q_max``、关节名
         无重复、arm/end ``channel`` 必填且同 channel 总线参数一致、同总线
         电机 ID 无冲突、arm 段 ``control_rate`` 为正数、runtime 参数为正数、
@@ -1004,8 +1004,8 @@ class JoyArm:
         jcfg = cfg.get("joyarm") or {}
         if "joyarm" not in cfg:
             problems.append("缺少配置段：joyarm")
-        if not jcfg.get("end_frame"):
-            problems.append("joyarm.end_frame 缺失（末端帧名）")
+        if not jcfg.get("frame_end"):
+            problems.append("joyarm.frame_end 缺失（末端帧名）")
         try:
             JoyArm._resolve_robot_urdf(model)
         except ValueError as e:

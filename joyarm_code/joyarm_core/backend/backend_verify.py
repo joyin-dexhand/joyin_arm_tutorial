@@ -312,7 +312,7 @@ def _plan_prefill(s: Session, needs: list) -> list[tuple[str, str]]:
     plans: list[tuple[str, str]] = []
     planned_conn: set = set()
     planned_mode: dict = {}
-    planned_abled: set = set()
+    planned_enabled: set = set()
     b = s.b  # 可能尚未构造（视为全部前置缺失）
     for nd in needs:
         kind = nd[0]
@@ -335,11 +335,11 @@ def _plan_prefill(s: Session, needs: list) -> list[tuple[str, str]]:
                     plans.append((f"set_mode_{fam}({mode.name})", "低"))
                     planned_mode[fam] = mode
             elif kind == "enabled":
-                abled = ((getattr(b, f"is_abled_{fam}", None) if b is not None else None) is True
-                         or fam in planned_abled)
-                if not abled:
+                enabled = ((getattr(b, f"is_enabled_{fam}", None) if b is not None else None) is True
+                         or fam in planned_enabled)
+                if not enabled:
                     plans.append((f"enable_{fam}", "高"))
-                    planned_abled.add(fam)
+                    planned_enabled.add(fam)
     return plans
 
 
@@ -384,7 +384,7 @@ def _prefill(s: Session, needs: list) -> tuple[str, list[str], str]:
                     return "skip", actions, (f"{fam} 族所需模式 {mode.name} 不可用"
                                              f"（set_mode 返回 0——型号能力缺失或硬件拒绝，非缺陷；详见上方 warn）")
             elif kind == "enabled":
-                if getattr(b, f"is_abled_{fam}") is True:
+                if getattr(b, f"is_enabled_{fam}") is True:
                     continue
                 if getattr(b, f"is_connected_{fam}") is not True:
                     return "fail", actions, "连接缺失"
@@ -499,14 +499,14 @@ def _it04(s: Session):
         for fam in ("arm", "end"):
             if getattr(b, f"n_joints_{fam}") != _n_family_cfg(s.cfg, fam):
                 fails.append(f"{fam} 关节数 {getattr(b, f'n_joints_{fam}')} ≠ cfg {_n_family_cfg(s.cfg, fam)}")
-            for attr in (f"is_connected_{fam}", f"is_abled_{fam}", f"mode_{fam}"):
+            for attr in (f"is_connected_{fam}", f"is_enabled_{fam}", f"mode_{fam}"):
                 if getattr(b, attr) is not None:
                     fails.append(f"{attr} 初值非 None")
         exp_name = str(s.cfg.get("name", ""))
         if b.name != exp_name:
             fails.append(f"name={b.name!r} ≠ cfg {exp_name!r}")
         ev = (f"name={b.name!r}，arm={b.n_joints_arm} 关节，end={b.n_joints_end} 关节，"
-              f"is_connected*/is_abled*/mode* 初值均为 None")
+              f"is_connected*/is_enabled*/mode* 初值均为 None")
         return ("FAIL" if fails else "PASS"), ev + (f"；异常：{fails}" if fails else "")
     finally:
         b.close()
@@ -564,7 +564,7 @@ def _it06(s: Session):
 def _snap(b: Backend, fam: str) -> tuple:
     """族三值状态快照（连接/模式/使能），用于对侧族隔离断言对比。"""
     return (getattr(b, f"is_connected_{fam}"), getattr(b, f"mode_{fam}"),
-            getattr(b, f"is_abled_{fam}"))
+            getattr(b, f"is_enabled_{fam}"))
 
 
 def _reset_disconnected(b: Backend) -> list[str]:
@@ -576,7 +576,7 @@ def _reset_disconnected(b: Backend) -> list[str]:
     for fam in ("arm", "end"):
         if getattr(b, f"n_joints_{fam}") == 0:
             continue
-        if getattr(b, f"is_abled_{fam}") is True:
+        if getattr(b, f"is_enabled_{fam}") is True:
             getattr(b, f"disable_{fam}")()
             acts.append(f"disable_{fam}")
         if getattr(b, f"is_connected_{fam}") is not False:
@@ -599,9 +599,9 @@ def _check_connected(b: Backend, fam: str) -> tuple[str, bool]:
 def _check_disconnected(b: Backend, fam: str) -> tuple[str, bool]:
     conn = getattr(b, f"is_connected_{fam}")
     mode = getattr(b, f"mode_{fam}")
-    abled = getattr(b, f"is_abled_{fam}")
-    ok = conn is False and mode is None and abled is None
-    return f"is_connected={conn}，mode={mode}，is_abled={abled}（缓存清空）", ok
+    enabled = getattr(b, f"is_enabled_{fam}")
+    ok = conn is False and mode is None and enabled is None
+    return f"is_connected={conn}，mode={mode}，is_enabled={enabled}（缓存清空）", ok
 
 
 def _seq_item(seq: list):
@@ -952,29 +952,29 @@ def _it32(s: Session):
 
 
 def _power_item(fam: str):
-    """使能和失能：读 is_abled → enable → 回读 → disable → 回读（返回值均应为 1）。"""
+    """使能和失能：读 is_enabled → enable → 回读 → disable → 回读（返回值均应为 1）。"""
     def fn(s: Session):
         b = s.backend()
         i0 = _mark()
-        pre = getattr(b, f"is_abled_{fam}")  # 读
+        pre = getattr(b, f"is_enabled_{fam}")  # 读
         r_en = getattr(b, f"enable_{fam}")()  # 使能
-        abled_en = getattr(b, f"is_abled_{fam}")  # 回读
+        enabled_en = getattr(b, f"is_enabled_{fam}")  # 回读
         r_dis = getattr(b, f"disable_{fam}")()  # 失能
-        abled_dis = getattr(b, f"is_abled_{fam}")  # 回读
+        enabled_dis = getattr(b, f"is_enabled_{fam}")  # 回读
         fails = []
         if r_en != 1:
             fails.append(f"enable 返回 {r_en}（核心能力失败；warn：{_recent(_since(i0))}）")
-        if abled_en is not True:
-            fails.append(f"使能后 is_abled={abled_en}（应 True）")
+        if enabled_en is not True:
+            fails.append(f"使能后 is_enabled={enabled_en}（应 True）")
         if r_dis != 1:
             fails.append(f"disable 返回 {r_dis}")
-        if abled_dis is not False:
-            fails.append(f"失能后 is_abled={abled_dis}（应 False）")
-        ev = (f"1.读 is_abled_{fam}={pre}（执行前）\n"
+        if enabled_dis is not False:
+            fails.append(f"失能后 is_enabled={enabled_dis}（应 False）")
+        ev = (f"1.读 is_enabled_{fam}={pre}（执行前）\n"
               f"2.使能 enable_{fam}() 返回 {r_en}\n"
-              f"3.回读 is_abled_{fam}={abled_en}\n"
+              f"3.回读 is_enabled_{fam}={enabled_en}\n"
               f"4.失能 disable_{fam}() 返回 {r_dis}\n"
-              f"5.回读 is_abled_{fam}={abled_dis}\n"
+              f"5.回读 is_enabled_{fam}={enabled_dis}\n"
               f"——五步{'全部符合' if not fails else '存在不符'}")
         return ("FAIL" if fails else "PASS"), ev + (f"；异常：{fails}" if fails else "")
     return fn
@@ -988,10 +988,10 @@ def _it35(s: Session):
         i0 = _mark()
         try:
             r1, r2 = getattr(b, f"enable_{fam}")(), getattr(b, f"enable_{fam}")()
-            abled = getattr(b, f"is_abled_{fam}")
+            enabled = getattr(b, f"is_enabled_{fam}")
             rd = getattr(b, f"disable_{fam}")()  # 收尾复位安全态（不参与判定）
-            ok = r1 == 1 and isinstance(r2, int) and abled is True
-            ev = f"enable×2→({r1},{r2})，终态 is_abled={abled}；收尾 disable→{rd}"
+            ok = r1 == 1 and isinstance(r2, int) and enabled is True
+            ev = f"enable×2→({r1},{r2})，终态 is_enabled={enabled}；收尾 disable→{rd}"
             results.append((fam, "PASS" if ok else "FAIL",
                             ev + ("" if ok else f"；warn：{_recent(_since(i0), 1)}")))
         except Exception as e:
@@ -1007,9 +1007,9 @@ def _it36(s: Session):
         i0 = _mark()
         try:
             r1, r2 = getattr(b, f"disable_{fam}")(), getattr(b, f"disable_{fam}")()
-            abled = getattr(b, f"is_abled_{fam}")
-            ok = r1 == 1 and r2 == 1 and abled is False
-            ev = f"disable×2→({r1},{r2})，终态 is_abled={abled}"
+            enabled = getattr(b, f"is_enabled_{fam}")
+            ok = r1 == 1 and r2 == 1 and enabled is False
+            ev = f"disable×2→({r1},{r2})，终态 is_enabled={enabled}"
             results.append((fam, "PASS" if ok else "FAIL",
                             ev + ("" if ok else f"；warn：{_recent(_since(i0), 1)}")))
         except Exception as e:
@@ -1254,13 +1254,13 @@ def _it50(s: Session):
         fails: list[str] = []
         # 1. 使能
         r_en = getattr(b, f"enable_{fam}")()
-        abled = getattr(b, f"is_abled_{fam}")
-        if r_en != 1 or abled is not True:
+        enabled = getattr(b, f"is_enabled_{fam}")
+        if r_en != 1 or enabled is not True:
             results.append((fam, "FAIL",
-                            f"1.使能 enable_{fam}() 返回 {r_en}，is_abled={abled}"
+                            f"1.使能 enable_{fam}() 返回 {r_en}，is_enabled={enabled}"
                             f"（核心能力失败）；warn：{_recent(_since(i0))}"))
             continue
-        lines.append(f"1.使能 enable_{fam}() 返回 {r_en}，is_abled_{fam}={abled}")
+        lines.append(f"1.使能 enable_{fam}() 返回 {r_en}，is_enabled_{fam}={enabled}")
         # 2. 读错误码
         time.sleep(0.2)  # 等使能生效与快照刷新（get_error 读槽不发帧）
         e1 = getattr(b, f"get_error_{fam}")()
@@ -1376,7 +1376,7 @@ _item(2, "空 cfg 构造容错", "init", "低", None,
 _item(3, "运行参数非法回退", "init", "低", None,
       "验证 state_refresh_hz 等运行参数非法（非正数）时回退默认并 warn", [], _it03)
 _item(4, "只读属性初值", "init", "低", None,
-      "验证关节数/name 与 cfg 一致，is_connected*/is_abled*/mode* 初值均为 None（三值未知）", [], _it04)
+      "验证关节数/name 与 cfg 一致，is_connected*/is_enabled*/mode* 初值均为 None（三值未知）", [], _it04)
 _item(5, "硬限位解析核对", "init", "低", None,
       "验证 joint_limits_* 的 q_min/q_max/dq_max/tau_max 与 cfg 各关节四键一致（发送裁剪的唯一依据）", [], _it05)
 _item(6, "joint_state 初值", "init", "低", None,
@@ -1448,7 +1448,7 @@ _item(32, "set_mode 非法/未定义模式门禁", "ctrl", "低", None,
       "（返回 0 + warn，不达内核）",
       [("connected", "both")], _it32)
 _item(33, "arm 使能和失能", "ctrl", "高", "arm",
-      "验证读 is_abled→enable（返回 1、回读 True）→disable（返回 1、回读 False）（电机上力）",
+      "验证读 is_enabled→enable（返回 1、回读 True）→disable（返回 1、回读 False）（电机上力）",
       [("connected", "arm")], _power_item("arm"))
 _item(34, "end 使能和失能", "ctrl", "高", "end",
       "末端族使能/失能契约（与 33 对称）",

@@ -164,7 +164,7 @@ class TrajFrame(_ArrayEqMixin):
 class JointState(_ArrayEqMixin):
     """关节层状态快照（同一 ``t`` 批次的物理量整族装配）
 
-    :ivar t: 状态最近更新时刻，Unix 秒（float64 与 ``ArmState.timestamp`` 同基准；0 = 从未更新）。
+    :ivar t: 本批各电机数据帧到达时刻的最早值，Unix 秒（float64 与 ``ArmState.timestamp`` 同基准；0 = 从未更新）。
     :ivar q: ``(n,)`` 关节位置，弧度。
     :ivar dq: ``(n,)`` 关节速度，弧度/秒。
     :ivar tau: ``(n,)`` 关节力矩，N·m。

@@ -250,14 +250,14 @@ def test_01_init(b, cfg):
     assert np.allclose(b.joint_limits_arm.dq_max, [5, 5, 5, 8, 8, 8])
     assert b.joint_limits_arm.q_min[0] == -2.8
     assert all(getattr(b, a) is None for a in
-               ("is_connected_arm", "is_connected_end", "is_abled_arm", "is_abled_end"))
-    assert b.mode_arm is None and b.mode_end is None
+               ("is_connected_arm", "is_connected_end", "is_enabled_arm", "is_enabled_end"))
+    assert b._mode_arm is None and b._mode_end is None
     assert b._refresh_hz == cfg.get("state_refresh_hz", 10.0)  # 跟随 yaml 配置（默认 10）
     # 状态槽（公开成员）已定维：物理量 NaN / error -1 占位 / t=0；模式缓存逐 joint None
-    assert b.joint_state_arm.q.shape == (6,) and np.isnan(b.joint_state_arm.q).all()
-    assert b.joint_state_arm.error.dtype.kind == "i" and np.all(b.joint_state_arm.error == -1)
-    assert b.joint_state_end.q.shape == (1,)
-    assert b.joint_state_arm.t == 0.0
+    assert b._joint_state_arm.q.shape == (6,) and np.isnan(b._joint_state_arm.q).all()
+    assert b._joint_state_arm.error.dtype.kind == "i" and np.all(b._joint_state_arm.error == -1)
+    assert b._joint_state_end.q.shape == (1,)
+    assert b._joint_state_arm.t == 0.0
     assert b._joint_mode_arm == [None] * 6
     assert b._joint_mode_end == [None]
     # cfg 属性实时引用
@@ -355,7 +355,7 @@ def test_06_connect(b):
     assert b._joint_mode_arm == [ControlMode.MIT] * 6
     assert b.get_mode_end() == ControlMode.MIT
     assert b._joint_mode_end == [ControlMode.MIT]
-    assert b.mode_arm == ControlMode.MIT and b.mode_end == ControlMode.MIT
+    assert b._mode_arm == ControlMode.MIT and b._mode_end == ControlMode.MIT
     assert any("连接成功" in m for m in cap.msgs)  # 成功信息默认可见
     b._refresh_stop.set()  # 停保活线程，避免后台读取干扰后续调用计数
 
@@ -373,16 +373,16 @@ def test_06b_connect_failure(cfg):
 
 # ---- T5 使能/失能（三值标志） ----
 def test_07_enable_disable(b):
-    assert b.enable_arm() == 1 and b.is_abled_arm is True
+    assert b.enable_arm() == 1 and b.is_enabled_arm is True
     b.ret_false["enable_joint_arm"] = {2}
-    assert b.enable_arm() == 0 and b.is_abled_arm is None
+    assert b.enable_arm() == 0 and b.is_enabled_arm is None
     del b.ret_false["enable_joint_arm"]
     b.enable_arm()
     b.ret_false["disable_joint_arm"] = {0}
-    assert b.disable_arm() == 0 and b.is_abled_arm is None
+    assert b.disable_arm() == 0 and b.is_enabled_arm is None
     del b.ret_false["disable_joint_arm"]
     b.enable_arm()
-    assert b.disable_arm() == 1 and b.is_abled_arm is False
+    assert b.disable_arm() == 1 and b.is_enabled_arm is False
     b.enable_arm()
 
 
@@ -392,18 +392,18 @@ def test_08_get_mode(b):
     b.modes["arm"] = [P] * 6  # 复位模式（connect 已自动设 MIT）
     b.modes["end"] = [P]
     assert b.get_mode_arm() == P
-    assert b._joint_mode_arm == [P] * 6 and b.mode_arm == P
+    assert b._joint_mode_arm == [P] * 6 and b._mode_arm == P
     b.modes["arm"][3] = M
     assert b.get_mode_arm() is None  # 不一致 → None（与读取失败同值）+ 逐 joint 模式保留
     assert b._joint_mode_arm == [P, P, P, M, P, P]
-    assert b.mode_arm == P  # 族模式成员不更新
+    assert b._mode_arm == P  # 族模式成员不更新
     b.modes["arm"] = [M] * 6
-    assert b.get_mode_arm() == M and b.mode_arm == M
+    assert b.get_mode_arm() == M and b._mode_arm == M
     b.fail_at["read_joint_mode_arm"] = {1}
     assert b.get_mode_arm() is None  # 失败 → None 不部分赋值
-    assert b._joint_mode_arm == [M] * 6 and b.mode_arm == M
+    assert b._joint_mode_arm == [M] * 6 and b._mode_arm == M
     del b.fail_at["read_joint_mode_arm"]
-    assert b.get_mode_end() == P and b.mode_end == P
+    assert b.get_mode_end() == P and b._mode_end == P
 
 
 # ---- T7 get_state ----
@@ -412,6 +412,13 @@ def test_09_get_state(b):
     assert isinstance(st, JointState) and st.q.shape == (6,)
     assert np.allclose(st.q, [0.1 * (i + 1) for i in range(6)])
     assert st.error.dtype.kind == "i" and np.all(st.error == 0) and st.t > 0
+    ts = [time.time() - 0.5 + 0.1 * i for i in range(6)]  # 各电机帧先后到达（无 t 键时走 fallback 装配时刻）
+    for i, tv in enumerate(ts):
+        b.jstates["arm"][i]["t"] = tv
+    st = b.get_state_arm()
+    assert st.t == min(ts)  # t=各电机 RX 时刻最早值（min 聚合，整批判旧保守判定）
+    for jd in b.jstates["arm"]:  # 还原（b 为 module 级共享夹具：旧 t 会让后续 get_error 判过期）
+        jd.pop("t", None)
     b.jstates["arm"][3].pop("temp_mos")
     st = b.get_state_arm()
     # 缺键=子类不含该量 → 该字段 None，其余照常装配
@@ -436,7 +443,7 @@ def test_09_get_state(b):
     assert b.get_state_arm() is None  # 失败 → None 且不部分赋值
     assert np.array_equal(st.q, q_before) and st.t == t_before
     del b.fail_at["read_joint_state_arm"]
-    assert b.get_state_arm() is b.joint_state_arm  # 返回本次原子换入后的当前对象
+    assert b.get_state_arm() is b._joint_state_arm  # 返回本次原子换入后的当前对象
 
 
 # ---- T8 read_param ----
@@ -462,15 +469,15 @@ def test_11_write_param(b):
 # ---- T10 set_mode（写入成功即返回 + 乐观更新模式缓存：门禁立即放行；读回核实经 get_mode） ----
 def test_12_set_mode(b):
     assert b.set_mode_arm(ControlMode.MIT) == 1
-    assert b.mode_arm == ControlMode.MIT and b._joint_mode_arm == [ControlMode.MIT] * 6  # set_mode 乐观更新为目标模式
+    assert b._mode_arm == ControlMode.MIT and b._joint_mode_arm == [ControlMode.MIT] * 6  # set_mode 乐观更新为目标模式
     assert b.set_mode_arm(ControlMode.VELOCITY) == 1
-    assert b.mode_arm == ControlMode.VELOCITY  # set_mode 成功即乐观更新缓存
+    assert b._mode_arm == ControlMode.VELOCITY  # set_mode 成功即乐观更新缓存
     assert b.get_mode_arm() == ControlMode.VELOCITY  # 读回硬件真值（内核已改写 dummy）
-    assert b.mode_arm == ControlMode.VELOCITY
+    assert b._mode_arm == ControlMode.VELOCITY
     b.fail_at["set_joint_mode_arm"] = {0}
     assert b.set_mode_arm(ControlMode.POSITION) == 0  # 内核失败 → 0（joint0 未写入，其余未尝试）
     del b.fail_at["set_joint_mode_arm"]
-    assert b.mode_arm == ControlMode.VELOCITY  # 失败同样不动缓存
+    assert b._mode_arm == ControlMode.VELOCITY  # 失败同样不动缓存
     assert b.set_mode_arm() == 1  # 省参默认 MIT
     assert b.get_mode_arm() == ControlMode.MIT
 
@@ -497,7 +504,7 @@ def test_12b_set_mode_gains_hole(cfg):
 # ---- T11 set_zero（无失能门禁：任意使能态直接透传内核，时序由上层保证） ----
 def test_13_set_zero(b):
     for abled in (True, None, False):  # 已使能 / 未知 / 已失能：均不拦截，直接逐 joint 设零
-        b._is_abled_arm = abled
+        b._is_enabled_arm = abled
         b.calls.clear()
         assert b.set_zero_arm() == 1
         assert [c[1] for c in b.calls if c[0] == "set_joint_zero_arm"] == list(range(6))
@@ -533,16 +540,16 @@ def test_14_get_check_clear_error(b):
     assert b.get_error_arm() == [0, 0, 1, 0, 0, 0]
     # clear_error：无失能门禁 → 任意使能态直接逐 joint 发清错帧（无静置、无读回验证；不自动失能/使能）
     for abled in (True, None):  # 已使能 / 未知态：同样透传（失能时序由上层保证）
-        b._is_abled_arm = abled
+        b._is_enabled_arm = abled
         b.calls.clear()
         assert b.clear_error_arm() is True
         assert [c[1] for c in b.calls if c[0] == "clear_joint_error_arm"] == list(range(6))
-    b._is_abled_arm = False
+    b._is_enabled_arm = False
     b.calls.clear()
     assert b.clear_error_arm() is True
     assert [c[1] for c in b.calls if c[0] == "clear_joint_error_arm"] == list(range(6))
     assert not any(c[0] == "disable_joint_arm" for c in b.calls)
-    assert b.is_abled_arm is False  # 使能标志不被清错改动
+    assert b.is_enabled_arm is False  # 使能标志不被清错改动
     b.fail_at["clear_joint_error_arm"] = {2}
     cap.msgs.clear()
     assert b.clear_error_arm() is False and len(warns("清错异常")) >= 1
@@ -697,8 +704,8 @@ def test_21_refresh_thread(cfg):
 
         def toucher():
             while not stop_t.is_set():
-                r.joint_state_arm.t = time.time()
-                r.joint_state_end.t = time.time()
+                r._joint_state_arm.t = time.time()
+                r._joint_state_end.t = time.time()
                 time.sleep(0.005)
 
         th = threading.Thread(target=toucher, daemon=True)
@@ -736,8 +743,8 @@ def test_21b_refresh_threshold(cfg):
 
         def backdater(lag):
             while not stop_t.is_set():
-                r.joint_state_arm.t = time.time() - lag
-                r.joint_state_end.t = time.time() - lag
+                r._joint_state_arm.t = time.time() - lag
+                r._joint_state_end.t = time.time() - lag
                 time.sleep(0.003)
 
         # 回拨 0.6×period（30ms < 40ms 阈值）→ 视为新鲜（更高频读取在更新），不触发读取
@@ -761,7 +768,7 @@ def test_21b_refresh_threshold(cfg):
         r._refresh_stop.set()
 
 
-# ---- T14c 刷新按 error 码推导 is_abled（独立 dummy，50Hz） ----
+# ---- T14c 刷新按 error 码推导 is_enabled（独立 dummy，50Hz） ----
 def test_21c_refresh_abled(cfg):
     cfg2 = copy.deepcopy(cfg)
     cfg2["state_refresh_hz"] = 50
@@ -773,7 +780,7 @@ def test_21c_refresh_abled(cfg):
         def wait_ab(val, timeout=1.0):
             t0 = time.monotonic()
             while time.monotonic() - t0 < timeout:
-                if r.is_abled_arm is val and r.is_abled_end is val:
+                if r.is_enabled_arm is val and r.is_enabled_end is val:
                     return True
                 time.sleep(0.01)
             return False
@@ -828,9 +835,9 @@ def test_22_types():
 
 # ---- T16 断连 ----
 def test_23_disconnect(b):
-    b._is_abled_arm = True  # 前置：未失能 → 断连前应先失能
+    b._is_enabled_arm = True  # 前置：未失能 → 断连前应先失能
     b.disconnect_arm()
-    assert b.is_connected_arm is False and b.is_abled_arm is None
+    assert b.is_connected_arm is False and b.is_enabled_arm is None
     idx_disc = next((i for i, m in enumerate(cap.msgs) if "断连成功" in m), -1)
     idx_disb = max((i for i, m in enumerate(cap.msgs[:idx_disc]) if "失能成功" in m), default=-1)
     assert idx_disc >= 0 and 0 <= idx_disb < idx_disc  # 先失能后断连（info 顺序）
@@ -900,15 +907,15 @@ def test_25_none_input_no_raise(b):
 def test_26_disconnect_clears_mode(b):
     # 主 Dummy 现状：arm 已于 test_23 断连（模式应已清空）
     assert b.is_connected_arm is False
-    assert b.mode_arm is None and b._joint_mode_arm == [None] * 6
+    assert b._mode_arm is None and b._joint_mode_arm == [None] * 6
     # end 仍连接且模式已知 → 断连清空 → 重连自动恢复默认 MIT
-    assert b.is_connected_end and b.mode_end == ControlMode.POSITION
+    assert b.is_connected_end and b._mode_end == ControlMode.POSITION
     b.disconnect_end()
     assert b.is_connected_end is False
-    assert b.mode_end is None and b._joint_mode_end == [None]
+    assert b._mode_end is None and b._joint_mode_end == [None]
     b.connect_end()
     assert b.get_mode_end() == ControlMode.MIT  # 重连自动设默认模式并乐观填缓存，get_mode 核实
-    assert b.mode_end == ControlMode.MIT
+    assert b._mode_end == ControlMode.MIT
 
 
 # ---- end 族对称用例（每用例独立 Dummy：连接 end 即自动设 MIT） ----
@@ -922,15 +929,15 @@ def e(cfg):
 
 
 def test_30_end_enable_disable(e):
-    assert e.enable_end() == 1 and e.is_abled_end is True
+    assert e.enable_end() == 1 and e.is_enabled_end is True
     e.ret_false["enable_joint_end"] = {0}
-    assert e.enable_end() == 0 and e.is_abled_end is None  # 任一失败 → 0 且停留未知态
+    assert e.enable_end() == 0 and e.is_enabled_end is None  # 任一失败 → 0 且停留未知态
     del e.ret_false["enable_joint_end"]
-    assert e.enable_end() == 1 and e.is_abled_end is True
+    assert e.enable_end() == 1 and e.is_enabled_end is True
     e.ret_false["disable_joint_end"] = {0}
-    assert e.disable_end() == 0 and e.is_abled_end is None
+    assert e.disable_end() == 0 and e.is_enabled_end is None
     del e.ret_false["disable_joint_end"]
-    assert e.disable_end() == 1 and e.is_abled_end is False
+    assert e.disable_end() == 1 and e.is_enabled_end is False
 
 
 def test_31_end_get_state(e):
@@ -951,7 +958,7 @@ def test_31_end_get_state(e):
     e.fail_at["read_joint_state_end"] = {0}
     assert e.get_state_end() is None  # 内核异常 → None
     del e.fail_at["read_joint_state_end"]
-    assert e.get_state_end() is e.joint_state_end  # 返回本次原子换入后的当前对象
+    assert e.get_state_end() is e._joint_state_end  # 返回本次原子换入后的当前对象
 
 
 def test_32_end_mode_params(e):
@@ -973,8 +980,8 @@ def test_33_end_set_mode_zero(e):
     assert e.set_mode_end(ControlMode.VELOCITY) == 0  # 内核失败 → 0
     del e.fail_at["set_joint_mode_end"]
     assert e.set_mode_end(ControlMode.VELOCITY) == 1  # 写入成功即返回 + 乐观更新缓存
-    assert e.get_mode_end() == ControlMode.VELOCITY and e.mode_end == ControlMode.VELOCITY
-    e._is_abled_end = False  # 设零须失能（门禁放行）
+    assert e.get_mode_end() == ControlMode.VELOCITY and e._mode_end == ControlMode.VELOCITY
+    e._is_enabled_end = False  # 设零须失能（门禁放行）
     e.ret_false["set_joint_zero_end"] = {0}
     assert e.set_zero_end() == 0
     del e.ret_false["set_joint_zero_end"]
@@ -1008,11 +1015,11 @@ def test_34_end_check_clear_error(e):
     e.get_state_end()
     assert e.check_error_end() is True
     # clear_error：无失能门禁 → 任意使能态直接逐电机发清错帧
-    e._is_abled_end = True  # 已使能：同样直接透传（失能时序由上层保证）
+    e._is_enabled_end = True  # 已使能：同样直接透传（失能时序由上层保证）
     e.calls.clear()
     assert e.clear_error_end() is True
     assert [c[1] for c in e.calls if c[0] == "clear_joint_error_end"] == [0]
-    e._is_abled_end = False
+    e._is_enabled_end = False
     e.calls.clear()
     assert e.clear_error_end() is True
     assert [c[1] for c in e.calls if c[0] == "clear_joint_error_end"] == [0]
@@ -1058,8 +1065,8 @@ def test_36_end_send_vel(e):
 def test_38_end_disconnect(e):
     e.enable_end()
     e.disconnect_end()
-    assert e.is_connected_end is False and e.is_abled_end is None
-    assert e.mode_end is None and e._joint_mode_end == [None]  # 模式缓存随断连清空
+    assert e.is_connected_end is False and e.is_enabled_end is None
+    assert e._mode_end is None and e._joint_mode_end == [None]  # 模式缓存随断连清空
     e.calls.clear()
     e.disconnect_end()
     assert not any(c[0] == "disconnect_end" for c in e.calls)  # 确知未连接时空操作
@@ -1069,7 +1076,7 @@ def test_38_end_disconnect(e):
 def test_40_properties(b, cfg):
     assert b.name == "backend_dm" and b.n_joints_arm == 6 and b.n_joints_end == 1
     assert b.n_joints_arm == b._n_joints_arm and b.n_joints_end == b._n_joints_end
-    assert b.joint_state_arm is b._joint_state_arm and b.joint_state_end is b._joint_state_end
+    assert b._joint_state_arm is b._joint_state_arm and b._joint_state_end is b._joint_state_end
     endj = cfg["end"]["joints"][0]
     assert b.joint_limits_end.q_min[0] == endj["q_min"] and b.joint_limits_end.q_max[0] == endj["q_max"]
     assert b.joint_limits_end.dq_max[0] == endj["dq_max"] and b.joint_limits_end.tau_max[0] == endj["tau_max"]
@@ -1082,7 +1089,7 @@ def test_41_no_arm_section(cfg):
     bna = DummyBackend(cfg_na)
     try:
         assert bna._n_joints_arm == 0 and bna.n_joints_arm == 0 and bna.joint_limits_arm is None
-        assert bna.joint_state_arm.q.shape == (0,)
+        assert bna._joint_state_arm.q.shape == (0,)
         cap.msgs.clear()
         assert bna.enable_arm() == 1 and len(warns("未配置任何 joint")) >= 1  # 空族视为成功
     finally:
@@ -1150,13 +1157,13 @@ def test_45_state_nonfinite(cfg):
         b5.connect_arm()
         b5._refresh_stop.set()
         b5.get_state_arm()
-        q_prev = b5.joint_state_arm.q.copy()
+        q_prev = b5._joint_state_arm.q.copy()
         b5.jstates["arm"][1]["q"] = float("nan")
         b5.jstates["arm"][4]["tau"] = float("inf")
         cap.msgs.clear()
         assert b5.get_state_arm() is None
         assert len(warns("非有限值")) >= 1
-        assert np.array_equal(b5.joint_state_arm.q, q_prev)  # 快照保持
+        assert np.array_equal(b5._joint_state_arm.q, q_prev)  # 快照保持
         b5.jstates["arm"][1]["q"] = 0.2
         b5.jstates["arm"][4]["tau"] = 0.0
         assert b5.get_state_arm() is not None  # 恢复有限值后正常装配
@@ -1175,7 +1182,7 @@ def test_46_set_mode_type_gate(cfg):
         assert b6.set_mode_arm("position") == 0
         assert len(warns("非 ControlMode 枚举")) >= 1
         assert not any(c[0] == "set_joint_mode_arm" for c in b6.calls)
-        assert b6.mode_arm == ControlMode.MIT  # 缓存不动（保持 connect 乐观值，类型拦截未触碰）
+        assert b6._mode_arm == ControlMode.MIT  # 缓存不动（保持 connect 乐观值，类型拦截未触碰）
     finally:
         b6._refresh_stop.set()
 
@@ -1225,7 +1232,7 @@ def test_49_state_nondict(cfg):
         b8.connect_arm()
         b8._refresh_stop.set()
         b8.get_state_arm()
-        q_prev, t_prev = b8.joint_state_arm.q.copy(), b8.joint_state_arm.t
+        q_prev, t_prev = b8._joint_state_arm.q.copy(), b8._joint_state_arm.t
         orig = b8._read_joint_state_arm
         b8._read_joint_state_arm = lambda i: [0.1, 0.0, 0] if i == 2 else orig(i)  # joint3 误返回 list
         cap.msgs.clear()
@@ -1233,7 +1240,7 @@ def test_49_state_nondict(cfg):
         assert len(warns("返回非字典")) >= 1
         assert b8._jname("arm", 2) in warns("返回非字典")[0]  # 指名 joint
         assert "list" in warns("返回非字典")[0]               # 附实际类型
-        assert np.array_equal(b8.joint_state_arm.q, q_prev) and b8.joint_state_arm.t == t_prev  # 快照保持
+        assert np.array_equal(b8._joint_state_arm.q, q_prev) and b8._joint_state_arm.t == t_prev  # 快照保持
         b8._read_joint_state_arm = orig
         assert b8.get_state_arm() is not None                 # 恢复字典后正常装配
     finally:
@@ -1251,7 +1258,7 @@ def test_50_state_none_return(cfg):
         b9.connect_arm()
         b9._refresh_stop.set()
         b9.get_state_arm()
-        q_prev, t_prev = b9.joint_state_arm.q.copy(), b9.joint_state_arm.t
+        q_prev, t_prev = b9._joint_state_arm.q.copy(), b9._joint_state_arm.t
         orig = b9._read_joint_state_arm
         b9._read_joint_state_arm = lambda i: None if i == 4 else orig(i)  # joint5 误返回 None
         cap.msgs.clear()
@@ -1259,7 +1266,7 @@ def test_50_state_none_return(cfg):
         assert len(warns("返回非字典")) >= 1
         assert b9._jname("arm", 4) in warns("返回非字典")[0]   # 指名 joint
         assert "NoneType" in warns("返回非字典")[0]            # 附实际类型
-        assert np.array_equal(b9.joint_state_arm.q, q_prev) and b9.joint_state_arm.t == t_prev  # 快照保持
+        assert np.array_equal(b9._joint_state_arm.q, q_prev) and b9._joint_state_arm.t == t_prev  # 快照保持
         b9._read_joint_state_arm = orig
         assert b9.get_state_arm() is not None                 # 恢复字典后正常装配
     finally:
@@ -1273,13 +1280,13 @@ def test_51_error_inf_no_raise(cfg):
         b10.connect_arm()
         b10._refresh_stop.set()
         b10.get_state_arm()
-        q_prev, t_prev = b10.joint_state_arm.q.copy(), b10.joint_state_arm.t
+        q_prev, t_prev = b10._joint_state_arm.q.copy(), b10._joint_state_arm.t
         b10.jstates["arm"][1]["error"] = float("inf")
         cap.msgs.clear()
         st = b10.get_state_arm()  # 不得上抛（NumPy ≥1.24 的 OverflowError 须被拦截转 warn）
         assert st is None
         assert len(warns("解析失败")) >= 1
-        assert np.array_equal(b10.joint_state_arm.q, q_prev) and b10.joint_state_arm.t == t_prev
+        assert np.array_equal(b10._joint_state_arm.q, q_prev) and b10._joint_state_arm.t == t_prev
         b10.jstates["arm"][1]["error"] = 0
         assert b10.get_state_arm() is not None                # 恢复有限码后正常装配
     finally:
@@ -1297,7 +1304,7 @@ def test_52_state_value_nonscalar(cfg):
         b11.connect_arm()
         b11._refresh_stop.set()
         b11.get_state_arm()
-        q_prev, t_prev = b11.joint_state_arm.q.copy(), b11.joint_state_arm.t
+        q_prev, t_prev = b11._joint_state_arm.q.copy(), b11._joint_state_arm.t
         orig = b11._read_joint_state_arm
         b11._read_joint_state_arm = lambda i: {**orig(i), "q": [0.1]} if i == 3 else orig(i)  # joint4 子值误返回 list
         cap.msgs.clear()
@@ -1305,8 +1312,8 @@ def test_52_state_value_nonscalar(cfg):
         assert len(warns("非标量")) >= 1
         assert b11._jname("arm", 3) in warns("非标量")[0]       # 指名 joint
         assert "『q』" in warns("非标量")[0] and "list" in warns("非标量")[0]  # 指名字段 + 实际类型
-        assert b11.joint_state_arm.q.shape == (6,)             # 快照保持 (n,) 不被 (n,1) 毒化
-        assert np.array_equal(b11.joint_state_arm.q, q_prev) and b11.joint_state_arm.t == t_prev
+        assert b11._joint_state_arm.q.shape == (6,)             # 快照保持 (n,) 不被 (n,1) 毒化
+        assert np.array_equal(b11._joint_state_arm.q, q_prev) and b11._joint_state_arm.t == t_prev
         b11._read_joint_state_arm = orig
         assert b11.get_state_arm() is not None                 # 恢复标量后正常装配
     finally:
@@ -1332,7 +1339,7 @@ def test_53_mode_nonenum(cfg):
         assert b12._jname("arm", 3) in warns("非 ControlMode 枚举")[0]  # 指名 joint
         assert "int" in warns("非 ControlMode 枚举")[0]                 # 附实际类型
         assert b12._joint_mode_arm == [ControlMode.MIT] * 6  # 逐 joint 缓存不被毒化
-        assert b12.mode_arm == ControlMode.MIT               # 族模式成员不动
+        assert b12._mode_arm == ControlMode.MIT               # 族模式成员不动
         b12._read_joint_mode_arm = orig
         assert b12.get_mode_arm() == ControlMode.MIT         # 恢复枚举后正常读取
     finally:
@@ -1460,7 +1467,7 @@ def test_60_kernel_exception_paths(cfg):
         r.connect_arm()
         r.fail_at["enable_joint_arm"] = {2}
         cap.msgs.clear()
-        assert r.enable_arm() == 0 and r.is_abled_arm is None
+        assert r.enable_arm() == 0 and r.is_enabled_arm is None
         assert len(warns("使能异常")) >= 1
         del r.fail_at["enable_joint_arm"]
         r.fail_at["disable_joint_arm"] = {3}
@@ -1632,16 +1639,16 @@ def test_67_refresh_tick_exception_retry(cfg):
     try:
         r.connect_arm()
         r._refresh_tick = flaky_tick
-        r.joint_state_arm.t = 0.0  # 人为陈旧，保证恢复后的拍会真正读状态
+        r._joint_state_arm.t = 0.0  # 人为陈旧，保证恢复后的拍会真正读状态
         boom["on"] = True
         cap.msgs.clear()
         time.sleep(0.25)  # 10Hz：至少 2 拍异常
         assert len(warns("单拍异常")) >= 1
         boom["on"] = False
         t0 = time.monotonic()
-        while r.joint_state_arm.t <= 0.0 and time.monotonic() - t0 < 1.0:
+        while r._joint_state_arm.t <= 0.0 and time.monotonic() - t0 < 1.0:
             time.sleep(0.02)  # 等一个成功拍重新装配（t > 0）
-        assert r.joint_state_arm.t > 0.0
+        assert r._joint_state_arm.t > 0.0
     finally:
         boom["on"] = False
         r._refresh_stop.set()
@@ -1690,7 +1697,7 @@ def test_69_template_smoke():
     t = BackendTemplate({})
     try:
         assert t.n_joints_arm == 0 and t.n_joints_end == 0  # 空 cfg 容错构造，不做任何总线 I/O
-        assert t.is_connected_arm is None and t.is_abled_end is None
+        assert t.is_connected_arm is None and t.is_enabled_end is None
         for name, args in kernel_args.items():  # 29 桩全量：『文件名 - 方法：』格式上抛 NotImplementedError
             with pytest.raises(NotImplementedError, match=rf"backend_<型号>\.py - {name}"):
                 getattr(t, name)(*args)
@@ -1862,9 +1869,11 @@ def test_70_backend_dm(cfg):
     assert sent == [dm0.query_frame]  # 上抛前已发刷新帧：电机在岸则下一拍自愈
     dm0.state = (time.monotonic(), 1.0, 2.0, 3.0, 1, 40, 41)  # 模拟刷新应答已到（新鲜快照）
     bus2.write = lambda frame: pytest.fail("新鲜缓存读取不应发总线帧")
-    assert d._read_state("arm", 0) == {"q": 1.0, "dq": 2.0, "tau": 3.0, "error": 1,
-                                       "temp_mos": 40, "temp_rotor": 41}
-    dm0.state = (time.monotonic() - 0.06, 9.0, 8.0, 7.0, 0, 30, 31)  # 陈旧（>50ms 且 <1s）
+    snap_fresh = d._read_state("arm", 0)
+    assert snap_fresh.pop("t") == pytest.approx(time.time(), abs=1.0)  # t=帧到达时刻（wall-clock 动态值，不精确相等）
+    assert snap_fresh == {"q": 1.0, "dq": 2.0, "tau": 3.0, "error": 1,
+                          "temp_mos": 40, "temp_rotor": 41}
+    dm0.state = (time.monotonic() - 0.015, 9.0, 8.0, 7.0, 0, 30, 31)  # 软陈旧（>_STATE_STALE=0.01 且 ≤_STATE_DEAD=0.02）
     sent = []
     bus2.write = sent.append
     snap = d._read_state("arm", 0)  # 发一帧 0CCR 后立即返回当前（陈旧）缓存，不等待
@@ -1943,7 +1952,7 @@ def test_72_backend_dm_action_end(cfg):
 
         # open：自动切 POSITION（RID10=4 + 4 增益共 5 个参数帧）→ 1 帧 pos_force（cfg vlim=3.0 / flim=1.0）
         d.send_action_end("open")
-        assert d.mode_end is ControlMode.POSITION
+        assert d._mode_end is ControlMode.POSITION
         assert frames[-1] == me.prefix_pos + _pack_pos(_END_ACTION_POS["open"], 3.0, 1.0) + b"\x00"
         assert frames[-2][21:29] == bytes((0x07, 0x00, 0x55, 26)) + _struct.pack("<f", 0.002)  # 末帧增益=vel_ki
         n = len(frames)
