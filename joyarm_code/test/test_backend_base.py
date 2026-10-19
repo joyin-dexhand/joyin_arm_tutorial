@@ -260,8 +260,8 @@ def test_01_init(b, cfg):
     assert b._joint_state_arm.t == 0.0
     assert b._joint_mode_arm == [None] * 6
     assert b._joint_mode_end == [None]
-    # cfg 属性实时引用
-    assert b.cfg is b._cfg and b.cfg["name"] == "backend_dm"
+    # cfg 属性只读视图（MappingProxyType 实时视图：顶层防增删，嵌套层勿深层改动）
+    assert b.cfg == b._cfg and b.cfg["name"] == "backend_dm"
     # 发送默认值与 POS_VEL 增益成员自 cfg 提取
     assert np.allclose(b._kp_mit_default_arm, [j["MIT"]["kp"] for j in arm_j])
     assert np.allclose(b._kd_mit_default_arm, [j["MIT"]["kd"] for j in arm_j])
@@ -607,20 +607,20 @@ def test_17_send_mit(b, cfg):
     b.modes["arm"] = [ControlMode.MIT] * 6
     b.get_mode_arm()
     b.calls.clear()
-    b.send_mit_arm(np.full(6, 3.0), np.zeros(6), np.full(6, 2.0))  # tau=3, q=0, dq=2（q=0 在行程内不裁剪）
+    b.send_mit_arm(q=np.zeros(6), dq=np.full(6, 2.0), tau=np.full(6, 3.0))  # tau=3, q=0, dq=2（q=0 在行程内不裁剪）
     c13c = [c for c in b.calls if c[0] == "send_joint_mit_arm"]
     assert np.allclose([c[2] for c in c13c], 3.0)  # 参数顺序 tau, q, dq
     assert np.allclose([c[3] for c in c13c], 0.0) and np.allclose([c[4] for c in c13c], 2.0)
     assert np.allclose([c[5] for c in c13c], [j["MIT"]["kp"] for j in arm_j])  # kp/kd 缺省取 cfg 成员
     assert np.allclose([c[6] for c in c13c], [j["MIT"]["kd"] for j in arm_j])
     b.calls.clear()
-    b.send_mit_arm(np.full(6, 3.0), np.zeros(6), np.full(6, 2.0),
+    b.send_mit_arm(q=np.zeros(6), dq=np.full(6, 2.0), tau=np.full(6, 3.0),
                    kp=np.full(6, 7.0), kd=np.full(6, 0.7))  # 显式覆盖增益
     c13e = [c for c in b.calls if c[0] == "send_joint_mit_arm"]
     assert np.allclose([c[5] for c in c13e], 7.0) and np.allclose([c[6] for c in c13e], 0.7)
     cap.msgs.clear()
     b.calls.clear()
-    b.send_mit_arm(np.full(6, 3.0), np.zeros(6), np.full(6, 2.0), kp=[1, 2])
+    b.send_mit_arm(q=np.zeros(6), dq=np.full(6, 2.0), tau=np.full(6, 3.0), kp=[1, 2])
     assert warns("kp=2") and not [c for c in b.calls if c[0] == "send_joint_mit_arm"]
 
 
@@ -631,13 +631,13 @@ def test_18_send_gates(b):
     saved_kp = b._kp_mit_default_arm.copy()
     b._kp_mit_default_arm = saved_kp.copy()
     b._kp_mit_default_arm[0] = np.nan
-    b.send_mit_arm(np.full(6, 3.0), np.zeros(6), np.full(6, 2.0))
+    b.send_mit_arm(q=np.zeros(6), dq=np.full(6, 2.0), tau=np.full(6, 3.0))
     assert not [c for c in b.calls if c[0] == "send_joint_mit_arm"]  # 增益成员空值 → 不发送
     assert warns("空值")
     b._kp_mit_default_arm = saved_kp
     cap.msgs.clear()
     b.calls.clear()
-    b.send_mit_arm(np.full(6, np.nan), np.zeros(6), np.full(6, 2.0))
+    b.send_mit_arm(q=np.zeros(6), dq=np.full(6, 2.0), tau=np.full(6, np.nan))
     assert not [c for c in b.calls if c[0] == "send_joint_mit_arm"]  # 指令含 NaN → 不发送
     assert warns("参数『tau』")
     cap.msgs.clear()
@@ -670,7 +670,7 @@ def test_19_send_single_joint_fail(b):
     b.calls.clear()
     cap.msgs.clear()
     b.fail_at["send_mit_arm"] = {2}
-    b.send_mit_arm(np.full(6, 3.0), np.zeros(6), np.full(6, 2.0))
+    b.send_mit_arm(q=np.zeros(6), dq=np.full(6, 2.0), tau=np.full(6, 3.0))
     del b.fail_at["send_mit_arm"]
     sent = [c for c in b.calls if c[0] == "send_joint_mit_arm"]
     assert [c[1] for c in sent] == list(range(6))  # 全部 joint 均尝试下发（失败不阻断其余）
@@ -895,7 +895,7 @@ def test_25_none_input_no_raise(b):
     assert not any(c[0] == "send_joint_vel_arm" for c in b.calls)
     assert len(warns("非数值")) >= 1
     cap.msgs.clear()
-    b.send_mit_arm([None] * 6, np.zeros(6), np.zeros(6))  # 含 None 同样不抛、不触内核
+    b.send_mit_arm(q=np.zeros(6), dq=np.zeros(6), tau=[None] * 6)  # 含 None 同样不抛、不触内核
     assert not any(c[0] == "send_joint_mit_arm" for c in b.calls)
     cap.msgs.clear()
     assert b.write_param_end("pos_kp", ["a"]) == 0
@@ -1033,19 +1033,19 @@ def test_35_end_send_mit(e, cfg):
     end_j = cfg["end"]["joints"]
     e.get_mode_end()  # 连接已乐观填缓存，get_mode 再核实
     e.calls.clear()
-    e.send_mit_end([1.0], [-1.0], [0.0])
+    e.send_mit_end(q=[-1.0], dq=[0.0], tau=[1.0])
     c = [x for x in e.calls if x[0] == "send_joint_mit_end"]
     assert len(c) == 1
     assert np.allclose([x[2] for x in c], 1.0) and np.allclose([x[3] for x in c], -1.0)
     assert np.allclose([x[5] for x in c], end_j[0]["MIT"]["kp"])  # kp/kd 缺省取 cfg 成员
     assert np.allclose([x[6] for x in c], end_j[0]["MIT"]["kd"])
     e.calls.clear()
-    e.send_mit_end([1.0], [-1.0], [0.0], kp=[3.0], kd=[0.3])
+    e.send_mit_end(q=[-1.0], dq=[0.0], tau=[1.0], kp=[3.0], kd=[0.3])
     c = [x for x in e.calls if x[0] == "send_joint_mit_end"]
     assert np.allclose([x[5] for x in c], 3.0) and np.allclose([x[6] for x in c], 0.3)
     cap.msgs.clear()
     e.calls.clear()
-    e.send_mit_end([99.0], [-1.0], [0.0])
+    e.send_mit_end(q=[-1.0], dq=[0.0], tau=[99.0])
     c = [x for x in e.calls if x[0] == "send_joint_mit_end"]
     assert np.allclose([x[2] for x in c], e.joint_limits_end.tau_max)  # tau 裁到 ±tau_max
     assert len(warns("越限")) >= 1
@@ -1080,7 +1080,7 @@ def test_40_properties(b, cfg):
     endj = cfg["end"]["joints"][0]
     assert b.joint_limits_end.q_min[0] == endj["q_min"] and b.joint_limits_end.q_max[0] == endj["q_max"]
     assert b.joint_limits_end.dq_max[0] == endj["dq_max"] and b.joint_limits_end.tau_max[0] == endj["tau_max"]
-    assert b.cfg is b._cfg
+    assert b.cfg == b._cfg  # MappingProxyType 只读视图：与内部 dict 内容相等（顶层防增删）
 
 
 def test_41_no_arm_section(cfg):
@@ -1450,7 +1450,7 @@ def test_59_unconnected_gate_sweep(cfg):
         assert r.get_error_arm() is None
         assert r.check_error_arm() is False
         assert r.clear_error_arm() is False
-        r.send_mit_arm(np.zeros(6), np.zeros(6), np.zeros(6))
+        r.send_mit_arm(q=np.zeros(6), dq=np.zeros(6), tau=np.zeros(6))
         r.send_position_arm(np.zeros(6))
         r.send_action_end("open")
         assert len(warns("未连接或状态未知")) >= 1
@@ -1520,7 +1520,7 @@ def test_62_mit_clip_arm(cfg):
         tau = np.array([99.0, -99.0, 0, 0, 0, 0])
         q = np.array([99.0, -99.0, 0, 0, 0, 0])
         dq = np.array([99.0, 0, 0, 0, 0, 0])
-        r.send_mit_arm(tau, q, dq)
+        r.send_mit_arm(q=q, dq=dq, tau=tau)
         calls = [c for c in r.calls if c[0] == "send_joint_mit_arm"]
         assert len(calls) == 6
         assert np.allclose([c[2] for c in calls], np.clip(tau, -lim.tau_max, lim.tau_max))

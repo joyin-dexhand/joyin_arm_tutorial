@@ -5,10 +5,10 @@
 ``StubArm``，对照独立参考式（pinocchio 原生算法等）逐位/数值校验，真机行为一概不触。
 
 组织方式（参照 test/test_backend_base.py 的头部说明与用例组织）：
-- ``_arm()``：模块级缓存离线 joyArm("joyarm_dm")（JoyArm 构造后默认未连接，backend 不上总线），
-  ``pin_model`` 等只读成员跨用例共享，避免重复构造；
-- ``StubArm``：traj/control 域用鸭子 stub（ctrl_hz / arm_home / arm_limits / get_arm_state /
-  set_arm_command，与 JoyArm 公开属性同名），可按需改 ``_st.joint.q/dq`` 模拟当前状态，
+- ``_arm()``：模块级缓存离线 joyArm("joyarm_dm")（JoyArm 构造后默认未连接，backend 不上总线；
+  构造失败抛携带原因的异常，不返回 None），``pin_model`` 等只读成员跨用例共享，避免重复构造；
+- ``StubArm``：traj/control 域用鸭子 stub（ctrl_hz / home_arm / joint_limits_hard_arm /
+  get_state_arm / send_position_arm，与 JoyArm 公开属性同名），可按需改 ``_st.q/dq`` 模拟当前状态，
   ``cmds`` 记录每拍下发指令；
 - 同一 bug 的多个片段合并为一个测试函数；函数命名 ``test_<主题>``。
 
@@ -25,7 +25,7 @@ import time
 import numpy as np
 import pinocchio as pin
 
-from joyarm_core import ArmState, JointLimits, JointState, TrajFrame, joyArm
+from joyarm_core import JointLimits, JointState, TrajFrame, joyArm
 from joyarm_core.robotics.dynamics import PinDynamicsSolver
 from joyarm_core.robotics.trajectory import SingleJointCubicTrajPlanner, SingleJointHoldTrajPlanner
 
@@ -37,28 +37,29 @@ def _arm():
     """离线 joyArm("joyarm_dm")：仅算法层使用（pin_model 等只读成员），跨用例共享单例。"""
     global _ARM
     if _ARM is None:
-        _ARM = joyArm("joyarm_dm")
-        assert _ARM is not None, "离线构造 joyArm('joyarm_dm') 失败"
+        try:
+            _ARM = joyArm("joyarm_dm")      # 失败抛携带原因的异常（不返回 None）
+        except Exception:
+            print("离线构造 joyArm('joyarm_dm') 失败，异常如下：")
+            raise
     return _ARM
 
 
 # ---- 鸭子 stub（traj/control 离线检查用：属性名与 JoyArm 公开接口同名） ----
 class StubArm:
     ctrl_hz = 200.0
-    arm_home = np.zeros(6)
-    arm_limits = JointLimits(q_min=np.full(6, -3.0), q_max=np.full(6, 3.0),
-                             dq_max=np.full(6, 5.0), tau_max=np.full(6, 30.0))
+    home_arm = np.zeros(6)
+    joint_limits_hard_arm = JointLimits(q_min=np.full(6, -3.0), q_max=np.full(6, 3.0),
+                                        dq_max=np.full(6, 5.0), tau_max=np.full(6, 30.0))
 
     def __init__(self):
-        st = ArmState()
-        st.joint = JointState(q=np.zeros(6), dq=np.zeros(6))
-        self._st = st
+        self._st = JointState(q=np.zeros(6), dq=np.zeros(6))
         self.cmds = []
 
-    def get_arm_state(self):
+    def get_state_arm(self):
         return self._st
 
-    def set_arm_command(self, mode, q=None, **kw):
+    def send_position_arm(self, q, vlim=None, flim=None):
         self.cmds.append(np.array(q))
 
 
@@ -110,7 +111,7 @@ def test_traj_single_joint_hold_invalid_q_falls_back_home():
                 TrajFrame(q=np.zeros(5)),           # 维度不符（≠ n=6）
                 None, []):                          # 空目标
         assert planner.plan(stub, bad) is True
-        assert np.allclose(planner.sample(time.time()).q, stub.arm_home)
+        assert np.allclose(planner.sample(time.time()).q, stub.home_arm)
 
 
 # ---- 多帧：视为无效，告警一次并回退 q_home（单帧规划后告警复位） ----
@@ -122,7 +123,7 @@ def test_traj_single_joint_hold_multi_frame_warns_and_falls_back(caplog):
         for _ in range(3):                          # 同一多帧目标重复规划
             assert planner.plan(stub, frames) is True
         assert len(caplog.records) == 1             # 只告警一次
-        assert np.allclose(planner.sample(time.time()).q, stub.arm_home)
+        assert np.allclose(planner.sample(time.time()).q, stub.home_arm)
         caplog.clear()
         assert planner.plan(stub, TrajFrame(q=np.full(6, 0.4))) is True
         assert not caplog.records                   # 单帧规划复位，不告警
@@ -148,8 +149,8 @@ def test_traj_single_joint_cubic_boundary_conditions():
     stub = StubArm()
     q0 = np.array([0.1, -0.2, -0.1, 0.0, 0.3, 0.0])
     dq0 = np.full(6, 0.05)
-    stub._st.joint.q = q0
-    stub._st.joint.dq = dq0
+    stub._st.q = q0
+    stub._st.dq = dq0
     planner = SingleJointCubicTrajPlanner()
     q1 = np.array([0.3, -0.5, -0.4, 0.2, 0.5, 0.1])
     dq1 = np.full(6, 0.02)
@@ -172,14 +173,14 @@ def test_traj_single_joint_cubic_invalid_falls_back_hold_home():
                 None, []):                                         # 空目标
         assert planner.plan(stub, bad) is True
         fr = planner.sample(time.time() + 10.0)
-        assert np.allclose(fr.q, stub.arm_home)
+        assert np.allclose(fr.q, stub.home_arm)
         assert np.allclose(fr.dq, 0.0)
 
 
 # ---- 目标已过期：不规划多项式，直接恒定发布目标（维持终点状态） ----
 def test_traj_single_joint_cubic_expired_target_holds_goal():
     stub = StubArm()
-    stub._st.joint.q = np.zeros(6)
+    stub._st.q = np.zeros(6)
     planner = SingleJointCubicTrajPlanner()
     q1 = np.full(6, 0.3)
     assert planner.plan(stub, TrajFrame(time=time.time() - 1.0, q=q1)) is True
@@ -197,7 +198,7 @@ def test_traj_single_joint_cubic_multi_frame_warns(caplog):
     with caplog.at_level("WARNING", logger="joyarm_core.traj_planner_single_joint_cubic"):
         assert planner.plan(stub, frames) is True
         assert len(caplog.records) == 1
-        assert np.allclose(planner.sample(time.time() + 10.0).q, stub.arm_home)
+        assert np.allclose(planner.sample(time.time() + 10.0).q, stub.home_arm)
 
 
 # ---- 未规划先采样：RuntimeError ----

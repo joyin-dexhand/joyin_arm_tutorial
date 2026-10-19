@@ -131,7 +131,7 @@ cfg 自检通过后：
 | `get_error_arm/end` | `get_error_arm/end` | `() -> list\|None` | §4.6 |
 | `check_error_arm/end` | `check_error_arm/end` | `() -> bool` | §4.6 |
 | `clear_error_arm/end` | `clear_error_arm/end` | `() -> bool` | §4.6 |
-| `send_mit_arm/end` | `send_mit_arm/end` | `(tau=0, q=0, dq=0, kp=None, kd=None) -> None`，缺省细则见 §4.7 | §4.7 |
+| `send_mit_arm/end` | `send_mit_arm/end` | `(q, dq=None, tau=None, kp=None, kd=None) -> None`，缺省细则见 §4.7 | §4.7 |
 | `send_position_arm/end` | `send_position_arm/end` | `(q, vlim=None, flim=None) -> None` | §4.7 |
 | `send_vel_arm/end` | `send_vel_arm/end` | `(dq) -> None` | §4.7 |
 | `set_action_end` | `send_action_end` | `(action: str, **kw) -> None` | §4.8 |
@@ -171,9 +171,9 @@ cfg 自检通过后：
 
 ### 4.7 关节指令下发
 
-- `send_mit_arm/end(tau=0, q=0, dq=0, kp=None, kd=None)`：电机内部执行 `τ = tau + kp·(q_d−q) + kd·(dq_d−dq)`，发送时五参均为 `(n,)`——tau、q、dq 缺省标量 0 按关节数广播为全零 `(n,)`，kp/kd 仍缺省取 cfg `backend.*.joints[].MIT.kp/kd` 发送默认。backend 自动维度校验、`tau/q/dq` 越硬限位就近裁剪 + warn、连接 + MIT 模式门禁。
-- `send_position_arm/end(q, vlim=None, flim=None)`：`q` `(n,)` rad；`vlim` rad/s、`flim` 归一化力矩电流 0~1，缺省取 cfg `POS_VEL.vlim/flim`；`q` 越硬限位 / `vlim` 超 `[0,dq_max]` / `flim` 超 `[0,1]` 就近裁剪 + warn、连接 + POSITION 门禁。
-- `send_vel_arm/end(dq)`：`dq` `(n,)` rad/s；幅值越 `|dq_max|` 就近裁剪 + warn、连接 + VELOCITY 门禁。
+- `send_mit_arm/end(q, dq=None, tau=None, kp=None, kd=None)`：电机内部执行 `τ = tau + kp·(q_d−q) + kd·(dq_d−dq)`，发送时五参均为 `(n,)`——**`q` 必填**；`dq`/`tau` 缺省置 `zeros(n)`；`kp`/`kd` 缺省取成员 `_kp/_kd_mit_default_arm/end`。下发校验（维度校验、`tau/q/dq` 越硬限位就近裁剪 + warn、连接 + MIT 模式门禁）**全部在 `_send_mit_impl`**，公开接口零校验、JoyArm 直接委托 backend。
+- `send_position_arm/end(q, vlim=None, flim=None)`：`q` 必填 `(n,)` rad；`vlim` rad/s、`flim` 归一化力矩电流 0~1，缺省取成员 `_vlim/_flim_default_arm/end`；`q` 越硬限位 / `vlim` 超 `[0,dq_max]` / `flim` 超 `[0,1]` 就近裁剪 + warn、连接 + POSITION 门禁——校验全部在 `_send_position_impl`。
+- `send_vel_arm/end(dq)`：`dq` 必填 `(n,)` rad/s、无缺省；幅值越 `|dq_max|` 就近裁剪 + warn、连接 + VELOCITY 门禁——校验全部在 `_send_vel_impl`。
 
 ### 4.8 send_action_end 动作集
 
@@ -226,7 +226,7 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 
 - **`_start_motion_thread`**：激活 traj 求解器 `plan(self, _target_trajframe)` 一次（保证首帧可用）→ 启动 plan 线程（按 `_plan_hz` 周期 `plan(self, _target_trajframe)`）→ 启动 ctrl 线程（按 `_ctrl_hz` 每拍 `_activated_ctrl_solver.step(self, frame = _activated_traj_solver.sample(time.time()), _backend.get_state_arm() 的 JointState)`，step 内部经 _backend 下发）→ 清暂停开关。
 - **hz 动态更新**：两线程节拍每拍重读 `_plan_hz/_ctrl_hz`（或等价 set_hz 机制），切换求解器后下一拍生效。
-- **`_stop_motion_thread`**：先停 ctrl 线程再停 plan 线程，超时回收并清当前帧缓存。
+- **`_stop_motion_thread`**：先停 ctrl 线程再停 plan 线程，超时回收线程；目标帧缓存 `_target_trajframe` 仅在 FSM start/stop 边界清理（§6.5），MOTION 态退出不清（保护性往返后续走用户目标）。
 - 方法名单数 `_thread` 但统一管理两条线程；不设 sample 线程与 `sample_hz`。
 
 ### 5.7 数学门面 9 方法
@@ -236,7 +236,7 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 | 方法 | 签名 | 返回 |
 |:---:|:---:|:---:|
 | `solve_fkine` | `(q=None, frame=None)` | `Pose` |
-| `solve_ikine` | `(pose, frame=None, q0=None, *, **kw)` | `IKResult` |
+| `solve_ikine` | `(pose, frame=None, q0=None, **kw)`（求解器特有参数仅限关键字传入） | `IKResult` |
 | `solve_ikine_all` | `(pose, frame=None, **kw)` | `IKResult` |
 | `get_jac` | `(q=None, frame=None)` | `(6,n)` |
 | `get_jac_pinv_damped` | `(q=None, frame=None, damping=1e-3)` | `(n,6)` |
@@ -268,9 +268,9 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 | 1 | `DISABLE` | 失能 | — | 执行一次 `_disable_clear_disable_arm`（§9，「失能→清错→失能」序列）并 info 状态转移信息 | 直接轮发 `self._backend.disable_arm()`（幂等、无检查无 warn） | — |
 | 2 | `ZERO` | 零位失能 | POSITION | 使能+设模式+发送 `_zero_arm` 位置指令+ 置「移动中」标志 | 子阶段机：移动中 → 查 `is_in_q_arm(_zero_arm)`，到位 → `disable_arm()` 失能并转「零位失能维持」子阶段（此后每拍轮发 disable_arm，同 DISABLE）；任何切换可立即打断（无阻塞等待） | 清到位轮询/子阶段标志 |
 | 3 | `HOME` | 空闲保持 | POSITION | 使能+设置模式 | 逐拍 `send_position_arm(_home_arm)` + `is_in_q_arm(_home_arm)` 到位监测（迁移门槛见 §6.3） | — |
-| 4 | `MOTION` | 正常运动 | 控制器 MODE | 清理缓存和残留+使能+设置mode为控制器 MODE；然后启动 plan/ctrl 两线程（§5.6 `_start_motion_thread`） | 维持 plan+ctrl 两线程 ；运行中热切换求解器按 §5.4 | 停线程与清帧缓存（§5.6 `_stop_motion_thread`） |
+| 4 | `MOTION` | 正常运动 | 控制器 MODE | 清理缓存和残留+使能+设置mode为控制器 MODE；然后启动 plan/ctrl 两线程（§5.6 `_start_motion_thread`） | 维持 plan+ctrl 两线程 ；运行中热切换求解器按 §5.4 | 停线程（§5.6 `_stop_motion_thread`；目标帧缓存仅在 FSM start/stop 边界清理，见 §6.5） |
 | 5 | `HOLD` | 原位锁定 | POSITION | 使能+ 模式设置+`_hold_q` 取 `_backend.get_state_arm().q` | 逐拍 `send_position_arm(_hold_q)` | 清 `_hold_q` |
-| 6 | `DAMPING` | 阻尼防护 | MIT | 使能+模式设置 | 逐拍 `send_mit_arm(kp=0, kd=_mit_kd_damping)`（tau/q/dq 缺省全零） | — |
+| 6 | `DAMPING` | 阻尼防护 | MIT | 使能+模式设置 | 逐拍 `send_mit_arm(q=0, dq=0, tau=0, kp=0, kd=_mit_kd_damping)`（`q/dq/tau/kp` 均为 `zeros(n)` 数组，不广播） | — |
 
 **damping**：`_mit_kd_damping` 在 init 解析：`cfg.joyarm.MotionFSM.mit_kd_damping` 为正有限数（标量广播或 n 元列表）则采用；未配置 / 非法 → init 抛错初始化失败。
 
@@ -354,7 +354,7 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 ### 7.3 safe_monitor 监视器
 
 - 独立 daemon 线程；`start_monitor()` / `stop_monitor()` 启停；频率 `cfg.joyarm.MotionFSM.monitor_hz`（缺省 = `fsm_hz`）。
-- 每拍：只读采集（`get_state_arm/end`、`get_current_motion_state`、`get_event`）→ 按规则判断 → 命中则 `set_event`。**只读：绝不调用控制/下发方法**；事件经 §7.2 通路驱动 FSM，天然非阻塞。
+- 每拍：只读采集（`get_state_arm/end`、`get_current_motion_state`、`get_event`）→ 按规则判断 → 命中且危险程度高于当前事件才 `set_event`（**只升不降**，防止覆写并发设置的更高危险事件；外部 `set_event` 不受限）。**只读：绝不调用控制/下发方法**；事件经 §7.2 通路驱动 FSM，天然非阻塞。
 - **触发规则集（最小硬规则）**：
 
 | 监测条件 | set 事件 |
@@ -394,7 +394,7 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 | ③ | pyproject | 增可选依赖组 `vis = ["meshcat>=0.3.2"]`（缺包降级行为见 §8） |
 | ④ | 基准 | 其余键一律以 yaml 现键为准、不做键名迁移；旧键 `end_frame` / `arm_home` / `end_home` / `arm_soft_limits` / `end_soft_limits` 废弃 |
 | ⑤ | 类型变更 `utils/types.py` | 新增 `Accel` 数据类（`linear` `(3,)` m/s²、`angular` `(3,)` rad/s²，与 `Twist` 成对同构）；`TrajFrame` 增加笛卡尔加速度子项 `accel: Optional[Accel]`（置于 `twist` 与 `wrench` 之间）——关节侧已有 `ddq`、力侧已有 `tau`/`wrench`，独缺笛卡尔加速度 |
-| ⑥ | 契约变更 | backend 基类 `send_mit_arm/end` 同步 §4.7 全默认签名（backend.py / backend_dm.py / backend_template.py），现有调用点均前三维位置传参、无需改动 |
+| ⑥ | 契约变更 | backend 基类 `send_mit_arm/end` 同步 §4.7 签名（`q` 必填、`dq/tau` 缺省默认 `zeros(n)`、`kp/kd` 缺省取 `_kp/_kd_mit_default_*` 成员）；三指令下发校验全部在 `*_impl`、公开接口零校验、JoyArm 纯委托（backend.py；backend_dm.py / backend_template.py 无公开覆写） |
 | ⑦ | 配套变更 | backend 基类 `joint_limits_arm/end` @property 内部数组置 writeable=False 返本体；`cfg` @property 返回 MappingProxyType 只读视图（顶层防增删，嵌套层注明勿深层改动） |
 | ⑧ | 契约变更 | backend 删除 `mode_arm/end`、`joint_state_arm/end` 直读 @property（直返私有缓存、可能陈旧）——动态数据一律经 `get_mode_*` / `get_state_*` 读时刷新；`is_abled_arm/end` @property **改名** `is_enabled_arm/end`（与 JoyArm 委托面同名，形态保持 @property）；`is_connected_arm/end` @property 不变（连接标志，非快照数据） |
 | ⑨ | 新增键 `cfg.joyarm.arrival_tol` | 到位判据统一容差：arm `{q: n 元列表, pos: float, rot: float}`、end `{q: n 元列表}`；缺省 0.05 / 1e-3 / 1e-2 标量广播（q 逐关节、pos/rot 单值）；消费方见 §6.7 三函数与 §6.3 到位门槛 |

@@ -2,7 +2,7 @@
 
 1. 由当前 `(q0, dq0)` 到目标 `(q1, dq1)`（`target.dq` 缺省则取 0），位置+速度四边界条件解三次多项式系数；
 2. 时长 `T` = 目标绝对时刻 − 当前时刻，采样按绝对时间求值、`τ` 钳位 `[0, T]`（超出时刻保持末状态）；目标已过期则直接发布目标为恒定段（维持终点状态）；
-3. `q` 为空或维度与 `arm_home` 不符视为无效，回退恒定保持 q_home。
+3. `q` 为空或维度与 `home_arm` 不符视为无效，回退恒定保持 q_home。
 """
 from __future__ import annotations
 
@@ -34,15 +34,16 @@ class SingleJointCubicTrajPlanner(TrajPlanner):
     def plan(self, arm, target: List[TrajFrame]) -> bool:
         """规划：单帧关节目标由当前状态解三次多项式（位置+速度四约束）。
 
-        :param arm: 机械臂对象（起点读 `arm.get_arm_state()` 的 q/dq，未连接将抛 ``RuntimeError``）。
-        :param target: 目标帧，单点或序列——仅取单帧的 `q` 与 `dq`（`dq` 为终点速度、缺省则取 0；`time` 为到达时刻，其余字段忽略）；q 为空或维度不符视为无效。
+        :param arm: 机械臂对象（起点读 `arm.get_state_arm()` 的 q/dq。
+        :param target: 目标帧，单点或序列——仅取单帧的 `q/dq`（`dq` 为终点速度、缺省则取 0）。
         :return: 是否完成规划（无效目标回退恒定 q_home 亦返回 ``True``）。
+        :raises ValueError: q 有效但目标帧 ``time`` 为 ``None``。
 
         **实现**：四约束解析系数 `c0=q0`、`c1=dq0`、`c2=(3Δq−(2·dq0+dq1)·T)/T²`、`c3=(−2Δq+(dq0+dq1)·T)/T³`（`T=time−now`）；
             无效目标发布零系数退化段（恒定 q_home），目标已过期直接恒定发布目标 q1。
         """
         targets = [target] if isinstance(target, TrajFrame) else list(target or [])
-        q_home = np.asarray(arm.arm_home, dtype=float).reshape(-1)
+        q_home = np.asarray(arm.home_arm, dtype=float).reshape(-1)
         q1: Optional[np.ndarray] = None
         if len(targets) == 1 and targets[0].q is not None:
             tq = np.asarray(targets[0].q, dtype=float).reshape(-1)
@@ -63,12 +64,23 @@ class SingleJointCubicTrajPlanner(TrajPlanner):
             zeros = np.zeros_like(q_home)
             self._seg = (now, 0.0, q_home.copy(), zeros, zeros, zeros)
             return True
+        if targets[0].time is None:
+            # q 有效但 time 缺失：属使用错误（门面 set_target_joint 的 t 必填校验，
+            # 绕过封装手写 TrajFrame 漏填）——显性报错，不得静默选定运动方向
+            raise ValueError(
+                "traj_planner_single_joint_cubic.py - SingleJointCubicTrajPlanner."
+                "plan：目标帧 time=None（cubic 规划需时间字段定 T；"
+                "请经 set_target_joint 封装设置或补全 TrajFrame.time）")
         if float(targets[0].time) <= now:
             # 目标已过期：不规划多项式，直接发布目标为恒定段（维持终点状态）
             zeros = np.zeros_like(q_home)
             self._seg = (now, 0.0, q1.copy(), zeros, zeros, zeros)
             return True
-        st = arm.get_arm_state().joint
+        st = arm.get_state_arm()
+        if st is None:
+            raise RuntimeError(
+                "traj_planner_single_joint_cubic.py - SingleJointCubicTrajPlanner."
+                "plan：get_state_arm() 返回 None（未连接或读取失败），无法取规划起点")
         q0 = np.asarray(st.q, dtype=float).reshape(-1)
         dq0 = np.asarray(st.dq, dtype=float).reshape(-1)
         dq1 = np.zeros_like(q1) if targets[0].dq is None \

@@ -16,11 +16,14 @@ from .transforms import T_to_Rp, R_to_quat, quat_to_R, Rp_to_T
 __all__ = [
     # 枚举
     "ControlMode",      # 关节控制模式：MIT / POSITION / VELOCITY
+    "MotionState",      # 运动状态机六状态：DISABLE / ZERO / HOME / MOTION / HOLD / DAMPING
+    "SafetyEvent",      # 安全事件等级：NORMAL ~ DISABLE（危险程度递增，DISABLE 最高）
     # 数据类
     "Wrench",           # 六维力/力矩：force + torque
     "Twist",            # 空间速度：linear + angular
+    "Accel",            # 空间加速度：linear + angular
     "Pose",             # 统一位姿表示：position + orientation（单位四元数）
-    "TrajFrame",        # 轨迹帧：time + pose/twist/wrench + q/dq/tau（纯数据）
+    "TrajFrame",        # 轨迹帧：time + pose/twist/accel/wrench + q/dq/ddq/tau（纯数据）
     "JointState",       # 关节状态：q/dq/tau + 温度 + error（含 t）
     "TcpState",         # 工具中心点状态：pose + twist + wrench
     "ArmState",         # 机械臂状态：joint + tcp + mode + timestamp + errors
@@ -37,8 +40,6 @@ __all__ = [
 class ControlMode(Enum):
     """关节控制模式
 
-    下发指令时，``JoyArm.set_arm_command()`` 根据 mode 调用 backend 的不同方法。
-
     :cvar MIT: MIT 模式，下发 ``(tau, q, dq, kp, kd)``，纯力矩经 MIT（``kp=kd=0``，仅前馈``tau_ff``）实现。
     :cvar POSITION: 位置模式，下发目标关节角 ``q``。
     :cvar VELOCITY: 速度模式，下发目标关节速度 ``dq``。
@@ -47,6 +48,59 @@ class ControlMode(Enum):
     MIT = "mit"
     POSITION = "position"
     VELOCITY = "velocity"
+
+
+class MotionState(Enum):
+    """运动状态机（MotionFSM）六状态
+
+    `HOME` 为中枢状态，其他状态与其均直达。
+
+    :cvar DISABLE: 失能——每拍轮发失能指令。
+    :cvar ZERO: 零位失能——发零位位置指令，到位后失能维持。
+    :cvar HOME: 空闲保持——逐拍发 home 位形位置指令的空闲状态。
+    :cvar MOTION: 正常运动——正常运动状态。
+    :cvar HOLD: 原位锁定——逐拍重发锁定的关节位置指令。
+    :cvar DAMPING: 阻尼防护——MIT 纯阻尼软防护。
+    """
+
+    DISABLE = "disable"
+    ZERO = "zero"
+    HOME = "home"
+    MOTION = "motion"
+    HOLD = "hold"
+    DAMPING = "damping"
+
+
+class SafetyEvent(Enum):
+    """安全事件等级（危险程度递增，``DISABLE`` 最高）
+
+    事件表达安全监视层的判定（要求进入的降级等级），状态机按`事件 → 目标 MotionState` 映射执行转移：
+
+    ==================  ============  ==================
+    SafetyEvent         语义            目标 MotionState
+    ==================  ============  ==================
+    `NORMAL`            运行正常        `MOTION`
+    `HOLDING`           原位锁定        `HOLD`
+    `HOMING`            回退锁定        `HOME`
+    `ZEROING`           回零失能        `ZERO`
+    `DAMPING`           阻尼防护        `DAMPING`
+    `DISABLE`           电机失能        `DISABLE`
+    ==================  ============  ==================
+
+    :cvar NORMAL: 运行正常（最低危险级）。
+    :cvar HOLDING: 原位锁定。
+    :cvar HOMING: 回退锁定。
+    :cvar ZEROING: 回零失能。
+    :cvar DAMPING: 阻尼防护。
+    :cvar DISABLE: 电机失能（最高危险级）。
+    """
+
+    NORMAL = "normal"
+    HOLDING = "holding"
+    HOMING = "homing"
+    ZEROING = "zeroing"
+    DAMPING = "damping"
+    DISABLE = "disable"
 
 
 # ============================================================
@@ -105,6 +159,20 @@ class Twist(_ArrayEqMixin):
 
 
 @dataclass(eq=False)
+class Accel(_ArrayEqMixin):
+    """空间加速度
+
+    与 :class:`Twist` 成对同构，结构一致。
+
+    :ivar linear: ``(3,)`` 线加速度，单位 m/s²。
+    :ivar angular: ``(3,)`` 角加速度，单位 rad/s²。
+    """
+
+    linear: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    angular: np.ndarray = field(default_factory=lambda: np.zeros(3))
+
+
+@dataclass(eq=False)
 class Pose(_ArrayEqMixin):
     """统一位姿表示
 
@@ -140,7 +208,8 @@ class TrajFrame(_ArrayEqMixin):
     :ivar time: 绝对时间戳，Unix 秒。
     :ivar pose: 末端位姿参考（笛卡尔任务）。
     :ivar twist: 末端速度参考。
-    :ivar wrench: 末端力/力矩参考（力控任务）。
+    :ivar accel: 末端加速度参考。
+    :ivar wrench: 末端力/力矩参考。
     :ivar q: ``(n,)`` 关节位置参考，弧度。
     :ivar dq: ``(n,)`` 关节速度参考，弧度/秒。
     :ivar ddq: ``(n,)`` 关节加速度参考，弧度/秒²。
@@ -150,6 +219,7 @@ class TrajFrame(_ArrayEqMixin):
     time: Optional[float] = None
     pose: Optional[Pose] = None
     twist: Optional[Twist] = None
+    accel: Optional[Accel] = None
     wrench: Optional[Wrench] = None
     q: Optional[np.ndarray] = None
     dq: Optional[np.ndarray] = None
@@ -218,8 +288,8 @@ class JointLimits(_ArrayEqMixin):
 
     所有数组维度均为 ``(n,)``，``n`` 为机械臂自由度数。
 
-    - **硬限位**实例（如 ``JoyArm.arm_limits``）：URDF/电机物理极限；
-    - **软限位**实例（如 ``JoyArm.arm_limits_soft``）：略窄于硬限位、留余量。
+    - **硬限位**实例（如 ``JoyArm.joint_limits_hard_arm``）：URDF/电机物理极限；
+    - **软限位**实例（如 ``JoyArm.joint_limits_soft_arm``）：略窄于硬限位、留余量。
 
     :ivar q_min: ``(n,)`` 关节角下限，弧度（不限位为 ``-inf``）。
     :ivar q_max: ``(n,)`` 关节角上限，弧度（不限位为 ``inf``）。

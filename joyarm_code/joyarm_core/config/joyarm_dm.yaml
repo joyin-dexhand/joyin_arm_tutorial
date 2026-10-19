@@ -50,15 +50,15 @@ joyarm:
 
   # end_frame 系三维位置空间限位
   tcp_limits:                                                                               # ！ 待标定
-    workspace_box: [[-0.2, -0.6, 0.05], [0.7, 0.6, 0.8]] # [min, max] (m)
+    workspace_box: [[-0.2, 0.7], [-0.6, 0.6], [0.05, 0.8]] # 3 行 [min, max]，对应 x/y/z (m)
     v_lin_max: 1.0 # m/s
     v_ang_max: 3.0 # rad/s
     f_max: 10.0 # N
     t_max: 3.0 # N·m
 
   # home 位形（rad）。zero/neutral 由代码实现，neural为软限位中点，zero为全零位形
-  home_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]                                                   # ！ 待标定
-  home_end: [-4.0]
+  home_arm: [0.0, -1.0, -1.0, -0.5, 0.0, 0.0]
+  home_end: [-3.0]
 
   # 运行参数
   runtime:                                                                                   # ！ 待标定
@@ -66,6 +66,21 @@ joyarm:
     state_stale_timeout: 0.15 # 缓存数据过期阈值 s
     move_poll_interval: 0.05 # 到位轮询间隔 s
     move_wait_timeout: 10.0 # 运动等待超时 s
+
+  # 运动状态机（MotionFSM）
+  MotionFSM:
+    fsm_hz: 50.0 # 主循环频率 Hz
+    mit_kd_damping: 4.0 # 阻尼模式 kd
+    monitor_hz: 50.0 # 运动过程监测频率
+
+  # 到位判断容差阈值
+  arrival_tol:
+    arm: # 本体：六关节逐关节角容差 + 末端位置/姿态容差
+      q: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05] # rad
+      pos: 0.001 # m
+      rot: 0.01 # rad
+    end: # 末端：逐关节角容差
+      q: [0.05] # rad
 
 # ===================================================================
 # 算法层（robotics）：求解器/规划器/控制律（JoyArm 策略成员，按 REGISTRY 注册名加载激活）；

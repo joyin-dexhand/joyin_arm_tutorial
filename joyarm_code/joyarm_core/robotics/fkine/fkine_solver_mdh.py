@@ -1,7 +1,7 @@
 """MdhFkineSolver —— MDH 参数白盒正运动学（教学实现）。
 
 1. 由 config `arm_mdh`（6×4：α/a/d/θ）逐关节连乘齐次变换得 T_06，再右乘 `T_linkn_endtcp` 得末端位姿；
-2. 仅支持末端帧（`frame` 须为 `arm.ee_frame_name`），其余帧抛 ``ValueError``。
+2. 仅支持末端帧（`frame` 须为 cfg ``joyarm.frame_end``），其余帧抛 ``ValueError``。
 """
 from __future__ import annotations
 
@@ -49,22 +49,21 @@ class MdhFkineSolver(FkineSolver):
     def solve(self, arm, q: np.ndarray, frame) -> Pose:
         """正运动学求解：frame_end_tcp 相对于基座的位姿。"""
         model = arm.pin_model
+        joyarm_config = arm.get_config()["joyarm"]
 
         frame_id = (
             int(frame)
             if isinstance(frame, (int, np.integer))
             else model.getFrameId(str(frame))
         )
-        end_id = model.getFrameId(arm.ee_frame_name)
+        ee_frame = str(joyarm_config["frame_end"])   # 末端帧名（cfg joyarm.frame_end）
+        end_id = model.getFrameId(ee_frame)
 
         if frame_id != end_id:
             raise ValueError(
                 "fkine_solver_mdh.py - MdhFkineSolver.frame_pose："
-                f"目前仅支持末端帧 {arm.ee_frame_name!r}，实际为 {frame!r}"
+                f"目前仅支持末端帧 {ee_frame!r}，实际为 {frame!r}"
             )
-
-        config = arm.get_config()
-        joyarm_config = config["joyarm"]
 
         mdh = np.asarray(joyarm_config["arm_mdh"], dtype=float)
         T_06 = _fkine_mdh(mdh, q)

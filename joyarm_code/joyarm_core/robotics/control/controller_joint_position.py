@@ -1,6 +1,6 @@
 """JointPositionController —— 关节位置控制器（默认实现）。
 
-激活位置模式；在关节空间跟踪当前轨迹帧的 `q`。
+经位置指令（``send_position_arm``）下发；在关节空间跟踪当前轨迹帧的 `q`。
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ _WARN_INTERVAL: float = 0.5    # 步长裁剪告警节流（秒）
 
 
 class JointPositionController(Controller):
-    """控制默认实现：位置模式逐周期跟踪当前轨迹帧的关节位置参考。"""
+    """控制默认实现：逐周期经 ``send_position_arm`` 下发位置指令，跟踪当前轨迹帧的关节位置参考。"""
 
     MODE = ControlMode.POSITION
 
@@ -45,5 +45,5 @@ class JointPositionController(Controller):
             raise ValueError(                               # NaN 兜底：拒绝下发
                 "controller_joint_position.py - JointPositionController."
                 "step：当前轨迹帧 q 含非有限值（NaN/inf），拒绝下发")
-        arm.set_arm_command(ControlMode.POSITION, q=q_ref)
+        arm.send_position_arm(q_ref)
         return True

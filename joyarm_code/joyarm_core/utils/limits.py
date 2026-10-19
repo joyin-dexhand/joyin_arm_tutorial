@@ -52,11 +52,9 @@ def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
 # 限位构建（硬限位 / 软限位 / 末端空间限位）
 # ============================================================
 def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
-    """从 config 关节条目列表解析**硬限位**（arm/end 同构；空列表返回 ``None``）。
+    """从 config 关节条目列表解析**硬限位**（arm/end 同构；空列表返回 `None`）。
 
-    ``q_min``/``q_max``/``dq_max``/``tau_max``（rad / rad/s / N·m，）。
-    ``arm_limits``/``end_limits`` 均由此解析。
-    NaN/inf 键值回退为未限位（±inf）并 warn；``q_min > q_max`` 属配置错误，值保留不阻断、仅启动 warn 提示。
+    `q_min`/`q_max`/`dq_max`/`tau_max`（rad / rad/s / N·m，）。
 
     :param joint_cfgs: ``backend.arm.joints`` / ``backend.end.joints`` 条目列表。
     """
@@ -109,8 +107,6 @@ def rand_within_limits(limits: JointLimits, size: Optional[int] = None,
 
 def soft_limits_from_cfg(cfg: dict, n: int) -> JointLimits:
     """从 config 四键**直值**字典解析软限位。
-
-    ``arm_limits_soft`` / ``end_limits_soft``均由此解析，且须位于对应硬限位内。
 
     :param cfg: 四键字典 ``{"q_min", "q_max", "dq_max", "tau_max"}``，每键为标量或n元列表。
     :param n: 关节数。

@@ -335,7 +335,7 @@ class AnalyticIkineSolver(IkineSolver):
                                 **kwargs)
         if not result.success:
             return result
-        limits = arm.arm_limits_soft
+        limits = arm.joint_limits_soft_arm
         return self._select_nearest(
             result.q,
             np.asarray(q0, dtype=float),
@@ -357,23 +357,24 @@ class AnalyticIkineSolver(IkineSolver):
         计算顺序：移除 TCP 固定变换 → q1 → (phi, q5, q6) → (q2, q3, q4)。
         逐关节加减整圈，尽量将角度移入硬限位；本方法不剔除越限解。
         :param target: TCP 目标位姿。
-        :param frame: 配置的末端帧名称或索引（缺省取 `arm.ee_frame_name`），
+        :param frame: 配置的末端帧名称或索引（缺省取 cfg ``joyarm.frame_end``），
             其他帧不支持。
         :param tol: 位置误差范数与姿态误差角之和的允许上限。
         :return: IKResult，q 为 (K,6)，K <= 8；无解时为 (0,6)。
         :raises ValueError: 请求的帧不是配置的末端帧。
         """
         q6_ref = float(kwargs.pop("q6_ref", 0.0))
+        ee_frame = str(arm.get_config()["joyarm"]["frame_end"])
         if frame is None:
-            frame = arm.ee_frame_name   # 基类契约 solve_all(arm, pose, **kw) 不传 frame
+            frame = ee_frame   # 基类契约 solve_all(arm, pose, **kw) 不传 frame
         model = arm.pin_model
-        end_id = model.getFrameId(arm.ee_frame_name)
+        end_id = model.getFrameId(ee_frame)
         frame_id = int(frame) if isinstance(frame, (int, np.integer)) \
             else model.getFrameId(str(frame))
         if frame_id != end_id:
             raise ValueError(
                 "ikine_solver_analytic.py - AnalyticIkineSolver："
-                f"仅支持配置的末端帧 {arm.ee_frame_name!r}，实际为 {frame!r}"
+                f"仅支持配置的末端帧 {ee_frame!r}，实际为 {frame!r}"
             )
 
         mdh, T_e6 = self._prepare(arm)
@@ -385,7 +386,7 @@ class AnalyticIkineSolver(IkineSolver):
                 for q2, q3, q4 in _solve_q234(mdh, T_06[:3, 3], q1, phi):
                     raw.append(np.array([q1, q2, q3, q4, q5, q6]))
 
-        limits = arm.arm_limits
+        limits = arm.joint_limits_hard_arm
         solutions = []
         errors = []
         for q in raw:

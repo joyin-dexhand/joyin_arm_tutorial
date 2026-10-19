@@ -85,7 +85,7 @@ class BackendTemplate(Backend):
         # self._n_joints_arm / _n_joints_end         arm/end 关节数
         # self._joint_limits_arm / _joint_limits_end 硬限位 JointLimits（q_min/q_max/dq_max/tau_max 四个(n,) 向量，±inf=无限制）
         # self._pos_kp/_pos_ki/_vel_kp/_vel_ki × arm/end（8 个 (n,)）  POS_VEL 增益，设模式写增益寄存器时直取（缺配置 NaN）
-        # self._joint_state_arm / _joint_state_end   私有状态对象（属性 joint_state_* 对外只读）
+        # self._joint_state_arm / _joint_state_end   私有状态快照（基类刷新线程维护）
 
         # ---- 其余基类私有成员（基类自管理：按需借用，勿重复解析 cfg；状态缓存类只读、勿直接改写）----
         # self._kp/_kd_mit_default × arm/end（4 个 (n,)）   MIT 发送默认（cfg MIT.kp/kd）

@@ -32,6 +32,7 @@ from .utils.types import (
     JointState,
     Wrench,
     Twist,
+    Accel,
     Pose,
     TrajFrame,
     JointLimits,
@@ -39,6 +40,8 @@ from .utils.types import (
     IKResult,
     ComplianceParams,
     ControlMode,
+    MotionState,
+    SafetyEvent,
 )
 from .utils.transforms import (
     rot_x,
@@ -90,7 +93,7 @@ from .backend import (
 
 # ---- JoyArm 类 + 对象创建入口 ----
 from .joyarm.joyarm import JoyArm
-from .joyarm import JoyArmFactory, joyArm
+from .joyarm import JoyArmFactory, joyArm, listArm
 
 __all__ = [
     # 版本
@@ -101,6 +104,7 @@ __all__ = [
     "JointState",
     "Wrench",
     "Twist",
+    "Accel",
     "Pose",
     "TrajFrame",
     "JointLimits",
@@ -108,6 +112,8 @@ __all__ = [
     "IKResult",
     "ComplianceParams",
     "ControlMode",
+    "MotionState",
+    "SafetyEvent",
     # 共享工具：数学 / 接口
     "rot_x",
     "rot_y",
@@ -142,6 +148,7 @@ __all__ = [
     "JoyArm",
     "JoyArmFactory",
     "joyArm",
+    "listArm",
     # 求解器接口
     "FkineSolver",
     "IkineSolver",

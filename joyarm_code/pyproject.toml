@@ -9,7 +9,6 @@ description = "sdk-ros2-chapt code for JoyArm"
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = [
-    "meshcat>=0.3.2",
     "pin>=3.9.0",
     "pyyaml>=6.0",
     "matplotlib>=3.10.0",
@@ -18,6 +17,9 @@ dependencies = [
     "pyserial>=3.5",
     "mujoco>=3.13.0",
 ]
+
+[project.optional-dependencies] # 可视化可选依赖组（`uv sync --extra vis` / `pip install .[vis]` 安装）
+vis = ["meshcat>=0.3.2"]
 
 [tool.setuptools.packages.find] # 平铺布局多顶层目录，显式只打包核心 SDK
 include = ["joyarm_core*"]

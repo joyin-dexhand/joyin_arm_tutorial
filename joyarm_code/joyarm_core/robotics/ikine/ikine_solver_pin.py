@@ -49,7 +49,7 @@ class PinIkineSolver(IkineSolver):
               tol: float = 1e-3, iters: int = 200, **kwargs) -> IKResult:
         """求单组解（数值法）。
 
-        :param arm: 机械臂对象。
+        :param arm: 机械臂对象（消费 `arm.pin_model` 与 `arm.joint_limits_soft_arm`）。
         :param pose: 目标位姿 `Pose`（xyz + 四元数）。
         :param frame: 目标帧名（``str``）。
         :param q0: `(n,)` 关节角迭代起点，弧度——单起点失败时限位内随机重启。
@@ -63,7 +63,7 @@ class PinIkineSolver(IkineSolver):
         model = arm.pin_model
         data = pin.Data(model)      # 整个求解一份私有 Data（迭代内复用、不共享）
         fid = _frame_id(model, frame)
-        limits = arm.arm_limits
+        limits = arm.joint_limits_soft_arm
         T_ref = pose.T
         starts = [np.asarray(q0, dtype=float).reshape(-1)]
         if limits is not None:                              # 无限位声明则不重启

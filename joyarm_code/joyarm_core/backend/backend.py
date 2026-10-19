@@ -24,6 +24,8 @@ import threading
 import time
 import weakref
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Optional, Union
 
 import numpy as np
@@ -131,8 +133,9 @@ class Backend(ABC):
         self._joint_feedback_id_end = [j.get("feedback_id") for j in self._jointscfg_end]
         self._joint_model_arm = [j.get("model") for j in self._jointscfg_arm]
         self._joint_model_end = [j.get("model") for j in self._jointscfg_end]
-        self._joint_limits_arm = limits_from_joint_cfgs(self._jointscfg_arm)
-        self._joint_limits_end = limits_from_joint_cfgs(self._jointscfg_end)
+        # 限位构造只读化（arm/end 统一）：joint_limits_* @property 零拷贝返回本体，外部改动抛异常
+        self._joint_limits_arm = self._freeze_joint_limits(limits_from_joint_cfgs(self._jointscfg_arm))
+        self._joint_limits_end = self._freeze_joint_limits(limits_from_joint_cfgs(self._jointscfg_end))
         self._n_joints_arm, self._n_joints_end = len(self._jointscfg_arm), len(self._jointscfg_end)
         # 状态按关节数定维：t 填 0、物理量填 NaN、error 填 -1，表示未读取；逐关节模式缓存填 None（未读取）
         self._joint_state_arm = JointState(t=0.0,
@@ -838,73 +841,57 @@ class Backend(ABC):
     # ============================================================
     # 控制指令发送（使能）
     # ============================================================
-    def send_mit_arm(self, tau, q, dq, kp=None, kd=None) -> None:
+    def send_mit_arm(self, q, dq=None, tau=None, kp=None, kd=None) -> None:
         """arm MIT 指令（电机内部 ``τ = tau + kp·(q_d−q) + kd·(dq_d−dq)``），整组下发。
 
-        :param tau: 前馈力矩 ``(n,)``，N·m。
-        :param q: 位置目标 ``(n,)``，rad。
-        :param dq: 速度目标 ``(n,)``，rad/s。
-        :param kp: 位置增益 ``(n,)``；缺省用 cfg ``MIT.kp`` 提取的默认值。
-        :param kd: 速度阻尼 ``(n,)``；缺省用 cfg ``MIT.kd`` 提取的默认值。
+        ``q`` 必填 ``(n,)`` rad；``dq``/``tau`` 缺省置 ``zeros(n)``；``kp``/``kd`` 缺省取 ``_kp_mit_default_arm`` / ``_kd_mit_default_arm``。
+        签名以 ``None`` 占位系 Python 限制（默认值在 ``def`` 时求值、不能引用实例成员），故在此处直接解析为成员值；校验全在 impl。
         """
-        if kp is None:
-            kp = self._kp_mit_default_arm
-        if kd is None:
-            kd = self._kd_mit_default_arm
+        n = self._n_joints_arm
+        dq = np.zeros(n) if dq is None else dq
+        tau = np.zeros(n) if tau is None else tau
+        kp = self._kp_mit_default_arm if kp is None else kp
+        kd = self._kd_mit_default_arm if kd is None else kd
         self._send_mit_impl("arm", tau, q, dq, kp, kd)
 
     def send_position_arm(self, q, vlim=None, flim=None) -> None:
         """arm 位置指令整组下发。
 
-        :param q: 位置目标 ``(n,)``，rad。
-        :param vlim: 速度上限 ``(n,)``，rad/s；缺省用 cfg ``POS_VEL.vlim`` 提取的默认值。
-        :param flim: 归一化力矩电流上限 ``(n,)``（0~1）；缺省用 cfg ``POS_VEL.flim`` 提取的默认值。
+        ``q`` 必填 ``(n,)`` rad；``vlim``/``flim`` 缺省取 ``_vlim_default_arm``/``_flim_default_arm``。
         """
-        if vlim is None:
-            vlim = self._vlim_default_arm
-        if flim is None:
-            flim = self._flim_default_arm
+        vlim = self._vlim_default_arm if vlim is None else vlim
+        flim = self._flim_default_arm if flim is None else flim
         self._send_position_impl("arm", q, vlim, flim)
 
     def send_vel_arm(self, dq) -> None:
         """arm 速度指令整组下发。
-
-        :param dq: 速度目标 ``(n,)``，rad/s。
         """
         self._send_vel_impl("arm", dq)
 
-    def send_mit_end(self, tau, q, dq, kp=None, kd=None) -> None:
+    def send_mit_end(self, q, dq=None, tau=None, kp=None, kd=None) -> None:
         """end MIT 指令（电机内部 ``τ = tau + kp·(q_d−q) + kd·(dq_d−dq)``），整组下发。
 
-        :param tau: 前馈力矩 ``(n,)``，N·m。
-        :param q: 位置目标 ``(n,)``，rad。
-        :param dq: 速度目标 ``(n,)``，rad/s。
-        :param kp: 位置增益 ``(n,)``；缺省用 cfg ``MIT.kp`` 提取的默认值。
-        :param kd: 速度阻尼 ``(n,)``；缺省用 cfg ``MIT.kd`` 提取的默认值。
+        ``q`` 必填 ``(n,)`` rad；``dq``/``tau`` 缺省置 ``zeros(n)``；``kp``/``kd`` 缺省取 ``_kp_mit_default_end`` / ``_kd_mit_default_end``。
+        签名以 ``None`` 占位系 Python 限制（默认值在 ``def`` 时求值、不能引用实例成员），故在此处直接解析为成员值；校验全在 impl。
         """
-        if kp is None:
-            kp = self._kp_mit_default_end
-        if kd is None:
-            kd = self._kd_mit_default_end
+        n = self._n_joints_end
+        dq = np.zeros(n) if dq is None else dq
+        tau = np.zeros(n) if tau is None else tau
+        kp = self._kp_mit_default_end if kp is None else kp
+        kd = self._kd_mit_default_end if kd is None else kd
         self._send_mit_impl("end", tau, q, dq, kp, kd)
 
     def send_position_end(self, q, vlim=None, flim=None) -> None:
         """end 位置指令整组下发。
 
-        :param q: 位置目标 ``(n,)``，rad。
-        :param vlim: 速度上限 ``(n,)``，rad/s；缺省用 cfg ``POS_VEL.vlim`` 提取的默认值。
-        :param flim: 归一化力矩电流上限 ``(n,)``（0~1）；缺省用 cfg ``POS_VEL.flim`` 提取的默认值。
+        ``q`` 必填 ``(n,)`` rad；``vlim``/``flim`` 缺省取 ``_vlim_default_end``/``_flim_default_end``。
         """
-        if vlim is None:
-            vlim = self._vlim_default_end
-        if flim is None:
-            flim = self._flim_default_end
+        vlim = self._vlim_default_end if vlim is None else vlim
+        flim = self._flim_default_end if flim is None else flim
         self._send_position_impl("end", q, vlim, flim)
 
     def send_vel_end(self, dq) -> None:
         """end 速度指令整组下发。
-
-        :param dq: 速度目标 ``(n,)``，rad/s。
         """
         self._send_vel_impl("end", dq)
 
@@ -926,7 +913,7 @@ class Backend(ABC):
         if self._skip_empty_family(family, f"send_mit_{family}"):
             return
         # ① 维度校验（不符 → warn 跳过本次发送）
-        n = self._n(family)
+        n = self._n_joints_arm if family == "arm" else self._n_joints_end
         arrs = [self._to_float_arr(x, f"send_mit_{family}") for x in (tau, q, dq, kp, kd)]
         if any(a is None for a in arrs):
             return
@@ -969,7 +956,7 @@ class Backend(ABC):
         if self._skip_empty_family(family, f"send_position_{family}"):
             return
         # ① 维度校验（不符 → warn 跳过本次发送）
-        n = self._n(family)
+        n = self._n_joints_arm if family == "arm" else self._n_joints_end
         arrs = [self._to_float_arr(x, f"send_position_{family}") for x in (q, vlim, flim)]
         if any(a is None for a in arrs):
             return
@@ -1012,7 +999,7 @@ class Backend(ABC):
         if self._skip_empty_family(family, f"send_vel_{family}"):
             return
         # ① 维度校验（不符 → warn 跳过本次发送）
-        n = self._n(family)
+        n = self._n_joints_arm if family == "arm" else self._n_joints_end
         dq = self._to_float_arr(dq, f"send_vel_{family}")
         if dq is None:
             return
@@ -1181,9 +1168,9 @@ class Backend(ABC):
     # 外部属性访问（供 joyarm 上层读取内部成员，返回实时引用）
     # ============================================================
     @property
-    def cfg(self) -> dict:
-        """config 的 ``backend`` 段整体（含 ``name``；实时引用）。"""
-        return self._cfg
+    def cfg(self) -> Mapping:
+        """config 的 `backend` 段整体；`MappingProxyType` 只读。"""
+        return MappingProxyType(self._cfg)
 
     @property
     def name(self) -> str:
@@ -1222,17 +1209,36 @@ class Backend(ABC):
 
     @property
     def joint_limits_arm(self) -> Optional[JointLimits]:
-        """arm 硬限位（发送越限裁剪的唯一依据；无 arm 段为 ``None``）。"""
+        """arm 硬限位（发送越限裁剪的唯一依据；无 arm 段为 ``None``）。
+
+        只读引用，返本体零拷贝，外部更改抛异常。
+        """
         return self._joint_limits_arm
 
     @property
     def joint_limits_end(self) -> Optional[JointLimits]:
-        """end 硬限位（无 end 段为 ``None``）。"""
+        """end 硬限位（无 end 段为 ``None``）。
+
+        只读引用，返本体零拷贝，外部更改抛异常。
+        """
         return self._joint_limits_end
 
     # ============================================================
     # 内部助手（仅基类使用）
     # ============================================================
+    @staticmethod
+    def _freeze_joint_limits(limits: Optional[JointLimits]) -> Optional[JointLimits]:
+        """硬限位只读化：``JointLimits`` 内部 ndarray 字段全部置 ``writeable=False`` 后原样返回（空组 ``None`` 直通）。
+
+        配套 ``joint_limits_arm/end`` @property 零拷贝返回本体：外部写入则抛 ``ValueError``。
+        """
+        if limits is None:
+            return None
+        for v in vars(limits).values():
+            if isinstance(v, np.ndarray):
+                v.flags.writeable = False
+        return limits
+
     def _n(self, family: str) -> int:
         """组（``"arm"`` / ``"end"``）的关节数（读 ``_n_joints_{family}`` 成员）。"""
         return getattr(self, f"_n_joints_{family}")
