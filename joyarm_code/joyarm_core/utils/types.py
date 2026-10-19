@@ -1,6 +1,6 @@
 """共享数据类型与枚举。
 
-定义全库复用的数据类型（可变 ``@dataclass`` 快照）与枚举（``enum``），
+定义全库复用的数据类型（可变 `@dataclass` 快照）与枚举（`enum`），
 所有模块统一引用此处定义的类型，杜绝重复定义。
 
 """
@@ -40,9 +40,9 @@ __all__ = [
 class ControlMode(Enum):
     """关节控制模式
 
-    :cvar MIT: MIT 模式，下发 ``(tau, q, dq, kp, kd)``，纯力矩经 MIT（``kp=kd=0``，仅前馈``tau_ff``）实现。
-    :cvar POSITION: 位置模式，下发目标关节角 ``q``。
-    :cvar VELOCITY: 速度模式，下发目标关节速度 ``dq``。
+    :cvar MIT: MIT 模式，下发 `(tau, q, dq, kp, kd)`，纯力矩经 MIT（`kp=kd=0`，仅前馈`tau_ff`）实现。
+    :cvar POSITION: 位置模式，下发目标关节角 `q`。
+    :cvar VELOCITY: 速度模式，下发目标关节速度 `dq`。
     """
 
     MIT = "mit"
@@ -72,7 +72,7 @@ class MotionState(Enum):
 
 
 class SafetyEvent(Enum):
-    """安全事件等级（危险程度递增，``DISABLE`` 最高）
+    """安全事件等级（危险程度递增，`DISABLE` 最高）
 
     事件表达安全监视层的判定（要求进入的降级等级），状态机按`事件 → 目标 MotionState` 映射执行转移：
 
@@ -107,14 +107,14 @@ class SafetyEvent(Enum):
 # 数据类公共基类
 # ============================================================
 class _ArrayEqMixin:
-    """ndarray 字段安全的 ``__eq__``。
+    """ndarray 字段安全的 `__eq__`。
 
-    dataclass 默认 ``__eq__`` 逐字段 ``==`` 比较，遇 ``np.ndarray`` 因布尔
-    歧义抛 ``ValueError``；本混入改为 ndarray 字段用
-    :func:`np.array_equal`（``equal_nan=True``），其余字段用 ``==``。
+    dataclass 默认 `__eq__` 逐字段 `==` 比较，遇 `np.ndarray` 因布尔
+    歧义抛 `ValueError`；本混入改为 ndarray 字段用
+    :func:`np.array_equal`（`equal_nan=True`），其余字段用 `==`。
 
-    .. note:: 子类须以 ``@dataclass(eq=False)`` 声明，否则 dataclass
-       自动生成的 ``__eq__`` 会覆盖本混入。
+    .. note:: 子类须以 `@dataclass(eq=False)` 声明，否则 dataclass
+       自动生成的 `__eq__` 会覆盖本混入。
     """
 
     def __eq__(self, other: object) -> bool:
@@ -138,8 +138,8 @@ class _ArrayEqMixin:
 class Wrench(_ArrayEqMixin):
     """六维力/力矩。
 
-    :ivar force: ``(3,)`` 力向量，单位 N。
-    :ivar torque: ``(3,)`` 力矩向量，单位 N·m。
+    :ivar force: `(3,)` 力向量，单位 N。
+    :ivar torque: `(3,)` 力矩向量，单位 N·m。
     """
 
     force: np.ndarray = field(default_factory=lambda: np.zeros(3))
@@ -150,8 +150,8 @@ class Wrench(_ArrayEqMixin):
 class Twist(_ArrayEqMixin):
     """空间速度
 
-    :ivar linear: ``(3,)`` 线速度，单位 m/s。
-    :ivar angular: ``(3,)`` 角速度，单位 rad/s。
+    :ivar linear: `(3,)` 线速度，单位 m/s。
+    :ivar angular: `(3,)` 角速度，单位 rad/s。
     """
 
     linear: np.ndarray = field(default_factory=lambda: np.zeros(3))
@@ -164,8 +164,8 @@ class Accel(_ArrayEqMixin):
 
     与 :class:`Twist` 成对同构，结构一致。
 
-    :ivar linear: ``(3,)`` 线加速度，单位 m/s²。
-    :ivar angular: ``(3,)`` 角加速度，单位 rad/s²。
+    :ivar linear: `(3,)` 线加速度，单位 m/s²。
+    :ivar angular: `(3,)` 角加速度，单位 rad/s²。
     """
 
     linear: np.ndarray = field(default_factory=lambda: np.zeros(3))
@@ -177,11 +177,11 @@ class Pose(_ArrayEqMixin):
     """统一位姿表示
 
     以 position(3) + orientation（单位四元数 4） 存储，与 ROS2
-    ``geometry_msgs/Pose`` 语义对齐。正运动学等内部计算仍用 4×4 齐次矩阵 ``T``，
+    `geometry_msgs/Pose` 语义对齐。正运动学等内部计算仍用 4×4 齐次矩阵 `T`，
     通过 :meth:`from_T` / :attr:`T` 在两表示间互转。
 
-    :ivar position: ``(3,)`` 位置向量 ``[x, y, z]``。
-    :ivar orientation: ``(4,)`` 单位四元数，``(w, x, y, z)`` 实部在前。
+    :ivar position: `(3,)` 位置向量 `[x, y, z]`。
+    :ivar orientation: `(4,)` 单位四元数，`(w, x, y, z)` 实部在前。
     """
 
     position: np.ndarray = field(default_factory=lambda: np.zeros(3))
@@ -210,10 +210,10 @@ class TrajFrame(_ArrayEqMixin):
     :ivar twist: 末端速度参考。
     :ivar accel: 末端加速度参考。
     :ivar wrench: 末端力/力矩参考。
-    :ivar q: ``(n,)`` 关节位置参考，弧度。
-    :ivar dq: ``(n,)`` 关节速度参考，弧度/秒。
-    :ivar ddq: ``(n,)`` 关节加速度参考，弧度/秒²。
-    :ivar tau: ``(n,)`` 前馈力矩，N·m。
+    :ivar q: `(n,)` 关节位置参考，弧度。
+    :ivar dq: `(n,)` 关节速度参考，弧度/秒。
+    :ivar ddq: `(n,)` 关节加速度参考，弧度/秒²。
+    :ivar tau: `(n,)` 前馈力矩，N·m。
     """
 
     time: Optional[float] = None
@@ -232,15 +232,15 @@ class TrajFrame(_ArrayEqMixin):
 # ============================================================
 @dataclass(eq=False)
 class JointState(_ArrayEqMixin):
-    """关节层状态快照（同一 ``t`` 批次的物理量整族装配）
+    """关节层状态快照（同一 `t` 批次的物理量整族装配）
 
-    :ivar t: 本批各电机数据帧到达时刻的最早值，Unix 秒（float64 与 ``ArmState.timestamp`` 同基准；0 = 从未更新）。
-    :ivar q: ``(n,)`` 关节位置，弧度。
-    :ivar dq: ``(n,)`` 关节速度，弧度/秒。
-    :ivar tau: ``(n,)`` 关节力矩，N·m。
-    :ivar temp_mos: ``(n,)`` 驱动板（MOS）温度，℃（固件反馈帧不含时恒 0）。
-    :ivar temp_rotor: ``(n,)`` 转子（线圈）温度，℃（同上）。
-    :ivar error: ``(n,)`` int 状态码（0=失能、1=使能，均正常；2 及以上为故障码，含义随固件/型号定）。
+    :ivar t: 本批各电机数据帧到达时刻的最早值，Unix 秒（float64 与 `ArmState.timestamp` 同基准；0 = 从未更新）。
+    :ivar q: `(n,)` 关节位置，弧度。
+    :ivar dq: `(n,)` 关节速度，弧度/秒。
+    :ivar tau: `(n,)` 关节力矩，N·m。
+    :ivar temp_mos: `(n,)` 驱动板（MOS）温度，℃（固件反馈帧不含时恒 0）。
+    :ivar temp_rotor: `(n,)` 转子（线圈）温度，℃（同上）。
+    :ivar error: `(n,)` int 状态码（0=失能、1=使能，均正常；2 及以上为故障码，含义随固件/型号定）。
     """
 
     t: float = 0.0
@@ -286,15 +286,15 @@ class ArmState(_ArrayEqMixin):
 class JointLimits(_ArrayEqMixin):
     """关节限位声明
 
-    所有数组维度均为 ``(n,)``，``n`` 为机械臂自由度数。
+    所有数组维度均为 `(n,)`，`n` 为机械臂自由度数。
 
-    - **硬限位**实例（如 ``JoyArm.joint_limits_hard_arm``）：URDF/电机物理极限；
-    - **软限位**实例（如 ``JoyArm.joint_limits_soft_arm``）：略窄于硬限位、留余量。
+    - **硬限位**实例（如 `JoyArm.joint_limits_hard_arm`）：URDF/电机物理极限；
+    - **软限位**实例（如 `JoyArm.joint_limits_soft_arm`）：略窄于硬限位、留余量。
 
-    :ivar q_min: ``(n,)`` 关节角下限，弧度（不限位为 ``-inf``）。
-    :ivar q_max: ``(n,)`` 关节角上限，弧度（不限位为 ``inf``）。
-    :ivar dq_max: ``(n,)`` 关节速度上限，弧度/秒（不限位为 ``inf``）。
-    :ivar tau_max: ``(n,)`` 关节力矩上限，N·m（不限位为 ``inf``）。
+    :ivar q_min: `(n,)` 关节角下限，弧度（不限位为 `-inf`）。
+    :ivar q_max: `(n,)` 关节角上限，弧度（不限位为 `inf`）。
+    :ivar dq_max: `(n,)` 关节速度上限，弧度/秒（不限位为 `inf`）。
+    :ivar tau_max: `(n,)` 关节力矩上限，N·m（不限位为 `inf`）。
     """
 
     q_min: np.ndarray = field(default_factory=lambda: np.full(0, -np.inf))
@@ -307,11 +307,11 @@ class JointLimits(_ArrayEqMixin):
 class TcpLimits(_ArrayEqMixin):
     """末端限位声明
 
-    :ivar workspace_box: ``(3,2)`` 末端工作空间包围盒，每行 ``[min, max]`` 对应 x/y/z，单位 m（不限位为 ``None``）。
-    :ivar v_lin_max: 末端最大线速度，m/s（不限位为 ``inf``）。
-    :ivar v_ang_max: 末端最大角速度，rad/s（不限位为 ``inf``）。
-    :ivar f_max: 末端最大力，N（不限位为 ``inf``）。
-    :ivar t_max: 末端最大力矩，N·m（不限位为 ``inf``）。
+    :ivar workspace_box: `(3,2)` 末端工作空间包围盒，每行 `[min, max]` 对应 x/y/z，单位 m（不限位为 `None`）。
+    :ivar v_lin_max: 末端最大线速度，m/s（不限位为 `inf`）。
+    :ivar v_ang_max: 末端最大角速度，rad/s（不限位为 `inf`）。
+    :ivar f_max: 末端最大力，N（不限位为 `inf`）。
+    :ivar t_max: 末端最大力矩，N·m（不限位为 `inf`）。
     """
 
     workspace_box: Optional[np.ndarray] = None
@@ -328,9 +328,9 @@ class TcpLimits(_ArrayEqMixin):
 class IKResult(_ArrayEqMixin):
     """逆运动学求解结果
 
-    :ivar q: 解算得到的关节角，弧度。单解为 ``(n,)``；``solve_all`` 全解为``(K,n)``（每行一组）。
+    :ivar q: 解算得到的关节角，弧度。单解为 `(n,)`；`solve_all` 全解为`(K,n)`（每行一组）。
     :ivar success: 是否收敛到满足精度的解（全解时为"存在可行解"）。
-    :ivar err: 末端位姿误差（残差范数；``success=False`` 时数值法为最优尝试解的残差）。
+    :ivar err: 末端位姿误差（残差范数；`success=False` 时数值法为最优尝试解的残差）。
     :ivar n_iter: 迭代次数（解析法恒 0）。
     """
 
@@ -344,9 +344,9 @@ class IKResult(_ArrayEqMixin):
 class ComplianceParams(_ArrayEqMixin):
     """笛卡尔柔顺参数
 
-    :ivar K: ``(6,6)`` 刚度矩阵。
-    :ivar D: ``(6,6)`` 阻尼矩阵。
-    :ivar M: ``(6,6)`` 惯量矩阵。
+    :ivar K: `(6,6)` 刚度矩阵。
+    :ivar D: `(6,6)` 阻尼矩阵。
+    :ivar M: `(6,6)` 惯量矩阵。
     """
 
     K: np.ndarray = field(default_factory=lambda: np.eye(6))

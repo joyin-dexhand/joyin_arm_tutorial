@@ -272,9 +272,9 @@ class AnalyticIkineSolver(IkineSolver):
 
     @staticmethod
     def _shift_2pi(q: np.ndarray, q_min: np.ndarray, q_max: np.ndarray) -> np.ndarray:
-        """逐关节加 ``k·2π``（k 取最优整数），使 ``q`` 尽量落入 ``[q_min, q_max]``。
+        """逐关节加 `k·2π`（k 取最优整数），使 `q` 尽量落入 `[q_min, q_max]`。
 
-        关节限位区间窄于 ``2π`` 时可能无整数 k 可入界，此时取离区间最近的等价角。
+        关节限位区间窄于 `2π` 时可能无整数 k 可入界，此时取离区间最近的等价角。
         """
         q = np.asarray(q, dtype=float).reshape(-1)
         q_min = np.asarray(q_min, dtype=float).reshape(-1)
@@ -298,8 +298,8 @@ class AnalyticIkineSolver(IkineSolver):
                         q_min: np.ndarray, q_max: np.ndarray) -> IKResult:
         """限位剔除 + 选最近解（解析法 :meth:`solve` 的收尾逻辑）。
 
-        ``sols`` 为 ``(K,n)`` 候选解：剔除任一关节超出 ``[q_min, q_max]`` 的行，剩余行中
-        取与 ``q0`` 各关节角偏差平方和最小的一组；全部越限返回``success=False``、``q`` 为 ``None``。
+        `sols` 为 `(K,n)` 候选解：剔除任一关节超出 `[q_min, q_max]` 的行，剩余行中
+        取与 `q0` 各关节角偏差平方和最小的一组；全部越限返回`success=False`、`q` 为 `None`。
         """
         sols = np.atleast_2d(np.asarray(sols, dtype=float))
         q0 = np.asarray(q0, dtype=float).reshape(-1)
@@ -357,7 +357,7 @@ class AnalyticIkineSolver(IkineSolver):
         计算顺序：移除 TCP 固定变换 → q1 → (phi, q5, q6) → (q2, q3, q4)。
         逐关节加减整圈，尽量将角度移入硬限位；本方法不剔除越限解。
         :param target: TCP 目标位姿。
-        :param frame: 配置的末端帧名称或索引（缺省取 cfg ``joyarm.frame_end``），
+        :param frame: 配置的末端帧名称或索引（缺省取 cfg `joyarm.frame_end`），
             其他帧不支持。
         :param tol: 位置误差范数与姿态误差角之和的允许上限。
         :return: IKResult，q 为 (K,6)，K <= 8；无解时为 (0,6)。

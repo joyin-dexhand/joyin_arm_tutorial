@@ -15,7 +15,7 @@
 
 ## 2 工厂 joyArm 与 listArm
 
-`joyArm(name: str)` 负责构造前的外部资源校验，四步固定顺序；任一步失败**抛携带具体原因的异常**（不返回 None），错误消息附可用型号列表（= `listArm()` 结果）。四步全过则 `logger.info`『创建成功』（含型号名）。调用方式保持 `from joyarm_core import joyArm; joyArm("joyarm_dm")`。chapt 脚本现按 `None` 判失败的写法适配为后续配套项。
+`joyArm(name: str)` 负责构造前的外部资源校验，四步固定顺序；任一步失败**抛携带具体原因的异常**（不返回 None），错误消息附可用型号列表（= `listArm()` 结果）。四步全过则 `logger.info`『创建成功』（含型号名）。调用方式保持 `from joyarm_core import joyArm; joyArm("joyarm_dm")`。
 
 | 步骤 | 校验内容 | 失败消息要素 |
 |:---:|:---:|:---:|
@@ -112,28 +112,30 @@ cfg 自检通过后：
 
 除注明外均为**直接委托、透传参数与返回值**（backend 签名按 `backend.py` 现状）；JoyArm 不重复实现 backend 已有的校验与门禁。动态数据（控制模式、关节状态快照）一律经 `get_*` 方法**读时刷新**；joyarm 和 backend 不保留直返私有缓存的 `mode_arm/end`、`joint_state_arm/end` @property（删除，§10⑧，防陈旧读）。
 
+**FSM 外部指令互斥**：FSM 运行期，arm 侧指令类公开方法被**外部线程**调用时空操作 + warn——`enable/disable/set_mode/set_zero` 返回 0、`clear_error` 返回 False、`send_mit/send_position/send_vel` 的 `_arm` 变体空操作；JoyArm 自家 ctrl 线程自身豁免（照常委托下发）；end 侧方法、参数读写、状态读取等只读/非 arm 指令接口不受互斥。
+
 ### 4.1 委托面方法总表
 
 | JoyArm 方法 | backend 方法 | 参数 → 返回 | 细则 |
 |:---:|:---:|:---:|:---:|
 | `connect_arm/end` | `connect_arm/end` | `(channel: str\|None=None, protocol: str\|None=None) -> bool\|None` | §4.2 |
 | `disconnect_arm/end` | `disconnect_arm/end` | `() -> None` | §4.2 |
-| `enable_arm/end` | `enable_arm/end` | `() -> int` | §4.2 |
-| `disable_arm/end` | `disable_arm/end` | `() -> int` | §4.2 |
+| `enable_arm/end` | `enable_arm/end` | `() -> int` | §4.2；arm 侧 FSM 运行中被外部线程调用空操作+warn 返 0 |
+| `disable_arm/end` | `disable_arm/end` | `() -> int` | §4.2；arm 侧 FSM 运行中被外部线程调用空操作+warn 返 0 |
 | `is_connected_arm/end` | `is_connected_arm/end` | `@property -> Optional[bool]` | §4.2 |
 | `is_enabled_arm/end` | `is_enabled_arm/end` | `@property -> Optional[bool]` | §4.2 |
 | `read_param_arm/end` | `read_param_arm/end` | `(key: str) -> list\|None` | §4.3 |
 | `write_param_arm/end` | `write_param_arm/end` | `(key: str, values: Sequence[float]) -> int` | §4.3 |
 | `get_mode_arm/end` | `get_mode_arm/end` | `() -> ControlMode\|None` | §4.4 |
-| `set_mode_arm/end` | `set_mode_arm/end` | `(mode: ControlMode=ControlMode.MIT) -> int` | §4.4 |
+| `set_mode_arm/end` | `set_mode_arm/end` | `(mode: ControlMode=ControlMode.MIT) -> int` | §4.4；arm 侧 FSM 运行中被外部线程调用空操作+warn 返 0 |
 | `get_state_arm/end` | `get_state_arm/end` | `() -> JointState\|None` | §4.5 |
-| `set_zero_arm/end` | `set_zero_arm/end` | `() -> int` | §4.6 |
+| `set_zero_arm/end` | `set_zero_arm/end` | `() -> int` | §4.6；arm 侧 FSM 运行中被外部线程调用空操作+warn 返 0 |
 | `get_error_arm/end` | `get_error_arm/end` | `() -> list\|None` | §4.6 |
 | `check_error_arm/end` | `check_error_arm/end` | `() -> bool` | §4.6 |
-| `clear_error_arm/end` | `clear_error_arm/end` | `() -> bool` | §4.6 |
-| `send_mit_arm/end` | `send_mit_arm/end` | `(q, dq=None, tau=None, kp=None, kd=None) -> None`，缺省细则见 §4.7 | §4.7 |
-| `send_position_arm/end` | `send_position_arm/end` | `(q, vlim=None, flim=None) -> None` | §4.7 |
-| `send_vel_arm/end` | `send_vel_arm/end` | `(dq) -> None` | §4.7 |
+| `clear_error_arm/end` | `clear_error_arm/end` | `() -> bool` | §4.6；arm 侧 FSM 运行中被外部线程调用空操作+warn 返 False |
+| `send_mit_arm/end` | `send_mit_arm/end` | `(q, dq=None, tau=None, kp=None, kd=None) -> None`，缺省细则见 §4.7 | §4.7；arm 侧 FSM 运行中被外部线程调用空操作+warn |
+| `send_position_arm/end` | `send_position_arm/end` | `(q, vlim=None, flim=None) -> None` | §4.7；arm 侧 FSM 运行中被外部线程调用空操作+warn |
+| `send_vel_arm/end` | `send_vel_arm/end` | `(dq) -> None` | §4.7；arm 侧 FSM 运行中被外部线程调用空操作+warn |
 | `set_action_end` | `send_action_end` | `(action: str, **kw) -> None` | §4.8 |
 
 ### 4.2 连接与使能
@@ -141,7 +143,7 @@ cfg 自检通过后：
 - `connect_arm/end(channel, protocol)`：透传可选参（缺省用 backend cfg 成员值，显式传入则同步更新）后委托，返回 `is_connected_arm/end`（True 成功 / False 失败 / None 意外）。
 - `disconnect_arm/end()`：委托，无返回值（断连结果经 `is_connected_*` 查询）。
 - backend 副作用（方法 docstring 写明）：connect 成功后自动设 cfg `default_mode` 并等 `write_settle` 秒生效；disconnect 前自动尽力失能再断总线、断开后清模式缓存；连接失败仅 warn 不抛。
-- `enable/disable_arm/end() -> int`：1 = 全部成功、0 = 任一关节失败或未连接（失败细节经日志 warn，不抛；使能结果另经 `is_enabled_*` 核实）。
+- `enable/disable_arm/end() -> int`：1 = 全部成功、0 = 任一关节失败或未连接（失败细节经日志 warn，不抛；使能结果另经 `is_enabled_*` 核实）；FSM 运行中被外部线程调用：arm 侧空操作 + warn 返 0（end 侧不受互斥）。
 - `is_connected_arm/end`、`is_enabled_arm/end` 四 `@property`：与 backend **同名直连**（改名见 §10⑧），返回 `Optional[bool]` 三态（使能缓存按各关节 error 码推导（码义见 §4.5）：全 1→True、全 0→False、混合或含 ≥2→None，可自愈；推导自快照，鲜度可用 `JointState.t` 判）。
 
 ### 4.3 参数读写
@@ -153,7 +155,7 @@ cfg 自检通过后：
 ### 4.4 控制模式
 
 - `get_mode_arm/end()`：全组模式一致才返回该模式；不一致 / 失败 / 未连接返回 None。
-- `set_mode_arm/end(mode)`：入参必须为 `ControlMode` 枚举（MIT / POSITION / VELOCITY），非枚举直接 0；成功返回 1 并**乐观更新**模式缓存使发送门禁立即放行，硬件一致性经 `get_mode` 读回纠正。
+- `set_mode_arm/end(mode)`：入参必须为 `ControlMode` 枚举（MIT / POSITION / VELOCITY），非枚举直接 0；成功返回 1 并**乐观更新**模式缓存使发送门禁立即放行，硬件一致性经 `get_mode` 读回纠正；FSM 运行中被外部线程调用：arm 侧空操作 + warn 返 0。
 - 切 POSITION / VELOCITY 自动随写 POS_VEL 四增益（缺配置跳过、沿用电机内部值）。
 
 ### 4.5 状态读取
@@ -164,10 +166,10 @@ cfg 自检通过后：
 
 ### 4.6 零点与错误
 
-- `set_zero_arm/end() -> int`：将当前位置记为零点（影响后续 q 读数基准）；1 = 全部成功、0 = 任一失败（warn 不抛）。
+- `set_zero_arm/end() -> int`：将当前位置记为零点（影响后续 q 读数基准）；1 = 全部成功、0 = 任一失败（warn 不抛）；FSM 运行中被外部线程调用：arm 侧空操作 + warn 返 0。
 - `get_error_arm/end()`：读缓存快照 error 段；快照过期、未连接或 error 段缺失返回 None。
 - `check_error_arm/end() -> bool`：全 0/1 判正常 True；含 ≥2（码义见 §4.5）/ 未连接 / 快照过期 False。
-- `clear_error_arm/end() -> bool`：逐关节发清错指令、无读回验证。
+- `clear_error_arm/end() -> bool`：逐关节发清错指令、无读回验证；FSM 运行中被外部线程调用：arm 侧空操作 + warn 返 False（注意返 False 非 0）。
 
 ### 4.7 关节指令下发
 
@@ -224,7 +226,8 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 
 ### 5.6 两线程架构
 
-- **`_start_motion_thread`**：激活 traj 求解器 `plan(self, _target_trajframe)` 一次（保证首帧可用）→ 启动 plan 线程（按 `_plan_hz` 周期 `plan(self, _target_trajframe)`）→ 启动 ctrl 线程（按 `_ctrl_hz` 每拍 `_activated_ctrl_solver.step(self, frame = _activated_traj_solver.sample(time.time()), _backend.get_state_arm() 的 JointState)`，step 内部经 _backend 下发）→ 清暂停开关。
+- **`_start_motion_thread`**：激活 traj 求解器 `plan(self, _target_trajframe)` 一次（保证首帧可用）→ 启动 plan 线程（按 `_plan_hz` 周期 `plan(self, _target_trajframe)`）→ 启动 ctrl 线程（按 `_ctrl_hz` 每拍 `_activated_ctrl_solver.step(self, frame = _activated_traj_solver.sample(time.time()), _backend.get_state_arm() 的 JointState)`，step 经 JoyArm 公开 send_*_arm 下发；FSM 运行中依赖外部指令互斥拦截 + ctrl 线程自身豁免才不被自身拦死；`get_state_arm()` 为 None 时跳过本拍 step + 节流 warn）→ 清暂停开关。
+- **旧线程残留防护**：`_start_motion_thread` 启动前检查 plan/ctrl 线程句柄，上次 stop 超时未确认退出（句柄保留）则抛错拒绝另起新线程（防双循环；MOTION 进入失败由 FSM 下拍重试）。
 - **hz 动态更新**：两线程节拍每拍重读 `_plan_hz/_ctrl_hz`（或等价 set_hz 机制），切换求解器后下一拍生效。
 - **`_stop_motion_thread`**：先停 ctrl 线程再停 plan 线程，超时回收线程；目标帧缓存 `_target_trajframe` 仅在 FSM start/stop 边界清理（§6.5），MOTION 态退出不清（保护性往返后续走用户目标）。
 - 方法名单数 `_thread` 但统一管理两条线程；不设 sample 线程与 `sample_hz`。
@@ -257,7 +260,7 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 - 前置：初始化自检通过且 arm 已连接。
 - FSM 状态动作与切换中全部硬件操作（enable/disable、get/set_mode、send_position/send_mit、get_state、clear_error）直连 `self._backend.*`，不经 JoyArm 公开委托面，减少转发开销；线程启停与缓存管理仍走 JoyArm 内部方法；安全性不降（理由同 §4 总则）。
 - **连接/使能/模式检查与设置仅在状态转移（enter）时执行一次**（经 `self._backend` 读取 `is_connected_arm` 标志、`is_enabled_arm` 标志、`get_mode_arm()`），状态内维持循环不再每拍检查、只执行必要动作（降低开销）；转移时发现未连接 → 抛错。
-- 各状态参数配置在 `cfg.joyarm.MotionFSM.*`（yaml 现无此段，见 §10）。
+- 各状态参数配置在 `cfg.joyarm.MotionFSM.*`。
 
 ### 6.2 六状态行为规格
 
@@ -266,10 +269,10 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 | # | 状态 | 语义 | 电机模式 | 进入时（enter） | 每拍核心动作 | 退出清理 |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | 1 | `DISABLE` | 失能 | — | 执行一次 `_disable_clear_disable_arm`（§9，「失能→清错→失能」序列）并 info 状态转移信息 | 直接轮发 `self._backend.disable_arm()`（幂等、无检查无 warn） | — |
-| 2 | `ZERO` | 零位失能 | POSITION | 使能+设模式+发送 `_zero_arm` 位置指令+ 置「移动中」标志 | 子阶段机：移动中 → 查 `is_in_q_arm(_zero_arm)`，到位 → `disable_arm()` 失能并转「零位失能维持」子阶段（此后每拍轮发 disable_arm，同 DISABLE）；任何切换可立即打断（无阻塞等待） | 清到位轮询/子阶段标志 |
+| 2 | `ZERO` | 零位失能 | POSITION | 使能+设模式+发送 `_zero_arm` 位置指令+ 置「移动中」标志 | 子阶段机：移动中 → 逐拍 `send_position_arm(_zero_arm)` + 查 `is_in_q_arm(_zero_arm)`，到位 → `disable_arm()` 失能并转「零位失能维持」子阶段（此后每拍轮发 disable_arm，同 DISABLE）；任何切换可立即打断（无阻塞等待） | 清到位轮询/子阶段标志 |
 | 3 | `HOME` | 空闲保持 | POSITION | 使能+设置模式 | 逐拍 `send_position_arm(_home_arm)` + `is_in_q_arm(_home_arm)` 到位监测（迁移门槛见 §6.3） | — |
 | 4 | `MOTION` | 正常运动 | 控制器 MODE | 清理缓存和残留+使能+设置mode为控制器 MODE；然后启动 plan/ctrl 两线程（§5.6 `_start_motion_thread`） | 维持 plan+ctrl 两线程 ；运行中热切换求解器按 §5.4 | 停线程（§5.6 `_stop_motion_thread`；目标帧缓存仅在 FSM start/stop 边界清理，见 §6.5） |
-| 5 | `HOLD` | 原位锁定 | POSITION | 使能+ 模式设置+`_hold_q` 取 `_backend.get_state_arm().q` | 逐拍 `send_position_arm(_hold_q)` | 清 `_hold_q` |
+| 5 | `HOLD` | 原位锁定 | POSITION | 使能+ 模式设置+`_hold_q` 取 `_backend.get_state_arm().q`（采样失败则迁移推迟下拍重试） | 逐拍 `send_position_arm(_hold_q)` | 清 `_hold_q` |
 | 6 | `DAMPING` | 阻尼防护 | MIT | 使能+模式设置 | 逐拍 `send_mit_arm(q=0, dq=0, tau=0, kp=0, kd=_mit_kd_damping)`（`q/dq/tau/kp` 均为 `zeros(n)` 数组，不广播） | — |
 
 **damping**：`_mit_kd_damping` 在 init 解析：`cfg.joyarm.MotionFSM.mit_kd_damping` 为正有限数（标量广播或 n 元列表）则采用；未配置 / 非法 → init 抛错初始化失败。
@@ -282,7 +285,7 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
   2. `target≠current` 时按 §6.4 路线表取下一跳 `next` → 执行现状态 **exit 清理**（motion/hold 清单见 §6.2 退出清理列——motion 经 §5.6 `_stop_motion_thread`；zero：清到位轮询/子阶段标志）→ 执行 `next` 的 **enter**（= §6.1 转移前置检查一次完成 + 状态初始化：hold 采样 `_hold_q`、motion 起线程等）→ `current=next`；`next==target` 转维持，否则下一拍继续迁移；
   3. `target==current` 执行该状态维持动作。
 - 迁移到位门槛：current==HOME 且 target∈{ZERO, MOTION} 时须 home 到位判定 `is_in_q_arm(_home_arm)`（tol 从 `cfg.joyarm.arrival_tol` 取（joyarm的私有成员变量），arm/end 分组逐关节）成立才执行该次迁移；其余迁移不等到位。home 未到位时的出路 = 保护性事件直达（disable/damping/hold 不受门槛限制）或 `stop_motion_fsm`（带超时强制推进，§6.5）。
-- 外部指令互斥兜底（§4 总则）：状态运行中被外部失能/改模式不再每拍检测（§6.1）——软件层由 FSM 外部指令互斥阻断（arm 侧指令类公开方法空操作 + warn）；硬件侧异常由 safe_monitor 硬规则（error≥2 → DAMPING、断连 → DISABLE，见 §7.3）监测，命中触发转移、在转移时重新执行 §6.1 的检查与设置。
+- 外部指令互斥兜底（§4 总则）：状态运行中被外部失能/改模式不再每拍检测（§6.1）——软件层由 FSM 外部指令互斥阻断（arm 侧指令类公开方法对**外部线程**空操作 + warn；JoyArm 自家 ctrl 线程豁免、照常下发，FSM 内部硬件操作直连 `_backend` 亦不经公开面、不受影响）；硬件侧异常由 safe_monitor 硬规则（error≥2 → DAMPING、断连 → DISABLE，见 §7.3）监测，命中触发转移、在转移时重新执行 §6.1 的检查与设置。
 
 ### 6.4 状态转移路线表
 
@@ -310,7 +313,7 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 **stop_motion_fsm**：
 
 1. 前置：`is_connected_arm is True`，否则抛 `RuntimeError`（断连急停不走本方法——无法下发任何指令，走销毁路径 §6.6）；
-2. 置 `target=ZERO`：按路线表经 HOME 中转迁移，**阻塞等待**含 home 到位（3→2 迁移门槛见 §6.3）+ 等 ZERO 子阶段推进完成（到位 + 失能）；超时沿用 `cfg.joyarm.runtime.move_wait_timeout`（10 s），超时 warn 并强制推进（disable → 清缓存 → 退出，见步骤 3/4），避免死等；
+2. 置 `set_event(SafetyEvent.ZEROING)`（统一事件与目标，同步 `_target_motion_state=ZERO`）：按路线表经 HOME 中转迁移，**阻塞等待**含 home 到位（3→2 迁移门槛见 §6.3）+ 等 ZERO 子阶段推进完成（到位 + 失能）；超时沿用 `cfg.joyarm.runtime.move_wait_timeout`（10 s），超时 warn 并强制推进（disable → 清缓存 → 退出，见步骤 3/4），避免死等；
 3. `self._backend.disable_arm()` 失能 arm 全部电机（end 失能由调用方或销毁路径处理）；
 4. 停 FSM 线程（停机 Event + join 带超时，超时 warn 不强杀）、清空全部 FSM 缓存、状态机退出（再用需重新 start）。
 
@@ -362,12 +365,12 @@ JoyArm 公共入口 `set_action_end(action: str, **kw)` 纯透传 `backend.send_
 | `get_state_arm().error` 任一 ≥2（码义见 §4.5） | `DAMPING` |
 | `is_connected_arm is False`，或 `get_state_arm()` 连续 0.1 s 返回 None（快照过期/读取失败） | `DISABLE` |
 
-- **自定义规则**：签名 `rule(state_arm: JointState, state_end: JointState|None, motion: MotionState, event: SafetyEvent) -> SafetyEvent|None`（返回 None = 无意见、不触发）；绑定方法 `set_monitor_rules(rules)`，传单条或列表；仲裁：同拍多命中取危险程度最高者，内置硬规则优先于自定义。
+- **自定义规则**：签名 `rule(state_arm: JointState|None, state_end: JointState|None, motion: MotionState, event: SafetyEvent) -> SafetyEvent|None`（状态读取失败时仍以 None 调用，规则须自判；返回 None = 无意见、不触发）；绑定方法 `set_monitor_rules(rules)`，传单条或列表；仲裁：同拍多命中取危险程度最高者，内置硬规则优先于自定义。
 
 ## 8 运行状态可视化(只读和状态刷新)
 
-- 一级功能区，入核心包；突破 `joyarm_code/AGENTS.md`「可视化不在核心包」与「核心轻依赖」两条约定，配套修订列为后续重构配套修改项。
-- **单页面监控网页**：左侧 iframe 嵌 meshcat 3D 视图（`src = meshcat.Visualizer().url()`），右侧自写 HTML 状态面板；轻量 HTTP 服务托管页面 + WebSocket 周期推数。
+- 一级功能区，入核心包；配套修订已完成（`joyarm_code/AGENTS.md` §1.2/§2.2 已纳入可视化与 meshcat 可选依赖）。
+- **单页面监控网页**：左侧 iframe 嵌 meshcat 3D 视图（`src = meshcat.Visualizer().url()`），右侧自写 HTML 状态面板；轻量 HTTP 服务托管页面 + 面板 JS 约 5 Hz 轮询 `fetch /state.json`（HTTP 轮询、零新增依赖）。
 - 右侧面板内容（arm/end分组）：关节的 q/dq/tau、双温度（`temp_mos/temp_rotor`）、error 码、末端位姿/速度、FSM 当前/目标状态、安全事件、连接/使能/模式。
 - **单一纯只读 daemon 线程**（`_state_viz_worker`），仅调只读接口刷新 meshcat 模型姿态与面板数据，绝不调用控制/下发方法；启停 `start_state_viz()` / `stop_state_viz()`。
 - **meshcat 为可选依赖**：`start_state_viz()` 内才 import；缺包（ImportError）warn 并降级为仅 HTML 状态面板（3D 区占位）。pyproject 增可选依赖组（如 `vis = ["meshcat>=0.3.2"]`）。

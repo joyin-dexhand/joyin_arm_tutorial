@@ -1,7 +1,7 @@
 """MdhFkineSolver —— MDH 参数白盒正运动学（教学实现）。
 
 1. 由 config `arm_mdh`（6×4：α/a/d/θ）逐关节连乘齐次变换得 T_06，再右乘 `T_linkn_endtcp` 得末端位姿；
-2. 仅支持末端帧（`frame` 须为 cfg ``joyarm.frame_end``），其余帧抛 ``ValueError``。
+2. 仅支持末端帧（`frame` 须为 cfg `joyarm.frame_end`），其余帧抛 `ValueError`。
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class MdhFkineSolver(FkineSolver):
 
         if frame_id != end_id:
             raise ValueError(
-                "fkine_solver_mdh.py - MdhFkineSolver.frame_pose："
+                "fkine_solver_mdh.py - MdhFkineSolver.solve："
                 f"目前仅支持末端帧 {ee_frame!r}，实际为 {frame!r}"
             )
 

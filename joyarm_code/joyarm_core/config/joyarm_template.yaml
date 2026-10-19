@@ -35,15 +35,12 @@ joyarm:
     f_max: 20.0 # N
     t_max: 5.0 # N·m
 
-  # home 位形（rad）。zero/neutral 由代码实现，neural为软限位中点，zero为全零位形
-  home_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  # home 位形（rad）。zero/neutral 由代码实现，neutral为软限位中点，zero为全零位形
+  home_arm: [0.0, -1.0, -1.0, -0.5, 0.0, 0.0]
   home_end: [-3.0]
 
   # 运行参数
   runtime:
-    state_keepalive_hz: 10.0 # 空闲期状态保活频率 Hz
-    state_stale_timeout: 0.15 # 缓存数据过期阈值 s
-    move_poll_interval: 0.05 # 到位轮询间隔 s
     move_wait_timeout: 10.0 # 运动等待超时 s
 
   # 运动状态机（MotionFSM）
@@ -75,7 +72,7 @@ robotics:
     - { name: pin_jacobian_solver }
   dynamics:
     - { name: pin_dynamics_solver }
-  traj:
+  trajectory:
     - { name: single_joint_cubic_traj_planner, plan_hz: 10.0 } # 三次多项式
   control:
     - { name: joint_position_controller, ctrl_hz: 200.0 } # 电机模式由控制器 MODE 类属性指定
@@ -105,8 +102,8 @@ backend:
         dq_max: 5.0 # 速度上限（rad/s）
         tau_max: 30.0 # 力矩上限（N·m）
         MIT: # MIT 模式增益（MIT 指令未传 kp/kd 时使用）
-          kp: 120.0
-          kd: 8.0
+          kp: 120.0   # max=500
+          kd: 5.0     # max=5
         POS_VEL: # 位置/速度两模式共用：电机寄存器闭环增益+ 速度上限 + 力矩电流上限    
           pos_kp: 150.0 # 位置环 Kp
           pos_ki: 0.5 # 位置环 Ki

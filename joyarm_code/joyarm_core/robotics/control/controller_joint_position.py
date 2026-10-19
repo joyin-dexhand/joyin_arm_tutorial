@@ -1,11 +1,8 @@
 """JointPositionController —— 关节位置控制器（默认实现）。
 
-经位置指令（``send_position_arm``）下发；在关节空间跟踪当前轨迹帧的 `q`。
+经位置指令（`send_position_arm`）下发；在关节空间跟踪当前轨迹帧的 `q`。
 """
 from __future__ import annotations
-
-import logging
-import time
 
 import numpy as np
 
@@ -14,22 +11,14 @@ from ...utils.types import ControlMode, JointState, TrajFrame
 
 __all__ = ["JointPositionController"]
 
-logger = logging.getLogger("joyarm_core.controller")
-
-_WARN_INTERVAL: float = 0.5    # 步长裁剪告警节流（秒）
-
 
 class JointPositionController(Controller):
-    """控制默认实现：逐周期经 ``send_position_arm`` 下发位置指令，跟踪当前轨迹帧的关节位置参考。"""
+    """控制默认实现：逐周期经 `send_position_arm` 下发位置指令，跟踪当前轨迹帧的关节位置参考。"""
 
     MODE = ControlMode.POSITION
 
-    def __init__(self):
-        """初始化：越限告警节流时间戳置 -inf（首次越限必告警）。"""
-        self._warn_last = float("-inf")
-
     def step(self, arm, target: TrajFrame, jointstate: JointState) -> bool:
-        """步进：跟踪当前轨迹帧的关节位置参考，越限关节就地裁剪并节流告警。
+        """跟踪当前轨迹帧的关节位置参考，经 `send_position_arm` 直接下发。
 
         :param arm: 机械臂对象。
         :param target: 目标轨迹帧（当前帧）。

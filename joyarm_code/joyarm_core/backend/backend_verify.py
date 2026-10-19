@@ -5,7 +5,7 @@ Backend 子类全方位测试验证（上层视角）  joyarm_core/backend/backe
 【功能概要】
     从上层视角（只调 Backend 基类公开方法与属性，不触碰子类私有层、与型号实现
     细节无关）对**任意** backend 子类（关节电机 / 舵机 / 混合硬件 / 无 end 型号）
-    做分组分项测试验证（verify_backend.py 的迭代版，编号改为两位数十进制分组）：
+    做分组分项测试验证（测试项编号采用两位数十进制分组）：
       00 组  初始化验证：构造、属性初值、限位解析（离线，全低危）；
       10 组  连接编排：arm/end 六种连断次序 + 重复连断 + 断开重联（全低危）；
       20 组  只读验证：单次状态获取、10s 实时刷新监视、模式获取、参数读取、
@@ -89,7 +89,7 @@ import yaml
 from joyarm_core.backend import Backend
 from joyarm_core.utils.types import ControlMode
 
-# ---------------- 安全常量（真机测试的小幅参数，子型中立；幅度=verify_backend 的一半） ----------------
+# ---------------- 安全常量（真机测试的小幅参数，子型中立） ----------------
 POS_AMP = 0.025       # 位置测试目标偏移 rad（原 0.05 减半）
 VEL_TEST = 0.1        # 速度测试目标 rad/s（原 0.2 减半）
 VEL_DUR = 0.5         # 速度测试持续时间 s
@@ -1696,7 +1696,7 @@ EPILOG = """\
   python joyarm_core/backend/backend_verify.py --sub=dm --step=connect,read # 组合
   python joyarm_core/backend/backend_verify.py --sub=dm --step=online --param=<键> --action=open,close
 
-风险与确认策略（与 verify_backend.py 相同）：
+风险与确认策略：
   低危：直接执行（初始化 / 连接编排 / 只读）。
   中危：交互回车确认（--yes 或非终端环境直接执行；本清单暂无中危项，机制保留）。
   高危：强制交互输入 yes（--yes 不放行；非终端自动 SKIP——agent 无法全自动执行高危项）。
@@ -1715,8 +1715,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="backend_verify.py",
         description=("Backend 子类全方位测试验证（上层视角）：只调 Backend 基类公开 API，"
-                     "对任意子类（关节电机/舵机/混合硬件）做分组分项测试（verify_backend.py 迭代版，"
-                     "两位数十进制分组）。能力三分法（能力缺失=SKIP）+ 空族自动跳过 + 风险分级确认。"),
+                     "对任意子类（关节电机/舵机/混合硬件）做分组分项测试"
+                     "（测试项编号采用两位数十进制分组）。能力三分法（能力缺失=SKIP）+ 空族自动跳过 + 风险分级确认。"),
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--sub", help="子型简称（如 dm、feetech）：经 REGISTRY 或文件约定导入"
                                  " backend_<型号>.py 并寻找 Backend<型号> 类，默认加载"

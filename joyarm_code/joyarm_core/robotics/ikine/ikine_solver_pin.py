@@ -34,7 +34,7 @@ class PinIkineSolver(IkineSolver):
 
     def __init__(self, damping: float = 1e-4, step_max: float = 0.5,
                  restarts: int = 3):
-        """求解参数经 config ``robotics.ikine`` 的 `**params` 注入。
+        """求解参数经 config `robotics.ikine` 的 `**params` 注入。
 
         :param damping: LM 初始阻尼 λ（自适应升降：步接受 ×0.5、被拒 ×4）。
         :param step_max: 单次迭代关节角修正上限（rad，防单步跨跳过冲）。
@@ -51,12 +51,12 @@ class PinIkineSolver(IkineSolver):
 
         :param arm: 机械臂对象（消费 `arm.pin_model` 与 `arm.joint_limits_soft_arm`）。
         :param pose: 目标位姿 `Pose`（xyz + 四元数）。
-        :param frame: 目标帧名（``str``）。
+        :param frame: 目标帧名（`str`）。
         :param q0: `(n,)` 关节角迭代起点，弧度——单起点失败时限位内随机重启。
-        :param tol: 残差收敛容差（位置 m 范数 + 姿态 rad 范数之和，默认 ``1e-3``）。
-        :param iters: 单起点迭代次数上限（默认 ``200``）。
+        :param tol: 残差收敛容差（位置 m 范数 + 姿态 rad 范数之和，默认 `1e-3`）。
+        :param iters: 单起点迭代次数上限（默认 `200`）。
         :param kwargs: 其余关键字参数——未识别的参数名将被忽略。
-        :return: `IKResult`；失败时 ``success=False``、`err` 为最优残差、`q` 为取得该残差的最接近尝试解。
+        :return: `IKResult`；失败时 `success=False`、`err` 为最优残差、`q` 为取得该残差的最接近尝试解。
 
         **实现**：LM 迭代（步被拒增大阻尼、被接受衰减，逐迭代钳硬限位）；重启采样确定性（固定种子，同输入同结果）。
         """

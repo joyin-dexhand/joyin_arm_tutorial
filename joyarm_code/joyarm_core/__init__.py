@@ -1,4 +1,4 @@
-"""``joyarm_core`` —— JoyArm 机械臂核心代码库。
+"""`joyarm_core` —— JoyArm 机械臂核心代码库。
 
 代码库分层结构：
 

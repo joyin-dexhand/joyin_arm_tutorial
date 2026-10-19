@@ -538,7 +538,7 @@ data  = model.createData() # 数据
 # 2. 给定六关节角（rad）
 q = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) 
 
-# 3. 求解末端（"frame_end_tcp" 帧，即 config end_frame 指向的 TCP 系）相对基座的位姿
+# 3. 求解末端（"frame_end_tcp" 帧，即 config joyarm.frame_end 指向的 TCP 系）相对基座的位姿
 pin.forwardKinematics(model, data, q) # 计算正运动学
 T_ee = pin.updateFramePlacement(model, data, model.getFrameId("frame_end_tcp")) # 获取结果
 ```
@@ -586,8 +586,8 @@ T_ee = pin.updateFramePlacement(model, data, model.getFrameId("frame_end_tcp")) 
 | 模块 | 功能 | 实现要点 |
 |:---:|:---:|:---:|
 | 模型加载 | 加载 JoyArm 的 URDF 模型 | 调用 `joyarm_core` 的 `JoyArm` 类 |
-| 关节采样 | 六维关节空间均匀随机采样 $N$ 组 | 调用 `arm.rand_q_arm(N)`（本体硬限位内采样） |
-| 正运动学 | 对每组关节角求末端位置 | Pinocchio 批量正解（同 [4.3.2 节](#432-用库自动求解正运动学)） |
+| 关节采样 | 六维关节空间均匀随机采样 $N$ 组 | 调用 `joyarm_core` 的 `rand_within_limits(arm.joint_limits_hard_arm, size=N)` 一次采 $N$ 组（硬限位内） |
+| 正运动学 | 对每组关节角求末端位置 | Pinocchio 批量正解（同 [4.3.2 节](#432)） |
 | 可视化 | MeshCat 3D 绘点云 | 按到基座距离着色，动态刷新、逐批添加点 |
 
 #### 5.2.2 运行脚本

@@ -1,20 +1,20 @@
-"""``BackendDM`` —— DM（达妙）机械臂硬件后端：7 电机经 U2CAN 串口转 CAN 桥接入。
+"""`BackendDM` —— DM（达妙）机械臂硬件后端：7 电机经 U2CAN 串口转 CAN 桥接入。
 
-型号说明（协议实现自包含，参照 ``u2can/DM_CAN.py`` 厂商库重写、不导入）：
+型号说明（协议实现自包含，参照 `u2can/DM_CAN.py` 厂商库重写、不导入）：
 
-- **总线**：U2CAN 盒串口封装帧（发 30B ``55 AA .. 00``、收 16B ``AA .. 55``，CAN id + 8B 数据内嵌）；
+- **总线**：U2CAN 盒串口封装帧（发 30B `55 AA .. 00`、收 16B `AA .. 55`，CAN id + 8B 数据内嵌）；
   一条串口一条总线，arm/end 同 channel 自动共享，不同 channel 各开各的；
 - **模式**：模式寄存器 RID10（RAM 态、断电丢失）：基类 MIT / VELOCITY / POSITION ↔ DM 1 / 3 / 4
-  （4 = Torque_Pos 力位混合，控制帧走 ``0x300+SlaveID`` 的 pos_force 帧：pos float32 + vel×100 + 电流标幺×10000）；
+  （4 = Torque_Pos 力位混合，控制帧走 `0x300+SlaveID` 的 pos_force 帧：pos float32 + vel×100 + 电流标幺×10000）；
   切 POSITION/VELOCITY 时随模式写 4 个增益寄存器（RID 25-28，缺配置 NaN 跳过），切 MIT 不写；
 - **状态**：反馈帧带 q/dq/tau/error 与两路温度（data[6]=T_MOS、data[7]=T_Rotor，厂商库未解析的温度在此补齐）；
   error 码 DM 原生 0=失能 / 1=使能 / ≥2=故障，与全库约定一致直接透传；
-- **参数**：``_PARAM_RIDS`` 键表读写 RAM 寄存器（无 save 功能；只读键见 ``_READONLY_KEYS``）；
-- **末端动作**：``open/home/close/position`` 离散动作（目标 -5.0/-3.0/0.0 rad / 按需 kwarg ``position``）——
+- **参数**：`_PARAM_RIDS` 键表读写 RAM 寄存器（无 save 功能；只读键见 `_READONLY_KEYS`）；
+- **末端动作**：`open/home/close/position` 离散动作（目标 -5.0/-3.0/0.0 rad / 按需 kwarg `position`）——
   自动切 POSITION 模式，vlim/flim 取 cfg 发送默认，位置经基类管道裁硬限位后下发。
 
-线程模型：应用/控制线程（``send_*`` 高频 + ``get_state_*`` 非阻塞）｜基类低频刷新线程（cfg
-``state_refresh_hz``）｜每总线一条 RX 收取线程（默认 1000Hz 节拍阻塞读，cfg 顶层 ``rx_hz`` 可配；
+线程模型：应用/控制线程（`send_*` 高频 + `get_state_*` 非阻塞）｜基类低频刷新线程（cfg
+`state_refresh_hz`）｜每总线一条 RX 收取线程（默认 1000Hz 节拍阻塞读，cfg 顶层 `rx_hz` 可配；
 只收数据+识别+原子更新电机状态快照，不主动发帧）。
 
 可靠性（读回验证与重试均在内核闭环）：参数写等 0x55 回显核对（uint 精确 / float 容差）、参数读等
@@ -74,7 +74,7 @@ _STATE_DEAD = 0.02        # 硬陈旧阈值 s：超过按数据异常上抛（�
 
 
 def _f2u(x: float, x_min: float, x_max: float, bits: int) -> int:
-    """float → 位域 uint（与厂商 ``float_to_uint`` 位级一致：钳位 → 归一化×满量程 → 向零截断）。"""
+    """float → 位域 uint（与厂商 `float_to_uint` 位级一致：钳位 → 归一化×满量程 → 向零截断）。"""
     if x <= x_min:
         x = x_min
     elif x > x_max:
@@ -124,7 +124,7 @@ class _DMMotor:
 
 
 def _pack_mit(m: _DMMotor, tau: float, q: float, dq: float, kp: float, kd: float) -> bytes:
-    """MIT 帧 8B 数据：``[q:16][dq:12][kp:12][kd:12][tau:12]``（量程按电机型号 + kp 0-500 / kd 0-5，越界就近钳位）。"""
+    """MIT 帧 8B 数据：`[q:16][dq:12][kp:12][kd:12][tau:12]`（量程按电机型号 + kp 0-500 / kd 0-5，越界就近钳位）。"""
     q_u = _f2u(q, -m.pmax, m.pmax, 16)
     dq_u = _f2u(dq, -m.vmax, m.vmax, 12)
     kp_u = _f2u(kp, 0.0, _KP_MAX, 12)
@@ -252,7 +252,7 @@ class _DMBus:
         """发使能/失能/设零/清错帧并验证：等新状态帧（超时补发一次 0xCC 查询）→ 按 expect(err) 核对 → 重试。
 
         :param cmd: 指令字节（0xFC 使能 / 0xFD 失能 / 0xFE 设零 / 0xFB 清错）。
-        :param expect: error 码判定函数（使能 ``==1`` / 失能 ``!=1`` / 清错 ``<2``）；``None`` 仅链路 ACK。
+        :param expect: error 码判定函数（使能 `==1` / 失能 `!=1` / 清错 `<2`）；`None` 仅链路 ACK。
         :return: 验证通过 True。
         :raises TimeoutError: 重试耗尽仍无新状态帧或核对不过。
         """
@@ -311,7 +311,7 @@ class _DMBus:
     def _dispatch(self, can_id: int, data: bytes) -> None:
         """按 CAN id 路由（can_id=0 时按 data[0] 低 4 位回退），按 data[2] 判别参数应答（0x33/0x55）与状态帧。
 
-        状态帧 data[2] 恰为 0x33/0x55（dq 高字节，约 0.8% 概率）会被判为参数应答——仅少一次缓存刷新，无害；
+        状态帧 data[2] 恰为 0x33/0x55会被判为参数应答——仅少一次缓存刷新，无害；
         参数应答永不误判为状态帧（反向无污染）。
         """
         motor = self._fb_map.get(can_id) if can_id else self._fb_map.get(data[0] & 0x0F)
@@ -340,9 +340,9 @@ class BackendDM(Backend):
     """DM 整机后端（型号说明见模块 docstring；arm 6 电机 + end 1 电机同协议，end 常为夹爪）。"""
 
     def __init__(self, cfg: dict) -> None:
-        """先 ``super().__init__(cfg)`` 解析基类成员，再建电机表（无总线 I/O，总线在 ``_connect_*`` 打开）。
+        """先 `super().__init__(cfg)` 解析基类成员，再建电机表（无总线 I/O，总线在 `_connect_*` 打开）。
 
-        :param cfg: yaml ``backend:`` 段整体（顶层 ``rx_hz`` 可配 RX 收取线程节拍，默认 1000Hz）。
+        :param cfg: yaml `backend:` 段整体（顶层 `rx_hz` 可配 RX 收取线程节拍，默认 1000Hz）。
         :raises ValueError: 型号不在量程表 / motor_id/feedback_id 缺失或非 int / feedback_id=0 / 组内 id 重复。
         """
         super().__init__(cfg)
@@ -368,7 +368,7 @@ class BackendDM(Backend):
 
     # ---------------- 私有助手 ----------------
     def _build_motors(self, family: str) -> list:
-        """构建电机句柄表（型号 → 位域量程；只建对象不做总线 I/O），下标严格对齐 ``_jointscfg_{family}``。"""
+        """构建电机句柄表（型号 → 位域量程；只建对象不做总线 I/O），下标严格对齐 `_jointscfg_{family}`。"""
         motors = []
         for i in range(self._n(family)):
             jn = self._jname(family, i)
@@ -462,7 +462,7 @@ class BackendDM(Backend):
         """非阻塞读单电机状态：新鲜（≤_STATE_STALE）直返缓存；陈旧先发一帧 0xCC 刷新——软陈旧立即返当前快照
         （下一拍自愈），硬陈旧（>_STATE_DEAD）先发刷新帧再上抛（电机在岸则下一拍自愈，不会永久锁死）。
 
-        返回字典含 `t`（该电机最近一帧 RX 到达时刻 Unix 秒）：``state[0]`` 为 monotonic 基准，此处每次调用
+        返回字典含 `t`（该电机最近一帧 RX 到达时刻 Unix 秒）：`state[0]` 为 monotonic 基准，此处每次调用
         现算偏移换算到 wall-clock（消费方均在 time.time() 域）。
 
         :raises TimeoutError: 状态 >_STATE_DEAD 无刷新（电机掉线/接线异常，防冻结值洗白）。
@@ -482,11 +482,12 @@ class BackendDM(Backend):
     # 第一部分：生命周期——连接与使能（8 个内核）
     # ============================================================
     def _connect_arm(self, channel, protocol) -> bool:
-        """连接 arm 总线（打开串口 + RX 线程 + 路由注册 + 逐电机在岸确认；``protocol`` 信息性忽略）。"""
+        """连接 arm 总线（打开串口 + RX 线程 + 路由注册 + 逐电机在岸确认；`protocol` 信息性忽略）。"""
         return self._connect_family("arm", channel)
 
     def _connect_end(self, channel, protocol) -> bool:
-        """连接 end 总线（与 arm 同 channel 时复用同一条总线）。"""
+        """连接 end 总线（与 arm 同 channel 时复用同一条总线，
+        否则打开串口 + RX 线程 + 路由注册；逐电机在岸确认；`protocol` 信息性忽略）。"""
         return self._connect_family("end", channel)
 
     def _disconnect_arm(self) -> None:
@@ -494,124 +495,124 @@ class BackendDM(Backend):
         self._disconnect_family("arm")
 
     def _disconnect_end(self) -> None:
-        """断开 end（同 :meth:`_disconnect_arm`）。"""
+        """断开 end：注销路由，共享总线按最后一族断开才关停的规则处理（幂等）。"""
         self._disconnect_family("end")
 
     def _enable_joint_arm(self, i: int) -> bool:
-        """使能 arm 第 ``i`` 关节（0xFC 帧 + 新状态帧核对 err==1，重试 3 次）。"""
+        """使能 arm 第 `i` 关节（0xFC 帧 + 新状态帧核对 err==1，重试 3 次）。"""
         return self._bus_arm.cmd_verified(self._motors_arm[i], _CMD_ENABLE, lambda e: e == 1)
 
     def _enable_joint_end(self, i: int) -> bool:
-        """使能 end 第 ``i`` 电机（同 :meth:`_enable_joint_arm`）。"""
+        """使能 end 第 `i` 电机（0xFC 帧 + 新状态帧核对 err==1，重试 3 次）。"""
         return self._bus_end.cmd_verified(self._motors_end[i], _CMD_ENABLE, lambda e: e == 1)
 
     def _disable_joint_arm(self, i: int) -> bool:
-        """失能 arm 第 ``i`` 关节（0xFD 帧 + 新状态帧核对 err!=1——故障码在场仍视为已失能）。"""
+        """失能 arm 第 `i` 关节（0xFD 帧 + 新状态帧核对 err!=1——故障码在场仍视为已失能）。"""
         return self._bus_arm.cmd_verified(self._motors_arm[i], _CMD_DISABLE, lambda e: e != 1)
 
     def _disable_joint_end(self, i: int) -> bool:
-        """失能 end 第 ``i`` 电机（同 :meth:`_disable_joint_arm`）。"""
+        """失能 end 第 `i` 电机（0xFD 帧 + 新状态帧核对 err!=1——故障码在场仍视为已失能）。"""
         return self._bus_end.cmd_verified(self._motors_end[i], _CMD_DISABLE, lambda e: e != 1)
 
     # ============================================================
     # 第二部分：读取（6 个内核）
     # ============================================================
     def _read_joint_param_arm(self, i: int, key: str):
-        """读 arm 第 ``i`` 关节参数寄存器（0x33 事务，键表 ``_PARAM_RIDS``）。"""
+        """读 arm 第 `i` 关节参数寄存器（0x33 事务，键表 `_PARAM_RIDS`）。"""
         return self._bus_arm.param_read(self._motors_arm[i], self._rid_of(key))
 
     def _read_joint_param_end(self, i: int, key: str):
-        """读 end 第 ``i`` 电机参数寄存器。"""
+        """读 end 第 `i` 电机参数寄存器（0x33 事务，键表 `_PARAM_RIDS`）。"""
         return self._bus_end.param_read(self._motors_end[i], self._rid_of(key))
 
     def _read_joint_mode_arm(self, i: int) -> Optional[ControlMode]:
-        """读 arm 第 ``i`` 关节模式寄存器 RID10 → 基类枚举（DM 码 2/5/6/7 在枚举外 → ``None``）。"""
+        """读 arm 第 `i` 关节模式寄存器 RID10 → 基类枚举（DM 码 2/5/6/7 在枚举外 → `None`）。"""
         return _CODE_MODE.get(self._bus_arm.param_read(self._motors_arm[i], _MODE_RID))
 
     def _read_joint_mode_end(self, i: int) -> Optional[ControlMode]:
-        """读 end 第 ``i`` 电机模式寄存器 → 基类枚举。"""
+        """读 end 第 `i` 电机模式寄存器 RID10 → 基类枚举（DM 码 2/5/6/7 在枚举外 → `None`）。"""
         return _CODE_MODE.get(self._bus_end.param_read(self._motors_end[i], _MODE_RID))
 
     def _read_joint_state_arm(self, i: int) -> dict:
-        """非阻塞读 arm 第 ``i`` 关节状态（新鲜直返 / 陈旧发 0xCC 后返当前快照，见 :meth:`_read_state`）。"""
+        """非阻塞读 arm 第 `i` 关节状态（新鲜直返 / 陈旧发 0xCC 后返当前快照，见 :meth:`_read_state`）。"""
         return self._read_state("arm", i)
 
     def _read_joint_state_end(self, i: int) -> dict:
-        """非阻塞读 end 第 ``i`` 电机状态。"""
+        """非阻塞读 end 第 `i` 电机状态（新鲜直返 / 陈旧发 0xCC 后返当前快照，见 :meth:`_read_state`）。"""
         return self._read_state("end", i)
 
     # ============================================================
     # 第三部分：写入（6 个内核）
     # ============================================================
     def _write_joint_param_arm(self, i: int, key: str, value: float) -> None:
-        """写 arm 第 ``i`` 关节参数寄存器（0x55 事务 + 回显核对；只读键上抛拒绝）。"""
+        """写 arm 第 `i` 关节参数寄存器（0x55 事务 + 回显核对；只读键上抛拒绝）。"""
         if key in _READONLY_KEYS:
             raise ValueError(f"参数 {key!r} 只读")
         self._bus_arm.param_write(self._motors_arm[i], self._rid_of(key), value)
 
     def _write_joint_param_end(self, i: int, key: str, value: float) -> None:
-        """写 end 第 ``i`` 电机参数寄存器。"""
+        """写 end 第 `i` 电机参数寄存器（0x55 事务 + 回显核对；只读键上抛拒绝）。"""
         if key in _READONLY_KEYS:
             raise ValueError(f"参数 {key!r} 只读")
         self._bus_end.param_write(self._motors_end[i], self._rid_of(key), value)
 
     def _set_joint_mode_arm(self, i: int, mode: ControlMode) -> None:
-        """设 arm 第 ``i`` 关节模式（写 RID10 验证；POSITION/VELOCITY 随写 4 增益，见 :meth:`_set_mode_core`）。"""
+        """设 arm 第 `i` 关节模式（写 RID10 验证；POSITION/VELOCITY 随写 4 增益，见 :meth:`_set_mode_core`）。"""
         self._set_mode_core("arm", i, mode)
 
     def _set_joint_mode_end(self, i: int, mode: ControlMode) -> None:
-        """设 end 第 ``i`` 电机模式。"""
+        """设 end 第 `i` 电机模式（写 RID10 验证；POSITION/VELOCITY 随写 4 增益，见 :meth:`_set_mode_core`）。"""
         self._set_mode_core("end", i, mode)
 
     def _set_joint_zero_arm(self, i: int) -> bool:
-        """arm 第 ``i`` 关节设零（0xFE 帧 + 新状态帧链路 ACK）。"""
+        """arm 第 `i` 关节设零（0xFE 帧 + 新状态帧链路 ACK）。"""
         return self._bus_arm.cmd_verified(self._motors_arm[i], _CMD_ZERO, None)
 
     def _set_joint_zero_end(self, i: int) -> bool:
-        """end 第 ``i`` 电机设零。"""
+        """end 第 `i` 电机设零（0xFE 帧 + 新状态帧链路 ACK）。"""
         return self._bus_end.cmd_verified(self._motors_end[i], _CMD_ZERO, None)
 
     # ============================================================
     # 第四部分：发送（7 个内核，入参均已由基类校验裁剪——只组帧 + 锁内写串口）
     # ============================================================
     def _send_joint_mit_arm(self, i: int, tau: float, q: float, dq: float, kp: float, kd: float) -> None:
-        """arm 第 ``i`` 关节 MIT 帧下发（位域打包见 :func:`_pack_mit`）。"""
+        """arm 第 `i` 关节 MIT 帧下发（位域打包见 :func:`_pack_mit`）。"""
         m = self._motors_arm[i]
         self._bus_arm.write(m.prefix + _pack_mit(m, tau, q, dq, kp, kd) + b"\x00")
 
     def _send_joint_mit_end(self, i: int, tau: float, q: float, dq: float, kp: float, kd: float) -> None:
-        """end 第 ``i`` 电机 MIT 帧下发。"""
+        """end 第 `i` 电机 MIT 帧下发（位域打包见 :func:`_pack_mit`）。"""
         m = self._motors_end[i]
         self._bus_end.write(m.prefix + _pack_mit(m, tau, q, dq, kp, kd) + b"\x00")
 
     def _send_joint_position_arm(self, i: int, q: float, vlim: float, flim: float) -> None:
-        """arm 第 ``i`` 关节 pos_force 帧下发（pos float32 + vel×100 + 电流标幺×10000，见 :func:`_pack_pos`）。"""
+        """arm 第 `i` 关节 pos_force 帧下发（pos float32 + vel×100 + 电流标幺×10000，见 :func:`_pack_pos`）。"""
         self._bus_arm.write(self._motors_arm[i].prefix_pos + _pack_pos(q, vlim, flim) + b"\x00")
 
     def _send_joint_position_end(self, i: int, q: float, vlim: float, flim: float) -> None:
-        """end 第 ``i`` 电机 pos_force 帧下发。"""
+        """end 第 `i` 电机 pos_force 帧下发（pos float32 + vel×100 + 电流标幺×10000，见 :func:`_pack_pos`）。"""
         self._bus_end.write(self._motors_end[i].prefix_pos + _pack_pos(q, vlim, flim) + b"\x00")
 
     def _send_joint_vel_arm(self, i: int, dq: float) -> None:
-        """arm 第 ``i`` 关节 vel 帧下发（速度 float32，见 :func:`_pack_vel`）。"""
+        """arm 第 `i` 关节 vel 帧下发（速度 float32，见 :func:`_pack_vel`）。"""
         self._bus_arm.write(self._motors_arm[i].prefix_vel + _pack_vel(dq) + b"\x00")
 
     def _send_joint_vel_end(self, i: int, dq: float) -> None:
-        """end 第 ``i`` 电机 vel 帧下发。"""
+        """end 第 `i` 电机 vel 帧下发（速度 float32，见 :func:`_pack_vel`）。"""
         self._bus_end.write(self._motors_end[i].prefix_vel + _pack_vel(dq) + b"\x00")
 
     def _send_action_end(self, action: str, **kwargs) -> None:
         """末端离散动作（DM 末端 = 夹爪电机，动作在 POSITION/pos_force 模式下执行）。
 
-        动作集：``"open"``→-5.0、``"home"``→-3.0、``"close"``→0.0（rad 固定行程位）、
-        ``"position"``→按需目标位置（kwarg ``position``，rad，JoyArm 层透传）。
-        模式不一致时自动切 POSITION（随写增益寄存器）；运动限速/限流取 cfg ``POS_VEL`` 的
-        ``vlim/flim`` 发送默认成员（缺配置被基类空值门禁拦截、warn 不发送）；
-        位置经 ``send_position_end`` 基类管道裁硬限位（越限就近裁剪 + warn）后整组下发。
+        动作集：`"open"`→-5.0、`"home"`→-3.0、`"close"`→0.0（rad 固定行程位）、
+        `"position"`→按需目标位置（kwarg `position`，rad，JoyArm 层透传）。
+        模式不一致时自动切 POSITION（随写增益寄存器）；运动限速/限流取 cfg `POS_VEL` 的
+        `vlim/flim` 发送默认成员（缺配置被基类空值门禁拦截、warn 不发送）；
+        位置经 `send_position_end` 基类管道裁硬限位（越限就近裁剪 + warn）后整组下发。
 
         :param action: 动作名（open / home / close / position）。
-        :param kwargs: ``position`` 动作的目标位置（rad）。
-        :raises ValueError: 未知动作、或 position 动作缺 ``position`` 参数（基类转 warn）。
+        :param kwargs: `position` 动作的目标位置（rad）。
+        :raises ValueError: 未知动作、或 position 动作缺 `position` 参数（基类转 warn）。
         :raises RuntimeError: 切 POSITION 模式失败（基类转 warn）。
         """
         if action == "position":
@@ -632,9 +633,9 @@ class BackendDM(Backend):
     # 第五部分：清错（2 个内核）
     # ============================================================
     def _clear_joint_error_arm(self, i: int) -> bool:
-        """清 arm 第 ``i`` 关节错误（0xFB 清错帧 + 新状态帧核对 err<2；清错后自动失能属正常）。"""
+        """清 arm 第 `i` 关节错误（0xFB 清错帧 + 新状态帧核对 err<2；清错后自动失能属正常）。"""
         return self._bus_arm.cmd_verified(self._motors_arm[i], _CMD_CLEAR, lambda e: e < 2)
 
     def _clear_joint_error_end(self, i: int) -> bool:
-        """清 end 第 ``i`` 电机错误。"""
+        """清 end 第 `i` 电机错误（0xFB 清错帧 + 新状态帧核对 err<2；清错后自动失能属正常）。"""
         return self._bus_end.cmd_verified(self._motors_end[i], _CMD_CLEAR, lambda e: e < 2)

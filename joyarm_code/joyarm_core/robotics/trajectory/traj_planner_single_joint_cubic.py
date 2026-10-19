@@ -36,8 +36,8 @@ class SingleJointCubicTrajPlanner(TrajPlanner):
 
         :param arm: 机械臂对象（起点读 `arm.get_state_arm()` 的 q/dq。
         :param target: 目标帧，单点或序列——仅取单帧的 `q/dq`（`dq` 为终点速度、缺省则取 0）。
-        :return: 是否完成规划（无效目标回退恒定 q_home 亦返回 ``True``）。
-        :raises ValueError: q 有效但目标帧 ``time`` 为 ``None``。
+        :return: 是否完成规划（无效目标回退恒定 q_home 亦返回 `True`）。
+        :raises ValueError: q 有效但目标帧 `time` 为 `None`。
 
         **实现**：四约束解析系数 `c0=q0`、`c1=dq0`、`c2=(3Δq−(2·dq0+dq1)·T)/T²`、`c3=(−2Δq+(dq0+dq1)·T)/T³`（`T=time−now`）；
             无效目标发布零系数退化段（恒定 q_home），目标已过期直接恒定发布目标 q1。
@@ -60,7 +60,7 @@ class SingleJointCubicTrajPlanner(TrajPlanner):
             self._multi_warned = False      # 单帧/空目标规划后复位告警去重
         now = _time.time()
         if q1 is None:
-            # 无效目标：零系数退化段 = 恒定保持 q_home（限速归控制器步长裁剪）
+            # 无效目标：零系数退化段 = 恒定保持 q_home（限速由电机内部 与 backend 限位承担）
             zeros = np.zeros_like(q_home)
             self._seg = (now, 0.0, q_home.copy(), zeros, zeros, zeros)
             return True

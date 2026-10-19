@@ -19,10 +19,10 @@ logger = logging.getLogger("joyarm_core.utils.limits")
 # 限位裁剪（clamp_to_limits：指令越限就近裁剪）
 # ============================================================
 def clamp_to_limits(targets: np.ndarray, limits: JointLimits) -> np.ndarray:
-    """运动指令逐元素裁剪到关节限位内；返回与 ``targets`` 同形状。
+    """运动指令逐元素裁剪到关节限位内；返回与 `targets` 同形状。
 
-    :param targets: ``(n,)`` 或 ``(N,n)`` 目标关节角，弧度。
-    :raises ValueError: 限位 ``q_min > q_max``（配置错误）、标量输入、末维与限位不匹配。
+    :param targets: `(n,)` 或 `(N,n)` 目标关节角，弧度。
+    :raises ValueError: 限位 `q_min > q_max`（配置错误）、标量输入、末维与限位不匹配。
     """
     targets = np.asarray(targets, dtype=float)
     q_min = np.asarray(limits.q_min, dtype=float)
@@ -56,7 +56,7 @@ def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
 
     `q_min`/`q_max`/`dq_max`/`tau_max`（rad / rad/s / N·m，）。
 
-    :param joint_cfgs: ``backend.arm.joints`` / ``backend.end.joints`` 条目列表。
+    :param joint_cfgs: `backend.arm.joints` / `backend.end.joints` 条目列表。
     """
     joints = list(joint_cfgs or [])
     if not joints:
@@ -92,11 +92,11 @@ def limits_from_joint_cfgs(joint_cfgs: list) -> Optional[JointLimits]:
 
 def rand_within_limits(limits: JointLimits, size: Optional[int] = None,
             rng: Optional[np.random.Generator] = None) -> np.ndarray:
-    """在限位内均匀采样关节角（``(n,)``；``size`` 给出 ``(size, n)``）。
+    """在限位内均匀采样关节角（`(n,)`；`size` 给出 `(size, n)`）。
 
     :param limits: 限位。
-    :param size: 采样组数；缺省单组 ``(n,)``。
-    :param rng: ``numpy`` 随机生成器。
+    :param size: 采样组数；缺省单组 `(n,)`。
+    :param rng: `numpy` 随机生成器。
     """
     rng = rng if rng is not None else np.random.default_rng()
     n = np.asarray(limits.q_min).shape[0]
@@ -108,9 +108,9 @@ def rand_within_limits(limits: JointLimits, size: Optional[int] = None,
 def soft_limits_from_cfg(cfg: dict, n: int) -> JointLimits:
     """从 config 四键**直值**字典解析软限位。
 
-    :param cfg: 四键字典 ``{"q_min", "q_max", "dq_max", "tau_max"}``，每键为标量或n元列表。
+    :param cfg: 四键字典 `{"q_min", "q_max", "dq_max", "tau_max"}`，每键为标量或n元列表。
     :param n: 关节数。
-    :raises ValueError: 结构非法（非字典/未知键/列表长度 ≠ n/负的幅值上限/``q_min > q_max``）。
+    :raises ValueError: 结构非法（非字典/未知键/列表长度 ≠ n/负的幅值上限/`q_min > q_max`）。
     """
     if not isinstance(cfg, dict):
         raise ValueError(
@@ -147,12 +147,12 @@ def soft_limits_from_cfg(cfg: dict, n: int) -> JointLimits:
 
 
 def tcp_limits_from_cfg(tl: dict) -> TcpLimits:
-    """从 config ``tcp_limits`` 段解析末端空间限位。
+    """从 config `tcp_limits` 段解析末端空间限位。
 
-    ``workspace_box`` 两种写法：``[[xmin,ymin,zmin],[xmax,ymax,zmax]]``
-    或三行``[min,max]`` 的 ``(3,2)``，内部统一成 ``(3,2)``。
+    `workspace_box` 两种写法：`[[xmin,ymin,zmin],[xmax,ymax,zmax]]`
+    或三行`[min,max]` 的 `(3,2)`，内部统一成 `(3,2)`。
 
-    :param tl: config ``joyarm.tcp_limits`` 段。
+    :param tl: config `joyarm.tcp_limits` 段。
     """
     box = np.asarray(tl["workspace_box"], dtype=float) \
         if tl.get("workspace_box") is not None else None

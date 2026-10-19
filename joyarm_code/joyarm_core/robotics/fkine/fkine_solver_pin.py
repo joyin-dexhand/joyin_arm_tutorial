@@ -33,7 +33,7 @@ class PinFkineSolver(FkineSolver):
 
         :param arm: 机械臂对象。
         :param q: `(n,)` 关节角，弧度。
-        :param frame: 目标帧名（``str``，如 ``link6``）。
+        :param frame: 目标帧名（`str`，如 `link6`）。
         :return: `Pose`（xyz+四元数），该帧在基坐标系下的位姿。
 
         **实现**：`forwardKinematics` + `updateFramePlacement`；每次计算

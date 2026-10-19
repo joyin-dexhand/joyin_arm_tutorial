@@ -15,16 +15,16 @@ JoyArm 层离线分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
       02 组  只读属性与防篡改：writeable=False 原地写抛异常、get_config 深拷贝
              （外部篡改不反哺内部）、只读 @property 零拷贝返本体；
       03 组  委托面与互斥：DummyBackend 内核透传核对、FSM 运行中外部 arm 侧
-             指令空操作 + warn（决议 D4）、ctrl 线程豁免（决议 D5）；
+             指令空操作 + warn、ctrl 线程豁免；
       04 组  求解器域：get/set_activated/get_<域>_solvers、坏名 warn 保持原激活、
-             traj 先 plan 后换指针 + plan_hz 联动、ctrl 切换 MODE 联动（M5）；
+             traj 先 plan 后换指针 + plan_hz 联动、ctrl 切换 MODE 联动；
       05 组  数学门面：显式传参离线计算 vs pinocchio 原生 API 逐项对照
              （fkine/ikine/ikine_all/jac/jac_pinv/idyn/mass/coriolis/gravity 9 方法）；
       06 组  MotionFSM（DummyBackend 推演）：start 前置 RuntimeError、
              DISABLE→HOME→MOTION 自动迁移、home 到位门槛、保护事件直达、
              stop 超时强推；
       07 组  safe_monitor：硬规则 error≥2→DAMPING、断连/连续 None→DISABLE、
-             自定义规则绑定（M6 state_arm 允许 None）与同拍仲裁（硬优先 +
+             自定义规则绑定（state_arm 允许 None）与同拍仲裁（硬优先 +
              同组取危险最高）；
       08 组  可视化：start/stop_state_viz 离线降级不炸、meshcat 缺失 warn、
              HTTP /state.json 轮询端点、重复启停幂等与线程退出；
@@ -49,7 +49,7 @@ JoyArm 层离线分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
     source .venv/bin/activate
 
     # 3. 运行本脚本（在 joyarm_code/ 目录下；全离线、无交互；系统 python 超
-    #    requires-python 上界，一律经 uv 运行，决议 M9）
+    #    requires-python 上界，一律经 uv 运行）
     python joyarm_core/joyarm/joyarm_verify.py --help        # 完整用法
     python joyarm_core/joyarm/joyarm_verify.py --list        # 全部测试项清单
     python joyarm_core/joyarm/joyarm_verify.py               # 全部（缺省 all）
@@ -98,7 +98,7 @@ __all__ = ["main"]
 
 MODEL = "joyarm_dm"                      # 被测型号（真实 config + robot_model 资产）
 DUMMY_KEY = "backend_verify_dummy"       # DummyBackend 临时注册名（注入用，用完恢复）
-VERIFY_CTRL = "verify_test_controller"   # M5 联动验证用临时控制器注册名
+VERIFY_CTRL = "verify_test_controller"   # ctrl 切换 MODE 联动验证用临时控制器注册名
 
 # FSM / 事件类用例的状态等待上限（秒；fsm_hz=50，正常迁移 ≤ 数拍）
 _WAIT_STATE = 3.0
@@ -157,14 +157,14 @@ class DummyBackend(Backend):
 
     行为脚本化：
 
-    - ``calls``：内核调用记录 ``(内核名, 参数...)``（``recording=False`` 时停记，
+    - `calls`：内核调用记录 `(内核名, 参数...)`（`recording=False` 时停记，
       供高频拍降噪声；判定一律用水位后增量，见 :meth:`calls_since`）；
-    - ``modes`` / ``jstates``：逐关节模式与状态字典可编程（读时注入
-      ``t=time.time()``，使基类状态装配拿到新鲜时间戳、不触发回退 warn）；
-    - ``registers``：参数读写寄存器模拟；
-    - ``fail_at``：``{内核名: None|{joint 下标}}`` 命中抛异常（``None``=整族），
-      ``ret_false`` 同型命中返回 False；
-    - ``follow``：True 时 arm 位置指令一步到位跟随（模拟理想电机到位，供 FSM
+    - `modes` / `jstates`：逐关节模式与状态字典可编程（读时注入
+      `t=time.time()`，使基类状态装配拿到新鲜时间戳、不触发回退 warn）；
+    - `registers`：参数读写寄存器模拟；
+    - `fail_at`：`{内核名: None|{joint 下标}}` 命中抛异常（`None`=整族），
+      `ret_false` 同型命中返回 False；
+    - `follow`：True 时 arm 位置指令一步到位跟随（模拟理想电机到位，供 FSM
       到位门槛 / stop 回零推演；False 时 jstates 冻结在脚本注入值）。
     """
 
@@ -345,7 +345,7 @@ class DummyBackend(Backend):
         return not self._hit("clear_joint_error_end", i)
 
 
-# M5 联动验证用临时控制器（MODE=VELOCITY，与默认 POSITION 控制器可区分）
+# ctrl 切换 MODE 联动验证用临时控制器（MODE=VELOCITY，与默认 POSITION 控制器可区分）
 class _VerifyTestController(Controller):
     """仅验收用：切换后经 MODE 联动把电机模式置 VELOCITY 的哑控制器。"""
 
@@ -356,7 +356,7 @@ class _VerifyTestController(Controller):
 
 
 # ============================================================
-# Dummy 注入机制（决议 M8：临时改 cfg.backend.name + 替换 REGISTRY，用完恢复）
+# Dummy 注入机制（临时改 cfg.backend.name + 替换 REGISTRY，用完恢复）
 # ============================================================
 class _CfgSource:
     """load_config 替身：next 非 None 时返回该 cfg（一次性），否则返回基础注入 cfg。"""
@@ -389,9 +389,9 @@ class _AttrPatch:
 class _DictAddPatch:
     """注册表 dict 原地加键记录。
 
-    joyarm.py 在 import 时以**值引用**捕获各域 REGISTRY（``_DOMAIN_REGISTRIES``），
+    joyarm.py 在 import 时以**值引用**捕获各域 REGISTRY（`_DOMAIN_REGISTRIES`），
     替换模块属性不影响已捕获引用——必须向原 dict 原地加键才能同时被
-    ``_check_cfg``/``_build_domains`` 与 ``get_backend`` 看到。
+    `_check_cfg`/`_build_domains` 与 `get_backend` 看到。
     """
 
     def __init__(self, dct, key, value):
@@ -443,11 +443,11 @@ def _tweak_cfg(cfg: dict) -> dict:
     - backend.name → DUMMY_KEY（Dummy 注入点）；
     - runtime.move_wait_timeout → 1.0 s（默认 10 s，stop 超时强推项时长可控）；
     - traj 两规划器 plan_hz 拉开（hold 10 / cubic 20，切换联动可判）；
-    - control 追加 verify_test_controller（ctrl_hz=100，M5 联动切换可判）。"""
+    - control 追加 verify_test_controller（ctrl_hz=100，MODE 联动切换可判）。"""
     cfg = copy.deepcopy(cfg)
     cfg["backend"]["name"] = DUMMY_KEY
     cfg["joyarm"].setdefault("runtime", {})["move_wait_timeout"] = 1.0
-    for spec in cfg["robotics"]["traj"]:
+    for spec in cfg["robotics"]["trajectory"]:
         spec["plan_hz"] = 10.0 if spec["name"] == "single_joint_hold_traj_planner" else 20.0
     cfg["robotics"]["control"].append({"name": VERIFY_CTRL, "ctrl_hz": 100.0})
     return cfg
@@ -640,11 +640,11 @@ def _m_bad_reg(cfg):
 
 
 def _m_no_plan_hz(cfg):
-    cfg["robotics"]["traj"][0].pop("plan_hz", None)
+    cfg["robotics"]["trajectory"][0].pop("plan_hz", None)
 
 
 def _m_frac_hz(cfg):
-    cfg["robotics"]["traj"][0]["plan_hz"] = 10.5
+    cfg["robotics"]["trajectory"][0]["plan_hz"] = 10.5
 
 
 def _m_home_out(cfg):
@@ -811,7 +811,7 @@ def _it30():
         chk("get_state_arm→read_joint_state_arm×n",
             st is not None and st.q.shape == (n,)
             and len(d.calls_since(i0, "read_joint_state_arm")) >= n)
-        # ---- end 侧对称（D4：end 侧不受互斥） ----
+        # ---- end 侧对称（end 侧不受互斥） ----
         i0 = len(d.calls)
         arm.connect_end()
         arm.set_action_end("home")
@@ -827,7 +827,7 @@ def _it30():
 
 
 def _it31():
-    """D4 互斥：FSM 运行中外部线程 arm 侧指令空操作 + warn；只读/end 侧放行。"""
+    """FSM 外部指令互斥：FSM 运行中外部线程 arm 侧指令空操作 + warn；只读/end 侧放行。"""
     arm, d = make_arm()
     try:
         d.follow = False
@@ -862,7 +862,7 @@ def _it31():
         r = arm.set_zero_arm()
         checks.append(("set_zero_arm 拦截（ret=0）",
                        r == 0 and len(d.calls_since(i0, "set_joint_zero_arm")) == 0))
-        # D4 放行面：只读 get_* 与 end 侧方法
+        # 互斥放行面：只读 get_* 与 end 侧方法
         arm.connect_end()
         i0 = len(d.calls)
         st = arm.get_state_arm()
@@ -880,7 +880,7 @@ def _it31():
 
 
 def _it32():
-    """D5 豁免：MOTION 态 ctrl 线程自身的 send_position_arm 照常到达 backend。"""
+    """ctrl 线程互斥豁免：MOTION 态 ctrl 线程自身的 send_position_arm 照常到达 backend。"""
     arm, d = make_arm()
     try:
         d.follow = True
@@ -950,12 +950,12 @@ def _it40():
         hz_hold = arm.plan_hz
         checks.append(("traj plan_hz 联动", hz_cubic == 20.0 and hz_hold == 10.0,
                        f"cubic={hz_cubic}→hold={hz_hold}（期望 20→10）"))
-        # ctrl 切换 MODE 联动（M5：直连 _backend.set_mode_arm，不经公开 set_mode）
+        # ctrl 切换 MODE 联动（直连 _backend.set_mode_arm，不经公开 set_mode）
         arm.connect_arm()
         i0 = len(d.calls)
         r = arm.set_activated_ctrl_solver(VERIFY_CTRL)
         got = d.calls_since(i0, "set_joint_mode_arm")
-        checks.append(("ctrl 切换 MODE 联动（M5）",
+        checks.append(("ctrl 切换 MODE 联动",
                        r is True and arm.get_activated_ctrl_solver() == VERIFY_CTRL
                        and len(got) == arm.n_arm
                        and all(c[2] is ControlMode.VELOCITY for c in got)
@@ -1328,7 +1328,7 @@ def _it70():
 
 
 def _it71():
-    """断连与连续 None → DISABLE；M6 state_arm=None 仍调自定义规则；断连收尾走 close。"""
+    """断连与连续 None → DISABLE；state_arm=None 仍调自定义规则；断连收尾走 close。"""
     # ---- a) 断连 → DISABLE（事件通路 + FSM 迁移被 enter 未连接门禁拦（§6.1 规格：
     #      断连下无法迁移，急停走销毁路径 close()，见 stop_motion_fsm docstring）----
     arm, d = make_arm()
@@ -1375,14 +1375,14 @@ def _it71():
         d.fail_at["read_joint_state_arm"] = None       # 整族读失败 → get_state_arm None
         ok_b = _wait_event(arm, SafetyEvent.DISABLE)
         st_b = _wait_state(arm, MotionState.DISABLE)
-        m4 = _hit(_since(i0), "跳过本拍 step")
+        ctrl_skip = _hit(_since(i0), "跳过本拍 step")
         d.fail_at.pop("read_joint_state_arm", None)
         ok = ok_a and ok_b and st_b and any(seen_none)
         ev = (f"断连：{ev_a}；读状态整族失败（连续 None>0.1s）：event={arm.get_event().name}，"
               f"current={arm.get_current_motion_state().name}；自定义规则收到 "
-              f"state_arm=None（M6）={any(seen_none)}"
+              f"state_arm=None（读取失败仍调用）={any(seen_none)}"
               f"（{sum(seen_none)}/{len(seen_none)} 拍为 None）；"
-              f"ctrl 线程 M4 跳拍 warn={m4}")
+              f"ctrl 线程跳拍 warn={ctrl_skip}")
         return ("PASS" if ok else "FAIL"), ev
     finally:
         d.fail_at.pop("read_joint_state_arm", None)
@@ -1657,14 +1657,14 @@ _item(22, "只读引用零拷贝", "readonly", "低",
 # —— 03 组（委托面与互斥）——
 _item(30, "委托面透传核对", "delegate", "低",
       "JoyArm 公开方法逐项核对 DummyBackend 对应内核（调用名 + 关键参数 + 返回值透传；arm/end 对称）", _it30)
-_item(31, "FSM 运行中外部指令互斥（D4）", "delegate", "低",
+_item(31, "FSM 运行中外部指令互斥", "delegate", "低",
       "FSM 运行中外部线程的 arm 侧指令（send_position/set_mode/enable/clear_error/set_zero）空操作 + warn；只读与 end 侧放行", _it31)
-_item(32, "ctrl 线程豁免（D5）", "delegate", "低",
+_item(32, "ctrl 线程豁免", "delegate", "低",
       "MOTION 态 ctrl 线程自身的 send_position_arm 照常到达 backend（_is_internal_thread 豁免）", _it32)
 
 # —— 04 组（求解器域）——
 _item(40, "六域查询与切换联动", "solvers", "低",
-      "get_*_solvers=cfg 名单、默认激活=cfg 首位、切换后激活名/plan_hz/ctrl_hz/MODE（M5 直连）联动", _it40)
+      "get_*_solvers=cfg 名单、默认激活=cfg 首位、切换后激活名/plan_hz/ctrl_hz/MODE 联动（切换直连 _backend.set_mode）", _it40)
 _item(41, "坏名 warn 保持原激活", "solvers", "低",
       "六域 set_activated_*('no_such_solver') 均返回 False + warn『未在该域已加载成员中』且激活不变", _it41)
 _item(42, "traj 先 plan 后换指针", "solvers", "低",
@@ -1690,7 +1690,7 @@ _item(64, "stop 超时强推", "fsm", "低",
 _item(70, "硬规则 error≥2→DAMPING", "monitor", "低",
       "单关节故障码触发监视器 set_event(DAMPING)，FSM 迁入 DAMPING 并维持 MIT 阻尼", _it70)
 _item(71, "断连/连续 None→DISABLE", "monitor", "低",
-      "断连与连续 None>0.1s 双路径触发 DISABLE；M6 state_arm=None 仍调自定义规则；ctrl 线程 M4 跳拍 warn；断连收尾走 close", _it71)
+      "断连与连续 None>0.1s 双路径触发 DISABLE；state_arm=None 仍调自定义规则；ctrl 线程跳拍 warn；断连收尾走 close", _it71)
 _item(72, "自定义规则与同拍仲裁", "monitor", "低",
       "同组多命中取危险最高、硬规则优先于自定义（压过更高危自定义）、异常/非法返回忽略且不影响其他规则", _it72)
 

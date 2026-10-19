@@ -15,8 +15,9 @@ joyin_arm_tutorial/
 │   ├── *.md              #   各章正文（命名规则见下）
 │   ├── images/           #   章内配图（按正文文件同名子目录，如 images/chapt1_intro/）
 │   ├── stylesheets/      #   extra.css（表格居中等）、mermaid.css
-│   └── javascripts/      #   mathjax.js（数学公式渲染配置）
+│   └── javascripts/      #   image-viewer.js、mathjax.js
 ├── joyarm_code/          # ★ 配套代码库（用户向见其 README.md；架构/约定/维护规则见其 AGENTS.md）
+├── output/               # 脚本产出的分析图（如 fk_trajectory）
 ├── mkdocs.yml            # ★ 站点配置（主题、扩展、nav 目录树）
 ├── .github/workflows/    # deploy.yml：推 main 自动构建发布到 gh-pages
 ├── AGENTS.md             # 本文件：教程站点部分的项目记忆
