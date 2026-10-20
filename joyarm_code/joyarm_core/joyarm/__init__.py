@@ -45,7 +45,7 @@ logger = logging.getLogger("joyarm_core.joyarm")
 
 
 def _model_paths_missing(name: str) -> list:
-    """§2 工厂第③步四路径的缺失清单（空列表 = 齐全）。
+    """工厂第③步四路径的缺失清单（空列表 = 齐全）。
 
     四路径按序：`robot_model/<name>/`、`<name>/meshes/`、`<name>/urdf/`、
     `<name>/urdf/<name>.urdf`（型号名 = 目录名 = URDF 文件名）。
@@ -61,7 +61,7 @@ def _model_paths_missing(name: str) -> list:
 def _available_models() -> list:
     """listArm 的共享实现（与工厂失败消息共用）：扫描 `config/*.yaml` 逐型号过滤。
 
-    可行型号须**同时**满足（§2 三条件）：
+    可行型号须**同时**满足（三条件）：
 
     1. `config/<name>.yaml` 存在、非空 dict、含 `joyarm` / `robotics` / `backend`
        三顶层键；
@@ -118,7 +118,7 @@ class JoyArmFactory:
     # factory 工厂方法
     # ----------------------------------------------------------
     def create(self, name: str) -> JoyArm:
-        """创建指定型号的 JoyArm 实例（§2 四步固定顺序校验）。
+        """创建指定型号的 JoyArm 实例（四步固定顺序校验）。
 
         :param name: 型号名（如 `"joyarm_dm"`）——= config 文件名（URDF 目录
             `robot_model/<型号>/` 同名）。

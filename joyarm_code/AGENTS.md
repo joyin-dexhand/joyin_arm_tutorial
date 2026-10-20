@@ -14,7 +14,7 @@
 3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 5R/6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族）。
 4. **失败语义（抛异常，不返 None）**：工厂 `joyArm(model)` 四步固定顺序校验（①config 存在且解析为非空 dict → ②`backend.name` ∈ `REGISTRY` → ③robot_model 四路径齐全 → ④`JoyArm` 构造自检），任一步失败**抛携带具体原因的异常**（消息附可用型号列表 = `listArm()` 结果）；`JoyArm` 直用为**硬失败**——config 必需（缺失/自检不通过即抛）、backend 必配、robotics 配置的成员必须全部创建成功（约束2）。
 5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `pose`/`frame`/`q0`），**特有参数在后**（仅特定算法需要，如 ikine 数值法的 `tol`/`iters`，解析法可忽略）。
-6. **功能全面性 + 字典化**：机械臂的常见功能（读配置、配置自检、连接/失连、使能/失能、状态读取、指令下发、运动状态机、安全监视、运行状态可视化……）在 `JoyArm` 类内完成定义。robotics 六域策略成员**统一字典化**：config 可指定单个或列表规格（全部加载进 `dict[注册名→实例]`，首个为激活、有且仅有一个被激活），运行期经 `set_activated_<域>_solver` 热切换。
+6. **功能全面性 + 字典化**：机械臂的常见功能（读配置、配置自检、连接/失连、使能/失能、状态读取、指令下发、运动状态机、安全监视、运行状态可视化……）在 `JoyArm` 类内完成定义。robotics 六域策略成员**统一字典化**：config 可指定单个或列表规格（全部加载进 `dict[注册名→实例]`，首个为激活、有且仅有一个被激活），运行期经 `set_<域>_solver` 热切换。
 7. **robotics 独立运行**：robotics 子模块不得 import `joyarm`（鸭子类型消费 `arm`）；各章算法实现须可脱离 JoyArm 独立运行与测试（直接实例化，构造参数自足）。
 8. **教学数据读取路径**：config 在 `JoyArm.__init__` **一次性深拷贝**存入 `self._cfg`（隔离外部引用，`get_config()` 另返回深拷贝）；教学数据（如 MDH 参数）由教学算法经 `arm.get_config()` 从**类内已加载数据**读取，**不重新加载 yaml 文件**；MDH 等非通用参数不做 cfg 跨源自检（对比项见 §1.3）。
 9. **开闭原则**：常见变更（新机械臂型号、换电机、结构更新、升级算法）以最小改动完成（新型号三件套见约束1；换算法 = 改 config 注册名 + 注册表一行），对扩展开放、对修改关闭；新增实现不得改动 `JoyArm` 接口签名。
@@ -101,8 +101,8 @@ backend: {name: backend_dm, 可选运行键 state_refresh_hz/write_settle（默�
 - **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
 - **设备模型**（`joyarm/`）：`JoyArm` = 组合根单类（无型号子类）；`joyArm(model)` 外部推荐创建入口（`JoyArmFactory` 实例、可直接调用；失败语义见约束4）；`listArm()` 列可用型号。文件 `joyarm.py` / `__init__.py`。
 - **Backend 整机两层**（`backend/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendDM`（1:1 对应见约束1）。`REGISTRY` + `get_backend(name)` 供 config 选型。
-- **属性约定**：类内成员一律 `_` 前缀私有，类外访问经只读 `@property`（限位/位形数组只读化后零拷贝返本体）或 `get_*/set_*` 方法；型号名/教学数据经 `arm.get_config()` 读（约束8）。常用只读属性：`pin_model`（pinocchio 缩减构型，nq=n_arm；**勿与型号名混淆**）/ `n_arm`/`n_end` / `joint_limits_hard_arm/end` / `joint_limits_soft_arm/end`（限位语义见 §1.3）/ `zero_/neutral_/home_arm/end` / `tcp_limits` / `plan_hz`/`ctrl_hz` / `is_connected_arm/end`/`is_enabled_arm/end`（与 backend 同名直连）；关节名查询 `get_joint_names_arm/end(joint)`（1 基序号口径，全文统一）；整机后端 = `_backend`（私有，必配，经 §3.3 委托面访问）。求解器形参用 `arm`（鸭子类型）。
-- **六域策略成员**：每域两成员 `_<域>_solvers`（`dict[注册名→实例]`）+ `_activated_<域>_solver`（激活**对象**指针）；域缩写 `fkine/ikine/jac/dyn/traj/ctrl`（cfg 段键 `fkine/ikine/jacobian/dynamics/trajectory/control`）。公开方法三件套：`get_<域>_solvers()` / `set_activated_<域>_solver(name)` / `get_activated_<域>_solver()`（热切换协议见 §3.3）。
+- **属性约定**：类内成员一律 `_` 前缀私有，类外访问经只读 `@property`（限位/位形数组只读化后零拷贝返本体）或 `get_*/set_*` 方法；型号名/教学数据经 `arm.get_config()` 读（约束8）。常用只读属性：`pin_model`（pinocchio 缩减构型，nq=n_arm；**勿与型号名混淆**）/ `n_arm`/`n_end` / `joint_limits_hard_arm/end` / `joint_limits_soft_arm/end`（限位语义见 §1.3）/ `zero_/neutral_/home_arm/end` / `tcp_limits` / `plan_hz`/`ctrl_hz` / `is_connected_arm/end`/`is_enabled_arm/end`、`joint_state_arm/end`（均与 backend 同名直连；joint_state 为缓存快照被动只读、不触发读帧，需实时走 `get_state_*`）；关节名查询 `get_joint_names_arm/end(joint)`（1 基序号口径，全文统一）；整机后端 = `_backend`（私有，必配，经 §3.3 委托面访问）。求解器形参用 `arm`（鸭子类型）。
+- **六域策略成员**：每域两成员 `_<域>_solvers`（`dict[注册名→实例]`）+ `_activated_<域>_solver`（激活**对象**指针）；域缩写 `fkine/ikine/jac/dyn/traj/ctrl`（cfg 段键 `fkine/ikine/jacobian/dynamics/trajectory/control`）。公开方法三件套：`get_<域>_solvers()` / `set_<域>_solver(name)` / `get_activated_<域>_solver()`（热切换协议见 §3.3）。
 - **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…，末端离散动作 `set_action_end(action, **kw)`）；三模式整组下发 `send_mit/send_position/send_vel_{arm,end}`（无逐 joint 子集参数）；`set_mode_*` 默认 MIT；参数读写 `read/write_param_{arm,end}`（族级：读返列表、写等长列表）；数学门面前缀 `solve_`（solve_fkine/solve_ikine/solve_ikine_all/solve_idyn）或 `get_`（get_jac/get_jac_pinv_damped/get_mass_matrix/get_coriolis/get_gravity）；到位判断 `is_in_q_arm/end`、`is_in_pose_arm`；目标通道 `set/get_target_trajframe` + 便捷封装 `set_target_joint/set_target_cart`；FSM `start/stop_motion_fsm`、`get_current/get_target_motion_state`；安全 `set/get_event`、`start/stop_monitor`、`set_monitor_rules`；可视化 `start/stop_state_viz`；销毁 `close()`。
 - **算法可换（成员即策略）**：每域 = ABC + `REGISTRY`（实现一节点一文件，各章新增）。
 
@@ -129,7 +129,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举（ControlMode/MotionState/SafetyEvent）+ 数据类（Pose/TrajFrame/JointState/Wrench/Twist/Accel/JointLimits/TcpLimits/IKResult/ComplianceParams 等） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | 限位助手：硬/软/tcp 限位构建 + 指令裁剪 + 限位内采样（签名见 §3.3） | Ch11 | ✅ |
-| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个抽象内核：24 单 joint + 4 总线级 + 1 整组动作）；三模式发送（cfg `default_mode` 可配、缺省 MIT，connect 自动 best-effort 设定）；动态数据（模式/状态快照）一律经 `get_mode_*`/`get_state_*` **读时刷新**（无 `mode_*`/`joint_state_*` 直读 @property）；`is_connected_*`/`is_enabled_*` 三值标志 @property；`send_mit_*` 签名 `(q, dq=None, tau=None, kp=None, kd=None)`（`q` 必填；`dq`/`tau` 缺省置 `zeros(n)` 不广播；`kp`/`kd` 缺省取 cfg MIT 增益成员；三指令校验全在 `*_impl`、公开接口零校验）；cfg 预解析硬限位/发送默认/POS_VEL 四增益（切 POSITION/VELOCITY 随写寄存器）/baud/协议标识三键/两运行键（state_refresh_hz、write_settle）；`cfg` @property 返 MappingProxyType 只读视图、`joint_limits_*` 数组 writeable=False 零拷贝；成员变量全私有化；运行期 warn/info 直接输出 | Ch2 | ✅ |
+| `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个抽象内核：24 单 joint + 4 总线级 + 1 整组动作）；三模式发送（cfg `default_mode` 可配、缺省 MIT，connect 自动 best-effort 设定）；动态数据读取：`get_mode_*`/`get_state_*` **读时刷新**；`joint_state_*` 只读快照 @property（被动直读槽位、不触发读帧，供监视器/可视化等无需实时者）；`is_connected_*`/`is_enabled_*` 三值标志 @property；无 `mode_*` 直读属性；`send_mit_*` 签名 `(q, dq=None, tau=None, kp=None, kd=None)`（`q` 必填；`dq`/`tau` 缺省置 `zeros(n)` 不广播；`kp`/`kd` 缺省取 cfg MIT 增益成员；三指令校验全在 `*_impl`、公开接口零校验）；cfg 预解析硬限位/发送默认/POS_VEL 四增益（切 POSITION/VELOCITY 随写寄存器）/baud/协议标识三键/两运行键（state_refresh_hz、write_settle）；`cfg` @property 返 MappingProxyType 只读视图、`joint_limits_*` 数组 writeable=False 零拷贝；成员变量全私有化；运行期 warn/info 直接输出 | Ch2 | ✅ |
 | `backend/backend_dm.py` | `BackendDM`（DM 7 电机经 U2CAN 串口转 CAN 桥，模块私有 `_DMMotor`/`_DMBus`：RX 收取线程纯收取默认 1000Hz（cfg `rx_hz`，上限 5000）、状态快照单一 tuple 原子换入、状态读非阻塞（新鲜直返/陈旧发 0xCC 即返当前快照/硬陈旧 >0.02s 先发刷新帧再上抛防洗白且可自愈）；模式寄存器 RID10 MIT/VEL/Torque_Pos=1/3/4（POSITION 走 0x300+id pos_force 帧）、切 POSITION/VELOCITY 随写 4 增益（RID25-28，NaN 跳过）；反馈帧含双温度（data[6]=T_MOS、data[7]=T_Rotor）；全操作内核验证+重试（参数 0x55 回显核对/0x33 应答、使能/失能/设零/清错 0xFC/FD/FE/FB 新状态帧核对 err，应答按电机+RID+时刻配对防洗白）；僵尸总线重连先关再重建、断连清扫无主总线；组帧/解码与厂商库比特级一致；无 save；末端离散动作 open/home/close/position（-5.0/-3.0/0.0 rad/kwarg `position` 透传：自动切 POSITION 随写增益 + cfg vlim/flim 发送默认 + 位置经基类管道裁硬限位） | Ch6/13 | ✅ |
 | `backend/backend_dm_mujoco.py` | `BackendDMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_dm` 同型号配套；文件待创建，实现后 REGISTRY 注册 `backend_dm_mujoco`） | — | 🟡 |
 | `backend/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError，桩消息前缀自动取 `self._name`（cfg `backend.name` 注册名，未传回退占位前缀 `backend_<型号>.py`，复制后无需手改）+ 逐方法实现指引注释 + 统一 `:param:/:return:/:raises:` 契约块（类型/单位/范围/维度与基类已做校验）+ 全量私有成员台账（直接消费 / 按需借用 / 勿动分档）+ 最小可用子集说明：必实现 14（连接/断连/使能/失能/读状态/读模式/设模式 ×2 族）、按需 15（参数读写/设零/三模式发送/离散动作/清错），不支持的能力保留桩由基类转 warn 降级；复制为 `backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入；含 DM 类关节电机/Feetech 类舵机双家族差异指引（覆盖混合硬件 arm 电机 + end 舵机、无 end 型号适配）、联调自检清单与「实现后 docstring 改写为型号介绍说明」指引（七步接入），受 test_69 冒烟保护：29 桩全量消息格式校验（含前缀随 name 自动切换）+ 基类内核集漂移守护 | — | ✅ |
@@ -178,14 +178,14 @@ load_config(model) → dict  # config 加载（缺失/解析失败/顶层非映�
 ```python
 # 配置与只读属性
 JoyArm.get_config() → dict    # 深拷贝快照（教学数据读取口，约束8）✅
-@property：pin_model · n_arm/n_end · joint_limits_hard_arm/end · joint_limits_soft_arm/end · zero_/neutral_/home_arm/end · tcp_limits · plan_hz/ctrl_hz（随热切换更新，未配置 None）· is_connected_arm/end · is_enabled_arm/end    # 限位/位形数组只读化零拷贝返本体 ✅
+@property：pin_model · n_arm/n_end · joint_limits_hard_arm/end · joint_limits_soft_arm/end · zero_/neutral_/home_arm/end · tcp_limits · plan_hz/ctrl_hz（随热切换更新，未配置 None）· is_connected_arm/end · is_enabled_arm/end · joint_state_arm/end（backend 同名直连，缓存快照被动只读）    # 限位/位形数组只读化零拷贝返本体 ✅
 # 关节查询与采样
 JoyArm.get_joint_names_arm/end(joint="all"|1基序号) · rand_q_arm/end(joint_limits=None)    # 缺省软限位内均匀采样 ✅
 # 硬件后端委托面（§4.1 总表同构直连；动态数据读时刷新）
 connect/disconnect_arm/end · enable/disable_arm/end · read/write_param_arm/end · get/set_mode_arm/end · get_state_arm/end() → JointState · set_zero_arm/end · get/check/clear_error_arm/end · send_mit_arm/end(q,dq=None,tau=None,kp=None,kd=None) · send_position_arm/end(q,vlim=None,flim=None) · send_vel_arm/end(dq) · set_action_end(action,**kw) ✅
 #   FSM 外部指令互斥：FSM 运行中外部线程调 arm 侧指令类方法（enable/disable/set_mode/set_zero/clear_error/send_*_arm）空操作+warn；ctrl 线程自身豁免（照常委托下发）；end 侧与参数读写、状态读取不受互斥
 # 六域求解器管理（每域三方法）
-JoyArm.get_<域>_solvers() → list[str] · set_activated_<域>_solver(name) → bool · get_activated_<域>_solver() → str ✅
+JoyArm.get_<域>_solvers() → list[str] · set_<域>_solver(name) → bool · get_activated_<域>_solver() → str ✅
 #   热切换协议：traj 域先以新规划器试 plan 一次（成功才替换并同步 plan_hz 与线程节拍）；ctrl 域换指针+按 MODE 联动 set_mode_arm+更新 ctrl_hz；其余四域直接换指针；名称不在已加载成员中 warn 保持原激活
 # 目标帧通道（应用线程写、规划线程每拍整体重读；deepcopy 后单条赋值原子发布）
 JoyArm.set_target_trajframe(单帧|序列|None) · get_target_trajframe() · set_target_joint(t, q, dq?, ddq?, tau?) · set_target_cart(t, pose, twist?, accel?, wrench?)    # 便捷封装内部组帧走同一通道；t=Unix 秒、q=(n,)、pose=Pose 或 (7,) ✅
@@ -196,7 +196,7 @@ JoyArm.is_in_q_arm/end(q, tol_q?) → bool · is_in_pose_arm(pose, tol_pos?, tol
 # 运动状态机 MotionFSM（六状态 DISABLE/ZERO/HOME/MOTION/HOLD/DAMPING；home(3) 中枢路线表；状态内硬件操作直连 _backend；转移时一次性检查连接/使能/模式）
 JoyArm.start_motion_fsm()（前置已连接，否则 RuntimeError；非阻塞；自动 DISABLE→HOME→MOTION，3→4 受 home 到位门槛）· stop_motion_fsm()（阻塞回零失能，超时 move_wait_timeout 强制推进；未连接抛 RuntimeError）· get_current_motion_state() · get_target_motion_state() ✅
 # 安全事件与监视器（事件→目标状态映射：NORMAL→MOTION…DISABLE 危险度最高；FSM 每拍消费，延迟 ≤1/fsm_hz）
-JoyArm.set_event(SafetyEvent) · get_event() · start_monitor() / stop_monitor() · set_monitor_rules(rules)    # 监视器独立 daemon 线程（monitor_hz）：硬规则（error≥2→DAMPING；断连或 get_state_arm 连续 0.1s None→DISABLE）优先于自定义，同组多命中取危险度最高；rule(state_arm, state_end, motion, event) → SafetyEvent|None ✅
+JoyArm.set_event(SafetyEvent) · get_event() · start_monitor() / stop_monitor() · set_monitor_rules(rules)    # 监视器独立 daemon 线程（monitor_hz）：硬规则（error≥2→DAMPING；断连或连续 0.1s 无新鲜快照→DISABLE，快照过期过滤判 None）优先于自定义，同组多命中取危险度最高；rule(state_arm, state_end, motion, event) → SafetyEvent|None ✅
 # 运行状态可视化（HTTP 轮询、零新增依赖）
 JoyArm.start_state_viz(traj_points=200) / stop_state_viz()    # 单页面监控网页（左 iframe 嵌 meshcat 3D（vis 可选依赖，缺包降级仅 HTML 面板）+ 右状态面板（FSM/事件/关节 q/dq/tau/双温度/error/末端位姿/backend 标志），JS ~5Hz fetch /state.json）+ 单一只读 daemon 线程（绝不下发指令）；轨迹显示可选（需 MOTION 态，界面可切）✅
 # 销毁（支持 with 上下文）
@@ -216,7 +216,7 @@ Controller：step(arm, target, jointstate) → bool（当前帧+JointState，算
 #### Backend / 限位 / 数学 / 类型 API
 
 ```python
-Backend(ABC, cfg) ✅   # 公开面：connect_*/disconnect_*（连接成功自动 best-effort 设 cfg default_mode，缺省 MIT）、enable/disable（逐 joint 内核编排、返 1/0）、get_mode（一致返模式并更新缓存，不一致/失败 None）、get_state（JointState 纯物理量含 t）、read/write_param（写入无静置读回，核对由上层 JoyArm 负责）、set_zero、set_mode（默认 MIT；成功后乐观更新模式缓存、门禁立即放行，一致性经 get_mode 读回纠正）、get/check/clear_error（读状态快照 error 码 list → 判 0/1 正常 → 发清错指令、无回读验证）、send_action_end、close（显式停刷新线程）；@property：cfg（MappingProxyType 只读视图）/ name / n_joints_*/ is_connected_*/ is_enabled_*/ joint_limits_*（只读，数组 writeable=False 零拷贝返本体）——动态数据无 mode_*/joint_state_* 直读属性；限位裁剪唯一执行点（语义见 §1.3）
+Backend(ABC, cfg) ✅   # 公开面：connect_*/disconnect_*（连接成功自动 best-effort 设 cfg default_mode，缺省 MIT）、enable/disable（逐 joint 内核编排、返 1/0）、get_mode（一致返模式并更新缓存，不一致/失败 None）、get_state（JointState 纯物理量含 t）、read/write_param（写入无静置读回，核对由上层 JoyArm 负责）、set_zero、set_mode（默认 MIT；成功后乐观更新模式缓存、门禁立即放行，一致性经 get_mode 读回纠正）、get/check/clear_error（读状态快照 error 码 list → 判 0/1 正常 → 发清错指令、无回读验证）、send_action_end、close（显式停刷新线程）；@property：cfg（MappingProxyType 只读视图）/ name / n_joints_*/ is_connected_*/ is_enabled_*/ joint_limits_*（只读，数组 writeable=False 零拷贝返本体）/ joint_state_*（只读快照槽位本体，被动直读不触发读帧）——无 mode_* 直读属性；限位裁剪唯一执行点（语义见 §1.3）
 send_mit_{arm,end}(q, dq=None, tau=None, kp=None, kd=None) · send_position_{arm,end}(q, vlim=None, flim=None) · send_vel_{arm,end}(dq)   # 三模式整组下发（公开薄委托+缺省直接解析：q 必填 (n,)；dq/tau 缺省 zeros(n) 不广播；kp/kd 缺省取 _kp/_kd_mit_default_*、vlim/flim 缺省取 _vlim/_flim_default_* 成员；校验全在 *_impl：①维度→②空值/越限裁剪→③连接/模式门禁→④逐 joint 内核）
 get_backend(name) · REGISTRY     # config backend.name 选型（REGISTRY 现有 backend_dm；新型号接入 = 复制 backend_template.py 七步接入）✅
 clamp_to_limits(targets, limits) · limits_from_joint_cfgs(joint_cfgs) · soft_limits_from_cfg(cfg, n) · tcp_limits_from_cfg(tl) · rand_within_limits(limits)   # ✅

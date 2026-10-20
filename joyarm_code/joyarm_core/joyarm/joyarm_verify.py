@@ -906,17 +906,17 @@ def _it32():
 
 # ---------------- 04 组（求解器域） ----------------
 _DOMAINS = {
-    "fkine": ("get_fkine_solvers", "set_activated_fkine_solver",
+    "fkine": ("get_fkine_solvers", "set_fkine_solver",
               "get_activated_fkine_solver", "fkine"),
-    "ikine": ("get_ikine_solvers", "set_activated_ikine_solver",
+    "ikine": ("get_ikine_solvers", "set_ikine_solver",
               "get_activated_ikine_solver", "ikine"),
-    "jac": ("get_jac_solvers", "set_activated_jac_solver",
+    "jac": ("get_jac_solvers", "set_jac_solver",
             "get_activated_jac_solver", "jacobian"),
-    "dyn": ("get_dyn_solvers", "set_activated_dyn_solver",
+    "dyn": ("get_dyn_solvers", "set_dyn_solver",
             "get_activated_dyn_solver", "dynamics"),
-    "traj": ("get_traj_solvers", "set_activated_traj_solver",
-             "get_activated_traj_solver", "traj"),
-    "ctrl": ("get_ctrl_solvers", "set_activated_ctrl_solver",
+    "traj": ("get_traj_solvers", "set_traj_solver",
+             "get_activated_traj_solver", "trajectory"),
+    "ctrl": ("get_ctrl_solvers", "set_ctrl_solver",
              "get_activated_ctrl_solver", "control"),
 }
 
@@ -946,14 +946,14 @@ def _it40():
                            f"ret={r}, 激活={getattr(arm, g_act)()}"))
         # traj 切换后 plan_hz 联动（tweak：hold=10 / cubic=20）
         hz_cubic = arm.plan_hz
-        arm.set_activated_traj_solver("single_joint_hold_traj_planner")
+        arm.set_traj_solver("single_joint_hold_traj_planner")
         hz_hold = arm.plan_hz
         checks.append(("traj plan_hz 联动", hz_cubic == 20.0 and hz_hold == 10.0,
                        f"cubic={hz_cubic}→hold={hz_hold}（期望 20→10）"))
         # ctrl 切换 MODE 联动（直连 _backend.set_mode_arm，不经公开 set_mode）
         arm.connect_arm()
         i0 = len(d.calls)
-        r = arm.set_activated_ctrl_solver(VERIFY_CTRL)
+        r = arm.set_ctrl_solver(VERIFY_CTRL)
         got = d.calls_since(i0, "set_joint_mode_arm")
         checks.append(("ctrl 切换 MODE 联动",
                        r is True and arm.get_activated_ctrl_solver() == VERIFY_CTRL
@@ -962,7 +962,7 @@ def _it40():
                        and arm.get_mode_arm() is ControlMode.VELOCITY
                        and arm.ctrl_hz == 100.0,
                        f"set_joint_mode_arm×{len(got)}→VELOCITY，ctrl_hz={arm.ctrl_hz}"))
-        r = arm.set_activated_ctrl_solver("joint_position_controller")
+        r = arm.set_ctrl_solver("joint_position_controller")
         checks.append(("ctrl 切回默认",
                        r is True and arm.ctrl_hz == 200.0
                        and arm.get_mode_arm() is ControlMode.POSITION,
@@ -975,7 +975,7 @@ def _it40():
 
 
 def _it41():
-    """坏名 warn 保持原激活：六域 set_activated_*('no_such_solver') 均 False + warn。"""
+    """坏名 warn 保持原激活：六域 set_*('no_such_solver') 均 False + warn。"""
     arm, _ = make_arm()
     try:
         checks = []
@@ -1002,7 +1002,7 @@ def _it42():
         q_t = np.clip(arm.home_arm + 0.05, arm.joint_limits_hard_arm.q_min,
                       arm.joint_limits_hard_arm.q_max)
         arm.set_target_joint(time.time() + 1.0, q_t)
-        r = arm.set_activated_traj_solver("single_joint_cubic_traj_planner")
+        r = arm.set_traj_solver("single_joint_cubic_traj_planner")
         planner = arm._activated_traj_solver
         sample_err = _exc(planner.sample, time.time() + 0.5)   # 中段采样（起步太近难判移动）
         q_mid = None if sample_err else np.asarray(planner.sample(time.time() + 0.5).q)
@@ -1013,7 +1013,7 @@ def _it42():
         # plan 失败路径：断连后 cubic.plan 取不到起点 → 试规划异常 → 保持原激活
         arm.disconnect_arm()
         i1 = _mark()
-        r2 = arm.set_activated_traj_solver("single_joint_cubic_traj_planner")
+        r2 = arm.set_traj_solver("single_joint_cubic_traj_planner")
         ok2 = (r2 is False
                and arm.get_activated_traj_solver() == "single_joint_cubic_traj_planner"
                and _hit(_since(i1), "试规划"))
@@ -1067,7 +1067,7 @@ def _it50():
 
         # 3) ikine_all：数值激活→RuntimeError；解析激活→全解往返
         e_num = _exc(arm.solve_ikine_all, pose)
-        arm.set_activated_ikine_solver("analytic_ikine_solver")
+        arm.set_ikine_solver("analytic_ikine_solver")
         r_all = arm.solve_ikine_all(pose)
         errs = []
         if r_all.q is not None and np.asarray(r_all.q).size:
@@ -1075,7 +1075,7 @@ def _it50():
                 pk = arm.solve_fkine(q_k)
                 errs.append(max(float(np.linalg.norm(pk.position - pose.position)),
                                 quat_err(pk.orientation, pose.orientation)))
-        arm.set_activated_ikine_solver("pin_ikine_solver")
+        arm.set_ikine_solver("pin_ikine_solver")
         checks.append(("solve_ikine_all（数值拒 / 解析全解）",
                        isinstance(e_num, RuntimeError) and r_all.success
                        and len(errs) >= 1 and max(errs) < 5e-3,
@@ -1329,7 +1329,7 @@ def _it70():
 
 def _it71():
     """断连与连续 None → DISABLE；state_arm=None 仍调自定义规则；断连收尾走 close。"""
-    # ---- a) 断连 → DISABLE（事件通路 + FSM 迁移被 enter 未连接门禁拦（§6.1 规格：
+    # ---- a) 断连 → DISABLE（事件通路 + FSM 迁移被 enter 未连接门禁拦（规格：
     #      断连下无法迁移，急停走销毁路径 close()，见 stop_motion_fsm docstring）----
     arm, d = make_arm()
     try:
@@ -1347,7 +1347,7 @@ def _it71():
         retry_warn = _hit(_since(i0), "单步", "失败")
         stuck_state = arm.get_current_motion_state().name   # 规格预期：无法迁移，保持原态
         ev_a = (f"dummy 断连后 event={arm.get_event().name}，current 保持 {stuck_state}"
-                f"（§6.1：enter 未连接抛 RuntimeError，FSM 每拍重试 warn={retry_warn}；"
+                f"（enter 未连接抛 RuntimeError，FSM 每拍重试 warn={retry_warn}；"
                 f"断连急停走销毁路径 close()）")
         arm.stop_monitor()
         e_close = _exc(arm.close)
@@ -1625,25 +1625,25 @@ _item(3, "工厂成功路径（Dummy 注入）", "factory", "低",
 
 # —— 01 组（初始化自检：坏 cfg 逐条异常）——
 _item(10, "缺顶层键", "init", "低",
-      "删 robotics 顶层段 → ValueError『缺少顶层配置段』（cfg 自检①）",
+      "删 robotics 顶层段 → ValueError『缺少顶层配置段』（cfg 自检）",
       _bad_cfg_item("缺顶层键 robotics", _m_del_top, "缺少顶层配置段"))
 _item(11, "坏注册名", "init", "低",
-      "robotics.fkine 注册名不存在 → ValueError『未在子包 REGISTRY』（cfg 自检③）",
+      "robotics.fkine 注册名不存在 → ValueError『未在子包 REGISTRY』（cfg 自检）",
       _bad_cfg_item("坏注册名", _m_bad_reg, "未在子包 REGISTRY"))
 _item(12, "缺 plan_hz", "init", "低",
-      "traj 规划器缺 plan_hz → ValueError『缺 plan_hz（必配、无缺省回退）』（cfg 自检④）",
+      "traj 规划器缺 plan_hz → ValueError『缺 plan_hz（必配、无缺省回退）』（cfg 自检）",
       _bad_cfg_item("缺 plan_hz", _m_no_plan_hz, "缺 plan_hz"))
 _item(13, "非整值 plan_hz", "init", "低",
-      "plan_hz=10.5 → ValueError『须为 int 或整值浮点且 ≥1』（cfg 自检④）",
+      "plan_hz=10.5 → ValueError『须为 int 或整值浮点且 ≥1』（cfg 自检）",
       _bad_cfg_item("非整值 plan_hz", _m_frac_hz, "非法", "整值"))
 _item(14, "home 越软限位", "init", "低",
       "home_arm[0]=9.9 越出软限位 → ValueError『越出软限位区间』（特征位形校验）",
       _bad_cfg_item("home 越软限位", _m_home_out, "越出软限位区间"))
 _item(15, "软限位越硬限位", "init", "低",
-      "软限位 q_min=-9.9 越出硬限位 → ValueError『越出对应硬限位』（cfg 自检⑥）",
+      "软限位 q_min=-9.9 越出硬限位 → ValueError『越出对应硬限位』（cfg 自检）",
       _bad_cfg_item("软限位越硬限位", _m_soft_over, "越出", "硬限位"))
 _item(16, "限位与 URDF 不符", "init", "低",
-      "cfg 关节 q_min 与 URDF <limit> 偏差超容差 → ValueError『与 URDF <limit> 不一致』（cfg 自检⑤）",
+      "cfg 关节 q_min 与 URDF <limit> 偏差超容差 → ValueError『与 URDF <limit> 不一致』（cfg 自检）",
       _bad_cfg_item("限位与 URDF 不符", _m_urdf_lim, "与 URDF <limit> 不一致"))
 
 # —— 02 组（只读属性与防篡改）——
@@ -1666,7 +1666,7 @@ _item(32, "ctrl 线程豁免", "delegate", "低",
 _item(40, "六域查询与切换联动", "solvers", "低",
       "get_*_solvers=cfg 名单、默认激活=cfg 首位、切换后激活名/plan_hz/ctrl_hz/MODE 联动（切换直连 _backend.set_mode）", _it40)
 _item(41, "坏名 warn 保持原激活", "solvers", "低",
-      "六域 set_activated_*('no_such_solver') 均返回 False + warn『未在该域已加载成员中』且激活不变", _it41)
+      "六域 set_*('no_such_solver') 均返回 False + warn『未在该域已加载成员中』且激活不变", _it41)
 _item(42, "traj 先 plan 后换指针", "solvers", "低",
       "切换成功即新规划器已完成 plan（sample 立即可用）；断连 plan 失败保持原激活 + warn", _it42)
 
@@ -1680,7 +1680,7 @@ _item(60, "start 前置 RuntimeError", "fsm", "低",
 _item(61, "自动迁移序列", "fsm", "低",
       "start 后 DISABLE→HOME→MOTION 两跳迁移（路线表经 home 中转）+『HOME 已到位』日志 + home 指令驱动", _it61)
 _item(62, "home 到位门槛", "fsm", "低",
-      "q 未到位时停留 HOME 不进 MOTION（§6.3 门槛）；到位后放行迁移", _it62)
+      "q 未到位时停留 HOME 不进 MOTION（home 到位门槛）；到位后放行迁移", _it62)
 _item(63, "保护事件直达", "fsm", "低",
       "MOTION 下 HOLDING/DAMPING/DISABLE 依次直达 + 各态维持指令（hold_q 重发/MIT 纯阻尼/失能轮发）核对", _it63)
 _item(64, "stop 超时强推", "fsm", "低",

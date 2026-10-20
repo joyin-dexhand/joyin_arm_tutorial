@@ -1987,3 +1987,26 @@ def test_72_backend_dm_action_end(cfg):
         assert len(pos_frames()) == n_pos  # 模式切换失败绝不发位置帧
     finally:
         d._refresh_stop.set()
+
+
+# ---- joint_state_* 只读快照属性 ----
+def test_73_joint_state_property(e):
+    # e 刷新线程已停：槽位只受显式 get_state 控制，被动断言无竞态
+    e.get_state_end()  # 填槽
+    slot = e._joint_state_end
+    e.calls.clear()
+    for _ in range(3):
+        assert e.joint_state_end is slot   # 与槽位/最近 get_state 返回同引用（零拷贝活引用）
+        assert e.joint_state_arm is e._joint_state_arm
+    assert not [c for c in e.calls if c[0].startswith("read_joint_state")]  # 被动只读、不触发读帧
+    # get_state 成功 → 整对象原子换入：属性跟随新对象，旧引用不被改写
+    old = e.joint_state_end
+    e.jstates["end"][0]["q"] = 1.25
+    new = e.get_state_end()
+    assert e.joint_state_end is new and new is not old and old.q[0] != new.q[0]
+    e.jstates["end"][0]["q"] = 0.1  # 还原（e 为函数级夹具，防御性还原）
+    # 读取失败 → get_state 返 None 且属性保持上次快照
+    e.fail_at["read_joint_state_end"] = None
+    assert e.get_state_end() is None
+    assert e.joint_state_end is new
+    del e.fail_at["read_joint_state_end"]

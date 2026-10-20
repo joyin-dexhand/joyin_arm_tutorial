@@ -1223,6 +1223,24 @@ class Backend(ABC):
         """
         return self._joint_limits_end
 
+    @property
+    def joint_state_arm(self) -> JointState:
+        """arm 整组关节状态快照（基类刷新线程维护的最近一次成功读；被动只读、不触发读帧）。
+
+        读取失败/断连时保持上次快照（渐陈旧），新鲜度以 `t` 判。
+        返回槽位本体引用：与最近一次 get_state_arm() 返回同对象，整对象原子换入。
+        """
+        return self._joint_state_arm
+
+    @property
+    def joint_state_end(self) -> JointState:
+        """end 整组关节状态快照（基类刷新线程维护的最近一次成功读；被动只读、不触发读帧）。
+
+        读取失败/断连时保持上次快照（渐陈旧），新鲜度以 `t` 判。
+        返回槽位本体引用：与最近一次 get_state_end() 返回同对象，整对象原子换入。
+        """
+        return self._joint_state_end
+
     # ============================================================
     # 内部助手（仅基类使用）
     # ============================================================
