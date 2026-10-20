@@ -24,9 +24,9 @@ JoyArm 层离线分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
              DISABLE→HOME→MOTION 自动迁移、home 到位门槛、保护事件直达、
              stop 超时强推；
       07 组  safe_monitor：硬规则 error≥2→DAMPING、断连/连续 None→DISABLE、
-             自定义规则绑定（state_arm 允许 None）与同拍仲裁（硬优先 +
-             同组取危险最高）；
-      08 组  可视化：start/stop_state_viz 离线降级不炸、meshcat 缺失 warn、
+             自定义规则绑定（state_arm 允许 None）与同拍仲裁（硬+自定义
+             命中合并取危险最高）；
+      08 组  可视化：start/stop_state_viz 离线降级不炸、meshcat 初始化失败降级 warn、
              HTTP /state.json 轮询端点、重复启停幂等与线程退出；
       09 组  销毁路径：close 幂等、with __exit__ 收尾序列、__del__ 冒烟
              （__del__ 不做执行时序承诺，仅验证存在与不炸）。
@@ -70,12 +70,16 @@ from __future__ import annotations
 import argparse
 import copy
 import logging
+import os
 import sys
 import tempfile
 import threading
 import time
 import urllib.request
 from pathlib import Path
+
+# 离线验收不弹监控窗口（start_state_viz 默认自动弹 PySide6 窗口，此处仅测服务面）
+os.environ.setdefault("JOYARM_VIZ_NOWINDOW", "1")
 
 # 未安装 joyarm_core 时兜底（本脚本可直接 python 运行；仓库源优先于任何安装副本）
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -1391,7 +1395,7 @@ def _it71():
 
 
 def _it72():
-    """自定义规则绑定 + 仲裁：同组取危险最高、硬规则优先于自定义、异常/非法返回忽略。"""
+    """自定义规则绑定 + 仲裁：全部命中合并取危险最高、异常/非法返回忽略。"""
     arm, d = make_arm()
     try:
         d.follow = False
@@ -1410,20 +1414,20 @@ def _it72():
         ok1 = _wait_event(arm, SafetyEvent.DAMPING)
         checks.append(("同组多命中取危险最高（HOLDING+DAMPING→DAMPING）", ok1))
 
-        # 2) 硬规则优先：硬 DAMPING(4) 压过自定义 DISABLE(5)（custom 组不参与）
+        # 2) 合并取最危险：硬 DAMPING(4) + 自定义 DISABLE(5) 同时命中 → DISABLE
         arm.set_monitor_rules([lambda sa, se, mo, ev: SafetyEvent.DISABLE])
         arm.set_event(SafetyEvent.NORMAL)
         d.jstates["arm"][0]["error"] = 2
-        ok2 = _wait_event(arm, SafetyEvent.DAMPING)
-        never_dis = True
+        ok2 = _wait_event(arm, SafetyEvent.DISABLE)
+        stay_dis = True
         t_end = time.monotonic() + 0.2
-        while time.monotonic() < t_end:      # 窗口内自定义 DISABLE 持续返回，事件须恒非 DISABLE
-            if arm.get_event() is SafetyEvent.DISABLE:
-                never_dis = False
+        while time.monotonic() < t_end:      # 窗口内两规则持续命中，事件须恒为最危险的 DISABLE
+            if arm.get_event() is not SafetyEvent.DISABLE:
+                stay_dis = False
             time.sleep(0.02)
         d.jstates["arm"][0]["error"] = 1
         arm.set_monitor_rules([])
-        checks.append(("硬规则优先（硬 DAMPING 压过自定义 DISABLE）", ok2 and never_dis))
+        checks.append(("合并取最危险（硬 DAMPING+自定义 DISABLE→DISABLE）", ok2 and stay_dis))
 
         # 3) 异常规则与非 SafetyEvent 返回忽略（warn），不影响其他规则
         def r_bad(sa, se, mo, ev):
@@ -1488,7 +1492,7 @@ def _it80():
         gone = not _fetch(urls[0] + "state.json", timeout=0.8)[0] if urls else True
         ok = (e is None and e2 is None and bool(urls) and ok_page
               and b"JoyArm" in page and ok_json and has_keys and gone)
-        ev = (f"start 异常={e is None}；meshcat 降级 warn={degraded}（未装 meshcat 走降级）；"
+        ev = (f"start 异常={e is None}；meshcat 降级 warn={degraded}（初始化失败走降级）；"
               f"监控页 URL={urls[:1]}；GET /（页面含标题）={ok_page and b'JoyArm' in page}；"
               f"GET /state.json（含 model/fsm/event 键）={has_keys}；"
               f"stop 后端口关闭={gone}；stop 异常={e2 is None}")
@@ -1499,24 +1503,33 @@ def _it80():
 
 
 def _it81():
-    """meshcat 缺失 warn：环境未装 meshcat 时必现降级 warn；已装则 SKIP。"""
-    import importlib.util
-    spec = importlib.util.find_spec("meshcat")
-    if spec is not None:
-        return "SKIP", (f"环境已安装 meshcat（{spec.origin}），缺包降级路径无法离线触发；"
-                        f"不炸与收尾已由 80 组覆盖（初始化成功/异常两分支均降级或就绪）")
+    """meshcat 初始化失败降级：注入故障必现降级 warn，页面 HAS_MC=false。"""
+    import joyarm_core.joyarm.joyarm as _jm
+
+    class _Boom:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("注入故障：初始化失败")
+
+    orig = _jm.MeshcatVisualizer
+    _jm.MeshcatVisualizer = _Boom
     arm, _ = make_arm()
     try:
         i0 = _mark()
-        arm.start_state_viz()
+        e = _exc(arm.start_state_viz)
         time.sleep(0.15)
-        arm.stop_state_viz()
-        msgs = _since(i0)
-        ok = _hit(msgs, "未安装 meshcat") and _hit(msgs, "降级为仅 HTML 状态面板")
-        ev = (f"未安装 meshcat → warn 降级："
-              f"{_trunc(next((m for m in msgs if 'meshcat' in m), ''), 120)}")
+        urls = _viz_urls()
+        ok_page, page = _fetch(urls[-1]) if urls else (False, b"")  # 取末位=本项端口（前面项的 URL 已停服）
+        degraded = (_hit(_since(i0), "meshcat 初始化失败")
+                    and _hit(_since(i0), "降级为仅 HTML 状态面板"))
+        has_false = ok_page and b"HAS_MC = false" in page
+        e2 = _exc(arm.stop_state_viz)
+        ok = e is None and e2 is None and degraded and has_false
+        ev = (f"注入 MeshcatVisualizer 故障 → start 不炸={e is None}；"
+              f"降级 warn={degraded}；页面 HAS_MC=false={has_false}；"
+              f"stop 不炸={e2 is None}")
         return ("PASS" if ok else "FAIL"), ev
     finally:
+        _jm.MeshcatVisualizer = orig
         arm.stop_state_viz()
         arm.close()
 
@@ -1692,13 +1705,13 @@ _item(70, "硬规则 error≥2→DAMPING", "monitor", "低",
 _item(71, "断连/连续 None→DISABLE", "monitor", "低",
       "断连与连续 None>0.1s 双路径触发 DISABLE；state_arm=None 仍调自定义规则；ctrl 线程跳拍 warn；断连收尾走 close", _it71)
 _item(72, "自定义规则与同拍仲裁", "monitor", "低",
-      "同组多命中取危险最高、硬规则优先于自定义（压过更高危自定义）、异常/非法返回忽略且不影响其他规则", _it72)
+      "命中合并取危险最高（硬+自定义统一取最危险，与到达顺序无关）、异常/非法返回忽略且不影响其他规则", _it72)
 
 # —— 08 组（可视化）——
 _item(80, "start/stop 离线不炸", "viz", "低",
       "未连接 start_state_viz → 页面 + /state.json 轮询端点可 GET；stop 后 HTTP 端口关闭", _it80)
-_item(81, "meshcat 缺失 warn", "viz", "低",
-      "未装 meshcat 时降级 warn『未安装 meshcat→仅 HTML 状态面板』；环境已装则 SKIP（降级分支由 80 组覆盖不炸）", _it81)
+_item(81, "meshcat 初始化失败降级", "viz", "低",
+      "注入 MeshcatVisualizer 故障：start 不炸、warn『初始化失败→仅 HTML 状态面板』、页面 HAS_MC=false", _it81)
 _item(82, "重复启停幂等 + 线程退出", "viz", "低",
       "start×2 忽略重复、stop×2 无异常、无 joyarm-viz 线程残留（daemon 均退出）", _it82)
 

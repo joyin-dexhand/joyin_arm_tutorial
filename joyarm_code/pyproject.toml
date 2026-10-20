@@ -12,14 +12,12 @@ dependencies = [
     "pin>=3.9.0",
     "pyyaml>=6.0",
     "matplotlib>=3.10.0",
+    "meshcat>=0.3.2",
     "pyside6>=6.5.2",
     "numpy>=2.0.1",
     "pyserial>=3.5",
     "mujoco>=3.13.0",
 ]
-
-[project.optional-dependencies] # 可视化可选依赖组（`uv sync --extra vis` / `pip install .[vis]` 安装）
-vis = ["meshcat>=0.3.2"]
 
 [tool.setuptools.packages.find] # 平铺布局多顶层目录，显式只打包核心 SDK
 include = ["joyarm_core*"]

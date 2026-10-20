@@ -18,14 +18,19 @@ import json
 import logging
 import os
 import re
+import subprocess
+import sys
 import threading
 import time
 import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, List, Optional, Sequence, Union
 
+import meshcat
+import meshcat.geometry as mg
 import numpy as np
 import pinocchio as pin
+from pinocchio.visualize import MeshcatVisualizer
 import yaml
 
 from ..utils.limits import (
@@ -407,23 +412,30 @@ class _PeriodicThread:
 
 
 # ============================================================
-# 可视化监控页面模板（HTTP 轮询）
+# 可视化监控页面模板（HTTP 轮询）：三栏布局（左侧静态参考 - 右侧动态状态 - 中间 3D 视图）
 # ============================================================
-# 左侧 iframe 嵌 meshcat（无 meshcat 时隐藏并显示占位），右侧为状态面板；
-# JS 以约 5 Hz fetch /state.json 刷新；「轨迹显示」复选框经 /traj?on=1|0 切换。
 _VIZ_PAGE_HTML = """<!DOCTYPE html>
 <html lang="zh">
 <head>
 <meta charset="utf-8">
 <title>JoyArm 运行状态监控</title>
 <style>
+ :root { --colh: min(100vh, calc(60vw - 16px)); } /* 三栏总宽 = 5/3·colh + 2×8px gap，
+        上限须扣 16px gap，否则居中布局下左栏左缘溢出不可达（永久裁切） */
  body { margin: 0; font-family: system-ui, sans-serif; background: #1e1e1e;
-        color: #ddd; display: flex; height: 100vh; }
- #left { flex: 1; position: relative; }
- #left iframe { width: 100%; height: 100%; border: 0; }
+        color: #ddd; height: 100vh; display: flex; justify-content: center;
+        align-items: center; gap: 8px; }
+ .col { height: var(--colh); box-sizing: border-box; padding: 10px; }
+ #col-left { flex: none; aspect-ratio: 1/3; overflow-y: auto; }   /* 竖长条，内容内部纵滚 */
+ #col-mid { flex: none; aspect-ratio: 1/1; position: relative; overflow: hidden; }
+ #col-right { flex: none; aspect-ratio: 1/3; overflow-y: auto; }
+ #col-mid iframe { width: 100%; height: 100%; border: 0; }
  #placeholder { position: absolute; inset: 0; display: flex; align-items: center;
-                justify-content: center; color: #777; font-size: 18px; }
- #right { width: 640px; overflow-y: auto; padding: 12px; box-sizing: border-box; }
+                justify-content: center; color: #777; font-size: 15px; }
+ #placeholder[hidden] { display: none; } /* display:flex 会覆盖 hidden 属性，须显式压制 */
+ #mid-overlay { position: absolute; top: 8px; right: 8px; z-index: 5;
+                background: rgba(30, 30, 30, .72); padding: 4px 8px;
+                border-radius: 4px; }
  h2 { font-size: 15px; margin: 12px 0 6px; color: #7fd1ff; }
  table { width: 100%; border-collapse: collapse; font-size: 12px;
          font-family: monospace; }
@@ -433,28 +445,39 @@ _VIZ_PAGE_HTML = """<!DOCTYPE html>
  .warn { color: #ffd97f; }
  details { margin: 12px 0 4px; }
  summary { font-size: 14px; color: #7fd1ff; cursor: pointer; }
- label { font-size: 13px; display: block; margin: 10px 0; }
+ pre { overflow-x: auto; font-size: 11px; margin: 4px 0; } /* cfg 原文长行横向滚动 */
+ label { font-size: 13px; }
 </style>
 </head>
 <body>
-<div id="left">
-  <iframe id="mc" src="__MESHCAT_SRC__"></iframe>
-  <div id="placeholder" hidden>meshcat 未启用（未安装或初始化失败，仅 HTML 状态面板）</div>
+<div class="col" id="col-left">
+  <h2>标识与关节</h2><div class="kv" id="ident">等待数据…</div>
+  <h2>限位</h2><div class="kv" id="limits">等待数据…</div>
+  <h2>特征位形</h2><div class="kv" id="poses">等待数据…</div>
+  <h2>控制默认值</h2><div class="kv" id="ctrl-defaults">等待数据…</div>
+  <h2>求解器注册表</h2><div class="kv" id="registry">等待数据…</div>
+  <details>
+    <summary>cfg 原文（已滤除通信拓扑/名义运动学参数）</summary>
+    <pre id="cfg-raw">等待数据…</pre>
+  </details>
 </div>
-<div id="right">
-  <h2>运行态</h2>
-  <div class="kv" id="fsm">等待数据…</div>
+<div class="col" id="col-mid">
+  <iframe id="mc" src="__MESHCAT_SRC__"></iframe>
+  <div id="placeholder" hidden>meshcat 未启用（初始化失败）</div>
+  <div id="mid-overlay"><label><input type="checkbox" id="traj"> 轨迹（MOTION 态）</label></div>
+</div>
+<div class="col" id="col-right">
+  <h2>运行态</h2><div class="kv" id="fsm">等待数据…</div>
   <div class="kv" id="snap">等待数据…</div>
   <div class="kv" id="bk">等待数据…</div>
   <h2 id="tcp-title">末端位姿与速度</h2><div class="kv" id="tcp">等待数据…</div>
+  <h2>动力学现算</h2><div class="kv" id="dyn">等待数据…</div>
+  <h2>FSM 子阶段</h2><div class="kv" id="fsm-sub">等待数据…</div>
+  <h2>监视器</h2><div class="kv" id="mon">等待数据…</div>
+  <h2>目标帧详情</h2><div class="kv" id="tgt-detail">等待数据…</div>
   <h2 id="arm-title">arm 关节</h2><table id="arm"></table>
   <h2 id="end-title">end 关节</h2><table id="end"></table>
   <h2>求解器与管线</h2><div class="kv" id="solvers">等待数据…</div>
-  <details>
-    <summary>静态参考（型号/限位/特征位形）</summary>
-    <div class="kv" id="static">等待数据…</div>
-  </details>
-  <label><input type="checkbox" id="traj"> 轨迹显示（需 FSM 处于 MOTION 态）</label>
 </div>
 <script>
 const HAS_MC = __HAS_MESHCAT__;
@@ -462,12 +485,15 @@ const $ = (id) => document.getElementById(id);
 if (!HAS_MC) { $("mc").remove(); $("placeholder").hidden = false; }
 function fmt(v, d = 4) { return (v === null || v === undefined) ? "—" : (+v).toFixed(d); }
 function fmtInf(v, d = 3) { return (v === null || v === undefined) ? "∞" : (+v).toFixed(d); }
+function arrOrDash(a, d = 3) {   // 数组 → [v, v, …]（null/undefined 整组显「—」）
+  return (a === null || a === undefined) ? "—" : `[${a.map(v => fmt(v, d)).join(", ")}]`;
+}
 function tri(v) {
   return v === true ? '<span class="ok">true</span>'
        : v === false ? '<span class="bad">false</span>'
        : '<span class="na">None</span>';
 }
-function fmtClock(t) {   // Unix 秒 → 本地 HH:MM:SS.mmm
+function fmtClock(t) {   // Unix 秒 → 本地 HH:MM:SS.mmm（仅 time.time() 域；单调钟原值禁用）
   if (t === null || t === undefined) return "—";
   const d = new Date(t * 1000), p = (x, n = 2) => String(x).padStart(n, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
@@ -519,19 +545,36 @@ function limArr(v, side) {   // 限位区间数组（null 元素 = 不限位 ±�
   return "[" + v.map(x => (x === null || x === undefined)
     ? (side === "min" ? "−∞" : "∞") : fmt(x)).join(", ") + "]";
 }
-function renderStatic(st) {
-  if (!st) return "—";
-  let h = `型号=<b>${st.model}</b> frame_end=<b>${st.frame_end}</b><br>`
-        + `arm 关节名：${st.joint_names_arm.join(", ") || "（无关节）"}<br>`
-        + `end 关节名：${st.joint_names_end.join(", ") || "（无电机）"}<br>`;
+// ---- 左栏静态组渲染（/static.json；组装配失败 _error 显「装配失败」）----
+function renderIdent(st) {
+  if (!st || st._error) { $("ident").innerHTML = (st && st._error) ? "装配失败" : "—"; return; }
+  $("ident").innerHTML = `型号=<b>${st.model}</b><br>frame_end=<b>${st.frame_end}</b><br>`
+    + `urdf=${st.urdf}<br>n_arm=${st.n_arm} n_end=${st.n_end}<br>`
+    + `arm 关节名：${st.joint_names_arm.join(", ") || "（无关节）"}<br>`
+    + `end 关节名：${st.joint_names_end.join(", ") || "（无电机）"}`;
+}
+function renderLimits(lm) {
+  if (!lm || lm._error) { $("limits").innerHTML = (lm && lm._error) ? "装配失败" : "—"; return; }
+  let h = "";
   for (const fam of ["arm", "end"]) {
-    const g = st.limits[fam];
+    const g = lm[fam];
     if (!g) { h += `${fam} 限位：—（无电机）<br>`; continue; }
     h += `${fam} 硬限位 q∈${limArr(g.hard_q_min, "min")}~${limArr(g.hard_q_max, "max")} `
        + `dq_max≤${limArr(g.hard_dq_max, "max")} tau_max≤${limArr(g.hard_tau_max, "max")}<br>`;
     h += `${fam} 软限位 q∈${limArr(g.soft_q_min, "min")}~${limArr(g.soft_q_max, "max")} `
        + `dq_max≤${limArr(g.soft_dq_max, "max")} tau_max≤${limArr(g.soft_tau_max, "max")}<br>`;
   }
+  const T = lm.tcp;
+  h += T.workspace_box
+     ? "工作空间盒 m（x/y/z）：" + T.workspace_box.map(r => `[${fmt(r[0], 3)}, ${fmt(r[1], 3)}]`).join(" ") + "<br>"
+     : "工作空间盒：—（不限位）<br>";
+  h += `v_lin_max=${fmtInf(T.v_lin_max)} v_ang_max=${fmtInf(T.v_ang_max)} `
+     + `f_max=${fmtInf(T.f_max)} t_max=${fmtInf(T.t_max)}`;
+  $("limits").innerHTML = h;
+}
+function renderPoses(st) {
+  if (!st || st._error) { $("poses").innerHTML = (st && st._error) ? "装配失败" : "—"; return; }
+  let h = "";
   for (const p of ["zero", "neutral", "home"]) {
     for (const fam of ["arm", "end"]) {
       const arr = st[`${p}_${fam}`];
@@ -539,14 +582,93 @@ function renderStatic(st) {
       h += `${p}_${fam}=[${arr.map(v => fmt(v)).join(", ")}]<br>`;
     }
   }
-  const T = st.tcp_limits;
-  h += T.workspace_box
-     ? "工作空间盒 m（x/y/z）：" + T.workspace_box.map(r => `[${fmt(r[0], 3)}, ${fmt(r[1], 3)}]`).join(" ") + "<br>"
-     : "工作空间盒：—（不限位）<br>";
-  return h + `v_lin_max=${fmtInf(T.v_lin_max)} v_ang_max=${fmtInf(T.v_ang_max)} `
-           + `f_max=${fmtInf(T.f_max)} t_max=${fmtInf(T.t_max)}`;
+  $("poses").innerHTML = h || "—";
+}
+function renderCtrl(cd) {
+  if (!cd || cd._error) { $("ctrl-defaults").innerHTML = (cd && cd._error) ? "装配失败" : "—"; return; }
+  let h = "";
+  for (const fam of ["arm", "end"]) {
+    const m = cd.mit ? cd.mit[fam] : null;
+    h += `MIT.${fam} kp=${arrOrDash(m && m.kp)} kd=${arrOrDash(m && m.kd)}<br>`;
+  }
+  for (const fam of ["arm", "end"]) {
+    const p = cd.pos_vel ? cd.pos_vel[fam] : null;
+    h += `POS_VEL.${fam} pos_kp=${arrOrDash(p && p.pos_kp)} pos_ki=${arrOrDash(p && p.pos_ki)} `
+       + `vel_kp=${arrOrDash(p && p.vel_kp)} vel_ki=${arrOrDash(p && p.vel_ki)} `
+       + `vlim=${arrOrDash(p && p.vlim)} flim=${arrOrDash(p && p.flim)}<br>`;
+  }
+  const dm = cd.default_mode || {}, bp = cd.backend_params || {}, at = cd.arrival_tol || {};
+  h += `default_mode：arm=${dm.arm || "—"} end=${dm.end || "—"}<br>`;
+  h += `write_settle=${fmt(bp.write_settle, 3)} state_refresh_hz=${fmt(bp.state_refresh_hz, 1)} `
+     + `rx_hz=${fmt(bp.rx_hz, 1)}<br>`;
+  h += `fsm_hz=${fmt(cd.fsm_hz, 1)} monitor_hz=${fmt(cd.monitor_hz, 1)} `
+     + `mit_kd_damping=${arrOrDash(cd.mit_kd_damping)}<br>`;
+  h += `到位容差 arm_q=${arrOrDash(at.arm_q)} end_q=${arrOrDash(at.end_q)} `
+     + `pos=${fmt(at.pos, 4)} rot=${fmt(at.rot, 4)}<br>`;
+  h += `move_wait_timeout=${fmt(cd.move_wait_timeout, 2)}`;
+  $("ctrl-defaults").innerHTML = h;
+}
+function renderRegistry(rg) {
+  if (!rg || rg._error) { $("registry").innerHTML = (rg && rg._error) ? "装配失败" : "—"; return; }
+  let h = "";
+  for (const k of ["fkine", "ikine", "jac", "dyn", "traj", "ctrl"]) {
+    const g = rg[k];
+    if (!g) { h += `${k}：（未配置）<br>`; continue; }
+    h += `${k}：` + g.names.map((n, i) => i === 0 ? `<b>${n}</b>（默认）` : n).join(", ");
+    const hzMap = (k === "traj") ? g.plan_hz_by_name : (k === "ctrl") ? g.ctrl_hz_by_name : null;
+    if (hzMap) h += `<br>　${Object.keys(hzMap).map(n => `${n}=${fmt(hzMap[n], 1)}Hz`).join(" ")}`;
+    h += "<br>";
+  }
+  $("registry").innerHTML = h;
+}
+let STATIC = null;          // /static.json 载荷（null = 未就绪，poll 内重试）
+let staticLoading = false;  // in-flight 防护（fetch 挂起时不重复发起）
+async function loadStatic() {
+  if (staticLoading) return;
+  staticLoading = true;
+  try {
+    STATIC = await (await fetch("/static.json")).json();
+    renderIdent(STATIC.ident);
+    renderLimits(STATIC.limits);
+    renderPoses(STATIC.poses);
+    renderCtrl(STATIC.ctrl_defaults);
+    renderRegistry(STATIC.registry);
+    $("cfg-raw").textContent = (typeof STATIC.cfg_raw === "string") ? STATIC.cfg_raw : "装配失败";
+  } catch (e) { STATIC = null; }   // 拉取/渲染失败保持未就绪，随轮询重试
+  finally { staticLoading = false; }
+}
+// ---- 右栏动态组渲染 ----
+function renderDyn(dy) {   // 动力学现算（逐子键 null 显「—」）
+  if (!dy || dy._error) { $("dyn").innerHTML = (dy && dy._error) ? "装配失败" : "—"; return; }
+  $("dyn").innerHTML = `重力 G(q) N·m=${arrOrDash(dy.gravity)}<br>`
+    + `科氏 C(q,dq)·dq N·m=${arrOrDash(dy.coriolis)}<br>`
+    + `惯量对角 diag(M) kg·m²=${arrOrDash(dy.mass_diag)}`;
+}
+function renderFsmSub(fs) {
+  if (!fs || fs._error) { $("fsm-sub").innerHTML = (fs && fs._error) ? "装配失败" : "—"; return; }
+  $("fsm-sub").innerHTML = `zero_moving=${tri(fs.zero_moving)} home_arrived=${tri(fs.home_arrived)}<br>`
+    + `hold_q=${arrOrDash(fs.hold_q)}`;
+}
+function renderMon(m) {   // none_since 为单调钟原值：严禁 fmtClock、严禁与 s.t 相减
+  if (!m || m._error) { $("mon").innerHTML = (m && m._error) ? "装配失败" : "—"; return; }
+  const since = (m.none_since === null || m.none_since === undefined)
+    ? "—" : (+m.none_since).toFixed(3) + "s（单调钟）";
+  $("mon").innerHTML = `rules=${m.rules}<br>连续None持续=${fmt(m.none_dur, 2)}s<br>起算=${since}`;
+}
+function renderTgtDetail(td) {   // 无目标整组 null →「—（无目标）」
+  if (!td || td._error) { $("tgt-detail").innerHTML = (td && td._error) ? "装配失败" : "—（无目标）"; return; }
+  let h = `time=${fmt(td.time, 3)}<br>`;
+  h += td.pose
+    ? `p=${arrOrDash(td.pose.position)}<br>q(wxyz)=${arrOrDash(td.pose.orientation)}<br>`
+    : "pose=—<br>";
+  h += td.twist
+    ? `v=${arrOrDash(td.twist.linear)} m/s<br>w=${arrOrDash(td.twist.angular)} rad/s<br>`
+    : "twist=—<br>";
+  h += `q=${arrOrDash(td.q)}`;
+  $("tgt-detail").innerHTML = h;
 }
 async function poll() {
+  if (STATIC === null) loadStatic();
   try {
     const s = await (await fetch("/state.json")).json();
     $("fsm").innerHTML = `current=<b>${s.fsm.current}</b> target=<b>${s.fsm.target}</b> `
@@ -556,8 +678,9 @@ async function poll() {
                       + `enabled_arm=${tri(s.backend.enabled_arm)}<br>`
                       + `connected_end=${tri(s.backend.connected_end)} `
                       + `enabled_end=${tri(s.backend.enabled_end)}`;
-    $("tcp-title").textContent = `末端位姿与速度 frame_end=${s.static ? s.static.frame_end : "—"}`
-                               + "（位置 m / 四元数 wxyz / 速度）";
+    const fe = (STATIC && STATIC.ident && STATIC.ident.frame_end)
+      ? STATIC.ident.frame_end : "—";
+    $("tcp-title").textContent = `末端位姿与速度 frame_end=${fe}（位置 m / 四元数 wxyz / 速度）`;
     $("tcp").innerHTML = s.tcp
       ? `p=[${s.tcp.position.map(v => fmt(v, 3)).join(", ")}]<br>`
         + `q(wxyz)=[${s.tcp.orientation.map(v => fmt(v, 3)).join(", ")}]`
@@ -570,15 +693,18 @@ async function poll() {
     $("end-title").textContent = `end 关节（${(s.end && s.end.names) ? s.end.names.length : 0}）`;
     jointTable($("arm"), s.arm, "（无关节）");
     jointTable($("end"), s.end, "（无电机）");
+    renderDyn(s.dynamics);
+    renderFsmSub(s.fsm_sub);
+    renderMon(s.monitor);
+    renderTgtDetail(s.target_detail);
     $("solvers").innerHTML = renderSolvers(s);
-    $("static").innerHTML = renderStatic(s.static);
     $("traj").checked = !!s.traj_enabled;
   } catch (e) { /* 下轮重试 */ }
 }
 $("traj").addEventListener("change", async () => {
   try { await fetch("/traj?on=" + ($("traj").checked ? 1 : 0)); } catch (e) {}
 });
-setInterval(poll, 200);   // 约 5 Hz 轮询（fetch /state.json）
+setInterval(poll, 200);   // 约 5 Hz 轮询（fetch /state.json；静态未就绪时顺带重试）
 poll();
 </script>
 </body>
@@ -710,7 +836,7 @@ class JoyArm:
         # ---- safe_monitor ----
         self._monitor_periodic: Optional[_PeriodicThread] = None  # 监视器周期线程句柄
         self._monitor_rules: List[Callable] = []          # 自定义规则列表
-        self._monitor_none_since: Optional[float] = None  # get_state_arm 连续 None 的起算时刻
+        self._monitor_none_since: Optional[float] = None  # 连续 None 的起算时刻
 
         # ---- 运行状态可视化 ----
         self._viz_periodic: Optional[_PeriodicThread] = None   # 可视化周期线程句柄
@@ -719,6 +845,11 @@ class JoyArm:
         self._viz_state: dict = {}                       # 面板数据快照（HTTP 线程读）
         self._viz_traj_points: int = 200                 # 轨迹显示采样点数（start 可配）
         self._viz_traj_enabled: bool = False             # 轨迹显示开关（界面可切）
+        self._viz_win_proc: Optional[subprocess.Popen] = None   # 监控窗口子进程句柄（stop 时终止）
+        # 以下三成员真值初始化推迟到 start_state_viz
+        self._viz_model: Optional[pin.Model] = None      # 可视化专属 pin 模型（arm+end 联动）
+        self._viz_static_bytes: bytes = b""              # /static.json 预装配载荷（start 时装配一次）
+        self._viz_q_cache: dict = {}                     # display q 族级缓存 {arm, end}（start 时初始化）
 
         # ------------------------------------------------------------
         # 子阶段二：按依赖顺序赋真值（cfg 加载自检 → _pin_model → 关节数/名 → 限位 → 特征位形 → _tcp_limits → _backend → 六域solvers与激活项 → _plan/ctrl_hz → FSM 参数）
@@ -1461,9 +1592,10 @@ class JoyArm:
         if nxt is None:
             return
         # 迁移门槛：current==HOME 且 target∈{ZERO, MOTION} 须 home 运动到位；
+        # 到位只认 _home_arrived（HOME 维持拍对 joint_state_arm 快照检测置位并记日志）；
         # 未到位时继续执行 HOME 维持动作（驱动其运动到位），其他保护性直达目标不受门槛限制
         if (cur is MotionState.HOME and tgt in (MotionState.ZERO, MotionState.MOTION)
-                and not self.is_in_q_arm(self._home_arm)):
+                and not self._home_arrived):
             self._maintain_motion_state(cur)
             return
         self._exit_motion_state(cur)
@@ -1588,7 +1720,7 @@ class JoyArm:
         """监视器单拍：只读采集 → 规则判断 → 命中则 `set_event`。
 
         只读：绝不调用控制/下发方法；事件经 set_event 通路驱动 FSM。
-        仲裁：内置硬规则优先于自定义；同组多命中取危险程度最高者；
+        仲裁：内置规则与自定义规则命中合并、统一取危险程度最高者；
         只升不降：命中事件危险程度高于当前事件才 set_event。
         """
         state_arm = self._fresh_joint_state("arm")
@@ -1632,11 +1764,10 @@ class JoyArm:
                                "SafetyEvent/None（%r），忽略",
                                getattr(rule, "__name__", rule), ev)
 
+        # 合并取最危险：内置规则与自定义规则命中合并、统一取危险度最高
         chosen: Optional[SafetyEvent] = None
-        if hard:
-            chosen = max(hard, key=lambda e: _EVENT_DANGER[e])
-        elif custom:
-            chosen = max(custom, key=lambda e: _EVENT_DANGER[e])
+        if hard or custom:
+            chosen = max(hard + custom, key=lambda e: _EVENT_DANGER[e])
         # 只升不降：仅当命中事件危险程度高于当前事件才 set_event，
         # 防止覆写并发设置的更高危险事件（外部 set_event 不受限，恢复 NORMAL 走外部通路）
         if chosen is not None and _EVENT_DANGER[chosen] > _EVENT_DANGER[self._safe_event]:
@@ -1645,10 +1776,26 @@ class JoyArm:
     def _state_viz_worker(self) -> None:
         """可视化单拍：被动采集刷新面板数据与 meshcat 模型姿态。
 
-        数据一律取 backend 缓存快照槽位（被动只读）。
+        数据一律取 backend 缓存快照槽位（被动只读）；静态参考不在此装配（`start_state_viz` 时一次性装配为 `/static.json`）。
         """
         state_arm = self._backend.joint_state_arm
         state_end = self._backend.joint_state_end
+        # 快照 q/dq 与有效性单次读取判定（tcp 现算、动力学现算、轨迹绘制共用）
+        q_arr = np.asarray(getattr(state_arm, "q", None), dtype=float).reshape(-1)
+        dq_arr = np.asarray(getattr(state_arm, "dq", None), dtype=float).reshape(-1)
+        snap_t = float(getattr(state_arm, "t", 0.0) or 0.0)
+        q_ok = (snap_t > 0 and q_arr.size > 0
+                and bool(np.all(np.isfinite(q_arr))))
+        dq_ok = (snap_t > 0 and dq_arr.size > 0
+                 and bool(np.all(np.isfinite(dq_arr))))
+
+        def _safe_json(fn, *args):
+            """动态组装配兜底：异常整组置 None（页面显占位，防 10 Hz 刷屏）。"""
+            try:
+                return fn(*args)
+            except Exception:
+                return None
+
         snap = {
             "model": self._model,
             "t": round(time.time(), 3),
@@ -1667,14 +1814,14 @@ class JoyArm:
                 "enabled_end": self._viz_bool(self._backend.is_enabled_end),
             },
             "solvers": self._viz_solvers(),
-            "static": self._viz_static(),
+            "dynamics": _safe_json(self._viz_dynamics, q_arr, dq_arr, q_ok, dq_ok),
+            "fsm_sub": _safe_json(self._viz_fsm_sub),
+            "monitor": _safe_json(self._viz_monitor),
+            "target_detail": _safe_json(self._viz_target_detail),
             "traj_enabled": self._viz_traj_enabled,
         }
         # 末端位姿（激活 fkine 对快照 q 现算，只读）；速度 = 激活雅可比 × 快照关节速度；
         # q/dq 含 NaN（未读取占位）或域未配置 → 对应项占位（try/except 防 10 Hz 刷屏）
-        q_arr = np.asarray(getattr(state_arm, "q", None), dtype=float).reshape(-1)
-        q_ok = (float(getattr(state_arm, "t", 0.0) or 0.0) > 0
-                and q_arr.size > 0 and bool(np.all(np.isfinite(q_arr))))
         if q_ok and self._activated_fkine_solver is not None:
             try:
                 pose = self._activated_fkine_solver.solve(self, q_arr, self._frame_end)
@@ -1682,9 +1829,7 @@ class JoyArm:
                                "orientation": _json_arr(pose.orientation)}
             except Exception:
                 pass
-            dq_arr = np.asarray(getattr(state_arm, "dq", None), dtype=float).reshape(-1)
-            if self._jac_solvers and dq_arr.size > 0 \
-                    and bool(np.all(np.isfinite(dq_arr))):
+            if self._jac_solvers and dq_ok:
                 try:
                     J = self.get_jac(q=q_arr)              # (6, n_arm) 只读雅可比
                     v = np.asarray(J, dtype=float) @ dq_arr
@@ -1694,12 +1839,17 @@ class JoyArm:
                 except Exception:
                     pass
         self._viz_state = snap
-        # meshcat 模型姿态刷新与轨迹绘制（缺包/失败降级；q 无效时不刷新、保持上一帧）
-        if self._viz_pin is not None and q_ok:
+        # meshcat 模型姿态刷新与轨迹绘制（初始化失败降级；q 无效时保持上一帧）。
+        # display q 按可视化模型（arm+end）关节序从快照按名映射拼装——其有效性与 q_ok（arm 快照当拍有效）经族级缓存解耦；
+        # 轨迹绘制入口因此保留 q_ok 条件：q_arr 无效时 _viz_draw_trajectory 内 fk.solve 会抛异常，必须整块跳过。
+        if self._viz_pin is not None:
             try:
-                self._viz_pin.display(q_arr)
+                q_viz = self._viz_display_q(state_arm, state_end)
+                if q_viz is not None:
+                    self._viz_pin.display(q_viz)
                 if (self._viz_traj_enabled and self._viz_traj_points > 0
-                        and self._current_motion_state is MotionState.MOTION):
+                        and self._current_motion_state is MotionState.MOTION
+                        and q_ok):
                     self._viz_draw_trajectory(q_arr)
                 else:
                     self._viz_hide_trajectory()
@@ -1781,14 +1931,167 @@ class JoyArm:
             out["target"] = None
         return out
 
-    def _viz_static(self) -> dict:
-        """组装静态参考分组（`__init__` 后冻结成员的只读摘要）。
+    def _viz_display_q(self, state_arm, state_end) -> Optional[np.ndarray]:
+        """按可视化模型关节序拼装 display q（快照按关节名映射，无效族沿用缓存）。
 
-        限位四键（q_min/q_max/dq_max/tau_max）均逐关节全数组——不同关节电机型号不同、
-        限值本就逐关节不同，不压缩为标量；±inf 经 :func:`_json_round` 转 `null`
-        （页面显「∞」）；n_end=0 的 end 限位组整组 `null`（页面「（无电机）」）。
+        可视化模型为arm+end联动缩减模型（`start_state_viz` 构建）；
+        每拍对快照做有效判定，有效则更新`_viz_q_cache`、无效沿用缓存「保持上一帧」。
 
-        :return: `{model, frame_end, joint_names_arm/end, limits, zero/neutral/home_arm/end, tcp_limits}` 分组 dict。
+        :param state_arm: arm 被动快照（`_state_viz_worker` 单次读取的局部引用）。
+        :param state_end: end 被动快照（`_state_viz_worker` 单次读取的局部引用）。
+        :return: 可视化模型关节序 display q `(nq_viz,)`；模型未构建或 arm 无可用值时 `None`。
+        """
+        if self._viz_model is None:
+            return None
+        # 名字 → q 向量下标：关节 0 为 "universe" 无自由度，i-1 才是 q 序
+        #（_build_pin_model 已保证 nq == 关节数-1，全部单自由度关节）
+        name_to_idx = {self._viz_model.names[i]: i - 1
+                       for i in range(1, self._viz_model.njoints)}
+        q_viz = np.zeros(self._viz_model.nq)
+        for fam, state, joint_names in (
+                ("arm", state_arm, self._joint_names_arm),
+                ("end", state_end, self._joint_names_end)):
+            arr = np.asarray(getattr(state, "q", None), dtype=float).reshape(-1)
+            if (float(getattr(state, "t", 0.0) or 0.0) > 0
+                    and arr.size > 0 and bool(np.all(np.isfinite(arr)))):
+                self._viz_q_cache[fam] = arr.copy()    # 族级有效才更新缓存
+            cached = self._viz_q_cache.get(fam)
+            if cached is None:
+                continue
+            for name, val in zip(joint_names,
+                                 np.asarray(cached, dtype=float).reshape(-1)):
+                idx = name_to_idx.get(name)
+                if idx is not None:
+                    q_viz[idx] = val
+        # arm 族从未有效（无缓存）→ 整拍不刷新（等价旧行为的 q_ok=False 分支）
+        return q_viz if self._viz_q_cache.get("arm") is not None else None
+
+    def _viz_dynamics(self, q_arr, dq_arr, q_ok: bool, dq_ok: bool) -> dict:
+        """动力学现算分组：激活 dyn 求解器对快照 q/dq 纯数学现算。
+
+        数学门面一律显式传参——`q=None` 缺省会走 `_current_q` →
+        `get_state_arm()` 触发总线帧，违反可视化被动红线，禁止。域未配置 /
+        输入无效 / 异常 → 对应子键 `None`（页面显「—」占位）；质量阵只取
+        对角（窄栏可读性）。
+
+        :param q_arr: arm 快照 q `(n_arm,)`（调用方单次读取）。
+        :param dq_arr: arm 快照 dq `(n_arm,)`（同上）。
+        :param q_ok: q 快照有效标志（t>0 且全有限）。
+        :param dq_ok: dq 快照有效标志。
+        :return: `{gravity, coriolis, mass_diag}` 分组 dict（纯 JSON 值，逐子键可 `None`）。
+        """
+        out = {"gravity": None, "coriolis": None, "mass_diag": None}
+        if not (q_ok and self._dyn_solvers):
+            return out
+        try:
+            out["gravity"] = _json_arr(self.get_gravity(q=q_arr))
+        except Exception:
+            pass
+        if dq_ok:
+            try:
+                out["coriolis"] = _json_arr(self.get_coriolis(q=q_arr, dq=dq_arr))
+            except Exception:
+                pass
+        try:
+            out["mass_diag"] = _json_arr(np.diagonal(
+                np.asarray(self.get_mass_matrix(q=q_arr), dtype=float)))
+        except Exception:
+            pass
+        return out
+
+    def _viz_fsm_sub(self) -> dict:
+        """FSM 子阶段分组：`_zero_moving`/`_home_arrived` 标志与 `_hold_q`（纯读）。
+
+        :return: `{zero_moving, home_arrived, hold_q}` 分组 dict。
+        """
+        return {
+            "zero_moving": bool(self._zero_moving),
+            "home_arrived": bool(self._home_arrived),
+            "hold_q": _json_arr(self._hold_q),
+        }
+
+    def _viz_monitor(self) -> dict:
+        """监视器内部分组：自定义规则数量与「连续 None」计时。
+
+        `_monitor_none_since` 为 `time.monotonic()` 单调钟域（与 `time.time()` 不同域），
+        故 none_dur 由本方法同域计算、none_since 原样传出。
+
+        :return: `{rules, none_dur, none_since}` 分组 dict（纯 JSON 值）。
+        """
+        since = self._monitor_none_since
+        return {
+            "rules": len(self._monitor_rules),
+            "none_dur": None if since is None
+            else round(max(0.0, time.monotonic() - since), 3),
+            "none_since": since,
+        }
+
+    def _viz_target_detail(self) -> Optional[dict]:
+        """目标帧详情分组：当前目标帧末帧的 pose/twist/q 完整值（纯读）。
+
+        `_target_trajframe` 单次读入局部引用，轨迹终点帧 = 单帧即自身、序列取末项。
+
+        :return: `{time, pose, twist, q}` 分组 dict 或 `None`（无目标）。
+        """
+        target = self._target_trajframe
+        if target is None:
+            return None
+        last = target if isinstance(target, TrajFrame) else target[-1]
+        return {
+            "time": _json_round(last.time),
+            "pose": None if last.pose is None else {
+                "position": _json_arr(last.pose.position),
+                "orientation": _json_arr(last.pose.orientation)},
+            "twist": None if last.twist is None else {
+                "linear": _json_arr(last.twist.linear),
+                "angular": _json_arr(last.twist.angular)},
+            "q": _json_arr(last.q),
+        }
+
+    def _viz_static_payload(self) -> dict:
+        """`start_state_viz` 时一次性装配 `/static.json` 六组静态载荷。
+
+        限位四键（q_min/q_max/dq_max/tau_max）均逐关节全数组。
+        cfg 深拷贝仅此一次，`ctrl_defaults` 与 `cfg_raw` 两组共用。
+
+        :return: `{ident, limits, poses, ctrl_defaults, registry, cfg_raw}` 六组 dict（纯 JSON 值）。
+        """
+        cfg = self.get_config()   # 深拷贝一次，供控制默认值与 cfg 原文两组共用
+
+        def _group(key: str, build) -> dict:
+            """单组装配兜底：异常置 `{"_error": ...}`（不影响其余组）。"""
+            try:
+                return build()
+            except Exception as e:
+                logger.warning("joyarm.py - _viz_static_payload：%s 组装配失败：%s", key, e)
+                return {"_error": str(e)}
+
+        return {
+            "ident": _group("ident", self._viz_ident),
+            "limits": _group("limits", self._viz_limits),
+            "poses": _group("poses", self._viz_poses),
+            "ctrl_defaults": _group("ctrl_defaults",
+                                    lambda: self._viz_ctrl_defaults(cfg)),
+            "registry": _group("registry", self._viz_registry),
+            "cfg_raw": _group("cfg_raw", lambda: self._viz_cfg_raw(cfg)),
+        }
+
+    def _viz_ident(self) -> dict:
+        """标识与关节分组：型号 / 末端帧 / URDF 路径 / 关节数与关节名（构造后不变量）。"""
+        return {
+            "model": self._model,
+            "frame_end": self._frame_end,
+            "urdf": self._urdf_path,
+            "n_arm": self._n_arm,
+            "n_end": self._n_end,
+            "joint_names_arm": list(self._joint_names_arm),
+            "joint_names_end": list(self._joint_names_end),
+        }
+
+    def _viz_limits(self) -> dict:
+        """限位分组：arm/end 硬/软限位（四键逐关节全数组）+ tcp_limits。
+
+        :return: `{arm, end, tcp}` 分组 dict。
         """
         def _lim_group(hard: Optional[JointLimits], soft: Optional[JointLimits]) -> Optional[dict]:
             """硬/软限位 → 对称摘要分组（限位四键均逐关节全数组）。"""
@@ -1810,23 +2113,11 @@ class JoyArm:
         tcp = self._tcp_limits
         box = tcp.workspace_box
         return {
-            "model": self._model,
-            "frame_end": self._frame_end,
-            "joint_names_arm": list(self._joint_names_arm),
-            "joint_names_end": list(self._joint_names_end),
-            "limits": {
-                "arm": _lim_group(self._joint_limits_hard_arm, self._joint_limits_soft_arm),
-                "end": None if not self._n_end
-                else _lim_group(self._joint_limits_hard_end,
-                                self._joint_limits_soft_end),
-            },
-            "zero_arm": _json_arr(self._zero_arm),
-            "neutral_arm": _json_arr(self._neutral_arm),
-            "home_arm": _json_arr(self._home_arm),
-            "zero_end": _json_arr(self._zero_end),
-            "neutral_end": _json_arr(self._neutral_end),
-            "home_end": _json_arr(self._home_end),
-            "tcp_limits": {
+            "arm": _lim_group(self._joint_limits_hard_arm, self._joint_limits_soft_arm),
+            "end": None if not self._n_end
+            else _lim_group(self._joint_limits_hard_end,
+                            self._joint_limits_soft_end),
+            "tcp": {
                 "workspace_box": None if box is None else [
                     [_json_round(box[i][0]), _json_round(box[i][1])]
                     for i in range(3)],
@@ -1837,6 +2128,142 @@ class JoyArm:
             },
         }
 
+    def _viz_poses(self) -> dict:
+        """特征位形分组：zero/neutral/home × arm/end（空数组照传，页面跳过）。"""
+        return {
+            "zero_arm": _json_arr(self._zero_arm),
+            "neutral_arm": _json_arr(self._neutral_arm),
+            "home_arm": _json_arr(self._home_arm),
+            "zero_end": _json_arr(self._zero_end),
+            "neutral_end": _json_arr(self._neutral_end),
+            "home_end": _json_arr(self._home_end),
+        }
+
+    def _viz_ctrl_defaults(self, cfg) -> dict:
+        """控制默认值分组：cfg（深拷贝）+ backend.cfg 映射 + 已解析成员。
+
+        只走公开面取数；`rx_hz` 为 backend_dm 专用键，其他型号 `null` 属正常占位。
+
+        :param cfg: `get_config()` 深拷贝（`_viz_static_payload` 传入）。
+        :return: `{mit, pos_vel, default_mode, backend_params, fsm_hz, monitor_hz,
+            mit_kd_damping, arrival_tol, move_wait_timeout}` 分组 dict（纯 JSON 值）。
+        """
+        def _joint_gain(fam: str, seg: str, keys: tuple) -> dict:
+            """walk cfg `backend.<fam>.joints[].<seg>.<keys>` → 逐关节数组。
+
+            条目/键缺失该元素 `null`；整族无条目 → 各键整组 `null`。
+            """
+            out = {k: [] for k in keys}
+            joints = (((cfg.get("backend") or {}).get(fam) or {})
+                      .get("joints") or [])
+            for entry in joints:
+                segcfg = (entry.get(seg) or {}) if isinstance(entry, dict) else {}
+                for k in keys:
+                    out[k].append(_json_round(segcfg.get(k)
+                                              if isinstance(segcfg, dict) else None))
+            return {k: (v if v else None) for k, v in out.items()}
+
+        def _default_mode(fam: str) -> Optional[str]:
+            """cfg `backend.<fam>.default_mode`（缺省 `null`）。"""
+            v = ((cfg.get("backend") or {}).get(fam) or {}).get("default_mode")
+            return None if v is None else str(v)
+
+        bcfg_pub = self._backend.cfg               # 公开 MappingProxy（只读）
+        return {
+            "mit": {fam: _joint_gain(fam, "MIT", ("kp", "kd"))
+                    for fam in ("arm", "end")},
+            "pos_vel": {fam: _joint_gain(
+                fam, "POS_VEL",
+                ("pos_kp", "pos_ki", "vel_kp", "vel_ki", "vlim", "flim"))
+                for fam in ("arm", "end")},
+            "default_mode": {"arm": _default_mode("arm"),
+                             "end": _default_mode("end")},
+            "backend_params": {
+                "write_settle": _json_round(bcfg_pub.get("write_settle")),
+                "state_refresh_hz": _json_round(bcfg_pub.get("state_refresh_hz")),
+                "rx_hz": _json_round(bcfg_pub.get("rx_hz")),
+            },
+            "fsm_hz": _json_round(self._fsm_hz),
+            "monitor_hz": _json_round(self._monitor_hz),
+            "mit_kd_damping": _json_arr(self._mit_kd_damping),
+            "arrival_tol": {
+                "arm_q": _json_arr(self._arrival_tol_q_arm),
+                "end_q": _json_arr(self._arrival_tol_q_end),
+                "pos": _json_round(self._arrival_tol_pos),
+                "rot": _json_round(self._arrival_tol_rot),
+            },
+            "move_wait_timeout": _json_round(self._move_wait_timeout),
+        }
+
+    def _viz_registry(self) -> dict:
+        """求解器注册表分组：六域全部已注册名 与 traj/ctrl 逐注册名频率。
+
+        键序钉死为 `_DOMAIN_REGISTRIES` 字典键 fkine/ikine/jac/dyn/traj/ctrl
+        （成员名 `_<域>_solvers` 仅对这六个字典键成立，误用 cfg 键名会
+        AttributeError 被组级 try/except 吞掉、六组静默全空）；`by_name`
+        频率表与注册名同键集（`_build_domains` 同一循环装配）；域未配置 →
+        `None`（页面「（未配置）」）。
+
+        :return: `{fkine, ikine, jac, dyn, traj, ctrl}`——各域 `{names, default}`
+            dict（traj 域加 `plan_hz_by_name`、ctrl 域加 `ctrl_hz_by_name`）或 `None`。
+        """
+        out: dict = {}
+        for d in _DOMAIN_REGISTRIES:
+            members = getattr(self, f"_{d}_solvers")
+            if not members:
+                out[d] = None
+                continue
+            names = list(members)                  # cfg 序（首位 = 默认激活）
+            entry = {"names": names, "default": names[0]}
+            if d == "traj":
+                entry["plan_hz_by_name"] = {
+                    n: _json_round(self._plan_hz_by_name.get(n)) for n in names}
+            elif d == "ctrl":
+                entry["ctrl_hz_by_name"] = {
+                    n: _json_round(self._ctrl_hz_by_name.get(n)) for n in names}
+            out[d] = entry
+        return out
+
+    def _viz_cfg_raw(self, cfg) -> str:
+        """cfg 原文分组（净化版）。
+
+        :param cfg: `get_config()` 深拷贝（`_viz_static_payload` 传入）。
+        :return: yaml 字符串（页面折叠区原文显示，长行横向滚动）。
+        """
+        return yaml.dump(self._sanitize_cfg_for_viz(cfg),
+                         allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+    @staticmethod
+    def _sanitize_cfg_for_viz(cfg: dict) -> dict:
+        """cfg 净化副本。
+
+        删除项：`joyarm.arm_mdh`、`joyarm.T_linkn_endtcp`、backend.arm/end的 `channel/protocol/baud_rate`、
+        backend.arm/end.joints[] 各条目的 `motor_id/feedback_id/model`；缺键/缺段静默跳过（兼容缺段型号）。
+
+        :param cfg: `get_config()` 深拷贝。
+        :return: 净化后的新 dict（入参不被修改）。
+        """
+        clean = copy.deepcopy(cfg)
+        jcfg = clean.get("joyarm")
+        if isinstance(jcfg, dict):
+            jcfg.pop("arm_mdh", None)
+            jcfg.pop("T_linkn_endtcp", None)
+        bcfg = clean.get("backend")
+        if isinstance(bcfg, dict):
+            for fam in ("arm", "end"):
+                fcfg = bcfg.get(fam)
+                if not isinstance(fcfg, dict):
+                    continue
+                for key in ("channel", "protocol", "baud_rate"):
+                    fcfg.pop(key, None)
+                joints = fcfg.get("joints")
+                if isinstance(joints, list):
+                    for entry in joints:
+                        if isinstance(entry, dict):
+                            for key in ("motor_id", "feedback_id", "model"):
+                                entry.pop(key, None)
+        return clean
+
     def _viz_draw_trajectory(self, q_cur: Optional[np.ndarray] = None) -> None:
         """轨迹显示（可选）：从激活规划器采样轨迹点 + 当前/目标位姿绘制。
 
@@ -1846,9 +2273,6 @@ class JoyArm:
 
         :param q_cur: 调用方传入的被动快照 q `(n_arm,)`（当前位姿球现算用；`None` 时跳过）。
         """
-        import meshcat
-        import meshcat.geometry as mg
-
         planner = self._activated_traj_solver
         target = self._target_trajframe
         frames = [target] if isinstance(target, TrajFrame) else list(target or [])
@@ -2553,30 +2977,33 @@ class JoyArm:
         return cls6(linear=np.array(arr[:3]), angular=np.array(arr[3:]))
 
     # ============================================================
-    # 7.6 数学门面方法：显式传参离线可用，缺省取硬件状态
+    # 7.6 数学门面方法：显式传参离线可用，缺省取硬件状态快照
     # ============================================================
     def _current_q(self, caller: str) -> np.ndarray:
-        """取 arm 当前 q。"""
-        st = self._backend.get_state_arm()
-        if st is None or st.q is None:
+        """取 arm 当前 q（joint_state_arm 快照）。"""
+        st = self._backend.joint_state_arm
+        q = np.asarray(st.q, dtype=float)
+        if not bool(np.all(np.isfinite(q))):
             raise RuntimeError(
-                f"joyarm.py - {caller}：get_state_arm() 无可用 q（未连接或读取失败）；"
+                f"joyarm.py - {caller}：joint_state_arm 快照无可用 q（未收到状态帧）；"
                 f"显式传参可离线计算")
-        return np.asarray(st.q, dtype=float)
+        return q
 
     def _current_qdq(self, caller: str) -> tuple:
-        """取 arm 当前 (q, dq)。"""
-        st = self._backend.get_state_arm()
-        if st is None or st.q is None or st.dq is None:
+        """取 arm 当前 (q, dq)（joint_state_arm 快照）。"""
+        st = self._backend.joint_state_arm
+        q = np.asarray(st.q, dtype=float)
+        dq = np.asarray(st.dq, dtype=float)
+        if not (bool(np.all(np.isfinite(q))) and bool(np.all(np.isfinite(dq)))):
             raise RuntimeError(
-                f"joyarm.py - {caller}：get_state_arm() 无可用 q/dq（未连接或读取失败）；"
+                f"joyarm.py - {caller}：joint_state_arm 无可用 q/dq（未收到状态帧）；"
                 f"显式传参可离线计算")
-        return np.asarray(st.q, dtype=float), np.asarray(st.dq, dtype=float)
+        return q, dq
 
     def solve_fkine(self, q=None, frame=None) -> Pose:
         """正运动学：`q` → `frame` 帧位姿。
 
-        :param q: `(n_arm,)` 关节角 rad；缺省取 `get_state_arm().q`。
+        :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
         :param frame: 帧名；缺省取 cfg `joyarm.frame_end`。
         :return: :class:`Pose`——`frame` 帧位姿。
         """
@@ -2616,7 +3043,7 @@ class JoyArm:
     def get_jac(self, q=None, frame=None) -> np.ndarray:
         """雅可比矩阵 `J(q)`。
 
-        :param q: `(n_arm,)` 关节角 rad；缺省取 `get_state_arm().q`。
+        :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
         :param frame: 帧名；缺省取 cfg `joyarm.frame_end`。
         :return: 基座系雅可比 `(6, n_arm)`。
         """
@@ -2627,7 +3054,7 @@ class JoyArm:
     def get_jac_pinv_damped(self, q=None, frame=None, damping: float = 1e-3) -> np.ndarray:
         """雅可比的阻尼最小二乘广义逆（`J* = Jᵀ(JJᵀ + λ²I)⁻¹`）。
 
-        :param q: `(n_arm,)` 关节角 rad；缺省取 `get_state_arm().q`。
+        :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
         :param frame: 帧名；缺省取 cfg `joyarm.frame_end`。
         :param damping: 阻尼系数 λ；缺省 1e-3。
         :return: 广义逆 `(n_arm, 6)`。
@@ -2639,8 +3066,8 @@ class JoyArm:
     def solve_idyn(self, q=None, dq=None, ddq=None) -> np.ndarray:
         """逆动力学（RNEA）：`(q, dq, ddq)` → 各关节力矩。
 
-        :param q: `(n_arm,)` 关节角 rad；缺省取 `get_state_arm().q`。
-        :param dq: `(n_arm,)` 关节速度 rad/s；缺省取 `get_state_arm().dq`。
+        :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
+        :param dq: `(n_arm,)` 关节速度 rad/s；缺省取 `joint_state_arm.dq` 快照。
         :param ddq: `(n_arm,)` 关节加速度 rad/s²；缺省零向量。
         :return: 各关节力矩 `(n_arm,)` N·m。
         """
@@ -2655,7 +3082,7 @@ class JoyArm:
     def get_mass_matrix(self, q=None) -> np.ndarray:
         """关节空间惯量矩阵 `M(q)`。
 
-        :param q: `(n_arm,)` 关节角 rad；缺省取 `get_state_arm().q`。
+        :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
         :return: 惯量阵 `(n_arm, n_arm)`。
         """
         if q is None:
@@ -2665,8 +3092,8 @@ class JoyArm:
     def get_coriolis(self, q=None, dq=None) -> np.ndarray:
         """科氏/向心项 `C(q, q̇)q̇`。
 
-        :param q: `(n_arm,)` 关节角 rad；缺省取 `get_state_arm().q`。
-        :param dq: `(n_arm,)` 关节速度 rad/s；缺省取 `get_state_arm().dq`。
+        :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
+        :param dq: `(n_arm,)` 关节速度 rad/s；缺省取 `joint_state_arm.dq` 快照。
         :return: 各关节科氏/向心力矩 `(n_arm,)` N·m。
         """
         if q is None or dq is None:
@@ -2679,7 +3106,7 @@ class JoyArm:
     def get_gravity(self, q=None) -> np.ndarray:
         """重力项 `G(q)`。
 
-        :param q: `(n_arm,)` 关节角 rad；缺省取 `get_state_arm().q`。
+        :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
         :return: 各关节重力力矩 `(n_arm,)` N·m。
         """
         if q is None:
@@ -2692,13 +3119,11 @@ class JoyArm:
     def is_in_pose_arm(self, pose, tol_pos: Optional[float] = None, tol_rot: Optional[float] = None, frame=None) -> bool:
         """末端位姿到位判断：位置误差 ≤ `tol_pos` 且姿态误差角 ≤ `tol_rot`。
 
-        末端位姿由激活 fkine 对 `get_state_arm().q` 现算；无可用关节状态 warn 并判为未到位。
-
         :param pose: 目标位姿（必填；:class:`Pose`）。
         :param tol_pos: 位置容差 m（可选）；缺省取 cfg `joyarm.arrival_tol.arm.pos`。
         :param tol_rot: 姿态容差 rad（可选）；缺省取 cfg `joyarm.arrival_tol.arm.rot`。
         :param frame: 帧名；缺省取 cfg `joyarm.frame_end`。
-        :return: 到位 `True`；未到位或无可用关节状态 `False`。
+        :return: 到位 `True`；未到位或无有效状态快照 `False`。
         :raises TypeError: `pose` 非 :class:`Pose`。
         """
         if not isinstance(pose, Pose):
@@ -2707,11 +3132,11 @@ class JoyArm:
                 f"{type(pose).__name__}")
         tol_pos = self._arrival_tol_pos if tol_pos is None else float(tol_pos)
         tol_rot = self._arrival_tol_rot if tol_rot is None else float(tol_rot)
-        st = self._backend.get_state_arm()
-        if st is None or st.q is None:
-            logger.warning("joyarm.py - is_in_pose_arm：无可用关节状态（未连接/读取失败），判为未到位")
+        q = np.asarray(self._backend.joint_state_arm.q, dtype=float)
+        if not bool(np.all(np.isfinite(q))):
+            logger.warning("joyarm.py - is_in_pose_arm：无可用关节状态快照（未收到状态帧），判为未到位")
             return False
-        cur = self._activated_of("fkine").solve(self, st.q, frame or self._frame_end)
+        cur = self._activated_of("fkine").solve(self, q, frame or self._frame_end)
         d_pos = float(np.linalg.norm(
             np.asarray(cur.position, float) - np.asarray(pose.position, float)))
         q_err = quat_mul(quat_conj(np.asarray(cur.orientation, float)), np.asarray(pose.orientation, float))
@@ -2723,34 +3148,32 @@ class JoyArm:
 
         :param q: 目标关节角 `(n_arm,)` rad（必填）。
         :param tol_q: 容差 rad；缺省从 cfg `joyarm.arrival_tol.arm.q` 取（n_arm 元逐关节）。
-        :return: 全关节同时满足容差 `True`；未到位或无可用关节状态 `False`。
+        :return: 全关节同时满足容差 `True`；未到位或无有效状态快照 `False`。
         :raises ValueError: 目标维度与关节数不符。
         """
-        return self._is_in_q(q, tol_q, self._arrival_tol_q_arm, self._backend.get_state_arm, self._n_arm, "arm")
+        return self._is_in_q(q, tol_q, self._arrival_tol_q_arm, self._backend.joint_state_arm, self._n_arm, "arm")
 
     def is_in_q_end(self, q, tol_q=None) -> bool:
         """end 电机到位判断：`np.max(|q_cur − q|) ≤ tol_q` 全电机同时满足。
 
         :param q: 目标电机角 `(n_end,)` rad（必填）。
         :param tol_q: 容差 rad；缺省从 cfg `joyarm.arrival_tol.end.q` 取（n_end 元逐电机）。
-        :return: 全电机同时满足容差 `True`；未到位或无可用关节状态 `False`。
+        :return: 全电机同时满足容差 `True`；未到位或无有效状态快照 `False`。
         :raises ValueError: 目标维度与电机数不符。
         """
-        return self._is_in_q(q, tol_q, self._arrival_tol_q_end, self._backend.get_state_end, self._n_end, "end")
+        return self._is_in_q(q, tol_q, self._arrival_tol_q_end, self._backend.joint_state_end, self._n_end, "end")
 
     @staticmethod
-    def _is_in_q(q, tol_q, tol_member, get_state, n: int, part: str) -> bool:
-        """关节到位判断实现。"""
+    def _is_in_q(q, tol_q, tol_member, state, n: int, part: str) -> bool:
+        """关节到位判断实现（读快照）。"""
         q = np.asarray(q, dtype=float).reshape(-1)
         if q.shape[0] != n:
             raise ValueError(
                 f"joyarm.py - is_in_q_{part}：目标维度 {q.shape[0]} ≠ 关节数 {n}")
-        st = get_state()
-        if st is None or st.q is None:
-            logger.warning("joyarm.py - is_in_q_%s：无可用关节状态（未连接/读取失败），"
-                           "判为未到位", part)
+        q_cur = np.asarray(state.q, dtype=float)
+        if not bool(np.all(np.isfinite(q_cur))):
+            logger.warning("joyarm.py - is_in_q_%s：无可用关节状态快照（未收到状态帧），判为未到位", part)
             return False
-        q_cur = np.asarray(st.q, dtype=float)
         tol = tol_member if tol_q is None else np.asarray(tol_q, dtype=float)
         return bool(np.all(np.abs(q_cur - q) <= np.broadcast_to(tol, q.shape)))
 
@@ -2803,7 +3226,7 @@ class JoyArm:
         ② 置 `set_event(SafetyEvent.ZEROING)`，阻塞等待经 HOME 中转迁移至 ZERO 并完成到位失能；
         ③ `self._backend.disable_arm()` 失能 arm 全部电机（end 失能由调用方或销毁路径处理）；
         ④ 停 FSM 线程（join 带超时、超时 warn 不强杀——此时句柄保留、跳过缓存清理与状态复位，
-          互斥与 ctrl 豁免判定继续生效）、清空全部 FSM 缓存、状态机退出。
+           互斥与 ctrl 豁免判定继续生效）、清空全部 FSM 缓存、状态机退出。
 
         :raises RuntimeError: 未连接。
         """
@@ -2879,7 +3302,7 @@ class JoyArm:
     def start_monitor(self) -> None:
         """启动安全监视器（独立 daemon 线程）。
 
-        每拍只读采集（`get_state_arm/end`、当前状态、当前事件）→ 按规则判断 → 命中则 `set_event`。
+        每拍只读采集（`joint_state_arm/end`、当前状态、当前事件）→ 按规则判断 → 命中则 `set_event`。
         """
         if self._monitor_periodic is not None and self._monitor_periodic.is_alive():
             logger.info("joyarm.py - start_monitor：监视器已在运行，忽略重复启动")
@@ -2908,9 +3331,7 @@ class JoyArm:
         """绑定自定义监视规则（单条或列表）。
 
         规则签名 `rule(state_arm, state_end, motion, event) -> SafetyEvent | None`
-        ——`state_arm/state_end` 允许为 `None`（状态读取失败时仍被调用），
-        返回 `None` = 无意见。仲裁：内置硬规则优先于自定义；同组多命中取危险程度
-        最高者。
+        仲裁：硬规则与自定义规则命中合并、统一取危险程度最高者（结果与到达顺序无关，返回 `None` 为“无意见”。）。
 
         :param rules: 可调用对象或其列表。
         :raises ValueError: 存在非可调用项。
@@ -2928,9 +3349,12 @@ class JoyArm:
     def start_state_viz(self, traj_points: int = 200) -> None:
         """启动运行状态可视化（单页面监控网页 + 单一只读 daemon 线程）。
 
-        左侧 iframe 嵌 meshcat 3D 视图（**可选依赖**：此处才 import；缺包 warn 并
-        降级为仅 HTML 状态面板、3D 区占位），右侧自写 HTML 状态面板；轻量 HTTP
-        服务托管页面，面板 JS 定时 `fetch /state.json`（约 5 Hz，零新增依赖）。
+        三栏页面：左静态参考（`/static.json` 在此一次性装配、页面加载时拉取
+        一次，失败随轮询重试）、中间 iframe 嵌 meshcat 3D 视图（**直接依赖**、
+        模块顶层导入；初始化失败（如 mesh 缺失）warn 并降级为仅 HTML 状态
+        面板、3D 区占位；轨迹开关在 3D 区角部 overlay）、右动态状态面板；
+        轻量 HTTP 服务托管页面，
+        面板 JS 定时 `fetch /state.json`（约 5 Hz，零新增依赖）。
         `_state_viz_worker` 只调只读接口刷新 meshcat 模型姿态与面板数据，绝不
         调用控制/下发方法。启动**不要求已连接**——未连接时可启动（面板显示
         占位符并标注快照新鲜度），连接后 backend 被动快照自动出数。
@@ -2943,33 +3367,46 @@ class JoyArm:
             return
         self._viz_traj_points = max(int(traj_points), 0)
         self._viz_traj_enabled = bool(self._viz_traj_points)
-        # ---- meshcat 可选依赖（降级路径）----
+        # ---- 可视化专属 pin 模型（arm+end 联动；仅依赖 pinocchio）----
+        # 独立于下方 meshcat 初始化块：几何构建失败不影响模型本体（另有
+        # arm-only 兜底）。数学求解模型 _pin_model 保持不动（可视化专属
+        # 缩减模型，meshcat 几何也按本模型构建）。
+        self._viz_model = None
+        try:
+            self._viz_model = self._build_pin_model(
+                self._urdf_path,
+                list(self._joint_names_arm) + list(self._joint_names_end))
+        except Exception as e:
+            logger.warning(
+                "joyarm.py - start_state_viz：arm+end 可视化模型构建失败（%s），"
+                "降级回 arm-only 模型", e)
+        if self._viz_model is None:
+            self._viz_model = self._pin_model          # arm-only 兜底（= 现行为）
+        # ---- 族级 display q 缓存 + 静态载荷一次性装配（此时 _zero_end 已为真值）----
+        self._viz_q_cache = {"arm": None, "end": np.array(self._zero_end)}
+        self._viz_static_bytes = json.dumps(
+            self._viz_static_payload()).encode("utf-8")
+        # ---- meshcat 3D 初始化（直接依赖；失败降级路径）----
         self._viz_pin = None
         iframe_src = "about:blank"
         try:
-            import meshcat
-            from pinocchio.visualize import MeshcatVisualizer as _PinViz
-            collision = pin.buildGeomFromUrdf(self._pin_model, self._urdf_path,
+            collision = pin.buildGeomFromUrdf(self._viz_model, self._urdf_path,
                                               pin.GeometryType.COLLISION)
-            visual = pin.buildGeomFromUrdf(self._pin_model, self._urdf_path,
+            visual = pin.buildGeomFromUrdf(self._viz_model, self._urdf_path,
                                            pin.GeometryType.VISUAL)
             viewer = meshcat.Visualizer()
-            viz = _PinViz(self._pin_model, collision, visual)
+            viz = MeshcatVisualizer(self._viz_model, collision, visual)
             viz.initViewer(meshcat_visualizer=viewer)
             viz.loadViewerModel()
             self._viz_pin = viz
             iframe_src = viewer.url()
             logger.info("joyarm.py - start_state_viz：meshcat 3D 视图已就绪（%s）",
                         iframe_src)
-        except ImportError:
-            logger.warning(
-                "joyarm.py - start_state_viz：未安装 meshcat（可选依赖，"
-                "`uv sync --extra vis` 安装），降级为仅 HTML 状态面板（3D 区占位）")
         except Exception as e:
             logger.warning(
                 "joyarm.py - start_state_viz：meshcat 初始化失败（%s），"
                 "降级为仅 HTML 状态面板", e)
-        # ---- 轻量 HTTP 托管（单页面 + /state.json 轮询端点 + /traj 开关）----
+        # ---- 轻量 HTTP 托管（单页面 + /static.json 静态端点 + /state.json 轮询端点 + /traj 开关）----
         page = (_VIZ_PAGE_HTML
                 .replace("__MESHCAT_SRC__", iframe_src)
                 .replace("__HAS_MESHCAT__", "true" if self._viz_pin is not None else "false")
@@ -2994,6 +3431,14 @@ class JoyArm:
                     self.send_header("Content-Length", str(len(payload)))
                     self.end_headers()
                     self.wfile.write(payload)
+                elif path == "/static.json":
+                    # 静态载荷：start 时预装配 bytes（不可变，HTTP 线程只读）
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length",
+                                     str(len(arm_ref._viz_static_bytes)))
+                    self.end_headers()
+                    self.wfile.write(arm_ref._viz_static_bytes)
                 elif path == "/traj":
                     arm_ref._viz_traj_enabled = query.strip().endswith("on=1")
                     self.send_response(200)
@@ -3014,10 +3459,44 @@ class JoyArm:
         self._viz_state = {}
         self._viz_periodic = _PeriodicThread(self._state_viz_worker, _VIZ_WORKER_HZ, name="joyarm-viz")
         self._viz_periodic.start()
-        logger.info("joyarm.py - start_state_viz：监控页面已启动 "
-                    "http://127.0.0.1:%s/（面板 JS 约 5 Hz 轮询 /state.json；"
-                    "轨迹点数 %s；不要求连接——未连接可启动，连接后 backend 快照自动出数）",
-                    port, self._viz_traj_points)
+        url = f"http://127.0.0.1:{port}/"
+        logger.info("joyarm.py - start_state_viz：监控页面已启动 %s（面板 JS 约 5 Hz 轮询 "
+                    "/state.json；轨迹点数 %s；不要求连接——未连接可启动，连接后 backend "
+                    "快照自动出数）", url, self._viz_traj_points)
+        # ---- 原生监控窗口（PySide6 QtWebEngine 子进程加载面板；失败/无显示器降级回 URL）----
+        self._viz_win_proc = None
+        if os.environ.get("JOYARM_VIZ_NOWINDOW"):
+            logger.info("joyarm.py - start_state_viz：JOYARM_VIZ_NOWINDOW 已设，"
+                        "跳过监控窗口（仅 URL 方式）")
+        else:
+            try:
+                from PySide6 import QtWebEngineWidgets  # noqa: F401  导入即预检（子进程内正式使用）
+                self._viz_win_proc = subprocess.Popen(
+                    [sys.executable, "-m", "joyarm_core.joyarm.viz_window", url,
+                     "JoyArm 运行状态监控"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                threading.Thread(target=self._viz_win_watchdog,
+                                 args=(self._viz_win_proc, url),
+                                 name="joyarm-viz-win", daemon=True).start()
+            except Exception as e:
+                self._viz_win_proc = None
+                logger.warning("joyarm.py - start_state_viz：监控窗口启动失败（%s），"
+                               "请用浏览器打开 %s", e, url)
+
+    def _viz_win_watchdog(self, proc: subprocess.Popen, url: str) -> None:
+        """监控窗口子进程早夭看护：启动短窗内退出则告警并回退 URL 方式。
+
+        :param proc: 窗口子进程句柄（启动方传入的当次对象）。
+        :param url: 面板 URL（降级提示用）。
+        """
+        try:
+            rc = proc.wait(timeout=3.0)
+        except subprocess.TimeoutExpired:
+            return    # 3 s 仍存活视为窗口已正常打开
+        if rc != 0 and self._viz_win_proc is proc:
+            self._viz_win_proc = None
+            logger.warning("joyarm.py - start_state_viz：监控窗口进程已退出"
+                           "（码 %s，可能无显示器），请用浏览器打开 %s", rc, url)
 
     def stop_state_viz(self) -> None:
         """停止运行状态可视化（停 worker、关 HTTP 服务；重复调用无副作用）。
@@ -3045,7 +3524,17 @@ class JoyArm:
                 httpd.server_close()
             except Exception as e:
                 logger.warning("joyarm.py - stop_state_viz：HTTP 服务关闭异常：%s", e)
+        proc, self._viz_win_proc = self._viz_win_proc, None
+        if proc is not None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=2.0)
+            except Exception:
+                pass    # 窗口已自行关闭或强杀失败均无需处理（stop 幂等口径）
         self._viz_pin = None
+        self._viz_model = None          # 下次 start 重新构建（arm+end 联动）
+        self._viz_q_cache = {}
+        self._viz_static_bytes = b""    # 下次 start 重新装配
         if was_running:
             logger.info("joyarm.py - stop_state_viz：可视化已停止")
 
