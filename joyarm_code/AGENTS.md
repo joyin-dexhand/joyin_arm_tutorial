@@ -50,7 +50,6 @@ joyarm_code/
 │   ├── joyarm/                      #   设备模型层（主类 + FSM + 监视器 + 可视化 + 对象创建入口）
 │   │   ├── joyarm.py                #     JoyArm 主类：初始化自检/硬件委托面/六域两线程/数学门面/MotionFSM/safe_monitor/状态可视化
 │   │   ├── __init__.py              #     JoyArmFactory / joyArm / listArm / load_config（对象创建入口）
-│   │   ├── viz_window.py            #     监控页原生窗口入口（PySide6 QtWebEngine 子进程，由 start_state_viz 拉起）
 │   │   ├── joyarm_features.md       #     joyarm 包重构规格（设计契约文档）
 │   │   └── joyarm_verify.py         #     JoyArm 层离线验收 CLI（DummyBackend 注入 00~09 分组；独立工具，不入门面）
 │   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
@@ -143,7 +142,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `robotics/control/` | `Controller(ABC)`（step 内核 + `MODE` 类属性声明所需电机模式：基类缺省 MIT、子类覆写，FSM 进 MOTION 依此设模式）+ `JointPositionController` 关节位置控制器（`MODE=POSITION`；step 跟踪当前帧 q 经 `send_position_arm` 下发，NaN/缺 q 拒绝下发）✅ | Ch6 | ✅ |
 | `joyarm/joyarm.py` | `JoyArm` 主类：两阶段初始化（私有成员声明 → 按依赖序赋真值）+ cfg 全套自检（含 cfg↔URDF 硬校验）+ pin 缩减模型（锁定非 cfg 名单活动关节 → nq=n_arm）+ 硬件委托面（§3.3）+ 六域求解器与热切换 + 目标帧通道 + plan/ctrl 两线程 + 数学门面 9 方法 + MotionFSM（六状态 + 路线表 + start/stop）+ SafetyEvent/safe_monitor（硬规则 + 自定义规则）+ 运行状态可视化（HTTP 轮询 + meshcat 依赖）+ `close()` 销毁路径；模块级 `load_config` 与私有周期线程机制 `_run_periodic`/`_PeriodicThread`（FSM/监视/可视化/运动线程共用，不入 utils） | — | ✅ |
 | `joyarm/__init__.py` | `JoyArmFactory`/`joyArm`/`listArm`/`load_config`（对象创建入口，四步校验失败语义见约束4；`listArm` 三条件过滤与失败消息共用实现） | — | ✅ |
-| `joyarm/viz_window.py` | 监控页原生窗口子进程入口（`python -m joyarm_core.joyarm.viz_window <url>`：`QMainWindow`+`QWebEngineView` 内嵌 Chromium 加载三栏页；零数据逻辑，数据仍来自 HTTP 服务；关窗即退出本进程） | — | ✅ |
+| `joyarm/joyarm.py` 内 `_VizWindow` | 监控页原生窗口封装类（JoyArm 成员 `_viz_window`：init 占位 None、start 时创建赋值、stop 终止；`launch()` 经 `python -c` 拉起子进程跑 `child_main()`——`QMainWindow`+`QWebEngineView` 内嵌 Chromium 加载三栏页，内置早夭看护；零数据逻辑，数据仍来自 HTTP 服务；关窗即退出子进程） | — | ✅ |
 | `joyarm/joyarm_verify.py` | JoyArm 层离线分级验收 CLI（全离线不连真机；DummyBackend 注入 00~09 十组 = 工厂 listArm/初始化自检/只读防篡改/委托面互斥/求解器域/数学门面/MotionFSM/safe_monitor/可视化/销毁路径，PASS/SKIP/FAIL 三分 + SUMMARY 行；真机侧走 backend_verify.py） | — | ✅ |
 | `config/joyarm_dm.yaml` | 型号 YAML 三段（结构与限位语义见 §1.3） | — | ✅ |
 
@@ -200,7 +199,7 @@ JoyArm.start_motion_fsm()（前置已连接，否则 RuntimeError；非阻塞；
 # 安全事件与监视器（事件→目标状态映射：NORMAL→MOTION…DISABLE 危险度最高；FSM 每拍消费，延迟 ≤1/fsm_hz）
 JoyArm.set_event(SafetyEvent) · get_event() · start_monitor() / stop_monitor() · set_monitor_rules(rules)    # 监视器独立 daemon 线程（monitor_hz）：硬规则（error≥2→DAMPING；断连或连续 0.1s 无新鲜快照→DISABLE，快照过期过滤判 None）与自定义规则命中合并、统一取危险度最高（结果与到达顺序无关）；rule(state_arm, state_end, motion, event) → SafetyEvent|None ✅
 # 运行状态可视化（HTTP 轮询、零新增依赖、纯被动快照零总线帧、与 FSM/规划控制线程正交）
-JoyArm.start_state_viz(traj_points=200) / stop_state_viz()    # 单页面三栏监控网页（中间 1:1、两侧 1:3 内部纵滚），start 后默认自动弹出 PySide6 QtWebEngine 原生窗口（`viz_window.py` 子进程加载同页，stop 随手关窗；`JOYARM_VIZ_NOWINDOW=1`/无显示器/启动失败降级仅打 URL 日志）：左静态（/static.json，start 时装配一次、页面加载拉取一次：标识与关节/限位（硬+软逐关节+tcp_limits）/特征位形/控制默认值/求解器注册表/cfg 原文折叠六组）+ 中 3D（iframe 嵌 meshcat（初始化失败降级占位）；arm+end 联动的可视化专属缩减 pin 模型（数学用 _pin_model 不动），display q 按关节名映射快照拼装、无效保持上一帧、构建失败降级 arm-only）+ 右动态（JS ~5Hz fetch /state.json：运行态/快照时刻与新鲜度标注/arm+end 关节表/末端位姿速度/求解器激活与目标帧摘要/动力学现算（门面显式传参）/FSM 子阶段/监视器内部/目标帧详情；控制模式无被动来源不展示）；单一只读 daemon 线程（绝不下发指令）；轨迹显示可选（需 MOTION 态，开关在中栏 3D 角部）✅
+JoyArm.start_state_viz(traj_points=200) / stop_state_viz()    # 单页面三栏监控网页（中间 1:1、两侧 1:3 内部纵滚），start 后默认自动弹出 PySide6 QtWebEngine 原生窗口（joyarm.py 内 `_VizWindow` 子进程加载同页、JoyArm 成员 `_viz_window` 持有，stop 随手关窗；`JOYARM_VIZ_NOWINDOW=1`/无显示器/启动失败降级仅打 URL 日志）：左静态（/static.json，start 时装配一次、页面加载拉取一次：标识与关节/限位（硬+软逐关节+tcp_limits）/特征位形/控制默认值（仅跨型号通用键）/cfg 原文折叠五组）+ 中 3D（iframe 嵌 meshcat（初始化失败降级占位）；arm+end 联动的可视化专属缩减 pin 模型（数学用 _pin_model 不动），display q 按关节名映射快照拼装、无效保持上一帧、构建失败降级 arm-only）+ 右动态（JS ~5Hz fetch /state.json：运行态/快照时刻与新鲜度标注/arm+end 关节表/末端位姿速度/求解器激活与目标帧摘要；控制模式无被动来源不展示）；单一只读 daemon 线程（绝不下发指令）；轨迹显示可选（需 MOTION 态，开关在中栏 3D 角部）✅
 # 销毁（支持 with 上下文）
 JoyArm.close()    # stop_motion_fsm → stop_monitor → stop_state_viz → disable_arm/end → disconnect_arm/end（各步异常转 warn 不阻断收尾）✅
 ```

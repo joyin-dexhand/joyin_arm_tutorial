@@ -455,7 +455,6 @@ _VIZ_PAGE_HTML = """<!DOCTYPE html>
   <h2>限位</h2><div class="kv" id="limits">等待数据…</div>
   <h2>特征位形</h2><div class="kv" id="poses">等待数据…</div>
   <h2>控制默认值</h2><div class="kv" id="ctrl-defaults">等待数据…</div>
-  <h2>求解器注册表</h2><div class="kv" id="registry">等待数据…</div>
   <details>
     <summary>cfg 原文（已滤除通信拓扑/名义运动学参数）</summary>
     <pre id="cfg-raw">等待数据…</pre>
@@ -471,10 +470,6 @@ _VIZ_PAGE_HTML = """<!DOCTYPE html>
   <div class="kv" id="snap">等待数据…</div>
   <div class="kv" id="bk">等待数据…</div>
   <h2 id="tcp-title">末端位姿与速度</h2><div class="kv" id="tcp">等待数据…</div>
-  <h2>动力学现算</h2><div class="kv" id="dyn">等待数据…</div>
-  <h2>FSM 子阶段</h2><div class="kv" id="fsm-sub">等待数据…</div>
-  <h2>监视器</h2><div class="kv" id="mon">等待数据…</div>
-  <h2>目标帧详情</h2><div class="kv" id="tgt-detail">等待数据…</div>
   <h2 id="arm-title">arm 关节</h2><table id="arm"></table>
   <h2 id="end-title">end 关节</h2><table id="end"></table>
   <h2>求解器与管线</h2><div class="kv" id="solvers">等待数据…</div>
@@ -599,27 +594,13 @@ function renderCtrl(cd) {
   }
   const dm = cd.default_mode || {}, bp = cd.backend_params || {}, at = cd.arrival_tol || {};
   h += `default_mode：arm=${dm.arm || "—"} end=${dm.end || "—"}<br>`;
-  h += `write_settle=${fmt(bp.write_settle, 3)} state_refresh_hz=${fmt(bp.state_refresh_hz, 1)} `
-     + `rx_hz=${fmt(bp.rx_hz, 1)}<br>`;
+  h += `write_settle=${fmt(bp.write_settle, 3)} state_refresh_hz=${fmt(bp.state_refresh_hz, 1)}<br>`;
   h += `fsm_hz=${fmt(cd.fsm_hz, 1)} monitor_hz=${fmt(cd.monitor_hz, 1)} `
      + `mit_kd_damping=${arrOrDash(cd.mit_kd_damping)}<br>`;
   h += `到位容差 arm_q=${arrOrDash(at.arm_q)} end_q=${arrOrDash(at.end_q)} `
      + `pos=${fmt(at.pos, 4)} rot=${fmt(at.rot, 4)}<br>`;
   h += `move_wait_timeout=${fmt(cd.move_wait_timeout, 2)}`;
   $("ctrl-defaults").innerHTML = h;
-}
-function renderRegistry(rg) {
-  if (!rg || rg._error) { $("registry").innerHTML = (rg && rg._error) ? "装配失败" : "—"; return; }
-  let h = "";
-  for (const k of ["fkine", "ikine", "jac", "dyn", "traj", "ctrl"]) {
-    const g = rg[k];
-    if (!g) { h += `${k}：（未配置）<br>`; continue; }
-    h += `${k}：` + g.names.map((n, i) => i === 0 ? `<b>${n}</b>（默认）` : n).join(", ");
-    const hzMap = (k === "traj") ? g.plan_hz_by_name : (k === "ctrl") ? g.ctrl_hz_by_name : null;
-    if (hzMap) h += `<br>　${Object.keys(hzMap).map(n => `${n}=${fmt(hzMap[n], 1)}Hz`).join(" ")}`;
-    h += "<br>";
-  }
-  $("registry").innerHTML = h;
 }
 let STATIC = null;          // /static.json 载荷（null = 未就绪，poll 内重试）
 let staticLoading = false;  // in-flight 防护（fetch 挂起时不重复发起）
@@ -632,40 +613,9 @@ async function loadStatic() {
     renderLimits(STATIC.limits);
     renderPoses(STATIC.poses);
     renderCtrl(STATIC.ctrl_defaults);
-    renderRegistry(STATIC.registry);
     $("cfg-raw").textContent = (typeof STATIC.cfg_raw === "string") ? STATIC.cfg_raw : "装配失败";
   } catch (e) { STATIC = null; }   // 拉取/渲染失败保持未就绪，随轮询重试
   finally { staticLoading = false; }
-}
-// ---- 右栏动态组渲染 ----
-function renderDyn(dy) {   // 动力学现算（逐子键 null 显「—」）
-  if (!dy || dy._error) { $("dyn").innerHTML = (dy && dy._error) ? "装配失败" : "—"; return; }
-  $("dyn").innerHTML = `重力 G(q) N·m=${arrOrDash(dy.gravity)}<br>`
-    + `科氏 C(q,dq)·dq N·m=${arrOrDash(dy.coriolis)}<br>`
-    + `惯量对角 diag(M) kg·m²=${arrOrDash(dy.mass_diag)}`;
-}
-function renderFsmSub(fs) {
-  if (!fs || fs._error) { $("fsm-sub").innerHTML = (fs && fs._error) ? "装配失败" : "—"; return; }
-  $("fsm-sub").innerHTML = `zero_moving=${tri(fs.zero_moving)} home_arrived=${tri(fs.home_arrived)}<br>`
-    + `hold_q=${arrOrDash(fs.hold_q)}`;
-}
-function renderMon(m) {   // none_since 为单调钟原值：严禁 fmtClock、严禁与 s.t 相减
-  if (!m || m._error) { $("mon").innerHTML = (m && m._error) ? "装配失败" : "—"; return; }
-  const since = (m.none_since === null || m.none_since === undefined)
-    ? "—" : (+m.none_since).toFixed(3) + "s（单调钟）";
-  $("mon").innerHTML = `rules=${m.rules}<br>连续None持续=${fmt(m.none_dur, 2)}s<br>起算=${since}`;
-}
-function renderTgtDetail(td) {   // 无目标整组 null →「—（无目标）」
-  if (!td || td._error) { $("tgt-detail").innerHTML = (td && td._error) ? "装配失败" : "—（无目标）"; return; }
-  let h = `time=${fmt(td.time, 3)}<br>`;
-  h += td.pose
-    ? `p=${arrOrDash(td.pose.position)}<br>q(wxyz)=${arrOrDash(td.pose.orientation)}<br>`
-    : "pose=—<br>";
-  h += td.twist
-    ? `v=${arrOrDash(td.twist.linear)} m/s<br>w=${arrOrDash(td.twist.angular)} rad/s<br>`
-    : "twist=—<br>";
-  h += `q=${arrOrDash(td.q)}`;
-  $("tgt-detail").innerHTML = h;
 }
 async function poll() {
   if (STATIC === null) loadStatic();
@@ -693,10 +643,6 @@ async function poll() {
     $("end-title").textContent = `end 关节（${(s.end && s.end.names) ? s.end.names.length : 0}）`;
     jointTable($("arm"), s.arm, "（无关节）");
     jointTable($("end"), s.end, "（无电机）");
-    renderDyn(s.dynamics);
-    renderFsmSub(s.fsm_sub);
-    renderMon(s.monitor);
-    renderTgtDetail(s.target_detail);
     $("solvers").innerHTML = renderSolvers(s);
     $("traj").checked = !!s.traj_enabled;
   } catch (e) { /* 下轮重试 */ }
@@ -733,6 +679,102 @@ def _json_arr(x) -> Optional[List[Optional[float]]]:
     if x is None:
         return None
     return [_json_round(v) for v in np.asarray(x).reshape(-1)]
+
+
+class _VizWindow:
+    """监控页原生窗口封装（PySide6 QtWebEngine 子进程，父/子进程两侧入口）。
+
+    父进程侧：`launch()` 拉起子进程并挂早夭看护，`stop()` 终止；
+    子进程侧经 `python -c` 调 `child_main()` 内联执行 QApplication + QWebEngineView 加载监控页。
+    """
+
+    def __init__(self, url: str, title: str = "JoyArm 运行状态监控") -> None:
+        """记录参数并置进程句柄占位（进程由 `launch()` 创建）。
+
+        :param url: 监控页 URL（`http://127.0.0.1:<port>/`）。
+        :param title: 窗口标题。
+        """
+        self._url = url
+        self._title = title
+        self._proc: Optional[subprocess.Popen] = None   # 窗口子进程句柄
+
+    def launch(self) -> bool:
+        """拉起窗口子进程并挂早夭看护（PySide6 预检失败返回 False 降级 URL）。
+
+        :return: 是否成功创建子进程（早夭由看护线程事后告警）。
+        """
+        try:
+            from PySide6 import QtWebEngineWidgets  # noqa: F401  导入即预检（子进程内正式使用）
+        except Exception as e:
+            logger.warning("joyarm.py - _VizWindow.launch：PySide6 预检失败（%s），"
+                           "请用浏览器打开 %s", e, self._url)
+            return False
+        try:
+            self._proc = subprocess.Popen(
+                [sys.executable, "-c",
+                 "from joyarm_core.joyarm.joyarm import _VizWindow; import sys; "
+                 "sys.exit(_VizWindow.child_main(sys.argv[1:]))",
+                 self._url, self._title],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            self._proc = None
+            logger.warning("joyarm.py - _VizWindow.launch：监控窗口启动失败（%s），"
+                           "请用浏览器打开 %s", e, self._url)
+            return False
+        threading.Thread(target=self._watchdog, name="joyarm-viz-win",
+                         daemon=True).start()
+        return True
+
+    def _watchdog(self) -> None:
+        """子进程早夭看护：启动短窗内非零退出则告警并弃置句柄（回退 URL）。"""
+        try:
+            rc = self._proc.wait(timeout=3.0)
+        except subprocess.TimeoutExpired:
+            return    # 3 s 仍存活视为窗口已正常打开
+        if rc != 0:
+            self._proc = None
+            logger.warning("joyarm.py - _VizWindow.launch：监控窗口进程已退出"
+                           "（码 %s，可能无显示器），请用浏览器打开 %s", rc, self._url)
+
+    def stop(self) -> None:
+        """终止窗口子进程（幂等；已退出或强杀失败均静默）。"""
+        if self._proc is None:
+            return
+        try:
+            self._proc.terminate()
+            self._proc.wait(timeout=2.0)
+        except Exception:
+            pass    # 窗口已自行关闭或强杀失败均无需处理（幂等口径）
+        finally:
+            self._proc = None
+
+    @staticmethod
+    def child_main(argv: List[str]) -> int:
+        """子进程入口：`QMainWindow` + `QWebEngineView` 加载监控页并进入事件循环。
+
+        :param argv: `[url]` 或 `[url, title]`（父进程经 `python -c` 透传）。
+        :return: 进程退出码（参数缺失返回 2，正常关窗返回 0）。
+        """
+        from PySide6.QtCore import Qt, QUrl
+        from PySide6.QtWidgets import QApplication, QMainWindow
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+
+        if len(argv) < 1:
+            print("用法：_VizWindow.child_main([url] 或 [url, title])")
+            return 2
+        url = argv[0]
+        title = argv[1] if len(argv) > 1 else "JoyArm 运行状态监控"
+        # QtWebEngine 官方建议：QApplication 创建前开启 OpenGL 上下文共享（WebGL 稳定）。
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+        app = QApplication([])
+        win = QMainWindow()
+        win.setWindowTitle(title)
+        win.resize(1440, 820)
+        view = QWebEngineView()
+        view.load(QUrl(url))
+        win.setCentralWidget(view)
+        win.show()
+        return app.exec()
 
 
 class JoyArm:
@@ -845,7 +887,7 @@ class JoyArm:
         self._viz_state: dict = {}                       # 面板数据快照（HTTP 线程读）
         self._viz_traj_points: int = 200                 # 轨迹显示采样点数（start 可配）
         self._viz_traj_enabled: bool = False             # 轨迹显示开关（界面可切）
-        self._viz_win_proc: Optional[subprocess.Popen] = None   # 监控窗口子进程句柄（stop 时终止）
+        self._viz_window: Optional[_VizWindow] = None    # 监控窗口对象（start 时创建拉起、stop 终止）
         # 以下三成员真值初始化推迟到 start_state_viz
         self._viz_model: Optional[pin.Model] = None      # 可视化专属 pin 模型（arm+end 联动）
         self._viz_static_bytes: bytes = b""              # /static.json 预装配载荷（start 时装配一次）
@@ -1789,13 +1831,6 @@ class JoyArm:
         dq_ok = (snap_t > 0 and dq_arr.size > 0
                  and bool(np.all(np.isfinite(dq_arr))))
 
-        def _safe_json(fn, *args):
-            """动态组装配兜底：异常整组置 None（页面显占位，防 10 Hz 刷屏）。"""
-            try:
-                return fn(*args)
-            except Exception:
-                return None
-
         snap = {
             "model": self._model,
             "t": round(time.time(), 3),
@@ -1814,10 +1849,6 @@ class JoyArm:
                 "enabled_end": self._viz_bool(self._backend.is_enabled_end),
             },
             "solvers": self._viz_solvers(),
-            "dynamics": _safe_json(self._viz_dynamics, q_arr, dq_arr, q_ok, dq_ok),
-            "fsm_sub": _safe_json(self._viz_fsm_sub),
-            "monitor": _safe_json(self._viz_monitor),
-            "target_detail": _safe_json(self._viz_target_detail),
             "traj_enabled": self._viz_traj_enabled,
         }
         # 末端位姿（激活 fkine 对快照 q 现算，只读）；速度 = 激活雅可比 × 快照关节速度；
@@ -1966,95 +1997,13 @@ class JoyArm:
         # arm 族从未有效（无缓存）→ 整拍不刷新（等价旧行为的 q_ok=False 分支）
         return q_viz if self._viz_q_cache.get("arm") is not None else None
 
-    def _viz_dynamics(self, q_arr, dq_arr, q_ok: bool, dq_ok: bool) -> dict:
-        """动力学现算分组：激活 dyn 求解器对快照 q/dq 纯数学现算。
-
-        数学门面一律显式传参——`q=None` 缺省会走 `_current_q` →
-        `get_state_arm()` 触发总线帧，违反可视化被动红线，禁止。域未配置 /
-        输入无效 / 异常 → 对应子键 `None`（页面显「—」占位）；质量阵只取
-        对角（窄栏可读性）。
-
-        :param q_arr: arm 快照 q `(n_arm,)`（调用方单次读取）。
-        :param dq_arr: arm 快照 dq `(n_arm,)`（同上）。
-        :param q_ok: q 快照有效标志（t>0 且全有限）。
-        :param dq_ok: dq 快照有效标志。
-        :return: `{gravity, coriolis, mass_diag}` 分组 dict（纯 JSON 值，逐子键可 `None`）。
-        """
-        out = {"gravity": None, "coriolis": None, "mass_diag": None}
-        if not (q_ok and self._dyn_solvers):
-            return out
-        try:
-            out["gravity"] = _json_arr(self.get_gravity(q=q_arr))
-        except Exception:
-            pass
-        if dq_ok:
-            try:
-                out["coriolis"] = _json_arr(self.get_coriolis(q=q_arr, dq=dq_arr))
-            except Exception:
-                pass
-        try:
-            out["mass_diag"] = _json_arr(np.diagonal(
-                np.asarray(self.get_mass_matrix(q=q_arr), dtype=float)))
-        except Exception:
-            pass
-        return out
-
-    def _viz_fsm_sub(self) -> dict:
-        """FSM 子阶段分组：`_zero_moving`/`_home_arrived` 标志与 `_hold_q`（纯读）。
-
-        :return: `{zero_moving, home_arrived, hold_q}` 分组 dict。
-        """
-        return {
-            "zero_moving": bool(self._zero_moving),
-            "home_arrived": bool(self._home_arrived),
-            "hold_q": _json_arr(self._hold_q),
-        }
-
-    def _viz_monitor(self) -> dict:
-        """监视器内部分组：自定义规则数量与「连续 None」计时。
-
-        `_monitor_none_since` 为 `time.monotonic()` 单调钟域（与 `time.time()` 不同域），
-        故 none_dur 由本方法同域计算、none_since 原样传出。
-
-        :return: `{rules, none_dur, none_since}` 分组 dict（纯 JSON 值）。
-        """
-        since = self._monitor_none_since
-        return {
-            "rules": len(self._monitor_rules),
-            "none_dur": None if since is None
-            else round(max(0.0, time.monotonic() - since), 3),
-            "none_since": since,
-        }
-
-    def _viz_target_detail(self) -> Optional[dict]:
-        """目标帧详情分组：当前目标帧末帧的 pose/twist/q 完整值（纯读）。
-
-        `_target_trajframe` 单次读入局部引用，轨迹终点帧 = 单帧即自身、序列取末项。
-
-        :return: `{time, pose, twist, q}` 分组 dict 或 `None`（无目标）。
-        """
-        target = self._target_trajframe
-        if target is None:
-            return None
-        last = target if isinstance(target, TrajFrame) else target[-1]
-        return {
-            "time": _json_round(last.time),
-            "pose": None if last.pose is None else {
-                "position": _json_arr(last.pose.position),
-                "orientation": _json_arr(last.pose.orientation)},
-            "twist": None if last.twist is None else {
-                "linear": _json_arr(last.twist.linear),
-                "angular": _json_arr(last.twist.angular)},
-            "q": _json_arr(last.q),
-        }
-
     def _viz_static_payload(self) -> dict:
-        """`start_state_viz` 时一次性装配 `/static.json` 六组静态载荷。
+        """`start_state_viz` 时一次性装配 `/static.json` 五组静态载荷。
 
         限位四键（q_min/q_max/dq_max/tau_max）均逐关节全数组。
         cfg 深拷贝仅此一次，`ctrl_defaults` 与 `cfg_raw` 两组共用。
 
-        :return: `{ident, limits, poses, ctrl_defaults, registry, cfg_raw}` 六组 dict（纯 JSON 值）。
+        :return: `{ident, limits, poses, ctrl_defaults, cfg_raw}` 五组 dict（纯 JSON 值）。
         """
         cfg = self.get_config()   # 深拷贝一次，供控制默认值与 cfg 原文两组共用
 
@@ -2072,7 +2021,6 @@ class JoyArm:
             "poses": _group("poses", self._viz_poses),
             "ctrl_defaults": _group("ctrl_defaults",
                                     lambda: self._viz_ctrl_defaults(cfg)),
-            "registry": _group("registry", self._viz_registry),
             "cfg_raw": _group("cfg_raw", lambda: self._viz_cfg_raw(cfg)),
         }
 
@@ -2142,7 +2090,7 @@ class JoyArm:
     def _viz_ctrl_defaults(self, cfg) -> dict:
         """控制默认值分组：cfg（深拷贝）+ backend.cfg 映射 + 已解析成员。
 
-        只走公开面取数；`rx_hz` 为 backend_dm 专用键，其他型号 `null` 属正常占位。
+        只走公开面取数，且只含跨型号通用键（型号专用运行键不入本组）。
 
         :param cfg: `get_config()` 深拷贝（`_viz_static_payload` 传入）。
         :return: `{mit, pos_vel, default_mode, backend_params, fsm_hz, monitor_hz,
@@ -2181,7 +2129,6 @@ class JoyArm:
             "backend_params": {
                 "write_settle": _json_round(bcfg_pub.get("write_settle")),
                 "state_refresh_hz": _json_round(bcfg_pub.get("state_refresh_hz")),
-                "rx_hz": _json_round(bcfg_pub.get("rx_hz")),
             },
             "fsm_hz": _json_round(self._fsm_hz),
             "monitor_hz": _json_round(self._monitor_hz),
@@ -2194,35 +2141,6 @@ class JoyArm:
             },
             "move_wait_timeout": _json_round(self._move_wait_timeout),
         }
-
-    def _viz_registry(self) -> dict:
-        """求解器注册表分组：六域全部已注册名 与 traj/ctrl 逐注册名频率。
-
-        键序钉死为 `_DOMAIN_REGISTRIES` 字典键 fkine/ikine/jac/dyn/traj/ctrl
-        （成员名 `_<域>_solvers` 仅对这六个字典键成立，误用 cfg 键名会
-        AttributeError 被组级 try/except 吞掉、六组静默全空）；`by_name`
-        频率表与注册名同键集（`_build_domains` 同一循环装配）；域未配置 →
-        `None`（页面「（未配置）」）。
-
-        :return: `{fkine, ikine, jac, dyn, traj, ctrl}`——各域 `{names, default}`
-            dict（traj 域加 `plan_hz_by_name`、ctrl 域加 `ctrl_hz_by_name`）或 `None`。
-        """
-        out: dict = {}
-        for d in _DOMAIN_REGISTRIES:
-            members = getattr(self, f"_{d}_solvers")
-            if not members:
-                out[d] = None
-                continue
-            names = list(members)                  # cfg 序（首位 = 默认激活）
-            entry = {"names": names, "default": names[0]}
-            if d == "traj":
-                entry["plan_hz_by_name"] = {
-                    n: _json_round(self._plan_hz_by_name.get(n)) for n in names}
-            elif d == "ctrl":
-                entry["ctrl_hz_by_name"] = {
-                    n: _json_round(self._ctrl_hz_by_name.get(n)) for n in names}
-            out[d] = entry
-        return out
 
     def _viz_cfg_raw(self, cfg) -> str:
         """cfg 原文分组（净化版）。
@@ -3349,18 +3267,12 @@ class JoyArm:
     def start_state_viz(self, traj_points: int = 200) -> None:
         """启动运行状态可视化（单页面监控网页 + 单一只读 daemon 线程）。
 
-        三栏页面：左静态参考（`/static.json` 在此一次性装配、页面加载时拉取
-        一次，失败随轮询重试）、中间 iframe 嵌 meshcat 3D 视图（**直接依赖**、
-        模块顶层导入；初始化失败（如 mesh 缺失）warn 并降级为仅 HTML 状态
-        面板、3D 区占位；轨迹开关在 3D 区角部 overlay）、右动态状态面板；
-        轻量 HTTP 服务托管页面，
-        面板 JS 定时 `fetch /state.json`（约 5 Hz，零新增依赖）。
-        `_state_viz_worker` 只调只读接口刷新 meshcat 模型姿态与面板数据，绝不
-        调用控制/下发方法。启动**不要求已连接**——未连接时可启动（面板显示
-        占位符并标注快照新鲜度），连接后 backend 被动快照自动出数。
+        三栏页面：左侧静态参考 - 中间 meshcat 3D 视图 - 右侧动态状态面板；
+        轻量 HTTP 服务托管页面，面板 JS 定时 `fetch /state.json`（约 5 Hz）。
+        启动后默认弹出监控窗口（`_VizWindow` 子进程；`JOYARM_VIZ_NOWINDOW=1`可禁用）。
+        `_state_viz_worker` 只调只读接口刷新 meshcat 模型姿态与面板数据。
 
-        :param traj_points: 轨迹显示采样点数（start 时可配，默认 200；0 = 关闭）。
-            轨迹显示需 FSM 已启动且处于 MOTION 态才绘制，亦可在界面勾选切换。
+        :param traj_points: 轨迹显示采样点数（默认 200；0 = 关闭）。轨迹显示需 FSM 已启动且处于 MOTION 态。
         """
         if self._viz_periodic is not None and self._viz_periodic.is_alive():
             logger.info("joyarm.py - start_state_viz：可视化已在运行，忽略重复启动")
@@ -3464,48 +3376,19 @@ class JoyArm:
                     "/state.json；轨迹点数 %s；不要求连接——未连接可启动，连接后 backend "
                     "快照自动出数）", url, self._viz_traj_points)
         # ---- 原生监控窗口（PySide6 QtWebEngine 子进程加载面板；失败/无显示器降级回 URL）----
-        self._viz_win_proc = None
+        self._viz_window = None
         if os.environ.get("JOYARM_VIZ_NOWINDOW"):
             logger.info("joyarm.py - start_state_viz：JOYARM_VIZ_NOWINDOW 已设，"
                         "跳过监控窗口（仅 URL 方式）")
         else:
-            try:
-                from PySide6 import QtWebEngineWidgets  # noqa: F401  导入即预检（子进程内正式使用）
-                self._viz_win_proc = subprocess.Popen(
-                    [sys.executable, "-m", "joyarm_core.joyarm.viz_window", url,
-                     "JoyArm 运行状态监控"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                threading.Thread(target=self._viz_win_watchdog,
-                                 args=(self._viz_win_proc, url),
-                                 name="joyarm-viz-win", daemon=True).start()
-            except Exception as e:
-                self._viz_win_proc = None
-                logger.warning("joyarm.py - start_state_viz：监控窗口启动失败（%s），"
-                               "请用浏览器打开 %s", e, url)
-
-    def _viz_win_watchdog(self, proc: subprocess.Popen, url: str) -> None:
-        """监控窗口子进程早夭看护：启动短窗内退出则告警并回退 URL 方式。
-
-        :param proc: 窗口子进程句柄（启动方传入的当次对象）。
-        :param url: 面板 URL（降级提示用）。
-        """
-        try:
-            rc = proc.wait(timeout=3.0)
-        except subprocess.TimeoutExpired:
-            return    # 3 s 仍存活视为窗口已正常打开
-        if rc != 0 and self._viz_win_proc is proc:
-            self._viz_win_proc = None
-            logger.warning("joyarm.py - start_state_viz：监控窗口进程已退出"
-                           "（码 %s，可能无显示器），请用浏览器打开 %s", rc, url)
+            self._viz_window = _VizWindow(url)
+            self._viz_window.launch()
 
     def stop_state_viz(self) -> None:
-        """停止运行状态可视化（停 worker、关 HTTP 服务；重复调用无副作用）。
+        """停止运行状态可视化（停 worker、关 HTTP 服务）。
 
-        worker 停止超时（`RuntimeError`）时保留句柄并提前返回——口径同
-        `stop_monitor` / `_stop_motion_thread` 的超时分支：句柄若被置
-        `None`，仍存活的 worker 沦为无法停止的僵尸，且再次 `start_state_viz`
-        的存活守卫将失效、创建第二套 worker 与 HTTP 服务；待线程退出后再次
-        调用本方法完成收尾。
+        worker 停止超时（`RuntimeError`）时保留句柄并提前返回；
+        待线程退出后再次调用本方法完成收尾。
         """
         was_running = self._viz_periodic is not None or self._viz_httpd is not None
         if self._viz_periodic is not None:
@@ -3524,13 +3407,9 @@ class JoyArm:
                 httpd.server_close()
             except Exception as e:
                 logger.warning("joyarm.py - stop_state_viz：HTTP 服务关闭异常：%s", e)
-        proc, self._viz_win_proc = self._viz_win_proc, None
-        if proc is not None:
-            try:
-                proc.terminate()
-                proc.wait(timeout=2.0)
-            except Exception:
-                pass    # 窗口已自行关闭或强杀失败均无需处理（stop 幂等口径）
+        if self._viz_window is not None:
+            self._viz_window.stop()
+            self._viz_window = None
         self._viz_pin = None
         self._viz_model = None          # 下次 start 重新构建（arm+end 联动）
         self._viz_q_cache = {}
