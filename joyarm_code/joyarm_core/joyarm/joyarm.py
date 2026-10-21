@@ -3347,6 +3347,42 @@ class JoyArm:
         """FSM 目标状态（只读查询）。"""
         return self._target_motion_state
 
+    def wait_for_motion_state(self, fsm_state: MotionState, timeout: float = 5.0) -> int:
+        """阻塞等待 FSM 到达指定状态（只读轮询）。
+
+        :param fsm_state: 目标状态（:class:`MotionState` 枚举）。
+        :param timeout: 等待超时（秒，须为正有限数）。
+        :return: 1=已到达目标状态；0=超时、FSM 未运行、FSM 中途停止或 fsm_state 非枚举。
+        :raises ValueError: timeout 非法（非正有限秒数）。
+        """
+        if not isinstance(fsm_state, MotionState):
+            logger.warning("joyarm.py - wait_for_motion_state：fsm_state 需为 MotionState"
+                           " 枚举，实际 %s", type(fsm_state).__name__)
+            return 0
+        try:
+            timeout = float(timeout)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"joyarm.py - wait_for_motion_state：timeout={timeout!r} 非法（须为正有限秒数）") from e
+        if not (np.isfinite(timeout) and timeout > 0):
+            raise ValueError(
+                f"joyarm.py - wait_for_motion_state：timeout={timeout!r} 非法（须为正有限秒数）")
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._current_motion_state is fsm_state:
+                return 1
+            if not self._fsm_running():
+                logger.warning("joyarm.py - wait_for_motion_state：FSM 未运行（当前 %s，未达 %s），提前返回 0",
+                               self._current_motion_state.name, fsm_state.name)
+                return 0
+            time.sleep(0.02)                      # 轮询步进（对齐 stop_motion_fsm 内部等待节奏）
+        if self._current_motion_state is fsm_state:
+            return 1
+        logger.warning("joyarm.py - wait_for_motion_state：等待 %s 超时 %.3g s"
+                       "（当前 %s）", fsm_state.name, timeout,
+                       self._current_motion_state.name)
+        return 0
+
     def start_motion_fsm(self) -> None:
         """启动运动状态机（非阻塞）。
 

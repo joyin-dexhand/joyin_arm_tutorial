@@ -56,14 +56,15 @@ source .venv/bin/activate  # 激活后直接用 python；或免激活用 uv run 
 
 ```python
 import time
-from joyarm_core import joyArm       # 创建入口（型号名 = config/joyarm_dm.yaml 文件名）
+from joyarm_core import joyArm, MotionState   # 创建入口 + 状态枚举（型号名 = config/joyarm_dm.yaml 文件名）
 
 arm = joyArm("joyarm_dm")            # 四步校验任一失败 → 抛携带具体原因的异常（不返回 None）
 arm.connect_arm()                    # 连接真机本体（末端 connect_end() 同构）
 arm.enable_arm()                     # 使能本体电机（状态机进入各状态时也会自动检查使能）
 arm.start_motion_fsm()               # 启动运动状态机（自动迁移 DISABLE→HOME→MOTION）
+arm.wait_for_motion_state(MotionState.MOTION)  # 等待就绪再发定时目标（1=到达 / 0=超时；真机行程远可传大 timeout）
 arm.set_target_joint(time.time() + 3.0, arm.home_arm)  # 关节目标：3 秒后到达 home 位形
-arm.stop_motion_fsm()                # 停止状态机（阻塞回零失能）
+arm.stop_motion_fsm()                # 停止状态机（阻塞安全停机：回零失能；更高危事件时直接失能）
 arm.close()                          # 安全退出（失能 + 断开；亦可用 with 语句）
 ```
 

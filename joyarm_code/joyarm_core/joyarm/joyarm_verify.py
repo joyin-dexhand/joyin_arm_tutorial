@@ -1,13 +1,33 @@
 """
 ==============================================================================
-JoyArm 层离线分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
+JoyArm 层双模式分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
 ==============================================================================
 【功能概要】
     对 JoyArm 整机层（joyarm/joyarm.py 的组合根：工厂/自检/只读面/委托面/求解器
-    域/数学门面/MotionFSM/safe_monitor/可视化/销毁路径）做**全离线**分组分项验收
-    （不连真机；真机侧验收走 backend/backend_verify.py）。组织范式与
-    backend_verify.py 一致：两位数十进制分组（组号×10+组内序号）、_item 注册表
-    （组/风险/用途）、PASS/SKIP/FAIL 三分判定、结尾机器可解析 SUMMARY 行：
+    域/数学门面/MotionFSM/safe_monitor/可视化/销毁路径）做分组分项**分级**验收，
+    双模式共用同一套骨架（两位数十进制分组（组号×10+组内序号）、_item 注册表
+    （组/级/风险/用途）、逐项 pre/post 打印、PASS/SKIP/FAIL 三分判定、结尾机器
+    可解析 SUMMARY 行）：
+    - 缺省【离线模式】：DummyBackend 注入全自动（零交互、非终端可跑、可当门控）；
+    - --real【真机模式】：真配置（joyarm_dm.yaml 的 backend.name=backend_dm）真
+      连接交互验收，不经 Dummy 注入，按危险度分级确认（对齐 backend_verify.py
+      的风险确认惯例）。
+    离线分级（00~09 组 → 级 L0~L5）：
+      L0 = factory(00)+init(01)+readonly(02)   工厂构建/初始化自检/只读面
+      L1 = delegate(03)                        直接委托类指令（互斥与拒绝路径）
+      L2 = solvers(04)+math(05)                求解器域/数学门面
+      L3 = fsm(06)+monitor(07)                 MotionFSM/safe_monitor
+      L4 = viz(08)                             可视化
+      L5 = close(09)                           销毁路径
+    真机分级（100~15x 组 → 级 r0~r5，危险度递进）：
+      r0(100 组) 连接/硬件只读（低危直执）
+      r1(110 组) 使能/模式/参数写（模式低危；使能/写参高危输入 yes）
+      r2(120 组) 委托指令小幅运动（高危 + 发送前参数预览 + 二次确认，--yes 不放行）
+      r3(130 组) 状态机运动（高危输入 yes：FSM 启动将使能电机并运动至 home）
+      r4(140 组) 监视器/可视化（中危回车确认）
+      r5(150 组) 清错（高危）；设零 151（极高危：每族二次确认、--yes 不放行、
+                 仅显式 --real --step=151 执行，任何组展开不含本项）
+    离线 00~09 组逐组说明：
       00 组  工厂与 listArm：未知名异常含可用列表（临时禁用注入直连真实
              ①config/②backend 错误消息路径）、listArm 三条件（临时目录
              变量控制）、模板排除、Dummy 注入下的工厂成功路径；
@@ -26,7 +46,8 @@ JoyArm 层离线分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
              到位判断三函数、rand_q 限位内采样、frame=0 基座帧回归；
       06 组  MotionFSM（DummyBackend 推演）：start 前置 RuntimeError、
              DISABLE→HOME→MOTION 自动迁移、home 到位门槛、保护事件直达、
-             stop 超时强推、set_target 拒绝路径、目标帧通道 deepcopy 隔离；
+             stop 超时强推、set_target 拒绝路径、目标帧通道 deepcopy 隔离、
+             wait_for_motion_state 四路径（到达 1 / 超时·未运行·非枚举 0）；
       07 组  safe_monitor：硬规则 error≥2→DAMPING、断连/连续 None→DISABLE
              （断连项含 close 后线程清点断言）、自定义规则绑定（state_arm 允许
              None）与同拍仲裁（硬+自定义命中合并取危险最高）；
@@ -39,8 +60,24 @@ JoyArm 层离线分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
     跟随开关），经「临时改 cfg 的 backend.name + backend.REGISTRY 原地加键
     （joyarm.py import 时值引用捕获各域 REGISTRY，替换模块属性无效）+ 临时换
     load_config 返回注入 cfg」注入（用完恢复，不触碰仓库文件）。
-    交互性：全部测试项无交互（非终端可跑）；FSM/监视器/可视化线程类用例在
-    每项内部 finally 收尾（stop/join），不悬挂线程、不影响退出码。
+    交互性：离线模式全部测试项无交互（非终端可跑）；FSM/监视器/可视化线程类
+    用例在每项内部 finally 收尾（stop/join），不悬挂线程、不影响退出码。真机
+    模式为交互验收（危险分级确认见下），非终端环境高危/极高危项自动 SKIP。
+
+【旧→新编号覆盖映射】（离线回归覆盖不降级：旧 42 项断言全部保留、编号恒等，
+    断言函数体一字未改；仅重排注册表字段与统一 pre/post 打印模板）
+    旧 0,1,2,3        → 新 0,1,2,3        （factory，L0）
+    旧 10,11,…,17     → 新 10,11,…,17     （init，L0；8 项）
+    旧 20,21,22,23    → 新 20,21,22,23    （readonly，L0）
+    旧 30,31,32       → 新 30,31,32       （delegate，L1）
+    旧 40,41,42       → 新 40,41,42       （solvers，L2）
+    旧 50,51,52,53    → 新 50,51,52,53    （math，L2）
+    旧 60,61,…,66     → 新 60,61,…,66     （fsm，L3；7 项）
+    旧 70,71,72       → 新 70,71,72       （monitor，L3）
+    旧 80,81,82       → 新 80,81,82       （viz，L4）
+    旧 90,91,92       → 新 90,91,92       （close，L5）
+    合计 42 条全对应（4+8+4+3+3+4+7+3+3+3=42），无合并、无删除；真机项
+    100+ 与离线 67（wait_for_motion_state，新增公开方法）为后续新增，不在旧清单内。
 
 【环境与运行】
     # 1. 安装 uv（仅首次）
@@ -52,21 +89,44 @@ JoyArm 层离线分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
     uv sync
     source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下；全离线、无交互；系统 python 超
-    #    requires-python 上界，一律经 uv 运行）
+    # 3. 运行本脚本（在 joyarm_code/ 目录下；离线全离线零交互、真机交互分级确认；
+    #    系统 python 超 requires-python 上界，一律经 uv 运行）
     python joyarm_core/joyarm/joyarm_verify.py --help        # 完整用法
-    python joyarm_core/joyarm/joyarm_verify.py --list        # 全部测试项清单
-    python joyarm_core/joyarm/joyarm_verify.py               # 全部（缺省 all）
-    python joyarm_core/joyarm/joyarm_verify.py --step=fsm    # 单组
-    python joyarm_core/joyarm/joyarm_verify.py --step=61,71  # 单项混选
-    python joyarm_core/joyarm/joyarm_verify.py --step=math,monitor  # 组名混选
+    python joyarm_core/joyarm/joyarm_verify.py --list        # 离线测试项清单
+    python joyarm_core/joyarm/joyarm_verify.py               # 离线全部（缺省 all）
+    python joyarm_core/joyarm/joyarm_verify.py --step=fsm    # 离线单组
+    python joyarm_core/joyarm/joyarm_verify.py --step=61,71  # 离线单项混选
+    python joyarm_core/joyarm/joyarm_verify.py --step=math,monitor  # 离线组名混选
+    python joyarm_core/joyarm/joyarm_verify.py --real --list # 真机测试项清单
+    python joyarm_core/joyarm/joyarm_verify.py --real        # 真机 r0~r5（151 除外）
+    python joyarm_core/joyarm/joyarm_verify.py --real --step=r2       # 真机单级
+    python joyarm_core/joyarm/joyarm_verify.py --real --step=120,151  # 真机单项混选
+    python joyarm_core/joyarm/joyarm_verify.py --real --step=151      # 极高危设零（仅显式编号）
 
 【命令行参数】
-    --step    数字=单项编号（如 61）；组名（factory/init/readonly/delegate/
-              solvers/math/fsm/monitor/viz/close/all）；逗号分隔混选；缺省 all
-    --list    仅列出全部测试项（编号/组/风险/用途），不执行
+    --step    数字=单项编号（离线如 61；真机如 120）；组名逗号混选（离线：
+              factory/init/readonly/delegate/solvers/math/fsm/monitor/viz/
+              close/all；真机：r0/r1/r2/r3/r4/r5/rall）；缺省 all（按模式取全）
+    --list    仅列出测试项（缺省列离线项；--real --list 列真机项），不执行
+    --real    真机交互模式：真配置真连接 backend_dm（不经 Dummy 注入），按危险
+              度分级确认；进入真机段前总告知（工作空间已清空、急停可用、有人监护）
+    --yes     真机模式：跳过中危回车确认（--yes 或非终端直执）；高危/极高危永不
+              自动执行（仍需交互输入 yes；非终端自动 SKIP）
     退出码：全 PASS/SKIP=0；任一 FAIL=1；用法错误=2（便于 agent 判定）
     结尾输出 SUMMARY: total=… pass=… fail=… skip=…（机器可解析）+ 各组统计行
+
+【真机风险与确认策略】（对齐 backend_verify.py 惯例）
+    低危（r0 连接/只读、r1 模式设置）：直接执行；
+    中危（r4 监视器/可视化）：交互回车确认（--yes 或非终端直接执行）；
+    高危（r1 使能/写参、r2 委托运动、r3 状态机运动、r5 清错）：强制交互输入
+        yes（--yes 不放行；非终端自动 SKIP）；
+    极高危（r5 之 151 设零）：永久改写零位标定（不可逆），仅显式 --real
+        --step=151 执行（任何组展开不含本项），且每族（arm/end）各自二次确认
+        （任一次非 yes 即跳过该族及后续），--yes 不放行。
+    前置自动补齐：真机单项可独立执行（如 --real --step=120 自动 connect +
+        set_mode + enable），前置风险并入该项确认等级（enable 为高危前置）；
+        低危前置（connect/set_mode）静默补齐。
+    运动组（r2）：发送前参数预览（当前实测值 vs 目标值）+ 二次确认（--yes 不放行）。
 ==============================================================================
 """
 from __future__ import annotations
@@ -1587,6 +1647,44 @@ def _it66():
         arm.close()
 
 
+def _it67():
+    """wait_for_motion_state 四路径：到达返 1；超时/未运行/非枚举返 0；timeout 非法 ValueError。"""
+    arm, d = make_arm()
+    try:
+        # 参数与未运行路径（FSM 未启动，互不干扰）
+        i0 = _mark()
+        r_enum = arm.wait_for_motion_state("MOTION", timeout=0.2)
+        warn_enum = _hit(_since(i0), "MotionState 枚举")
+        e = _exc(arm.wait_for_motion_state, MotionState.MOTION, 0)
+        bad_timeout = isinstance(e, ValueError) and "正有限" in str(e)
+        i0 = _mark()
+        r_idle = arm.wait_for_motion_state(MotionState.MOTION, timeout=0.2)
+        warn_idle = _hit(_since(i0), "FSM 未运行")
+        # 成功路径：驱动 FSM 至 MOTION，等待即返 1
+        d.follow = True
+        d.set_q("arm", arm.home_arm)
+        arm.connect_arm()
+        arm.start_motion_fsm()
+        r_ok = arm.wait_for_motion_state(MotionState.MOTION, timeout=5.0)
+        # 超时路径：等待无事件触发的不可达态 DAMPING
+        i0 = _mark()
+        t0 = time.monotonic()
+        r_to = arm.wait_for_motion_state(MotionState.DAMPING, timeout=0.3)
+        dt = time.monotonic() - t0
+        warn_to = _hit(_since(i0), "超时")
+        ok = (r_enum == 0 and warn_enum and bad_timeout
+              and r_idle == 0 and warn_idle and r_ok == 1
+              and r_to == 0 and warn_to and 0.25 <= dt <= 2.0)
+        ev = (f"非枚举→0+warn={r_enum == 0 and warn_enum}；timeout=0→ValueError"
+              f"={bad_timeout}；未运行→0+warn={r_idle == 0 and warn_idle}；"
+              f"运行中等到 MOTION→1={r_ok == 1}；不可达态 0.3s 超时→0+warn"
+              f"={r_to == 0 and warn_to}（实测耗时 {dt:.2f}s）")
+        return ("PASS" if ok else "FAIL"), ev
+    finally:
+        _settle_fsm(arm, d)
+        arm.close()
+
+
 # ---------------- 07 组（safe_monitor） ----------------
 def _it70():
     """硬规则：error≥2 → DAMPING（事件与 FSM 迁移双通路）。"""
@@ -2027,6 +2125,8 @@ _item(65, "set_target 拒绝路径", "fsm", "低",
       "set_target_joint / set_target_cart：缺必填（q/pose）、维度不符、t 非标量、目标序列非 TrajFrame 均 ValueError（消息含字段名）；拒绝后合法写入不受影响", _it65)
 _item(66, "目标帧通道 deepcopy 隔离", "fsm", "低",
       "get_target_trajframe 返回深拷贝（外部改写不反哺内部）；set 目标对入参深拷贝（set 后改入参不影响内部）；None 清空通道", _it66)
+_item(67, "wait_for_motion_state 四路径", "fsm", "低",
+      "到达返 1（运行中等到 MOTION）；超时/FSM 未运行/非枚举返 0 且各有 warn；timeout 非正有限抛 ValueError", _it67)
 
 # —— 07 组（safe_monitor）——
 _item(70, "硬规则 error≥2→DAMPING", "monitor", "低",
@@ -2062,12 +2162,891 @@ GROUPS: dict[str, list[int]] = {
     "delegate": [30, 31, 32],
     "solvers": [40, 41, 42],
     "math": [50, 51, 52, 53],
-    "fsm": [60, 61, 62, 63, 64, 65, 66],
+    "fsm": [60, 61, 62, 63, 64, 65, 66, 67],
     "monitor": [70, 71, 72],
     "viz": [80, 81, 82],
     "close": [90, 91, 92],
 }
 GROUPS["all"] = [n for ns in GROUPS.values() for n in ns]
+
+# 离线组 → 级（L0~L5 逐级分组骨架，与真机 r0~r5 同构；打印与统计用）
+_GROUP_LEVEL = {
+    "factory": "L0", "init": "L0", "readonly": "L0",
+    "delegate": "L1",
+    "solvers": "L2", "math": "L2",
+    "fsm": "L3", "monitor": "L3",
+    "viz": "L4",
+    "close": "L5",
+}
+
+
+# ============================================================
+# 真机模式（--real）：真配置真连接 backend_dm，分级危险确认
+# ============================================================
+_RISK_ORDER = {"低": 0, "中": 1, "高": 2, "极高": 3}
+
+# 真机运动项保守参数（幅度小；对齐 backend_verify 运动组惯例）
+REAL_SETTLE = 1.5                       # 运动后观测等待（秒）
+REAL_POS_AMP = 0.05                     # 委托位置指令小幅幅度（rad）
+REAL_VLIM = 0.3                         # 位置指令速度上限（rad/s）
+REAL_MIT_KP, REAL_MIT_KD = 5.0, 0.5     # MIT 原地保持保守增益
+REAL_VEL = 0.1                          # 速度指令幅值（rad/s）
+REAL_VEL_DUR = 0.5                      # 速度指令持续时间（秒）
+REAL_ZERO_TOL = 0.05                    # 设零后回读容差（rad）
+REAL_WAIT_HOME = 8.0                    # FSM 启动等 HOME 迁移上限（秒）
+REAL_WAIT_MOTION = 30.0                 # home 到位迁 MOTION 上限（秒，真实运动耗时）
+
+
+def _confirm(level: str, args: argparse.Namespace) -> str:
+    """风险确认：返回 run/skip/quit（对齐 backend_verify.py 惯例）。
+
+    低危直接执行；中危交互回车（--yes 或非终端直接执行）；
+    高危/极高强制交互 yes（--yes 不放行；非终端自动 skip，不卡死）。
+    """
+    if level == "低":
+        return "run"
+    if not sys.stdin.isatty():
+        return "skip" if level in ("高", "极高") else "run"
+    if level == "中" and args.yes:
+        return "run"
+    if level in ("高", "极高"):
+        tip = ("⚠⚠ 极高风险：将永久改写 arm/end 关节零位标定（不可逆；每族还需二次确认）！"
+               if level == "极高" else
+               "⚠ 高风险：电机将上力/运动！确认工作空间已清空、急停可用、有人监护。")
+        ans = input(f"{tip}输入 yes 执行（回车/s=跳过  q=退出）: ").strip().lower()
+    else:
+        ans = input("[回车]=执行  s=跳过  q=退出: ").strip().lower()
+    if ans in ("q", "quit", "退出"):
+        return "quit"
+    if ans in ("s", "skip", "跳过"):
+        return "skip"
+    if level in ("高", "极高"):
+        return "run" if ans in ("yes", "y") else "skip"
+    return "run"
+
+
+_real_banner_done = False
+
+
+def _real_banner_once():
+    """进入真机段一次性总告知（对齐 backend_verify 惯例）。"""
+    global _real_banner_done
+    if not _real_banner_done:
+        _real_banner_done = True
+        print("─" * 68)
+        print("⚠ 进入真机测试段：请确认机械臂工作空间已清空、急停可用、有人监护")
+
+
+class _RealSession:
+    """真机会话：惰性构造真实 JoyArm（无注入，backend_dm 真连接）+ 共享收尾。"""
+
+    def __init__(self, args: argparse.Namespace):
+        self.args = args
+        self._arm: Optional[JoyArm] = None
+
+    def arm(self) -> JoyArm:
+        if self._arm is None:
+            self._arm = JoyArm(MODEL)   # 真实 cfg（backend_dm）；构造无总线 I/O
+        return self._arm
+
+    def close(self) -> None:
+        if self._arm is not None:
+            try:
+                self._arm.close()
+            except Exception as e:  # noqa: BLE001（验收脚本须捕获一切）
+                print(f"（真机会话 close 异常（记录不吞）：{e!r}）")
+            self._arm = None
+
+
+def _real_prefill_fams(fam: str) -> tuple:
+    return ("arm", "end") if fam == "both" else (fam,)
+
+
+def _plan_real_prefill(s: _RealSession, needs: list) -> list:
+    """干跑：计算将补齐哪些前置（不动状态），返回 [(动作描述, 风险)]。
+
+    用于确认等级计算（前置风险并入该项确认）与确认文案（对齐 backend_verify）。
+    """
+    plans: list = []
+    planned_conn: set = set()
+    planned_mode: dict = {}
+    planned_enabled: set = set()
+    arm = s._arm
+    for nd in needs:
+        kind = nd[0]
+        for fam in _real_prefill_fams(nd[1]):
+            if fam == "end" and (arm is None or arm.n_end == 0):
+                continue                          # 空族（n_end=0）无前置可言
+            conn = ((getattr(arm, f"is_connected_{fam}", None) if arm is not None else None)
+                    is True or fam in planned_conn)
+            if kind == "connected":
+                if not conn:
+                    plans.append((f"connect_{fam}", "低"))
+                    planned_conn.add(fam)
+            elif kind == "mode":
+                mode = nd[2]
+                mode_cur = (getattr(arm, f"get_mode_{fam}")() if arm is not None else None)
+                if mode_cur != mode and planned_mode.get(fam) != mode:
+                    if not conn:
+                        plans.append((f"connect_{fam}", "低"))
+                        planned_conn.add(fam)
+                    plans.append((f"set_mode_{fam}({mode.name})", "低"))
+                    planned_mode[fam] = mode
+            elif kind == "enabled":
+                enabled = ((getattr(arm, f"is_enabled_{fam}", None) if arm is not None else None)
+                           is True or fam in planned_enabled)
+                if not enabled:
+                    if not conn:
+                        plans.append((f"connect_{fam}", "低"))
+                        planned_conn.add(fam)
+                    plans.append((f"enable_{fam}", "高"))
+                    planned_enabled.add(fam)
+    return plans
+
+
+def _real_prefill(s: _RealSession, needs: list) -> tuple:
+    """按声明顺序补齐缺失前置（已就绪则跳过；低危静默补齐，高危并入项级确认）。
+
+    返回 (状态, 已执行的补齐动作描述, 原因)，状态：
+      "ok" 全部就绪；"skip" 所需模式不可用（型号能力缺失，判 SKIP 非缺陷）；
+      "fail" 连接/使能等核心前置未达成，判 FAIL。
+    """
+    if not needs:
+        return "ok", [], ""
+    arm = s.arm()
+    actions: list = []
+    for nd in needs:
+        kind = nd[0]
+        for fam in _real_prefill_fams(nd[1]):
+            if fam == "end" and arm.n_end == 0:
+                continue
+            if kind == "connected":
+                if getattr(arm, f"is_connected_{fam}") is True:
+                    continue
+                getattr(arm, f"connect_{fam}")()
+                actions.append(f"connect_{fam}")
+                if getattr(arm, f"is_connected_{fam}") is not True:
+                    return "fail", actions, f"connect_{fam} 未成功（详见上方日志）"
+            elif kind == "mode":
+                mode = nd[2]
+                if getattr(arm, f"get_mode_{fam}")() == mode:
+                    continue
+                if getattr(arm, f"is_connected_{fam}") is not True:   # 防御：先保连接
+                    getattr(arm, f"connect_{fam}")()
+                    actions.append(f"connect_{fam}")
+                    if getattr(arm, f"is_connected_{fam}") is not True:
+                        return "fail", actions, f"connect_{fam} 未成功（详见上方日志）"
+                ret = getattr(arm, f"set_mode_{fam}")(mode)
+                actions.append(f"set_mode_{fam}({mode.name})")
+                if ret != 1:
+                    return "skip", actions, (f"{fam} 族所需模式 {mode.name} 不可用"
+                                             f"（set_mode 返回 0——型号能力缺失或硬件拒绝，非缺陷）")
+            elif kind == "enabled":
+                if getattr(arm, f"is_enabled_{fam}") is True:
+                    continue
+                if getattr(arm, f"is_connected_{fam}") is not True:
+                    return "fail", actions, "连接缺失"
+                ret = getattr(arm, f"enable_{fam}")()
+                actions.append(f"enable_{fam}")
+                if ret != 1:
+                    return "fail", actions, f"enable_{fam} 未成功（详见上方日志）"
+    return "ok", actions, ""
+
+
+def _describe_real_needs(needs: list) -> str:
+    parts = []
+    for nd in needs:
+        fams = "/".join(_real_prefill_fams(nd[1]))
+        if nd[0] == "connected":
+            parts.append(f"已连接（{fams}）")
+        elif nd[0] == "enabled":
+            parts.append(f"已使能（{fams}）")
+        else:
+            parts.append(f"{nd[2].name} 模式（{fams}）")
+    return "、".join(parts)
+
+
+def _real_current_q(arm: JoyArm, fam: str = "arm") -> tuple:
+    """读当前实测 q：get_state_{fam}（读时刷新）优先，被动快照兜底。"""
+    st = getattr(arm, f"get_state_{fam}")()
+    if st is not None and st.q is not None and bool(np.all(np.isfinite(st.q))):
+        return np.asarray(st.q, dtype=float), f"get_state_{fam} 实测"
+    snap = getattr(arm, f"joint_state_{fam}")
+    q = np.asarray(snap.q, dtype=float)
+    if q.size and bool(np.all(np.isfinite(q))):
+        return q, f"joint_state_{fam} 快照"
+    return None, "无可用状态（读取失败且快照无效）"
+
+
+def _real_safe_target(arm: JoyArm, fam: str, q0: np.ndarray, amp: float) -> np.ndarray:
+    """自当前实测位置的小幅目标：逐关节按软限位裕量选向 ±amp（至多走半裕量，不贴限位）。"""
+    soft = getattr(arm, f"joint_limits_soft_{fam}")
+    q_min = np.asarray(soft.q_min, dtype=float)
+    q_max = np.asarray(soft.q_max, dtype=float)
+    target = q0.copy()
+    for i in range(target.size):
+        up, dn = q_max[i] - q0[i], q0[i] - q_min[i]
+        step = min(amp, 0.5 * up) if up >= dn else -min(amp, 0.5 * dn)
+        target[i] = q0[i] + step
+    return target
+
+
+# ---------------- r0 组（真机：连接与硬件只读，低危） ----------------
+def _rt100(s: _RealSession):
+    """真机构建与自检：真实 cfg（backend_dm）构造 JoyArm，自检通过且无总线 I/O。"""
+    i0 = _mark()
+    arm = s.arm()
+    cfg = arm.get_config()
+    ok = (isinstance(arm, JoyArm) and cfg["backend"]["name"] == "backend_dm"
+          and arm.n_arm == len(cfg["backend"]["arm"]["joints"])
+          and arm.is_connected_arm is not True     # 构造契约：不做任何总线 I/O
+          and _hit(_since(i0), "初始化和自检完毕"))
+    ev = (f"JoyArm('{MODEL}')（真实 cfg，无注入）构造成功；backend="
+          f"{cfg['backend']['name']}，n_arm={arm.n_arm}、n_end={arm.n_end}；"
+          f"repr={_trunc(repr(arm), 90)}；自检完成 info="
+          f"{_hit(_since(i0), '初始化和自检完毕')}；连接标志="
+          f"{arm.is_connected_arm}（构造不做总线 I/O）")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt101(s: _RealSession):
+    """arm/end 连接：connect 后连接标志 True、default_mode 回填一致。"""
+    arm = s.arm()
+    arm.connect_arm()
+    ok_a = arm.is_connected_arm is True
+    m_a = arm.get_mode_arm()
+    if arm.n_end:
+        arm.connect_end()
+        ok_e = arm.is_connected_end is True
+    else:
+        ok_e = True
+    default = str((arm.get_config()["backend"].get("arm") or {}).get("default_mode", "")).upper()
+    ok = ok_a and ok_e and (m_a is None or m_a.name == default or default == "")
+    ev = (f"connect_arm() → is_connected_arm={arm.is_connected_arm}；get_mode_arm()="
+          f"{getattr(m_a, 'name', m_a)}（cfg default_mode={default or '（未配）'}，"
+          f"回填一致或无回读能力均不算失败）；n_end={arm.n_end}，"
+          f"connect_end() → is_connected_end={arm.is_connected_end}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt102(s: _RealSession):
+    """状态读取：get_state 输出实测值（q/dq/tau/温度/error）并校验契约（(n,) 有限、t 更新）。"""
+    arm = s.arm()
+    checks = []
+    for fam in ("arm", "end"):
+        if fam == "end" and arm.n_end == 0:
+            continue
+        st = getattr(arm, f"get_state_{fam}")()
+        n = getattr(arm, f"n_{fam}")
+        if st is None or st.q is None:
+            checks.append((f"{fam} get_state 返回可用快照", False, "None"))
+            continue
+        q = np.asarray(st.q, dtype=float)
+        fields_ok = (q.shape == (n,) and bool(np.all(np.isfinite(q)))
+                     and float(getattr(st, "t", 0.0) or 0.0) > 0)
+        vals = (f"q={np.round(q, 4).tolist()}"
+                f"{'，dq=' + str(np.round(np.asarray(st.dq, float), 3).tolist()) if st.dq is not None else ''}"
+                f"{'，error=' + str(np.asarray(st.error).reshape(-1).tolist()) if st.error is not None else ''}"
+                f"，t={float(getattr(st, 't', 0.0) or 0.0):.3f}")
+        checks.append((f"{fam} get_state 契约（(n,) 有限、t>0）", fields_ok, vals))
+    snap_age = time.time() - float(getattr(arm.joint_state_arm, "t", 0.0) or 0.0)
+    checks.append(("被动快照新鲜（age<0.5s，刷新线程在跑）",
+                   0 < snap_age < 0.5, f"age={snap_age:.3f}s"))
+    ok = all(c for _, c, _ in checks)
+    ev = "；".join(f"{lb}={'OK' if c else 'FAIL'}（{dt}）" for lb, c, dt in checks)
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt103(s: _RealSession):
+    """模式读取：get_mode 返回 default_mode 回填值（None=无回读能力，SKIP 非缺陷）。"""
+    arm = s.arm()
+    m_a = arm.get_mode_arm()
+    m_e = arm.get_mode_end() if arm.n_end else None
+    default = str((arm.get_config()["backend"].get("arm") or {}).get("default_mode", "")).upper()
+    if m_a is None:
+        return "SKIP", f"get_mode_arm()=None（无模式回读能力或各关节不一致，非缺陷）"
+    ok = m_a.name == default
+    ev = (f"get_mode_arm()={m_a.name}（cfg default_mode={default}）一致={ok}；"
+          f"get_mode_end()={getattr(m_e, 'name', m_e)}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt104(s: _RealSession):
+    """错误码读取与检查：get_error 逐关节码 + check_error 与之一致。"""
+    arm = s.arm()
+    checks = []
+    for fam in ("arm", "end"):
+        if fam == "end" and arm.n_end == 0:
+            continue
+        errs = getattr(arm, f"get_error_{fam}")()
+        chk = getattr(arm, f"check_error_{fam}")()
+        if errs is None:
+            checks.append((f"{fam} get_error 可读", False, "None"))
+            continue
+        arr = np.asarray(errs).reshape(-1)
+        consistent = chk == bool(np.all(arr < 2))
+        checks.append((f"{fam} get_error/check_error 一致", consistent,
+                       f"error={arr.tolist()}，check={chk}（0=失能 1=使能 ≥2=故障）"))
+    ok = all(c for _, c, _ in checks)
+    ev = "；".join(f"{lb}={'OK' if c else 'FAIL'}（{dt}）" for lb, c, dt in checks)
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt105(s: _RealSession):
+    """参数读取：read_param('kp') 返回逐关节 list（键不可用 SKIP 非缺陷）。"""
+    arm = s.arm()
+    vals = arm.read_param_arm("kp")
+    if vals is None:
+        return "SKIP", ("read_param_arm('kp')=None（参数键不可用或无读取能力——"
+                        "非缺陷；可用 --step 跑其余项）")
+    ok = len(vals) == arm.n_arm and all(np.isfinite(v) for v in vals)
+    ev = f"read_param_arm('kp')={np.round(np.asarray(vals, float), 3).tolist()}（n={arm.n_arm}）"
+    return ("PASS" if ok else "FAIL"), ev
+
+
+# ---------------- r1 组（真机：使能/模式/参数写） ----------------
+def _rt110(s: _RealSession):
+    """三模式设置：MIT/POSITION/VELOCITY 循环 设→读回（回读能力缺失仅记录）。"""
+    arm = s.arm()
+    checks = []
+    for mode in (ControlMode.MIT, ControlMode.POSITION, ControlMode.VELOCITY):
+        r = arm.set_mode_arm(mode)
+        back = arm.get_mode_arm()
+        ok = r == 1 and (back is None or back is mode)   # 回读 None=无回读能力，不算失败
+        checks.append((f"set_mode({mode.name})→读回", ok,
+                       f"ret={r}, 回读={getattr(back, 'name', back)}"))
+    r = arm.set_mode_arm(ControlMode.POSITION)            # 收尾回 POSITION
+    ok = all(c for _, c, _ in checks) and r == 1
+    ev = ("；".join(f"{lb}={'OK' if c else 'FAIL'}（{dt}）" for lb, c, dt in checks)
+          + f"；收尾回 POSITION ret={r}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt111(s: _RealSession):
+    """arm 使能/失能：enable(1/True) → disable(1/False)（电机上力，高危）。"""
+    arm = s.arm()
+    r1 = arm.enable_arm()
+    e1 = arm.is_enabled_arm
+    r2 = arm.disable_arm()
+    e2 = arm.is_enabled_arm
+    ok = r1 == 1 and e1 is True and r2 == 1 and e2 is False
+    ev = (f"enable_arm() ret={r1}，is_enabled={e1}；disable_arm() ret={r2}，"
+          f"is_enabled={e2}（推导口径：全 1→True、全 0→False、混合→None）")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt112(s: _RealSession):
+    """使能/失能幂等：enable×2、disable×2 不炸且终态 False。"""
+    arm = s.arm()
+    r1 = arm.enable_arm()
+    r2 = arm.enable_arm()
+    d1 = arm.disable_arm()
+    d2 = arm.disable_arm()
+    e = arm.is_enabled_arm
+    ok = all(isinstance(v, int) for v in (r1, r2, d1, d2)) and e is False
+    ev = (f"enable×2 ret=({r1},{r2})；disable×2 ret=({d1},{d2})；"
+          f"终态 is_enabled={e}（重复调用安全、无异常）")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt113(s: _RealSession):
+    """参数写回：读 kp 原值 → 写回原值 → 读回核对（无副作用）。"""
+    arm = s.arm()
+    vals = arm.read_param_arm("kp")
+    if vals is None:
+        return "SKIP", "read_param_arm('kp')=None（参数键不可用——非缺陷）"
+    w = arm.write_param_arm("kp", vals)
+    back = arm.read_param_arm("kp")
+    same = back is not None and bool(np.allclose(np.asarray(back, float),
+                                                 np.asarray(vals, float), rtol=1e-6))
+    ok = w == 1 and same
+    ev = (f"原值={np.round(np.asarray(vals, float), 3).tolist()} → write ret={w} → "
+          f"读回={np.round(np.asarray(back, float), 3).tolist() if back else None}，"
+          f"一致={same}（写回原值，无副作用）")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt114(s: _RealSession):
+    """end 使能/失能（与 111 对称；空族自动 SKIP）。"""
+    arm = s.arm()
+    if arm.n_end == 0:
+        return "SKIP", "end 族未配置任何电机（n_end=0），空族自动跳过"
+    r1 = arm.enable_end()
+    e1 = arm.is_enabled_end
+    r2 = arm.disable_end()
+    e2 = arm.is_enabled_end
+    ok = r1 == 1 and e1 is True and r2 == 1 and e2 is False
+    ev = (f"enable_end() ret={r1}，is_enabled={e1}；disable_end() ret={r2}，"
+          f"is_enabled={e2}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+# ---------------- r2 组（真机：委托指令小幅运动，高危 + 发送前参数预览） ----------------
+def _rp120(s: _RealSession):
+    """120 发送前参数预览：当前实测 q vs 小幅目标 q（+vlim）。"""
+    arm = s.arm()
+    q0, src = _real_current_q(arm, "arm")
+    if q0 is None:
+        print(f"（预览：{src}——无法自实际位置小幅出发）")
+        return
+    target = _real_safe_target(arm, "arm", q0, REAL_POS_AMP)
+    print(f"  当前 q（{src}）={np.round(q0, 4).tolist()}")
+    print(f"  目标 q（±{REAL_POS_AMP} rad 按软限位裕量选向）={np.round(target, 4).tolist()}")
+    print(f"  vlim={REAL_VLIM} rad/s（位置指令速度上限）")
+
+
+def _rt120(s: _RealSession):
+    """send_position 小幅：自实测位置 ±0.05 rad（软限位裕量选向）、限速 0.3 rad/s。"""
+    arm = s.arm()
+    q0, src = _real_current_q(arm, "arm")
+    if q0 is None:
+        return "SKIP", f"{src}——无法自实际位置小幅出发，盲发目标有大幅运动风险"
+    target = _real_safe_target(arm, "arm", q0, REAL_POS_AMP)
+    arm.send_position_arm(target, np.full(arm.n_arm, REAL_VLIM))
+    time.sleep(REAL_SETTLE)
+    q1, src1 = _real_current_q(arm, "arm")
+    moved = q1 is not None and float(np.max(np.abs(q1 - q0))) > 0.005
+    delta = "—" if q1 is None else f"{float(np.max(np.abs(q1 - q0))):.4f}"
+    ok = moved
+    ev = (f"目标（{src} ±{REAL_POS_AMP}）={np.round(target, 4).tolist()}；"
+          f"{REAL_SETTLE}s 后实测 q（{src1}）"
+          f"={np.round(q1, 4).tolist() if q1 is not None else None}，"
+          f"|Δq|max={delta} rad（>0.005 判有响应）")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rp121(s: _RealSession):
+    """121 发送前参数预览：MIT 原地保持参数。"""
+    arm = s.arm()
+    q0, src = _real_current_q(arm, "arm")
+    if q0 is None:
+        print(f"（预览：{src}）")
+        return
+    print(f"  当前 q（{src}）={np.round(q0, 4).tolist()}（MIT 目标=当前实测，原地保持）")
+    print(f"  kp={REAL_MIT_KP}, kd={REAL_MIT_KD}（保守增益），tau=0, dq=0")
+
+
+def _rt121(s: _RealSession):
+    """send_mit 原地保持：当前实测位置为目标（保守增益），1s 后漂移 <0.05 rad。"""
+    arm = s.arm()
+    q0, src = _real_current_q(arm, "arm")
+    if q0 is None:
+        return "SKIP", f"{src}——无法取当前位置作保持目标"
+    n = arm.n_arm
+    arm.send_mit_arm(q=q0, dq=np.zeros(n), tau=np.zeros(n),
+                     kp=np.full(n, REAL_MIT_KP), kd=np.full(n, REAL_MIT_KD))
+    time.sleep(1.0)
+    q1, _ = _real_current_q(arm, "arm")
+    drift = None if q1 is None else float(np.max(np.abs(q1 - q0)))
+    ok = drift is not None and drift < 0.05
+    ev = (f"目标 q=当前实测（{src}）{np.round(q0, 4).tolist()}，kp={REAL_MIT_KP}、"
+          f"kd={REAL_MIT_KD}；1s 后 |漂移|max={drift if drift is not None else '—'} rad"
+          f"（<0.05 判原地保持）")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rp122(s: _RealSession):
+    """122 发送前参数预览：速度指令幅值/方向/持续时间。"""
+    arm = s.arm()
+    q0, src = _real_current_q(arm, "arm")
+    if q0 is None:
+        print(f"（预览：{src}）")
+        return
+    target = _real_safe_target(arm, "arm", q0, REAL_POS_AMP)
+    dirs = np.sign(np.asarray(target) - q0).astype(int)
+    print(f"  当前 q（{src}）={np.round(q0, 4).tolist()}")
+    print(f"  dq 指令={np.round(dirs * REAL_VEL, 2).tolist()} rad/s"
+          f"（按软限位裕量选向）持续 {REAL_VEL_DUR}s 后发 dq=0 停止")
+
+
+def _rt122(s: _RealSession):
+    """send_vel 短时低速：±0.1 rad/s 选向 ×0.5s 后 dq=0 停止。"""
+    arm = s.arm()
+    q0, src = _real_current_q(arm, "arm")
+    if q0 is None:
+        return "SKIP", f"{src}——电机反馈异常时不宜做速度测试"
+    n = arm.n_arm
+    target = _real_safe_target(arm, "arm", q0, REAL_POS_AMP)
+    dq_cmd = np.sign(np.asarray(target) - q0) * REAL_VEL
+    arm.send_vel_arm(dq_cmd)
+    time.sleep(REAL_VEL_DUR)
+    st = arm.get_state_arm()
+    arm.send_vel_arm(np.zeros(n))                     # 停止
+    dq_meas = None if (st is None or st.dq is None) else np.asarray(st.dq, float)
+    resp = dq_meas is not None and float(np.max(np.abs(dq_meas))) > 0.01
+    ev = (f"dq 指令={np.round(dq_cmd, 2).tolist()} rad/s ×{REAL_VEL_DUR}s 后已发 dq=0；"
+          f"运动中实测 dq={np.round(dq_meas, 3).tolist() if dq_meas is not None else None}"
+          f"（|dq|max>0.01 判有响应）")
+    return ("PASS" if resp else "FAIL"), ev
+
+
+def _rp123(s: _RealSession):
+    """123 发送前参数预览：end 位置小幅目标。"""
+    arm = s.arm()
+    if arm.n_end == 0:
+        print("  （end 空族）")
+        return
+    q0, src = _real_current_q(arm, "end")
+    if q0 is None:
+        print(f"  （预览：{src}）")
+        return
+    target = _real_safe_target(arm, "end", q0, REAL_POS_AMP)
+    print(f"  end 当前 q（{src}）={np.round(q0, 4).tolist()}")
+    print(f"  end 目标 q（±{REAL_POS_AMP} rad 选向）={np.round(target, 4).tolist()}")
+
+
+def _rt123(s: _RealSession):
+    """send_position_end 小幅：end 自实测位置 ±0.05 rad（空族 SKIP）。"""
+    arm = s.arm()
+    if arm.n_end == 0:
+        return "SKIP", "end 族未配置任何电机（n_end=0），空族自动跳过"
+    q0, src = _real_current_q(arm, "end")
+    if q0 is None:
+        return "SKIP", f"{src}——无法自实际位置小幅出发"
+    target = _real_safe_target(arm, "end", q0, REAL_POS_AMP)
+    arm.send_position_end(target, np.full(arm.n_end, REAL_VLIM))
+    time.sleep(REAL_SETTLE)
+    q1, _ = _real_current_q(arm, "end")
+    moved = q1 is not None and float(np.max(np.abs(q1 - q0))) > 0.005
+    ev = (f"end 目标（{src} ±{REAL_POS_AMP}）={np.round(target, 4).tolist()}；"
+          f"{REAL_SETTLE}s 后实测 q={np.round(q1, 4).tolist() if q1 is not None else None}")
+    return ("PASS" if moved else "FAIL"), ev
+
+
+# ---------------- r3 组（真机：状态机运动，高危——FSM 启动将使能并运动至 home） ----------------
+def _rt130(s: _RealSession):
+    """FSM 启动与自动迁移：start → DISABLE→HOME→MOTION（home 到位门槛放行）。"""
+    arm = s.arm()
+    i0 = _mark()
+    arm.start_motion_fsm()                        # 幂等（已运行忽略）
+    ok_home = _wait_state(arm, MotionState.HOME, timeout=REAL_WAIT_HOME)
+    ok_motion = _wait_state(arm, MotionState.MOTION, timeout=REAL_WAIT_MOTION)
+    msgs = _since(i0)
+    seq = (_hit(msgs, "状态迁移 DISABLE → HOME") and _hit(msgs, "状态迁移 HOME → MOTION")
+           and _hit(msgs, "HOME 已到位"))
+    ok = ok_home and ok_motion and seq
+    ths = [t for t in _joyarm_thread_names()
+           if t in ("joyarm-plan", "joyarm-ctrl")]
+    ev = (f"start_motion_fsm 后：HOME 迁移={ok_home}，『HOME 已到位』="
+          f"{_hit(msgs, 'HOME 已到位')}（真实运动到位耗时计入），MOTION 迁移={ok_motion}；"
+          f"终态 current={arm.get_current_motion_state().name}；"
+          f"plan/ctrl 线程={ths or '（未清点到，见日志）'}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt131(s: _RealSession):
+    """目标通道小幅运动：set_target_joint（当前 ±0.05）经 plan/ctrl 管线到位。"""
+    arm = s.arm()
+    arm.start_motion_fsm()                        # 幂等
+    if not _wait_state(arm, MotionState.MOTION, timeout=REAL_WAIT_MOTION):
+        return "FAIL", f"未进入 MOTION（current={arm.get_current_motion_state().name}）"
+    q0, src = _real_current_q(arm, "arm")
+    if q0 is None:
+        return "SKIP", f"{src}——无法取当前位置作小幅目标"
+    target = _real_safe_target(arm, "arm", q0, REAL_POS_AMP)
+    print(f"  目标通道预览：当前 q（{src}）={np.round(q0, 4).tolist()} → "
+          f"目标（±{REAL_POS_AMP} 选向）={np.round(target, 4).tolist()}（t+3.0s）")
+    arm.set_target_joint(time.time() + 3.0, target)
+    deadline = time.monotonic() + 5.0
+    arrived = False
+    while time.monotonic() < deadline:
+        if arm.is_in_q_arm(target, tol_q=0.1):
+            arrived = True
+            break
+        time.sleep(0.1)
+    q1, _ = _real_current_q(arm, "arm")
+    err = None if q1 is None else float(np.max(np.abs(q1 - target)))
+    ok = arrived
+    ev = (f"set_target_joint(t+3.0, ±{REAL_POS_AMP}) 后 5s 内到位={arrived}"
+          f"（is_in_q_arm(tol=0.1)）；实测 q={np.round(q1, 4).tolist() if q1 is not None else None}，"
+          f"|q−目标|max={err if err is not None else '—'} rad")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt132(s: _RealSession):
+    """保护事件直达：HOLDING→HOLD 原位锁定，恢复 NORMAL→MOTION。"""
+    arm = s.arm()
+    arm.start_motion_fsm()                        # 幂等
+    if not _wait_state(arm, MotionState.MOTION, timeout=REAL_WAIT_MOTION):
+        return "FAIL", f"未进入 MOTION（current={arm.get_current_motion_state().name}）"
+    arm.set_event(SafetyEvent.HOLDING)
+    ok_hold = _wait_state(arm, MotionState.HOLD, timeout=3.0)
+    arm.set_event(SafetyEvent.NORMAL)
+    ok_back = _wait_state(arm, MotionState.MOTION, timeout=8.0)
+    ok = ok_hold and ok_back
+    ev = (f"set_event(HOLDING) → HOLD 直达={ok_hold}（原位锁定）；"
+          f"set_event(NORMAL) → MOTION 恢复={ok_back}；"
+          f"终态 current={arm.get_current_motion_state().name}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt133(s: _RealSession):
+    """FSM 停止回零：stop（阻塞含回零等待）→ 失能收尾、状态机退出。"""
+    arm = s.arm()
+    if arm.is_connected_arm is not True:
+        return "SKIP", "arm 未连接（stop 需连接态；断连急停走 close）"
+    i0 = _mark()
+    t0 = time.monotonic()
+    e = _exc(arm.stop_motion_fsm)                 # 阻塞：真实回零最长 ~move_wait_timeout
+    dt = time.monotonic() - t0
+    disabled = arm.is_enabled_arm is False
+    stopped = arm.get_current_motion_state() is MotionState.DISABLE
+    ok = e is None and stopped and disabled
+    ev = (f"stop_motion_fsm 阻塞耗时 {dt:.2f}s（含回零等待，超时上限 "
+          f"move_wait_timeout={arm.get_config()['joyarm']['runtime']['move_wait_timeout']}s）；"
+          f"收尾后 current={arm.get_current_motion_state().name}、"
+          f"is_enabled={arm.is_enabled_arm}；异常={e is None}；"
+          f"收尾 info={_hit(_since(i0), 'FSM 已停止并清空缓存')}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+# ---------------- r4 组（真机：监视器/可视化，中危） ----------------
+def _rt140(s: _RealSession):
+    """monitor 启停与不误触发：无故障时 event 保持 NORMAL；重复启停幂等。"""
+    arm = s.arm()
+    i0 = _mark()
+    arm.start_monitor()
+    arm.start_monitor()                           # 重复启动：忽略
+    ign = _hit(_since(i0), "忽略重复启动")
+    time.sleep(2.0)
+    ev_during = arm.get_event()
+    no_fault = arm.check_error_arm() if arm.is_connected_arm is True else None
+    arm.stop_monitor()
+    e2 = _exc(arm.stop_monitor)                   # 重复停止：无异常
+    no_false = (ev_during is SafetyEvent.NORMAL
+                or no_fault is False)             # 真有故障码时触发非误报
+    ok = ign and e2 is None and no_false
+    ev = (f"重复 start 忽略 info={ign}；2s 观察窗 event={ev_during.name}"
+          f"（check_error_arm={no_fault}：True=无故障且事件保持 NORMAL=未误触发；"
+          f"False=真有故障，触发属正常保护）；重复 stop 异常={e2 is None}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt141(s: _RealSession):
+    """自定义规则回调：收集型规则（返回 None 不 set_event）被周期调用且收到状态。"""
+    arm = s.arm()
+    seen: list = []
+
+    def probe(state_arm, state_end, motion, event):
+        seen.append((state_arm is not None,
+                     motion.name if motion is not None else None))
+        return None                               # 无意见：不触发任何事件
+
+    arm.set_monitor_rules(probe)
+    arm.start_monitor()
+    time.sleep(1.5)
+    arm.stop_monitor()
+    arm.set_monitor_rules([])
+    n_call = len(seen)
+    n_state = sum(1 for has, _ in seen if has)
+    hz = arm.get_config()["joyarm"]["MotionFSM"].get("monitor_hz", 50.0)
+    ok = n_call >= 20 and n_state >= n_call * 0.8
+    ev = (f"1.5s 内规则被调 {n_call} 次（monitor_hz={hz}，阈值 ≥20）；"
+          f"其中收到非 None 状态 {n_state}/{n_call} 拍（≥80%，连接态应非 None）；"
+          f"规则返回 None 全程未改 event={arm.get_event().name}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt142(s: _RealSession):
+    """可视化面板：真机连接态 /state.json 出实测数据（arm.q 非 null）+ 幂等停止。"""
+    import json as _json
+    arm = s.arm()
+    e = _exc(arm.start_state_viz)
+    time.sleep(0.5)                               # worker 10 Hz：至少数拍填充
+    urls = _viz_urls()
+    ok_json, payload = _fetch(urls[-1] + "state.json") if urls else (False, b"")
+    has_q = False
+    if ok_json:
+        try:
+            data = _json.loads(payload)
+            g = data.get("arm") or {}
+            has_q = g.get("q") is not None
+        except Exception:
+            has_q = False
+    e2 = _exc(arm.stop_state_viz)
+    ok = e is None and e2 is None and ok_json and has_q
+    ev = (f"start 异常={e is None}；GET /state.json={ok_json}，arm.q="
+          f"{'非 null（连接后 backend 快照出数）' if has_q else 'null（未出数）'}；"
+          f"stop 异常={e2 is None}；URL={urls[-1] if urls else '（未捕获，见日志）'}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
+# ---------------- r5 组（真机：清错/设零） ----------------
+def _rt150(s: _RealSession):
+    """清错：读错误码 → clear_error → 再读核对（清后全部 <2）。"""
+    arm = s.arm()
+    checks = []
+    for fam in ("arm", "end"):
+        if fam == "end" and arm.n_end == 0:
+            continue
+        e0 = getattr(arm, f"get_error_{fam}")()
+        r = getattr(arm, f"clear_error_{fam}")()
+        e1 = getattr(arm, f"get_error_{fam}")()
+        ok = (r is True and (e1 is None
+                             or all(int(v) < 2 for v in np.asarray(e1).reshape(-1))))
+        checks.append((f"{fam} clear_error", ok,
+                       f"清前={np.asarray(e0).reshape(-1).tolist() if e0 else None}，"
+                       f"ret={r}，清后={np.asarray(e1).reshape(-1).tolist() if e1 else None}"))
+    ok = all(c for _, c, _ in checks)
+    ev = "；".join(f"{lb}={'OK' if c else 'FAIL'}（{dt}）" for lb, c, dt in checks)
+    return ("PASS" if ok else "FAIL"), ev
+
+
+def _rt151(s: _RealSession):
+    """设零（极高危）：每族二次确认后 set_zero 并回读 |q|≈0（容差 0.05 rad）。
+
+    仅显式 --real --step=151 执行（任何组展开不含本项）；任一次非 yes 即跳过
+    该族及后续；--yes 不放行、非终端自动跳过。
+    """
+    arm = s.arm()
+    lines: list = []
+    worst = "PASS"
+    fams = [f for f in ("arm", "end") if getattr(arm, f"n_{f}") > 0]
+    aborted = False
+    for fam in fams:
+        if aborted:
+            lines.append(f"{fam}: SKIP（前族二次确认跳过，后续一并跳过）")
+            worst = "SKIP" if worst == "PASS" else worst
+            continue
+        if not sys.stdin.isatty():
+            lines.append(f"{fam}: SKIP（非终端环境自动跳过——极高危永不自动执行）")
+            worst = "SKIP" if worst == "PASS" else worst
+            continue
+        ans = input(f"    第二次确认（yes=对 {fam} 族执行设零，其他输入=跳过该族及后续）: ").strip().lower()
+        if ans not in ("yes", "y"):
+            lines.append(f"{fam}: SKIP（用户在二次确认跳过）")
+            worst = "SKIP" if worst == "PASS" else worst
+            aborted = True
+            continue
+        conn = getattr(arm, f"is_connected_{fam}") is True
+        if not conn:
+            lines.append(f"{fam}: FAIL（未连接——设零需连接态）")
+            worst = "FAIL"
+            continue
+        r = getattr(arm, f"set_zero_{fam}")()
+        st = getattr(arm, f"get_state_{fam}")()
+        qmax = (None if (st is None or st.q is None)
+                else float(np.max(np.abs(np.asarray(st.q, dtype=float)))))
+        ok = r == 1 and qmax is not None and qmax < REAL_ZERO_TOL
+        lines.append(f"{fam}: {'PASS' if ok else 'FAIL'}（set_zero ret={r}，回读 |q|max="
+                     f"{qmax if qmax is not None else '—'} rad（容差 {REAL_ZERO_TOL}））")
+        if not ok:
+            worst = "FAIL"
+    return worst, "；".join(lines) + "【永久改写零位标定，不可逆；回读仅验证当前读数≈0】"
+
+
+# ============================================================
+# 真机测试项注册表（编号沿用两位数十进制分组习惯：级 r0~r5 对应
+# 100/110/120/130/140/150 各组；151 极高危仅显式编号执行）
+# ============================================================
+REAL_ITEMS: list[dict] = []
+
+
+def _ritem(num, name, group, risk, purpose, needs, fn, preview=None):
+    REAL_ITEMS.append(dict(num=num, name=name, group=group, risk=risk, level=group,
+                           purpose=purpose, needs=list(needs), fn=fn, preview=preview))
+
+
+# —— r0 组（连接与硬件只读，低危）——
+_ritem(100, "真机构建与自检", "r0", "低",
+       "真实 cfg（joyarm_dm.yaml 的 backend_dm）构造 JoyArm：全套自检过、无总线 I/O、n_arm/n_end 与 cfg 一致", [], _rt100)
+_ritem(101, "arm/end 连接", "r0", "低",
+       "connect 后连接标志 True、default_mode 回填（信息性核对，回读能力缺失不算失败）", [], _rt101)
+_ritem(102, "状态读取", "r0", "低",
+       "get_state_arm/end 输出实测值（q/dq/tau/温度/error）并校验契约（(n,) 有限、t>0）+ 被动快照新鲜",
+       [("connected", "both")], _rt102)
+_ritem(103, "模式读取", "r0", "低",
+       "get_mode 返回 default_mode 回填值（None=无回读能力，SKIP 非缺陷）",
+       [("connected", "both")], _rt103)
+_ritem(104, "错误码读取与检查", "r0", "低",
+       "get_error 逐关节码（0=失能 1=使能 ≥2=故障）+ check_error 与之一致",
+       [("connected", "both")], _rt104)
+_ritem(105, "参数读取", "r0", "低",
+       "read_param_arm('kp') 返回逐关节 list（键不可用 SKIP 非缺陷）",
+       [("connected", "arm")], _rt105)
+
+# —— r1 组（使能/模式/参数写：模式低危；使能/写参高危）——
+_ritem(110, "三模式设置", "r1", "低",
+       "MIT/POSITION/VELOCITY 循环 设→读回（切 POSITION/VELOCITY 随模式写增益；回读 None 仅记录）",
+       [("connected", "arm")], _rt110)
+_ritem(111, "arm 使能/失能", "r1", "高",
+       "enable(1/回读 True) → disable(1/回读 False)（电机上力）",
+       [("connected", "arm")], _rt111)
+_ritem(112, "使能/失能幂等", "r1", "高",
+       "enable×2、disable×2 均返回 int 不崩溃，终态 False",
+       [("connected", "arm")], _rt112)
+_ritem(113, "参数写回", "r1", "高",
+       "读 kp 原值 → 写回原值 → 读回核对一致（无副作用；键不可用 SKIP）",
+       [("connected", "arm")], _rt113)
+_ritem(114, "end 使能/失能", "r1", "高",
+       "与 111 对称的末端族使能/失能契约（空族 SKIP）",
+       [("connected", "end")], _rt114)
+
+# —— r2 组（委托指令小幅运动，高危 + 发送前参数预览 + 二次确认，--yes 不放行）——
+_ritem(120, "send_position 小幅", "r2", "高",
+       f"自当前实测位置 ±{REAL_POS_AMP} rad（软限位裕量自动选向）、限速 {REAL_VLIM} rad/s，观测实际响应",
+       [("connected", "arm"), ("mode", "arm", ControlMode.POSITION), ("enabled", "arm")],
+       _rt120, preview=_rp120)
+_ritem(121, "send_mit 原地保持", "r2", "高",
+       f"以当前实测位置为 MIT 目标原地保持（kp={REAL_MIT_KP}, kd={REAL_MIT_KD} 保守增益），1s 漂移 <0.05 rad",
+       [("connected", "arm"), ("mode", "arm", ControlMode.MIT), ("enabled", "arm")],
+       _rt121, preview=_rp121)
+_ritem(122, "send_vel 短时低速", "r2", "高",
+       f"{REAL_VEL} rad/s 按软限位裕量逐关节选向 ×{REAL_VEL_DUR}s 后发 dq=0 停止",
+       [("connected", "arm"), ("mode", "arm", ControlMode.VELOCITY), ("enabled", "arm")],
+       _rt122, preview=_rp122)
+_ritem(123, "end 位置小幅", "r2", "高",
+       f"end 自实测位置 ±{REAL_POS_AMP} rad 位置指令（空族 SKIP）",
+       [("connected", "end"), ("mode", "end", ControlMode.POSITION), ("enabled", "end")],
+       _rt123, preview=_rp123)
+
+# —— r3 组（状态机运动，高危——FSM 启动将使能电机并运动至 home 位形）——
+_ritem(130, "FSM 启动与自动迁移", "r3", "高",
+       "start_motion_fsm → DISABLE→HOME→MOTION 自动迁移（HOME 已到位日志 + 真实运动耗时计入）",
+       [("connected", "arm")], _rt130)
+_ritem(131, "目标通道小幅运动", "r3", "高",
+       f"set_target_joint(当前 ±{REAL_POS_AMP}) 经 plan/ctrl 管线运动并到位（is_in_q_arm tol=0.1）",
+       [("connected", "arm")], _rt131)
+_ritem(132, "保护事件直达 HOLD", "r3", "高",
+       "MOTION 下 set_event(HOLDING) 直达 HOLD 原位锁定，set_event(NORMAL) 恢复 MOTION",
+       [("connected", "arm")], _rt132)
+_ritem(133, "FSM 停止回零", "r3", "高",
+       "stop_motion_fsm（阻塞含回零等待）→ 失能收尾、状态机退出（终态 DISABLE）",
+       [("connected", "arm")], _rt133)
+
+# —— r4 组（监视器/可视化，中危：交互回车确认）——
+_ritem(140, "monitor 启停与不误触发", "r4", "中",
+       "无故障时 2s 观察窗 event 保持 NORMAL（不误触发）；重复启停幂等",
+       [("connected", "arm")], _rt140)
+_ritem(141, "自定义规则回调", "r4", "中",
+       "收集型规则（返回 None 不 set_event）被周期调用（≥20 次/1.5s）且收到非 None 状态",
+       [("connected", "arm")], _rt141)
+_ritem(142, "可视化面板实测数据", "r4", "中",
+       "真机连接态 /state.json 出实测数据（arm.q 非 null）+ 幂等停止",
+       [("connected", "arm")], _rt142)
+
+# —— r5 组（清错高危；设零极高危）——
+_ritem(150, "清除错误", "r5", "高",
+       "读错误码 → clear_error（ret True）→ 再读核对全部 <2（end 对称，空族跳过）",
+       [("connected", "both")], _rt150)
+_ritem(151, "设置零点", "r5", "极高",
+       "【永久改写零位标定，不可逆】逐族（arm/end）：二次确认后 set_zero 并回读 |q|max<0.05 rad；"
+       "仅显式 --real --step=151 执行（任何组不含本项；--yes 不放行、非终端自动跳过）",
+       [("connected", "both")], _rt151)
+
+REAL_ALL_NUMS = {it["num"] for it in REAL_ITEMS}
+_REAL_BY_NUM = {it["num"]: it for it in REAL_ITEMS}
+
+# 组名 → 编号集合（151 极高危排除出 r5/rall，仅显式编号执行——对齐 backend_verify 38 惯例）
+REAL_GROUPS: dict[str, list[int]] = {
+    "r0": [100, 101, 102, 103, 104, 105],
+    "r1": [110, 111, 112, 113, 114],
+    "r2": [120, 121, 122, 123],
+    "r3": [130, 131, 132, 133],
+    "r4": [140, 141, 142],
+    "r5": [150],
+}
+REAL_GROUPS["rall"] = [n for ns in REAL_GROUPS.values() for n in ns]
 
 
 # ============================================================
@@ -2077,64 +3056,169 @@ class _UsageError(Exception):
     """用法错误（退出码 2）。"""
 
 
-def resolve_steps(spec: str) -> list[int]:
-    """解析 --step：单项编号 / 组名逗号混选。"""
+def resolve_steps(spec: str, real: bool = False) -> list[int]:
+    """解析 --step：单项编号 / 组名逗号混选（按模式取离线或真机组表）。
+
+    真机模式下 "all" 为 "rall" 别名（--real 缺省 --step=all 直达真机全项）。
+    """
+    groups = REAL_GROUPS if real else GROUPS
+    all_nums = REAL_ALL_NUMS if real else ALL_NUMS
     nums: list[int] = []
     for tok in spec.split(","):
         tok = tok.strip().lower()
         if not tok:
             continue
+        if real and tok == "all":
+            tok = "rall"                       # 真机模式别名：缺省 --step=all → rall
         if tok.isdigit():
             n = int(tok)
-            if n not in ALL_NUMS:
-                raise _UsageError(f"未知步骤编号 {n}；有效编号：{sorted(ALL_NUMS)}")
+            if n not in all_nums:
+                hint = "（编号 ≥100 为真机项，须加 --real）" if not real and n >= 100 else ""
+                raise _UsageError(f"未知步骤编号 {n}；有效编号：{sorted(all_nums)}{hint}")
             nums.append(n)
-        elif tok in GROUPS:
-            nums.extend(GROUPS[tok])
+        elif tok in groups:
+            nums.extend(groups[tok])
         else:
+            other = "（真机项见 --real --list）" if not real else ""
             raise _UsageError(
-                f"未知步骤 {tok!r}；有效组名：{[k for k in GROUPS if k != 'all'] + ['all']}"
-                f"，或编号 {sorted(ALL_NUMS)}")
+                f"未知步骤 {tok!r}；有效组名：{[k for k in groups if k not in ('all', 'rall')] + (['all'] if not real else ['rall'])}"
+                f"，或编号 {sorted(all_nums)}{other}")
     if not nums:
         raise _UsageError(f"--step={spec!r} 未解析出任何测试项")
     return sorted(set(nums))
 
 
-def run_item(it: dict) -> tuple[str, str]:
-    """单项执行：打印项与用途 → 执行 → 打印判定与证据（无交互）。"""
+# ---------------- 逐项 pre/post 统一打印模板（双模式共用） ----------------
+def _print_pre(it: dict, mode_label: str) -> None:
+    """执行前打印：本项测试内容（名称概要）+ 测试目的（双模式统一模板）。"""
+    lvl = it.get("level") or _GROUP_LEVEL.get(it["group"], "-")
     print()
-    print(f"[{it['num']:02d}] {it['name']} | 组={it['group']} | 风险={it['risk']}")
-    print(f"用途：{it['purpose']}")
+    print(f"[{it['num']:02d}] {it['name']} | 模式={mode_label} | 组={it['group']}"
+          f" | 级={lvl} | 风险={it['risk']}")
+    print(f"内容与目的：{it['purpose']}")
+
+
+def _print_post(it: dict, verdict: str, evidence: str) -> None:
+    """执行后打印：结果数据（实测数值/断言证据）+ 结论（双模式统一模板）。"""
+    print(f"[{it['num']:02d}] {verdict} —— 结果与证据：{evidence}")
+
+
+def run_item(it: dict) -> tuple[str, str]:
+    """离线单项执行：pre 打印 → 执行 → post 打印（无交互）。"""
+    _print_pre(it, "离线")
     try:
         verdict, evidence = it["fn"]()
     except Exception as e:  # noqa: BLE001（验收脚本须捕获一切）
         verdict, evidence = "FAIL", f"未预期异常 {type(e).__name__}: {e}"
-    print(f"[{it['num']:02d}] {verdict} —— {evidence}")
+    _print_post(it, verdict, evidence)
     return verdict, evidence
 
 
-def print_list():
+def run_real_item(it: dict, s: _RealSession) -> tuple[str, str]:
+    """真机单项执行：pre → 前置说明 → 风险确认 → 前置补齐 →（运动项）预览+二次
+    确认 → 执行 → post（对齐 backend_verify 执行框架）。"""
+    _print_pre(it, "真机")
+    level = it["risk"]
+    if it["needs"]:
+        plans = _plan_real_prefill(s, it["needs"])
+        print(f"前置：{_describe_real_needs(it['needs'])}"
+              + (f"；将自动补齐：{'、'.join(d for d, _ in plans)}" if plans else "（已就绪）"))
+        for _, lv in plans:            # 前置风险并入该项确认等级
+            if _RISK_ORDER[lv] > _RISK_ORDER[level]:
+                level = lv
+    if level != "低":
+        _real_banner_once()
+    ans = _confirm(level, s.args)
+    if ans == "quit":
+        _print_post(it, "SKIP", "用户退出（q）——后续项不再执行")
+        return "QUIT", "用户退出（q）"
+    if ans == "skip":
+        if not sys.stdin.isatty() and level in ("高", "极高"):
+            ev = "非终端环境自动跳过（高危永不自动执行；交互终端下需输入 yes）"
+        else:
+            ev = f"用户跳过（风险={level}）"
+        _print_post(it, "SKIP", ev)
+        return "SKIP", ev
+    status, actions, reason = _real_prefill(s, it["needs"])
+    if status == "fail":
+        ev = f"前置补齐失败：{'；'.join(actions) or '（无）'}——{reason}"
+        _print_post(it, "FAIL", ev)
+        return "FAIL", ev
+    if status == "skip":
+        ev = f"前置不可用：{reason}"
+        _print_post(it, "SKIP", ev)
+        return "SKIP", ev
+    if actions:
+        print(f"（已自动补齐前置：{'；'.join(actions)}）")
+    if it.get("preview"):
+        # 运动参数预览 + 二次确认（--yes 不放行；非终端自动 SKIP，不盲发）
+        try:
+            it["preview"](s)
+        except Exception as e:  # noqa: BLE001（验收脚本须捕获一切）
+            print(f"（预览失败：{type(e).__name__}: {e}）")
+        if not sys.stdin.isatty():
+            ans2 = "skip"
+        else:
+            ans2 = input("⚠ 以上为即将下发的运动参数，输入 yes 执行发送（回车/s=跳过  q=退出）: ").strip().lower()
+        if ans2 in ("q", "quit", "退出"):
+            _print_post(it, "SKIP", "用户在预览后退出（q）——后续项不再执行")
+            return "QUIT", "用户在预览后退出（q）"
+        if ans2 not in ("yes", "y"):
+            _print_post(it, "SKIP", "用户在预览后跳过发送（运动参数未下发）")
+            return "SKIP", "用户在预览后跳过发送"
+    try:
+        verdict, evidence = it["fn"](s)
+    except Exception as e:  # noqa: BLE001（验收脚本须捕获一切）
+        verdict, evidence = "FAIL", f"未预期异常 {type(e).__name__}: {e}"
+    _print_post(it, verdict, evidence)
+    return verdict, evidence
+
+
+def print_list(real: bool = False) -> None:
+    if real:
+        print("JoyArm 层真机验收测试项清单（--real；编号=组号×10+序号，级 r0~r5 危险度递进）")
+        print("=" * 68)
+        for it in sorted(REAL_ITEMS, key=lambda x: x["num"]):
+            tag = ("　★极高危：仅显式 --real --step=151 执行，不含于 r5/rall"
+                   if it["risk"] == "极高" else "")
+            print(f"[{it['num']:02d}] {it['name']}｜组={it['group']}｜风险={it['risk']}{tag}")
+            print(f"      用途：{it['purpose']}")
+            print(f"      前置：{_describe_real_needs(it['needs']) or '（无）'}")
+        print("=" * 68)
+        print("级：r0(100 连接/硬件只读) / r1(110 使能/模式/参数写) / r2(120 委托小幅运动·发送前预览) /")
+        print("    r3(130 状态机运动) / r4(140 监视器/可视化) / r5(150 清错)；rall=全部（151 除外）")
+        print("风险与确认：低=直执；中=回车确认（--yes 或非终端直执）；高=交互 yes（--yes 不放行，")
+        print("            非终端自动 SKIP）；极高（151 设零）=每族二次确认、--yes 不放行、仅显式编号执行。")
+        print("判定：PASS=符合契约；SKIP=环境/能力条件不满足（非缺陷）；FAIL=违反契约。")
+        return
     print("JoyArm 层离线验收测试项清单（编号=组号×10+组内序号；全离线低危、无交互）")
     print("=" * 68)
     for it in sorted(ITEMS, key=lambda x: x["num"]):
-        print(f"[{it['num']:02d}] {it['name']}｜组={it['group']}｜风险={it['risk']}")
+        print(f"[{it['num']:02d}] {it['name']}｜组={it['group']}｜级={_GROUP_LEVEL.get(it['group'], '-')}"
+              f"｜风险={it['risk']}")
         print(f"      用途：{it['purpose']}")
     print("=" * 68)
-    print("组：factory(00) / init(01) / readonly(02) / delegate(03) / solvers(04) /")
-    print("    math(05) / fsm(06) / monitor(07) / viz(08) / close(09)；all=全部（缺省）")
+    print("组（级）：factory(00,L0) / init(01,L0) / readonly(02,L0) / delegate(03,L1) /")
+    print("         solvers(04,L2) / math(05,L2) / fsm(06,L3) / monitor(07,L3) /")
+    print("         viz(08,L4) / close(09,L5)；all=全部（缺省；真机项见 --real --list）")
     print("判定：PASS=符合规格；SKIP=环境条件不满足（非缺陷，如已装 meshcat）；FAIL=违反契约。")
 
 
 EPILOG = """\
 示例：
-  python joyarm_core/joyarm/joyarm_verify.py --help       # 本说明
-  python joyarm_core/joyarm/joyarm_verify.py --list       # 全部测试项
-  python joyarm_core/joyarm/joyarm_verify.py              # 全部（缺省 all）
-  python joyarm_core/joyarm/joyarm_verify.py --step=fsm   # 单组（06 组 60~64）
-  python joyarm_core/joyarm/joyarm_verify.py --step=61,71 # 单项混选
+  python joyarm_core/joyarm/joyarm_verify.py --help        # 本说明
+  python joyarm_core/joyarm/joyarm_verify.py --list        # 离线测试项清单
+  python joyarm_core/joyarm/joyarm_verify.py               # 离线全部（缺省 all）
+  python joyarm_core/joyarm/joyarm_verify.py --step=fsm    # 离线单组（06 组 60~66）
+  python joyarm_core/joyarm/joyarm_verify.py --step=61,71  # 离线单项混选
+  python joyarm_core/joyarm/joyarm_verify.py --real --list # 真机测试项清单
+  python joyarm_core/joyarm/joyarm_verify.py --real        # 真机 r0~r5（151 除外）
+  python joyarm_core/joyarm/joyarm_verify.py --real --step=r2      # 真机单级
+  python joyarm_core/joyarm/joyarm_verify.py --real --step=120,151 # 真机单项混选
+  python joyarm_core/joyarm/joyarm_verify.py --real --step=151     # 极高危设零（仅显式编号）
 
-定位：全离线（不连真机；DummyBackend 注入推演），真机侧验收走
-      backend/backend_verify.py。全部测试项无交互（非终端可跑）；
+定位：缺省离线（DummyBackend 注入推演、零交互、非终端可跑、可当门控）；
+      --real 真机交互模式（真配置真连接 backend_dm、分级危险确认）。离线
       FSM/监视器/可视化线程类用例每项内部收尾（stop/join），不悬挂线程。
 
 退出码：全 PASS/SKIP=0；任一 FAIL=1；用法错误=2。结尾输出
@@ -2145,16 +3229,79 @@ EPILOG = """\
 def parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="joyarm_verify.py",
-        description=("JoyArm 层离线分级验收脚本：工厂/自检/只读面/委托面/求解器域/"
-                     "数学门面/MotionFSM/safe_monitor/可视化/销毁路径 00~09 十组分项；"
-                     "DummyBackend 注入（临时改 cfg backend.name + 替换 REGISTRY，"
-                     "用完恢复），PASS/SKIP/FAIL 三分判定。"),
+        description=("JoyArm 层双模式分级验收脚本：缺省离线（DummyBackend 注入，"
+                     "L0 工厂/自检/只读 → L1 委托指令 → L2 求解器/数学 → L3 "
+                     "MotionFSM/safe_monitor → L4 可视化 → L5 销毁）；--real 真机"
+                     "交互模式（真配置真连接 backend_dm，r0~r5 危险度递进分级确认）。"
+                     "PASS/SKIP/FAIL 三分判定。"),
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--step", default="all",
-                   help="数字=单项编号（如 61）；组名（factory/init/readonly/delegate/"
-                        "solvers/math/fsm/monitor/viz/close/all）；逗号分隔混选；缺省 all")
-    p.add_argument("--list", action="store_true", help="仅列出全部测试项，不执行")
+                   help="数字=单项编号（离线如 61；真机如 120）；组名（离线："
+                        "factory/init/readonly/delegate/solvers/math/fsm/monitor/"
+                        "viz/close/all；真机：r0~r5/rall）；逗号分隔混选；缺省 all")
+    p.add_argument("--list", action="store_true",
+                   help="仅列出测试项（缺省离线；--real --list 列真机项），不执行")
+    p.add_argument("--real", action="store_true",
+                   help="真机交互模式：真配置真连接 backend_dm（不经 Dummy 注入），"
+                        "按危险度分级确认")
+    p.add_argument("--yes", action="store_true",
+                   help="真机模式：跳过中危回车确认（高危/极高危永不自动执行："
+                        "仍需交互 yes，非终端自动 SKIP）")
     return p.parse_args(argv)
+
+
+def _print_summary(results: list, group_order: tuple, mode_label: str) -> int:
+    """结尾汇总：SUMMARY 行（机器可解析）+ 各组统计 + 失败明细；返回退出码。"""
+    n_pass = sum(1 for _, v, _ in results if v == "PASS")
+    n_fail = sum(1 for _, v, _ in results if v == "FAIL")
+    n_skip = sum(1 for _, v, _ in results if v != "FAIL" and v != "PASS")  # SKIP/QUIT
+    print()
+    print("=" * 68)
+    print(f"SUMMARY: total={len(results)} pass={n_pass} fail={n_fail} skip={n_skip}")
+    for gname in group_order:
+        sub = [(it, v) for it, v, _ in results if it["group"] == gname]
+        if not sub:
+            continue
+        gp = sum(1 for _, v in sub if v == "PASS")
+        gf = sum(1 for _, v in sub if v == "FAIL")
+        gs = sum(1 for _, v in sub if v not in ("PASS", "FAIL"))
+        print(f"GROUP {gname}: total={len(sub)} pass={gp} fail={gf} skip={gs}")
+    fails = [(it, ev) for it, v, ev in results if v == "FAIL"]
+    skips = [(it, v) for it, v, _ in results if v not in ("PASS", "FAIL")]
+    if not fails:
+        concl = f"结论：无失败项，JoyArm 层符合本次{mode_label}验收全部已测契约。"
+        if skips:
+            concl += f"共 {n_skip} 项跳过（环境条件不满足或用户确认跳过，非缺陷，详见各项证据）。"
+    else:
+        print(f"结论：{n_fail} 项失败——")
+        for it, ev in fails:
+            print(f"  FAIL [{it['num']:02d}] {it['name']}：{_trunc(ev)}")
+        concl = f"（详见上方 {n_fail} 条 FAIL 证据；其余 pass={n_pass}、skip={n_skip}）"
+    print(concl)
+    return 0 if n_fail == 0 else 1
+
+
+def _run_real(nums: list, args: argparse.Namespace) -> int:
+    """真机模式执行路径：共享会话（惰性构造真 JoyArm）→ 逐项分级确认执行 → 汇总。"""
+    s = _RealSession(args)
+    print("=" * 68)
+    print(f"JoyArm 层真机分级验收：型号 {MODEL}（真实 cfg backend_dm 直连，无 Dummy 注入）")
+    print(f"交互终端：{'是' if sys.stdin.isatty() else '否'}；--yes={args.yes}；"
+          f"高危策略：{'交互 yes（--yes 不放行）' if sys.stdin.isatty() else '非终端自动 SKIP'}")
+    print("危险分级：低=直执；中=回车确认（--yes 或非终端直执）；高=交互 yes；"
+          "极高（151）=每族二次确认、仅显式编号执行")
+    print(f"待执行 {len(nums)} 项：{[f'{n:02d}' for n in nums]}")
+    results: list[tuple[dict, str, str]] = []
+    try:
+        for num in nums:
+            it = _REAL_BY_NUM[num]
+            v, ev = run_real_item(it, s)
+            results.append((it, v, ev))
+            if v == "QUIT":
+                break                          # 用户 q 退出：后续项不再执行
+    finally:
+        s.close()                              # 共享收尾：stop/disable/disconnect（幂等）
+    return _print_summary(results, ("r0", "r1", "r2", "r3", "r4", "r5"), "真机")
 
 
 def main(argv=None) -> int:
@@ -2165,21 +3312,24 @@ def main(argv=None) -> int:
         pass
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     if args.list:
-        print_list()
+        print_list(real=args.real)
         return 0
     try:
-        nums = resolve_steps(args.step)
+        nums = resolve_steps(args.step, real=args.real)
     except _UsageError as e:
         print(f"用法错误：{e}", file=sys.stderr)
         return 2
+    if args.real:
+        return _run_real(nums, args)
+    # ---- 离线模式（缺省）：Dummy 注入全自动 ----
     # 基础 cfg（注入源）+ 注入装载（finally 恢复，不触碰仓库文件）
     CFG_SOURCE.base = _tweak_cfg(load_base_cfg())
     install_injection()
     print("=" * 68)
     print(f"JoyArm 层离线分级验收：型号 {MODEL}（DummyBackend 注入 {DUMMY_KEY}）")
     print("配置：真实 joyarm_dm.yaml（backend.name 临时指向 Dummy；机器人资产与 cfg 自检用真实文件）")
-    print(f"交互终端：{'是' if sys.stdin.isatty() else '否'}（全部用例无交互）；"
-          "FSM/monitor/viz 用例逐项收尾线程")
+    print(f"交互终端：{'是' if sys.stdin.isatty() else '否'}（离线用例全部无交互）；"
+          "FSM/monitor/viz 用例逐项收尾线程；真机验收走 --real")
     print(f"待执行 {len(nums)} 项：{[f'{n:02d}' for n in nums]}")
     results: list[tuple[dict, str, str]] = []
     try:
@@ -2189,34 +3339,9 @@ def main(argv=None) -> int:
             results.append((it, v, ev))
     finally:
         restore_injection()
-    n_pass = sum(1 for _, v, _ in results if v == "PASS")
-    n_fail = sum(1 for _, v, _ in results if v == "FAIL")
-    n_skip = sum(1 for _, v, _ in results if v == "SKIP")
-    print()
-    print("=" * 68)
-    print(f"SUMMARY: total={len(results)} pass={n_pass} fail={n_fail} skip={n_skip}")
-    for gname in ("factory", "init", "readonly", "delegate", "solvers",
-                  "math", "fsm", "monitor", "viz", "close"):
-        sub = [(it, v) for it, v, _ in results if it["group"] == gname]
-        if not sub:
-            continue
-        gp = sum(1 for _, v in sub if v == "PASS")
-        gf = sum(1 for _, v in sub if v == "FAIL")
-        gs = sum(1 for _, v in sub if v == "SKIP")
-        print(f"GROUP {gname}: total={len(sub)} pass={gp} fail={gf} skip={gs}")
-    fails = [(it, ev) for it, v, ev in results if v == "FAIL"]
-    skips = [(it, ev) for it, v, ev in results if v == "SKIP"]
-    if not fails:
-        concl = "结论：无失败项，JoyArm 层符合本次离线验收全部已测契约。"
-        if skips:
-            concl += f"共 {n_skip} 项跳过（环境条件不满足，非缺陷，详见各项证据）。"
-    else:
-        print(f"结论：{n_fail} 项失败——")
-        for it, ev in fails:
-            print(f"  FAIL [{it['num']:02d}] {it['name']}：{_trunc(ev)}")
-        concl = f"（详见上方 {n_fail} 条 FAIL 证据；其余 pass={n_pass}、skip={n_skip}）"
-    print(concl)
-    return 0 if n_fail == 0 else 1
+    return _print_summary(results, ("factory", "init", "readonly", "delegate",
+                                    "solvers", "math", "fsm", "monitor", "viz",
+                                    "close"), "离线")
 
 
 if __name__ == "__main__":
