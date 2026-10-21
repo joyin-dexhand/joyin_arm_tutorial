@@ -8,26 +8,30 @@ JoyArm 层离线分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
     （不连真机；真机侧验收走 backend/backend_verify.py）。组织范式与
     backend_verify.py 一致：两位数十进制分组（组号×10+组内序号）、_item 注册表
     （组/风险/用途）、PASS/SKIP/FAIL 三分判定、结尾机器可解析 SUMMARY 行：
-      00 组  工厂与 listArm：未知名异常含可用列表、listArm 三条件（临时目录
+      00 组  工厂与 listArm：未知名异常含可用列表（临时禁用注入直连真实
+             ①config/②backend 错误消息路径）、listArm 三条件（临时目录
              变量控制）、模板排除、Dummy 注入下的工厂成功路径；
       01 组  初始化自检：坏 cfg 变体逐条异常（缺顶层键/坏注册名/缺 plan_hz/
-             非整值/home 越软限位/软限位越硬限位/限位与 URDF 不符）；
+             非整值/home 越软限位/软限位越硬限位/限位与 URDF 不符/数值叶
+             NaN·null 拒绝构造）；
       02 组  只读属性与防篡改：writeable=False 原地写抛异常、get_config 深拷贝
-             （外部篡改不反哺内部）、只读 @property 零拷贝返本体；
+             （外部篡改不反哺内部）、只读 @property 零拷贝返本体、
+             get_joint_names 1 基边界；
       03 组  委托面与互斥：DummyBackend 内核透传核对、FSM 运行中外部 arm 侧
              指令空操作 + warn、ctrl 线程豁免；
       04 组  求解器域：get/set_activated/get_<域>_solvers、坏名 warn 保持原激活、
              traj 先 plan 后换指针 + plan_hz 联动、ctrl 切换 MODE 联动；
       05 组  数学门面：显式传参离线计算 vs pinocchio 原生 API 逐项对照
-             （fkine/ikine/ikine_all/jac/jac_pinv/idyn/mass/coriolis/gravity 9 方法）；
+             （fkine/ikine/ikine_all/jac/jac_pinv/idyn/mass/coriolis/gravity 9 方法）、
+             到位判断三函数、rand_q 限位内采样、frame=0 基座帧回归；
       06 组  MotionFSM（DummyBackend 推演）：start 前置 RuntimeError、
              DISABLE→HOME→MOTION 自动迁移、home 到位门槛、保护事件直达、
-             stop 超时强推；
-      07 组  safe_monitor：硬规则 error≥2→DAMPING、断连/连续 None→DISABLE、
-             自定义规则绑定（state_arm 允许 None）与同拍仲裁（硬+自定义
-             命中合并取危险最高）；
+             stop 超时强推、set_target 拒绝路径、目标帧通道 deepcopy 隔离；
+      07 组  safe_monitor：硬规则 error≥2→DAMPING、断连/连续 None→DISABLE
+             （断连项含 close 后线程清点断言）、自定义规则绑定（state_arm 允许
+             None）与同拍仲裁（硬+自定义命中合并取危险最高）；
       08 组  可视化：start/stop_state_viz 离线降级不炸、meshcat 初始化失败降级 warn、
-             HTTP /state.json 轮询端点、重复启停幂等与线程退出；
+             HTTP /state.json 轮询端点、重复启停幂等与 stop→start 循环、线程退出；
       09 组  销毁路径：close 幂等、with __exit__ 收尾序列、__del__ 冒烟
              （__del__ 不做执行时序承诺，仅验证存在与不炸）。
     DummyBackend 注入：脚本内自包含实现最小 DummyBackend(Backend)（29 个抽象
@@ -310,30 +314,30 @@ class DummyBackend(Backend):
     # ---- 发送内核 ----
     def _send_joint_mit_arm(self, i, tau, q, dq, kp, kd):
         self._rec("send_joint_mit_arm", i, tau, q, dq, kp, kd)
-        self._hit("send_mit_arm", i)
+        self._hit("send_joint_mit_arm", i)
 
     def _send_joint_mit_end(self, i, tau, q, dq, kp, kd):
         self._rec("send_joint_mit_end", i, tau, q, dq, kp, kd)
-        self._hit("send_mit_end", i)
+        self._hit("send_joint_mit_end", i)
 
     def _send_joint_position_arm(self, i, q, vlim, flim):
         self._rec("send_joint_position_arm", i, q, vlim, flim)
-        self._hit("send_position_arm", i)
+        self._hit("send_joint_position_arm", i)
         if self.follow:                   # 理想电机：一步到位
             self.jstates["arm"][i]["q"] = float(q)
             self.jstates["arm"][i]["dq"] = 0.0
 
     def _send_joint_position_end(self, i, q, vlim, flim):
         self._rec("send_joint_position_end", i, q, vlim, flim)
-        self._hit("send_position_end", i)
+        self._hit("send_joint_position_end", i)
 
     def _send_joint_vel_arm(self, i, dq):
         self._rec("send_joint_vel_arm", i, dq)
-        self._hit("send_vel_arm", i)
+        self._hit("send_joint_vel_arm", i)
 
     def _send_joint_vel_end(self, i, dq):
         self._rec("send_joint_vel_end", i, dq)
-        self._hit("send_vel_end", i)
+        self._hit("send_joint_vel_end", i)
 
     def _send_action_end(self, action, **kwargs):
         self._rec("send_action_end", action, tuple(sorted(kwargs.items())))
@@ -503,17 +507,17 @@ def _wait_event(arm: JoyArm, want: SafetyEvent, timeout: float = _WAIT_EVENT) ->
 
 
 def _settle_fsm(arm: JoyArm, d: DummyBackend) -> None:
-    """FSM/monitor 项统一收尾：q 置 home + follow 开（回零路径最短）→ stop。"""
+    """FSM/monitor 项统一收尾：q 置 home + follow 开（回零路径最短）→ stop（异常记录不吞）。"""
     try:
         d.follow = True
         d.set_q("arm", arm.home_arm)
         arm.stop_motion_fsm()
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001（验收脚本须捕获一切）
+        logging.warning("joyarm_verify - _settle_fsm：stop_motion_fsm 收尾异常（记录不吞）：%r", e)
     try:
         arm.stop_monitor()
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001（验收脚本须捕获一切）
+        logging.warning("joyarm_verify - _settle_fsm：stop_monitor 收尾异常（记录不吞）：%r", e)
     d.follow = False
 
 
@@ -539,19 +543,57 @@ def _exc(fn, *a, **kw):
 
 # ---------------- 00 组（工厂与 listArm） ----------------
 def _it00():
-    """未知名：工厂与 get_backend 的异常消息均含可用列表。"""
+    """未知名：临时禁用注入直连真实路径——工厂 ①config/②backend 错误消息均含可用型号列表。"""
     from joyarm_core.joyarm import _available_models
-    models = _available_models()
-    e1 = _exc(joyArm, "no_such_model_xyz")
-    e2 = _exc(get_backend, "no_such_backend")
-    ok = (isinstance(e1, ValueError) and "可用型号" in str(e1)
-          and all(m in str(e1) for m in models)
-          and isinstance(e2, ValueError) and "可用" in str(e2))
-    ev = (f"joyArm('no_such_model_xyz') → {type(e1).__name__}，消息含可用型号 {models}="
-          f"{all(m in str(e1) for m in models)}；get_backend('no_such_backend') → "
-          f"{type(e2).__name__}，消息含可用注册名={('可用' in str(e2))}；"
-          f"详情：{_trunc(e1, 120)}")
-    return ("PASS" if ok else "FAIL"), ev
+    # 禁用注入：注入生效时 load_config 永不抛错、backend 名必在册，①/② 两条错误
+    # 消息路径结构性不可达（失败总落在 ③ robot_model）；本项须真实走到前两步
+    restore_injection()
+    try:
+        models = _available_models()
+        e1 = _exc(joyArm, "no_such_model_xyz")    # ① config：真实仓库无此 yaml
+        ok1 = (isinstance(e1, ValueError) and "① config" in str(e1)
+               and "可用型号" in str(e1) and all(m in str(e1) for m in models))
+        # ② backend：临时目录放 badbackend.yaml（三键齐全、backend.name 不在真实
+        #    REGISTRY）+ good.yaml（四路径齐全）→ 可用列表非空、断言有内容可对
+        with tempfile.TemporaryDirectory() as td:
+            tdir = Path(td)
+            cfg_dir = tdir / "config"
+            cfg_dir.mkdir()
+            (cfg_dir / "good.yaml").write_text(
+                "joyarm: {frame_end: f}\nrobotics: {}\nbackend: {name: backend_dm}\n",
+                encoding="utf-8")
+            (cfg_dir / "badbackend.yaml").write_text(
+                "joyarm: {frame_end: f}\nrobotics: {}\nbackend: {name: nope}\n",
+                encoding="utf-8")
+            good = tdir / "robot_model" / "good"
+            (good / "meshes").mkdir(parents=True)
+            (good / "urdf").mkdir()
+            (good / "urdf" / "good.urdf").write_text("<robot/>", encoding="utf-8")
+            old = (_joyarm_pkg._CONFIG_DIR, _joyarm_pkg._ROBOT_MODEL_DIR,
+                   _jm_mod._CONFIG_DIR)
+            _joyarm_pkg._CONFIG_DIR = str(cfg_dir)   # _available_models / 路径条件
+            _joyarm_pkg._ROBOT_MODEL_DIR = str(tdir / "robot_model")
+            _jm_mod._CONFIG_DIR = str(cfg_dir)       # 真实 load_config 读临时目录
+            try:
+                avail = _available_models()
+                e2 = _exc(joyArm, "badbackend")      # ② backend：nope 不在 REGISTRY
+            finally:
+                (_joyarm_pkg._CONFIG_DIR, _joyarm_pkg._ROBOT_MODEL_DIR,
+                 _jm_mod._CONFIG_DIR) = old
+        ok2 = (isinstance(e2, ValueError) and "② backend" in str(e2)
+               and avail == ["good"] and "good" in str(e2))
+        e3 = _exc(get_backend, "no_such_backend")
+        ok3 = isinstance(e3, ValueError) and "可用" in str(e3)
+        ok = ok1 and ok2 and ok3
+        ev = (f"禁用注入直连真实路径：joyArm('no_such_model_xyz') → {type(e1).__name__}，"
+              f"① config 校验失败且消息含可用型号 {models}={ok1}；临时目录 "
+              f"joyArm('badbackend') → {type(e2).__name__}，② backend 校验失败且消息"
+              f"附可用列表 {avail}={ok2}；get_backend('no_such_backend') → "
+              f"{type(e3).__name__}，消息含可用注册名={ok3}；"
+              f"详情：{_trunc(e1, 110)}｜{_trunc(e2, 110)}")
+        return ("PASS" if ok else "FAIL"), ev
+    finally:
+        install_injection()                       # 恢复注入（后续项依赖）
 
 
 def _it01():
@@ -663,6 +705,39 @@ def _m_urdf_lim(cfg):
     cfg["backend"]["arm"]["joints"][0]["q_min"] = 1.234
 
 
+def _m_home_nan(cfg):
+    cfg["joyarm"]["home_arm"][0] = float("nan")
+
+
+def _m_soft_null(cfg):
+    cfg["joyarm"]["joint_limits_soft_arm"]["q_max"][1] = None
+
+
+def _m_ikine_nan(cfg):
+    cfg["robotics"]["ikine"][0]["damping"] = float("nan")
+
+
+def _it17():
+    """数值叶 NaN / null 拒绝构造：不再静默冻进 home/软限位/求解器参数后『安静地坏掉』。"""
+    e1 = _exc(make_arm, _m_home_nan)
+    e2 = _exc(make_arm, _m_soft_null)
+    e3 = _exc(make_arm, _m_ikine_nan)
+    ok1 = (isinstance(e1, ValueError) and "非有限数值" in str(e1)
+           and "home_arm[0]" in str(e1))
+    ok2 = (isinstance(e2, ValueError) and "为 null" in str(e2)
+           and "q_max[1]" in str(e2))
+    ok3 = (isinstance(e3, ValueError) and "非有限数值" in str(e3)
+           and "robotics.ikine[0].damping" in str(e3))
+    ok = ok1 and ok2 and ok3
+    ev = (f"home_arm[0]=NaN → {type(e1).__name__}，消息含『非有限数值』且带 cfg 路径"
+          f"home_arm[0]={ok1}（无此拦截则 NaN 冻进 home：到位判定永假、FSM 永驻 HOME）；"
+          f"软限位 q_max[1]=null → {type(e2).__name__}，消息含『为 null』且带路径"
+          f"q_max[1]={ok2}；robotics.ikine[0].damping=NaN → {type(e3).__name__}，"
+          f"消息带路径 robotics.ikine[0].damping={ok3}（求解器构造参数同为 cfg 数值叶）；"
+          f"详情：{_trunc(e1, 120)}｜{_trunc(e2, 120)}｜{_trunc(e3, 120)}")
+    return ("PASS" if ok else "FAIL"), ev
+
+
 # ---------------- 02 组（只读属性与防篡改） ----------------
 def _it20():
     """writeable=False：全部对外数组原地写均抛异常（防篡改）。"""
@@ -740,6 +815,34 @@ def _it22():
         ]
         ok = all(a and b for _, a, b in checks)
         ev = "；".join(f"{n}：同引用={a}，值一致={b}" for n, a, b in checks)
+        return ("PASS" if ok else "FAIL"), ev
+    finally:
+        arm.close()
+
+
+def _it23():
+    """get_joint_names 1 基边界：'all'/1/n 正常取值；0/n+1/非法类型 warn 返回 None。"""
+    arm, _ = make_arm()
+    try:
+        n = arm.n_arm
+        names = arm.get_joint_names_arm()
+        i0 = _mark()
+        got1 = arm.get_joint_names_arm(1)
+        gotn = arm.get_joint_names_arm(n)
+        bad = (arm.get_joint_names_arm(0), arm.get_joint_names_arm(n + 1),
+               arm.get_joint_names_arm("nope"), arm.get_joint_names_arm(True))
+        n_warn = sum("非法" in m for m in _since(i0))
+        names_end = arm.get_joint_names_end()
+        ok_end = (isinstance(names_end, tuple) and len(names_end) == arm.n_end
+                  and (arm.n_end == 0
+                       or arm.get_joint_names_end(arm.n_end) == names_end[-1]))
+        ok = (isinstance(names, tuple) and len(names) == n
+              and got1 == names[0] and gotn == names[-1]
+              and all(b is None for b in bad) and n_warn == len(bad) and ok_end)
+        ev = (f"arm：'all'→{n} 元 tuple，joint=1→{got1!r}（=首元）、joint={n}→"
+              f"{gotn!r}（=末元，1 基序号口径）；越界/非法（0、{n + 1}、'nope'、"
+              f"True）均返回 None 且逐次 warn（{n_warn}/{len(bad)}）；end：'all'→"
+              f"{len(names_end)} 元 tuple、1 基序号 {arm.n_end} 取末元一致={ok_end}")
         return ("PASS" if ok else "FAIL"), ev
     finally:
         arm.close()
@@ -1158,6 +1261,119 @@ def _it50():
         arm.close()
 
 
+def _it51():
+    """到位判断三函数：is_in_q_arm / is_in_q_end / is_in_pose_arm（Dummy 快照注入 + 拒绝路径 + 无快照路径）。"""
+    arm, d = make_arm()
+    try:
+        n = arm.n_arm
+        checks = []
+        # 未连接（无状态快照）：初始 NaN 快照 → 判未到位 + warn（不抛）
+        i0 = _mark()
+        no_snap = (arm.is_in_q_arm(arm.home_arm) is False
+                   and arm.is_in_pose_arm(Pose(position=np.zeros(3),
+                                               orientation=np.array([1.0, 0.0, 0.0, 0.0]))) is False
+                   and _hit(_since(i0), "无可用关节状态快照"))
+        checks.append(("未连接无快照 → False + warn（三函数不抛）", no_snap))
+        arm.connect_arm()
+        arm.connect_end()
+        d.set_q("arm", arm.home_arm)
+        d.set_q("end", arm.home_end)
+        time.sleep(0.12)                    # 等 backend 刷新线程装配快照（50 Hz）
+        tol = float(np.asarray(
+            arm.get_config()["joyarm"]["arrival_tol"]["arm"]["q"]).reshape(-1)[0])
+        checks.append(("is_in_q_arm：到位 True / 偏离超容差 False",
+                       arm.is_in_q_arm(arm.home_arm) is True
+                       and arm.is_in_q_arm(arm.home_arm + (tol + 0.05)) is False))
+        checks.append(("is_in_q_arm 容差边界（偏离 tol−0.01 内 True）",
+                       arm.is_in_q_arm(arm.home_arm + (tol - 0.01)) is True))
+        checks.append(("is_in_q_end：到位 True / 偏离 0.5 rad False",
+                       arm.is_in_q_end(arm.home_end) is True
+                       and arm.is_in_q_end(arm.home_end + 0.5) is False))
+        pose = arm.solve_fkine(arm.home_arm)
+        moved = Pose(position=pose.position + np.array([0.01, 0.0, 0.0]),
+                     orientation=pose.orientation)
+        checks.append(("is_in_pose_arm：到位 True / 平移 1 cm False（超 pos 容差 0.001）",
+                       arm.is_in_pose_arm(pose) is True
+                       and arm.is_in_pose_arm(moved) is False))
+        e1 = _exc(arm.is_in_q_arm, np.zeros(n + 1))
+        e2 = _exc(arm.is_in_q_arm, arm.home_arm, [0.1] * (n + 1))
+        e3 = _exc(arm.is_in_pose_arm, [1.0] * 7)
+        checks.append(("拒绝路径：目标维度/容差长度 ValueError、pose 类型 TypeError",
+                       isinstance(e1, ValueError) and "维度" in str(e1)
+                       and isinstance(e2, ValueError) and "tol_q 长度" in str(e2)
+                       and isinstance(e3, TypeError) and "Pose" in str(e3)))
+        ok = all(c for _, c in checks)
+        ev = "；".join(f"{lb}={'OK' if c else 'FAIL'}" for lb, c in checks)
+        return ("PASS" if ok else "FAIL"), ev
+    finally:
+        arm.close()
+
+
+def _it52():
+    """rand_q_arm / rand_q_end 随机采样：批量样本落在限位区间内且全有限、非退化。"""
+    arm, _ = make_arm()
+    try:
+        checks = []
+        lo = np.asarray(arm.joint_limits_soft_arm.q_min, dtype=float)
+        hi = np.asarray(arm.joint_limits_soft_arm.q_max, dtype=float)
+        s = np.array([arm.rand_q_arm() for _ in range(60)])
+        checks.append(("rand_q_arm 缺省软限位：60 样本 ∈ [q_min,q_max] 且全有限",
+                       s.shape == (60, arm.n_arm) and bool(np.all(np.isfinite(s)))
+                       and bool(np.all(s >= lo - 1e-12)) and bool(np.all(s <= hi + 1e-12))))
+        lo2 = np.asarray(arm.joint_limits_hard_arm.q_min, dtype=float)
+        hi2 = np.asarray(arm.joint_limits_hard_arm.q_max, dtype=float)
+        s2 = np.array([arm.rand_q_arm(arm.joint_limits_hard_arm) for _ in range(30)])
+        checks.append(("rand_q_arm 显式硬限位入参：30 样本 ∈ 硬限位区间",
+                       s2.shape == (30, arm.n_arm)
+                       and bool(np.all(s2 >= lo2 - 1e-12)) and bool(np.all(s2 <= hi2 + 1e-12))))
+        varied = bool(len(np.unique(s[:, 0])) > 1 and len(np.unique(s[:, -1])) > 1)
+        checks.append(("样本非退化（同列取值多样，非常数列 / 单点）", varied))
+        se = np.array([arm.rand_q_end() for _ in range(30)])
+        loe = np.asarray(arm.joint_limits_soft_end.q_min, dtype=float).reshape(-1)
+        hie = np.asarray(arm.joint_limits_soft_end.q_max, dtype=float).reshape(-1)
+        ok_end = (se.ndim == 2 and se.shape[1] == arm.n_end and bool(np.all(np.isfinite(se)))
+                  and bool(np.all(se >= loe - 1e-12)) and bool(np.all(se <= hie + 1e-12)))
+        checks.append((f"rand_q_end：30 样本 ∈ end 软限位区间（n_end={arm.n_end}）", ok_end))
+        ok = all(c for _, c in checks)
+        ev = "；".join(f"{lb}={'OK' if c else 'FAIL'}" for lb, c in checks)
+        return ("PASS" if ok else "FAIL"), ev
+    finally:
+        arm.close()
+
+
+def _it53():
+    """frame=0 基座（universe）帧回归：显式传 0 按基座帧求解，不再被吞成末端帧。"""
+    arm, _ = make_arm()
+    try:
+        model = arm.pin_model
+        rng = np.random.default_rng(20261020)
+        q = 0.5 * (arm.neutral_arm + rng.uniform(
+            np.asarray(arm.joint_limits_soft_arm.q_min),
+            np.asarray(arm.joint_limits_soft_arm.q_max)))
+        p0 = arm.solve_fkine(q, frame=0)            # 显式 0 = 基座 universe 帧
+        data = pin.Data(model)
+        pin.forwardKinematics(model, data, q)
+        ref_pose = Pose.from_T(pin.updateFramePlacement(model, data, 0).homogeneous)
+        d_pos = float(np.linalg.norm(p0.position - ref_pose.position))
+        d_rot = min(float(np.linalg.norm(p0.orientation - ref_pose.orientation)),
+                    float(np.linalg.norm(p0.orientation + ref_pose.orientation)))
+        p_end = arm.solve_fkine(q)                  # 缺省 = 末端帧（对照组）
+        d_end = float(np.linalg.norm(p0.position - p_end.position))
+        differs = d_end > 1e-3
+        J0 = np.asarray(arm.get_jac(q, frame=0))
+        J_ref = pin.computeFrameJacobian(model, pin.Data(model), q, 0,
+                                         pin.LOCAL_WORLD_ALIGNED)
+        jac_ok = J0.shape == (6, arm.n_arm) and bool(np.allclose(J0, J_ref, atol=1e-9))
+        ok = d_pos < 1e-9 and d_rot < 1e-9 and differs and jac_ok
+        ev = (f"solve_fkine(q, frame=0) vs updateFramePlacement(帧 0)：|Δp|={d_pos:.2e} m、"
+              f"|Δquat|={d_rot:.2e}；与缺省末端帧结果可区分（|Δp|=|p₀−p_end|={d_end:.3f} m"
+              f"＞1e-3，证明 0 未被当成假值吞掉换末端帧）；get_jac(q, frame=0) vs "
+              f"computeFrameJacobian(帧 0) 一致={jac_ok}")
+        return ("PASS" if ok else "FAIL"), ev
+    finally:
+        arm.close()
+
+
 # ---------------- 06 组（MotionFSM：DummyBackend 推演） ----------------
 def _it60():
     """start 前置：未连接 start_motion_fsm 抛 RuntimeError。"""
@@ -1301,6 +1517,76 @@ def _it64():
         arm.close()
 
 
+def _it65():
+    """set_target_joint / set_target_cart 拒绝路径：缺必填/维度不符/坏 t/非 TrajFrame 序列均 ValueError。"""
+    arm, _ = make_arm()
+    try:
+        n = arm.n_arm
+        t = time.time() + 1.0
+        checks = []
+        e = _exc(arm.set_target_joint, t, None)
+        checks.append(("set_target_joint q 缺失", isinstance(e, ValueError) and "q 必填" in str(e)))
+        e = _exc(arm.set_target_joint, t, np.zeros(n + 1))
+        checks.append(("set_target_joint q 维度 n+1", isinstance(e, ValueError) and "维度" in str(e)))
+        e = _exc(arm.set_target_joint, "bad", np.zeros(n))
+        checks.append(("set_target_joint t 非标量", isinstance(e, ValueError) and "Unix 秒标量" in str(e)))
+        e = _exc(arm.set_target_cart, t, None)
+        checks.append(("set_target_cart pose 缺失", isinstance(e, ValueError) and "pose 必填" in str(e)))
+        e = _exc(arm.set_target_cart, t, np.zeros(6))
+        checks.append(("set_target_cart pose 维度 6≠7", isinstance(e, ValueError) and "维度" in str(e)))
+        e = _exc(arm.set_target_cart, t, np.zeros(7), np.zeros(5))
+        checks.append(("set_target_cart twist 维度 5≠6", isinstance(e, ValueError) and "twist" in str(e)))
+        e = _exc(arm.set_target_trajframe, [object()])
+        checks.append(("set_target_trajframe 非 TrajFrame 序列",
+                       isinstance(e, ValueError) and "非 TrajFrame" in str(e)))
+        arm.set_target_joint(t, np.zeros(n))   # 合法目标可写入（拒绝路径不破坏通道）
+        ok_write = arm.get_target_trajframe() is not None
+        ok = all(c for _, c in checks) and ok_write
+        ev = ("；".join(f"{lb}={'OK' if c else 'FAIL'}" for lb, c in checks)
+              + f"；拒绝后合法目标写入通道不受影响={ok_write}")
+        return ("PASS" if ok else "FAIL"), ev
+    finally:
+        arm.set_target_trajframe(None)
+        arm.close()
+
+
+def _it66():
+    """目标帧通道 deepcopy 隔离：get 返回值与 set 入参的外部改写均不反哺内部。"""
+    arm, _ = make_arm()
+    try:
+        t = time.time() + 2.0
+        q_expect = np.clip(arm.home_arm + 0.05, arm.joint_limits_hard_arm.q_min,
+                           arm.joint_limits_hard_arm.q_max).astype(float)
+        q_t = q_expect.copy()
+        arm.set_target_joint(t, q_t)
+        q_t[0] = 999.0                        # set 后改写入参 → 内部深拷贝不受影响
+        fr1 = arm.get_target_trajframe()
+        fr1.q[0] = -999.0                     # 改 get 返回值 → 不反哺内部
+        fr2 = arm.get_target_trajframe()
+        ok_q = (fr1 is not fr2
+                and bool(np.allclose(fr2.q, q_expect))
+                and not np.allclose(fr2.q[0:1], [-999.0])
+                and abs(float(fr2.time) - t) < 1e-9)
+        pose = arm.solve_fkine(arm.home_arm)
+        arm.set_target_cart(t, pose)
+        pose.position[0] = 999.0              # 笛卡尔目标对 Pose 入参深拷贝
+        frc = arm.get_target_trajframe()
+        pos0 = (float(frc.pose.position[0])
+                if frc is not None and frc.pose is not None else None)
+        ok_c = pos0 is not None and frc.pose is not pose and pos0 < 1.0
+        arm.set_target_trajframe(None)        # 清空通道
+        ok_none = arm.get_target_trajframe() is None
+        ok = ok_q and ok_c and ok_none
+        ev = (f"joint 目标：set 后改入参 / 改 get 返回值均不反哺（二次 get 的 q 仍="
+              f"{np.round(fr2.q, 3).tolist()[:3]}…，time 保持原值）={ok_q}；cart 目标："
+              f"set 后改入参 Pose 不反哺（内部 pose.position[0]={pos0}）={ok_c}；"
+              f"None 清空后 get=None={ok_none}")
+        return ("PASS" if ok else "FAIL"), ev
+    finally:
+        arm.set_target_trajframe(None)
+        arm.close()
+
+
 # ---------------- 07 组（safe_monitor） ----------------
 def _it70():
     """硬规则：error≥2 → DAMPING（事件与 FSM 迁移双通路）。"""
@@ -1310,7 +1596,7 @@ def _it70():
         d.set_q("arm", arm.home_arm)
         arm.connect_arm()
         arm.start_motion_fsm()
-        _wait_state(arm, MotionState.HOME)
+        home = _wait_state(arm, MotionState.HOME)
         arm.start_monitor()
         time.sleep(0.1)
         i0 = len(d.calls)
@@ -1320,8 +1606,8 @@ def _it70():
         time.sleep(0.15)                       # 等数拍维持指令（50 Hz）落地再计数
         got = d.calls_since(i0, "send_joint_mit_arm")
         d.jstates["arm"][0]["error"] = 1
-        ok = ok_ev and ok_st and bool(got)
-        ev = (f"error[0]=2 后：get_event()={arm.get_event().name}，"
+        ok = home and ok_ev and ok_st and bool(got)
+        ev = (f"监视器前置 HOME 就绪={home}；error[0]=2 后：get_event()={arm.get_event().name}，"
               f"current={arm.get_current_motion_state().name}，"
               f"DAMPING 维持 MIT 帧 {len(got)} 个（>0）")
         return ("PASS" if ok else "FAIL"), ev
@@ -1341,7 +1627,7 @@ def _it71():
         d.set_q("arm", arm.home_arm)
         arm.connect_arm()
         arm.start_motion_fsm()
-        _wait_state(arm, MotionState.HOME)
+        home_a = _wait_state(arm, MotionState.HOME)
         arm.start_monitor()
         time.sleep(0.1)
         i0 = _mark()
@@ -1350,12 +1636,18 @@ def _it71():
         time.sleep(0.15)                       # FSM 尝试迁移：enter 撞未连接门禁 → 重试 warn
         retry_warn = _hit(_since(i0), "单步", "失败")
         stuck_state = arm.get_current_motion_state().name   # 规格预期：无法迁移，保持原态
-        ev_a = (f"dummy 断连后 event={arm.get_event().name}，current 保持 {stuck_state}"
-                f"（enter 未连接抛 RuntimeError，FSM 每拍重试 warn={retry_warn}；"
-                f"断连急停走销毁路径 close()）")
         arm.stop_monitor()
         e_close = _exc(arm.close)
-        ok_a = ok_a and retry_warn and e_close is None
+        time.sleep(0.1)                        # 等 daemon 线程退出可观测后再清点
+        # 断连豁免收尾后 FSM/plan/ctrl 线程须全部退出（backend-state-refresh 为
+        # backend 构造期自启线程，归 backend 对象生命周期管、随对象回收退出，
+        # 不在 JoyArm.close() 收尾范围，不计入清点）
+        leaked = [t for t in _joyarm_thread_names() if t != "backend-state-refresh"]
+        ev_a = (f"dummy 断连后 event={arm.get_event().name}，current 保持 {stuck_state}"
+                f"（enter 未连接抛 RuntimeError，FSM 每拍重试 warn={retry_warn}；"
+                f"断连急停走销毁路径 close()：不抛={e_close is None}，"
+                f"close 后 joyarm 线程清点残留={leaked or '无'}）")
+        ok_a = home_a and ok_a and retry_warn and e_close is None and not leaked
     finally:
         arm.close()
     # ---- b) 连续 None → DISABLE（整族读失败注入） ----
@@ -1365,7 +1657,7 @@ def _it71():
         d.set_q("arm", arm.home_arm)
         arm.connect_arm()
         arm.start_motion_fsm()
-        _wait_state(arm, MotionState.HOME)
+        home_b = _wait_state(arm, MotionState.HOME)
         seen_none = []
 
         def probe(sa, se, mo, ev):
@@ -1381,12 +1673,12 @@ def _it71():
         st_b = _wait_state(arm, MotionState.DISABLE)
         ctrl_skip = _hit(_since(i0), "跳过本拍 step")
         d.fail_at.pop("read_joint_state_arm", None)
-        ok = ok_a and ok_b and st_b and any(seen_none)
+        ok = ok_a and home_b and ok_b and st_b and any(seen_none) and ctrl_skip
         ev = (f"断连：{ev_a}；读状态整族失败（连续 None>0.1s）：event={arm.get_event().name}，"
               f"current={arm.get_current_motion_state().name}；自定义规则收到 "
               f"state_arm=None（读取失败仍调用）={any(seen_none)}"
               f"（{sum(seen_none)}/{len(seen_none)} 拍为 None）；"
-              f"ctrl 线程跳拍 warn={ctrl_skip}")
+              f"ctrl 线程跳拍 warn={ctrl_skip}（纳入判定）")
         return ("PASS" if ok else "FAIL"), ev
     finally:
         d.fail_at.pop("read_joint_state_arm", None)
@@ -1402,7 +1694,7 @@ def _it72():
         d.set_q("arm", arm.neutral_arm)     # 非 home：门槛拦住 MOTION，驻留 HOME
         arm.connect_arm()
         arm.start_motion_fsm()
-        _wait_state(arm, MotionState.HOME)
+        home = _wait_state(arm, MotionState.HOME)
         arm.start_monitor()
         time.sleep(0.1)
         checks = []
@@ -1445,8 +1737,9 @@ def _it72():
                and _hit(_since(i0), "非 SafetyEvent/None"))
         checks.append(("异常/非法返回忽略 + 正常规则仍生效", ok3))
         arm.stop_monitor()
-        ok = all(c for _, c in checks)
-        ev = "；".join(f"{lb}={'OK' if c else 'FAIL'}" for lb, c in checks)
+        ok = home and all(c for _, c in checks)
+        ev = (f"前置 HOME 就绪={home}；"
+              + "；".join(f"{lb}={'OK' if c else 'FAIL'}" for lb, c in checks))
         return ("PASS" if ok else "FAIL"), ev
     finally:
         d.jstates["arm"][0]["error"] = 1
@@ -1457,10 +1750,17 @@ def _it72():
 
 # ---------------- 08 组（可视化） ----------------
 def _viz_urls() -> list[str]:
-    """从已捕获日志解析监控页 URL（http://127.0.0.1:<port>/，去重保序）。"""
+    """从已捕获日志解析监控页 URL（只认『监控页面已启动』日志行；去重保序）。
+
+    只捕获监控页日志行：meshcat 初始化成功时其 URL（『3D 视图已就绪』行）会先
+    入日志，若按首个匹配 URL 取页面/端点，断言会打到 meshcat 端口（无监控页
+    内容 / 404）而误判 FAIL——监控页正常也过不了。
+    """
     import re as _re
     urls: list[str] = []
     for m in _cap.msgs:
+        if "监控页面已启动" not in m:
+            continue
         for u in _re.findall(r"http://127\.0\.0\.1:\d+/", m):
             if u not in urls:
                 urls.append(u)
@@ -1492,7 +1792,8 @@ def _it80():
         gone = not _fetch(urls[0] + "state.json", timeout=0.8)[0] if urls else True
         ok = (e is None and e2 is None and bool(urls) and ok_page
               and b"JoyArm" in page and ok_json and has_keys and gone)
-        ev = (f"start 异常={e is None}；meshcat 降级 warn={degraded}（初始化失败走降级）；"
+        ev = (f"start 异常={e is None}；meshcat 降级 warn={degraded}"
+              f"（False=3D 视图真实拉起、True=初始化失败走降级）；"
               f"监控页 URL={urls[:1]}；GET /（页面含标题）={ok_page and b'JoyArm' in page}；"
               f"GET /state.json（含 model/fsm/event 键）={has_keys}；"
               f"stop 后端口关闭={gone}；stop 异常={e2 is None}")
@@ -1510,10 +1811,13 @@ def _it81():
         def __init__(self, *args, **kwargs):
             raise RuntimeError("注入故障：初始化失败")
 
-    orig = _jm.MeshcatVisualizer
-    _jm.MeshcatVisualizer = _Boom
-    arm, _ = make_arm()
+    arm = None
     try:
+        # 保存/替换/构造三行均在 try 内（首行保存必成功 → finally 恢复时 orig 恒
+        # 有定义；make_arm 中途抛异常也能恢复替换，不把 _Boom 残留到进程结束）
+        orig = _jm.MeshcatVisualizer
+        _jm.MeshcatVisualizer = _Boom
+        arm, _ = make_arm()
         i0 = _mark()
         e = _exc(arm.start_state_viz)
         time.sleep(0.15)
@@ -1530,12 +1834,13 @@ def _it81():
         return ("PASS" if ok else "FAIL"), ev
     finally:
         _jm.MeshcatVisualizer = orig
-        arm.stop_state_viz()
-        arm.close()
+        if arm is not None:
+            arm.stop_state_viz()
+            arm.close()
 
 
 def _it82():
-    """重复启停幂等 + 线程退出：start×2 忽略、stop×2 无异常、无 viz 线程残留。"""
+    """重复启停幂等 + stop→start 循环 + 线程退出：start×2 忽略、stop×2 无异常、循环重启可用、无 viz 线程残留。"""
     arm, _ = make_arm()
     try:
         i0 = _mark()
@@ -1545,9 +1850,19 @@ def _it82():
         ign = _hit(_since(i0), "忽略重复启动")
         e1 = _exc(arm.stop_state_viz)
         e2 = _exc(arm.stop_state_viz)          # 重复停止：无异常
+        # stop→start 循环：stop 须完成收尾（含 meshcat-server 终止与句柄清空），
+        # 残留时 start 的重入守卫会拒绝（RuntimeError）——循环重启即收尾生效的回归
+        e3 = _exc(arm.start_state_viz)
+        time.sleep(0.25)                       # worker 10 Hz：至少 2 拍填充面板数据
+        urls = _viz_urls()
+        page_ok = bool(urls) and _fetch(urls[-1])[0]   # 本轮监控页可 GET
+        e4 = _exc(arm.stop_state_viz)
         leftovers = [t for t in _joyarm_thread_names() if "viz" in t]
-        ok = ign and e1 is None and e2 is None and not leftovers
+        ok = (ign and e1 is None and e2 is None and e3 is None and page_ok
+              and e4 is None and not leftovers)
         ev = (f"重复 start 忽略 info={ign}；stop×2 异常={e1 is None and e2 is None}；"
+              f"stop→start 循环重启不炸={e3 is None}（stop 收尾残留句柄会触发重入守卫"
+              f"拒绝）、重启后监控页可 GET={page_ok}；二次 stop 异常={e4 is None}；"
               f"残留 viz 线程={leftovers or '无'}（daemon 线程均已退出，不阻脚本退出码）")
         return ("PASS" if ok else "FAIL"), ev
     finally:
@@ -1658,6 +1973,8 @@ _item(15, "软限位越硬限位", "init", "低",
 _item(16, "限位与 URDF 不符", "init", "低",
       "cfg 关节 q_min 与 URDF <limit> 偏差超容差 → ValueError『与 URDF <limit> 不一致』（cfg 自检）",
       _bad_cfg_item("限位与 URDF 不符", _m_urdf_lim, "与 URDF <limit> 不一致"))
+_item(17, "数值叶 NaN / null 拒绝构造", "init", "低",
+      "cfg 数值叶 NaN（home_arm[0] / robotics.ikine[0].damping）/ null（软限位 q_max[1]）→ ValueError『非有限数值』/『为 null』且消息带 cfg 路径（不再静默冻进数组或求解器参数）", _it17)
 
 # —— 02 组（只读属性与防篡改）——
 _item(20, "writeable=False 防篡改", "readonly", "低",
@@ -1666,6 +1983,8 @@ _item(21, "get_config 深拷贝", "readonly", "低",
       "篡改 get_config() 返回值（home/限位/帧名）不反哺内部状态与后续读取", _it21)
 _item(22, "只读引用零拷贝", "readonly", "低",
       "只读 @property 多次访问返回同一本体（零拷贝）、与 get_config 值一致、pin_model.nq=n_arm", _it22)
+_item(23, "get_joint_names 1 基边界", "readonly", "低",
+      "get_joint_names_arm/end：'all' 返回全名 tuple、1 基序号 1/n 取首末名；越界（0、n+1）与非法类型（str/bool）warn 返回 None", _it23)
 
 # —— 03 组（委托面与互斥）——
 _item(30, "委托面透传核对", "delegate", "低",
@@ -1686,6 +2005,12 @@ _item(42, "traj 先 plan 后换指针", "solvers", "低",
 # —— 05 组（数学门面）——
 _item(50, "9 方法 vs pinocchio 原生对照", "math", "低",
       "显式传参离线计算与 pinocchio 原生 API 同输入对照：fkine/ikine/ikine_all/jac/jac_pinv/idyn/mass/coriolis/gravity + 缺省硬件态契约", _it50)
+_item(51, "到位判断三函数", "math", "低",
+      "is_in_q_arm / is_in_q_end / is_in_pose_arm：Dummy 快照注入核对到位/偏离/容差边界；未连接无快照 False+warn；维度/容差长度 ValueError、pose 类型 TypeError", _it51)
+_item(52, "rand_q 限位内采样", "math", "低",
+      "rand_q_arm / rand_q_end 批量样本 ∈ 软/硬限位区间且全有限、非退化（缺省软限位 + 显式限位入参两口径）", _it52)
+_item(53, "frame=0 基座帧回归", "math", "低",
+      "solve_fkine(q, frame=0) / get_jac(q, frame=0) 按 universe 帧求解且与缺省末端帧结果可区分（显式 0 不被当假值吞掉）", _it53)
 
 # —— 06 组（MotionFSM：DummyBackend 推演）——
 _item(60, "start 前置 RuntimeError", "fsm", "低",
@@ -1698,6 +2023,10 @@ _item(63, "保护事件直达", "fsm", "低",
       "MOTION 下 HOLDING/DAMPING/DISABLE 依次直达 + 各态维持指令（hold_q 重发/MIT 纯阻尼/失能轮发）核对", _it63)
 _item(64, "stop 超时强推", "fsm", "低",
       "回零永不到位 → 等满 move_wait_timeout 后 warn『超时强制推进』并完成失能与线程收尾", _it64)
+_item(65, "set_target 拒绝路径", "fsm", "低",
+      "set_target_joint / set_target_cart：缺必填（q/pose）、维度不符、t 非标量、目标序列非 TrajFrame 均 ValueError（消息含字段名）；拒绝后合法写入不受影响", _it65)
+_item(66, "目标帧通道 deepcopy 隔离", "fsm", "低",
+      "get_target_trajframe 返回深拷贝（外部改写不反哺内部）；set 目标对入参深拷贝（set 后改入参不影响内部）；None 清空通道", _it66)
 
 # —— 07 组（safe_monitor）——
 _item(70, "硬规则 error≥2→DAMPING", "monitor", "低",
@@ -1728,12 +2057,12 @@ _BY_NUM = {it["num"]: it for it in ITEMS}
 
 GROUPS: dict[str, list[int]] = {
     "factory": [0, 1, 2, 3],
-    "init": [10, 11, 12, 13, 14, 15, 16],
-    "readonly": [20, 21, 22],
+    "init": [10, 11, 12, 13, 14, 15, 16, 17],
+    "readonly": [20, 21, 22, 23],
     "delegate": [30, 31, 32],
     "solvers": [40, 41, 42],
-    "math": [50],
-    "fsm": [60, 61, 62, 63, 64],
+    "math": [50, 51, 52, 53],
+    "fsm": [60, 61, 62, 63, 64, 65, 66],
     "monitor": [70, 71, 72],
     "viz": [80, 81, 82],
     "close": [90, 91, 92],

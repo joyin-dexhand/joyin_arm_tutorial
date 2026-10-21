@@ -1,7 +1,7 @@
 """`JoyArm` —— 机械臂组合根（config 驱动的整机对象）
 
-按 `config/<型号>.yaml` 把 `backend`（硬件通信）、`robotics`（六域求解器）与 `robot_model`（URDF 资产）组合成整机对象，
-对外提供统一调用入口。一级功能块：
+按 `config/<型号>.yaml` 把 `backend`、`robotics` 与 `robot_model`组合成整机对象，
+对外提供统一调用入口。一级功能块包括：
 
 - 初始化与自检（定义与赋值两阶段 + cfg 全套自检 + pin 锁末端缩减模型 + 完成后 info）；
 - 硬件后端委托面（arm/end 两组薄委托 + FSM 运行中的外部指令互斥与 ctrl 线程豁免）；
@@ -32,6 +32,7 @@ import numpy as np
 import pinocchio as pin
 from pinocchio.visualize import MeshcatVisualizer
 import yaml
+import zmq
 
 from ..utils.limits import (
     limits_from_joint_cfgs,
@@ -241,6 +242,38 @@ def _freeze_arrays(obj):
     return obj
 
 
+def _cfg_leaf_problems(section, root: str) -> List[str]:
+    """cfg 段递归叶校验：None 叶子一律拒、数值叶（int/float，bool 除外）须有限。"""
+    problems: List[str] = []
+
+    def _walk(node, path: str) -> None:
+        if node is None:
+            problems.append(f"{path} 为 null（{root} 段不允许空值）")
+        elif isinstance(node, bool):
+            pass                              # bool 不按数值叶校验
+        elif isinstance(node, (int, float)):
+            if not bool(np.isfinite(node)):
+                problems.append(f"{path}={node} 非有限数值（{root} 段数值叶须有限）")
+        elif isinstance(node, dict):
+            for k, v in node.items():
+                _walk(v, f"{path}.{k}")
+        elif isinstance(node, (list, tuple)):
+            for i, v in enumerate(node):
+                _walk(v, f"{path}[{i}]")
+
+    _walk(section, root)
+    return problems
+
+
+def _backend_joint_cfgs(bcfg, part: str) -> List[dict]:
+    """backend.<part>.joints 安全提取。"""
+    seg = bcfg.get(part)
+    joints = seg.get("joints") if isinstance(seg, dict) else None
+    if not isinstance(joints, list):
+        return []
+    return [j for j in joints if isinstance(j, dict)]
+
+
 # ============================================================
 # 六域算法成员的构建：cfg 段六键 → 域缩写与注册表
 # ============================================================
@@ -355,7 +388,11 @@ class _PeriodicThread:
     """
 
     def __init__(self, step: Callable[[], None], hz: float, name: str = "periodic") -> None:
-        """:param step: 单步函数；:param hz: 频率 Hz；:param name: 线程名。"""
+        """
+        :param step: 单步函数。
+        :param hz: 频率 Hz。
+        :param name: 线程名。
+        """
         self._step = step               # 单步函数（循环体）
         self._hz = float(hz)            # 执行频率 Hz
         self._name = str(name)          # 线程名（日志标识）
@@ -383,18 +420,35 @@ class _PeriodicThread:
         """线程是否还在跑（从未启动过算没在跑）。"""
         return self._thread is not None and self._thread.is_alive()
 
-    def start(self) -> None:
-        """启动线程；已在运行（或上次 stop 没停干净）时抛 `RuntimeError`。"""
+    def prepare(self) -> threading.Thread:
+        """预创建底层线程对象并返回（未启动）。
+
+        属主把线程句柄登记到外部判定槽位（如 ctrl 线程互斥豁免判定）后再 :meth:`start`。
+
+        :return: 已创建未启动的底层线程对象（与 :attr:`thread` 同一引用）。
+        :raises RuntimeError: 已有句柄（运行中或上次 stop 未确认退出）。
+        """
         if self._thread is not None:
             raise RuntimeError(
-                f"joyarm.py - _PeriodicThread.start：[{self._name}] 线程仍在运行"
+                f"joyarm.py - _PeriodicThread.prepare：[{self._name}] 线程仍在运行"
                 f"（或上次 stop 未成功退出），须先确认 stop() 完成")
         self._stop.clear()
         self._thread = threading.Thread(
             target=_run_periodic,
             args=(self._stop, lambda: self._hz, self._step, self._name),
             daemon=True, name=self._name)
-        self._thread.start()
+        return self._thread
+
+    def start(self) -> None:
+        """启动线程；已在运行（或上次 stop 没停干净）时抛 `RuntimeError`。"""
+        th = self._thread
+        if th is None:
+            th = self.prepare()
+        elif th.ident is not None:      # ident 仅在线程起跑后为非 None（预创建未启动放行）
+            raise RuntimeError(
+                f"joyarm.py - _PeriodicThread.start：[{self._name}] 线程仍在运行"
+                f"（或上次 stop 未成功退出），须先确认 stop() 完成")
+        th.start()
 
     def stop(self) -> None:
         """停止线程；超时（1s）没退出抛 `RuntimeError`（引用保留）。"""
@@ -659,8 +713,14 @@ poll();
 
 # _state_viz_worker 的数据刷新频率（Hz；面板 JS 以约 5 Hz 轮询，刷新端取 10 Hz 保证领先）
 _VIZ_WORKER_HZ: float = 10.0
+# meshcat 刷新 zmq 收包超时（毫秒）：套接字置 RCVTIMEO，server 死亡时 recv 不永久阻塞
+_VIZ_ZMQ_TIMEOUT_MS: int = 1000
+# meshcat 刷新连续失败降级阈值（zmq 超时/状态错误累计达此数即降级仅 HTML 面板并停步进）
+_VIZ_ZMQ_FAIL_MAX: int = 3
 # 监视器「状态连续 None」判 DISABLE 的时长阈值（连续 0.1 s）
 _MONITOR_NONE_TIMEOUT: float = 0.1
+# FSM 迁移连续推迟拍数上限（超限改走 DISABLE 直接失能兜底）
+_FSM_DEFER_RETRY_MAX: int = 50
 
 
 def _json_round(x) -> Optional[float]:
@@ -697,6 +757,7 @@ class _VizWindow:
         self._url = url
         self._title = title
         self._proc: Optional[subprocess.Popen] = None   # 窗口子进程句柄
+        self._stop_requested = threading.Event()        # 主动停止标志
 
     def launch(self) -> bool:
         """拉起窗口子进程并挂早夭看护（PySide6 预检失败返回 False 降级 URL）。
@@ -726,25 +787,42 @@ class _VizWindow:
         return True
 
     def _watchdog(self) -> None:
-        """子进程早夭看护：启动短窗内非零退出则告警并弃置句柄（回退 URL）。"""
+        """子进程早夭看护：启动短窗内非零退出则告警并弃置句柄（回退 URL）。
+
+        对 `_proc` 取局部快照并做 None 防护（与 `stop()` 并发置空时不误触）；
+        主动停止标志已置时不告警、不动句柄（收尾由 `stop()` 完成）。
+        """
+        proc = self._proc                          # 局部快照：stop 并发置 None 不致 None.wait
+        if proc is None:
+            return
         try:
-            rc = self._proc.wait(timeout=3.0)
+            rc = proc.wait(timeout=3.0)
         except subprocess.TimeoutExpired:
             return    # 3 s 仍存活视为窗口已正常打开
+        if self._stop_requested.is_set():
+            return    # 用户主动收尾（terminate 致 -15 等）不当作故障告警
         if rc != 0:
             self._proc = None
             logger.warning("joyarm.py - _VizWindow.launch：监控窗口进程已退出"
                            "（码 %s，可能无显示器），请用浏览器打开 %s", rc, self._url)
 
     def stop(self) -> None:
-        """终止窗口子进程（幂等；已退出或强杀失败均静默）。"""
-        if self._proc is None:
+        """终止窗口子进程（幂等；先置停止标志防看护误告警，超时 kill 兜底，失败均静默）。"""
+        self._stop_requested.set()                 # 主动停止标志先行：看护线程不再当故障告警
+        proc = self._proc
+        if proc is None:
             return
         try:
-            self._proc.terminate()
-            self._proc.wait(timeout=2.0)
+            proc.terminate()
+            proc.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()                        # terminate 2 s 未退出（挂起）：强杀兜底
+                proc.wait()
+            except Exception:
+                pass    # 强杀失败静默弃句柄（幂等口径）
         except Exception:
-            pass    # 窗口已自行关闭或强杀失败均无需处理（幂等口径）
+            pass    # 窗口已自行关闭等无需处理（幂等口径）
         finally:
             self._proc = None
 
@@ -859,31 +937,33 @@ class JoyArm:
         self._fsm_hz: float = 50.0                       # cfg.joyarm.MotionFSM.fsm_hz
         self._mit_kd_damping: np.ndarray = np.zeros(0)   # DAMPING 态 MIT kd（cfg 必配）
         self._monitor_hz: float = 50.0                   # 缺省 = fsm_hz
-        self._arrival_tol_q_arm: np.ndarray = np.zeros(0)  # 到位容差（逐关节）
-        self._arrival_tol_q_end: np.ndarray = np.zeros(0)  # 到位容差（逐电机）
+        self._arrival_tol_q_arm = np.zeros(0)            # 到位容差（逐关节）
+        self._arrival_tol_q_end = np.zeros(0)            # 到位容差（逐电机）
         self._arrival_tol_pos: float = 1e-3              # 末端位置容差 m
         self._arrival_tol_rot: float = 1e-2              # 末端姿态容差 rad
         self._move_wait_timeout: float = 10.0            # cfg.joyarm.runtime.move_wait_timeout
         self._hold_q: Optional[np.ndarray] = None        # HOLD 态锁定的关节位置
         self._zero_moving: bool = False                  # ZERO 态「移动中」子阶段标志
         self._home_arrived: bool = False                 # HOME 态到位日志去重
+        self._fsm_defer_count: int = 0                   # 迁移连续推迟拍数（告警与上限兜底）
         self._fsm_periodic: Optional[_PeriodicThread] = None  # FSM 周期线程句柄（fsm_hz）
 
         # ---- plan/ctrl 运动线程 ----
         self._plan_periodic: Optional[_PeriodicThread] = None  # plan 周期线程句柄
         self._ctrl_periodic: Optional[_PeriodicThread] = None  # ctrl 周期线程句柄
         self._ctrl_thread: Optional[threading.Thread] = None   # ctrl 线程句柄（互斥豁免判定）
-        self._motion_pause = threading.Event()            # 换规划器/启动期间 ctrl 暂停派发
+        self._motion_pause = threading.Event()           # 换规划器/启动期间 ctrl 暂停派发
 
         # ---- safe_monitor ----
         self._monitor_periodic: Optional[_PeriodicThread] = None  # 监视器周期线程句柄
-        self._monitor_rules: List[Callable] = []          # 自定义规则列表
-        self._monitor_none_since: Optional[float] = None  # 连续 None 的起算时刻
+        self._monitor_rules: List[Callable] = []         # 自定义规则列表
+        self._monitor_none_since = None                  # 连续 None 的起算时刻
 
         # ---- 运行状态可视化 ----
         self._viz_periodic: Optional[_PeriodicThread] = None   # 可视化周期线程句柄
         self._viz_httpd: Optional[ThreadingHTTPServer] = None  # 监控页面 HTTP 服务句柄
         self._viz_pin = None                             # pin.visualize MeshcatVisualizer
+        self._viz_zmq_fails: int = 0                     # meshcat 刷新连续失败计数（zmq 看门狗降级用）
         self._viz_state: dict = {}                       # 面板数据快照（HTTP 线程读）
         self._viz_traj_points: int = 200                 # 轨迹显示采样点数（start 可配）
         self._viz_traj_enabled: bool = False             # 轨迹显示开关（界面可切）
@@ -898,8 +978,8 @@ class JoyArm:
         # ------------------------------------------------------------
         # 1) cfg 加载 + 全套自检（frame_end/urdf_path 先行赋值供自检与 pin 构建用）
         self._cfg = load_config(name)                          # 缺失/解析失败 → 抛错
-        jcfg = self._cfg.get("joyarm") or {}
-        backend_cfg = dict(self._cfg.get("backend") or {})
+        jcfg = self._cfg.get("joyarm") if isinstance(self._cfg.get("joyarm"), dict) else {}
+        backend_cfg = dict(self._cfg["backend"]) if isinstance(self._cfg.get("backend"), dict) else {}
         self._frame_end = str(jcfg.get("frame_end") or "")
         self._urdf_path = os.path.join(_ROBOT_MODEL_DIR, name, "urdf", f"{name}.urdf")
         self._check_cfg(self._cfg)                             # 全套自检（软限位越出硬限位的交叉检查在限位构建后补做）
@@ -936,6 +1016,21 @@ class JoyArm:
         # 5) 特征位形：zero 全零 / neutral 软限位中点 / home cfg 配置（须在软限位内）
         self._zero_arm = _freeze_arrays(np.zeros(self._n_arm))
         self._zero_end = _freeze_arrays(np.zeros(self._n_end))
+        # zero（全零位形，ZERO 态回零目标）须在硬限位内：不含零位的型号回零永不到位、
+        # stop 每次等满超时（边界贴合按 1e-12 容差放行，与 home 校验口径一致）
+        for tag, hard in (("arm", self._joint_limits_hard_arm),
+                          ("end", self._joint_limits_hard_end)):
+            if hard is None:
+                continue     # 无该组（如 n_end=0）不校验
+            q_min = np.asarray(hard.q_min, dtype=float)
+            q_max = np.asarray(hard.q_max, dtype=float)
+            bad = np.where((q_min > 1e-12) | (q_max < -1e-12))[0]
+            if bad.size:
+                i = int(bad[0])
+                raise ValueError(
+                    f"joyarm.py - JoyArm.__init__：backend.{tag}.joints 关节[{i + 1}]（1 基）"
+                    f"硬限位 [{q_min[i]}, {q_max[i]}] 不含零位（zero=全零为 ZERO 态回零目标；"
+                    f"越界关节序号 {bad.tolist()}）")
         self._neutral_arm = _freeze_arrays(
             (np.asarray(self._joint_limits_soft_arm.q_min, float)
              + np.asarray(self._joint_limits_soft_arm.q_max, float)) / 2.0)
@@ -985,20 +1080,50 @@ class JoyArm:
         :raises ValueError: 任一项失败；一条消息列出全部问题。
         """
         problems: List[str] = []
-        jcfg = cfg.get("joyarm") or {}
-        bcfg = cfg.get("backend") or {}
-        robotics_cfg = cfg.get("robotics") or {}
+        # ---- 段类型前置校验（段写成列表等结构错误）----
+        for key in ("joyarm", "robotics", "backend"):
+            v = cfg.get(key)
+            if v is not None and not isinstance(v, dict):
+                problems.append(f"顶层段 {key} 需为字典，实际 {type(v).__name__}")
+        jcfg = cfg.get("joyarm") if isinstance(cfg.get("joyarm"), dict) else {}
+        bcfg = cfg.get("backend") if isinstance(cfg.get("backend"), dict) else {}
+        robotics_cfg = cfg.get("robotics") if isinstance(cfg.get("robotics"), dict) else {}
 
         # ---- 三顶层键存在 ----
         for key in ("joyarm", "robotics", "backend"):
             if key not in cfg:
                 problems.append(f"缺少顶层配置段：{key}")
+        # ---- 三顶层段值递归校验：None 叶直接拒、数值叶（bool 除外）须有限 ----
+        for key in ("joyarm", "robotics", "backend"):
+            if isinstance(cfg.get(key), (dict, list, tuple)):
+                problems.extend(_cfg_leaf_problems(cfg[key], key))
         if not jcfg.get("frame_end"):
             problems.append("joyarm.frame_end 缺失（末端帧名，pin 模型帧）")
 
-        # ---- 关节数（后续维度检查基准）----
-        n_arm_cfg = len((bcfg.get("arm") or {}).get("joints") or [])
-        n_end_cfg = len((bcfg.get("end") or {}).get("joints") or [])
+        # ---- backend.arm/end 段与 joints 条目类型前置校验 ----
+        for part in ("arm", "end"):
+            seg = bcfg.get(part)
+            if seg is None:
+                continue
+            if not isinstance(seg, dict):
+                problems.append(f"backend.{part} 需为字典，实际 {type(seg).__name__}")
+                continue
+            joints = seg.get("joints")
+            if joints is None:
+                continue
+            if not isinstance(joints, list):
+                problems.append(
+                    f"backend.{part}.joints 需为列表，实际 {type(joints).__name__}")
+                continue
+            bad = [i for i, j in enumerate(joints) if not isinstance(j, dict)]
+            if bad:
+                problems.append(
+                    f"backend.{part}.joints 条目需为字典（关节 name/限位四键），"
+                    f"非字典条目下标 {bad}")
+
+        # ---- 关节数（后续维度检查基准；结构不符的段取空表，类型问题已在上报）----
+        n_arm_cfg = len(_backend_joint_cfgs(bcfg, "arm"))
+        n_end_cfg = len(_backend_joint_cfgs(bcfg, "end"))
 
         # ---- home / 软限位维度 ----
         for key, n_ref in (("home_arm", n_arm_cfg), ("home_end", n_end_cfg)):
@@ -1022,7 +1147,11 @@ class JoyArm:
                 continue
             for k in ("q_min", "q_max", "dq_max", "tau_max"):
                 if k not in soft:
-                    continue     # 缺键由 soft_limits_from_cfg 回退 ±∞（维度不构成问题）
+                    if k in ("q_min", "q_max"):
+                        problems.append(
+                            f"joyarm.{key}.{k} 缺键（位置软限位必配；缺键会使"
+                            f"随机采样与数值 IK 溢出崩溃、neutral 发散）")
+                    continue     # dq_max/tau_max 缺键由 soft_limits_from_cfg 回退 ±∞（无崩溃路径）
                 arr = np.asarray(soft[k], dtype=float).reshape(-1)
                 if arr.ndim == 0 or arr.shape[0] == 1:
                     continue     # 标量：全关节统一广播
@@ -1067,8 +1196,8 @@ class JoyArm:
         """cfg.backend 关节登记与 URDF 的一致性问题清单（任一不符抛异常）。
         """
         problems: List[str] = []
-        arm_cfgs = list((bcfg.get("arm") or {}).get("joints") or [])
-        end_cfgs = list((bcfg.get("end") or {}).get("joints") or [])
+        arm_cfgs = _backend_joint_cfgs(bcfg, "arm")
+        end_cfgs = _backend_joint_cfgs(bcfg, "end")
         if not arm_cfgs:
             return ["backend.arm.joints 为空（本体电机列表必配）"]
         if not os.path.isfile(self._urdf_path):
@@ -1334,8 +1463,13 @@ class JoyArm:
         self._arrival_tol_q_arm = _freeze_arrays(_tol_q("arm", self._n_arm))
         self._arrival_tol_q_end = _freeze_arrays(_tol_q("end", self._n_end))
         arm_at = at.get("arm") or {}
-        self._arrival_tol_pos = float(arm_at.get("pos", 1e-3))
-        self._arrival_tol_rot = float(arm_at.get("rot", 1e-2))
+        try:
+            self._arrival_tol_pos = float(arm_at.get("pos", 1e-3))
+            self._arrival_tol_rot = float(arm_at.get("rot", 1e-2))
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"joyarm.py - JoyArm._parse_fsm_params：arrival_tol.arm.pos/rot="
+                f"{arm_at.get('pos')!r}/{arm_at.get('rot')!r} 非法（须为正有限数）") from e
         if not (np.isfinite(self._arrival_tol_pos) and self._arrival_tol_pos > 0
                 and np.isfinite(self._arrival_tol_rot) and self._arrival_tol_rot > 0):
             raise ValueError(
@@ -1495,12 +1629,30 @@ class JoyArm:
             finally:
                 self._motion_pause.clear()
         elif domain == "ctrl":
-            # 替换激活 → MODE 联动（直连 backend，不经公开 set_mode、不受互斥拦截）→ 更新 hz
-            self._activated_ctrl_solver = new
-            self._backend.set_mode_arm(new.MODE)
-            self._ctrl_hz = self._ctrl_hz_by_name[name]
-            if self._ctrl_periodic is not None:
-                self._ctrl_periodic.set_hz(self._ctrl_hz)
+            # 固定时序（对齐 traj 分支）：① 暂停下发 → ② set_mode_arm 成功才换激活
+            #（MODE 联动直连 backend，不经公开 set_mode、不受互斥拦截）→ ③ 更新 hz；
+            # 模式切换失败 / 异常时保持原激活并返回 False，防新控制器指令被
+            # backend 模式门禁无限期丢弃
+            self._motion_pause.set()
+            try:
+                try:
+                    mode_ok = self._backend.set_mode_arm(new.MODE) == 1
+                except Exception as e:
+                    logger.warning(
+                        "joyarm.py - set_ctrl_solver：控制器『%s』模式切换异常"
+                        "（保持原激活不变）：%s", name, e)
+                    return False
+                if not mode_ok:
+                    logger.warning(
+                        "joyarm.py - set_ctrl_solver：控制器『%s』模式切换失败"
+                        "（保持原激活不变）", name)
+                    return False
+                self._activated_ctrl_solver = new
+                self._ctrl_hz = self._ctrl_hz_by_name[name]
+                if self._ctrl_periodic is not None:
+                    self._ctrl_periodic.set_hz(self._ctrl_hz)
+            finally:
+                self._motion_pause.clear()
         else:
             setattr(self, f"_activated_{domain}_solver", new)
         return True
@@ -1543,8 +1695,9 @@ class JoyArm:
             self._ctrl_periodic = _PeriodicThread(self._tick_ctrl, self._ctrl_hz,
                                                   name="joyarm-ctrl")
             self._plan_periodic.start()
+            # ctrl 线程句柄须在线程起跑前登记，否则ctrl 首批 step 可能会被互斥误判为外部指令（warn + 丢拍）
+            self._ctrl_thread = self._ctrl_periodic.prepare()
             self._ctrl_periodic.start()
-            self._ctrl_thread = self._ctrl_periodic.thread   # ctrl 线程互斥豁免判定依据
         finally:
             self._motion_pause.clear()
         logger.info("joyarm.py - _start_motion_thread：plan/ctrl 两线程已启动"
@@ -1628,6 +1781,7 @@ class JoyArm:
         self._target_motion_state = _EVENT_TO_STATE[self._safe_event]
         cur, tgt = self._current_motion_state, self._target_motion_state
         if cur is tgt:
+            self._fsm_defer_count = 0                     # 稳态：连续推迟计数清零
             self._maintain_motion_state(cur)
             return
         nxt = _ROUTE[cur].get(tgt)
@@ -1641,11 +1795,43 @@ class JoyArm:
             self._maintain_motion_state(cur)
             return
         self._exit_motion_state(cur)
+        if cur is MotionState.MOTION and self._ctrl_periodic is not None:
+            # MOTION 退出时 ctrl 线程停止超时残留：本拍不发指令，推迟下拍重试（确认退出后才继续迁移）
+            self._defer_motion_transition(cur, nxt, "ctrl 线程停止未确认（僵尸残留）")
+            return
         if not self._enter_motion_state(nxt):
-            return     # HOLD 采样失败等，本次迁移推迟、下拍重试
+            # 进入失败（如 HOLD 采样失败）：推迟期间旧态维持指令不中断，下拍重试
+            self._maintain_motion_state(cur)
+            self._defer_motion_transition(cur, nxt, "进入动作失败（见进入路径告警）")
+            return
         self._current_motion_state = nxt
+        self._fsm_defer_count = 0                         # 迁移成功：连续推迟计数清零
         logger.info("joyarm.py - _fsm_tick：状态迁移 %s → %s（目标 %s）",
                     cur.name, nxt.name, tgt.name)
+
+    def _defer_motion_transition(self, cur: MotionState, nxt: MotionState, reason: str) -> None:
+        """迁移推迟处理：显式告警 + 连续拍数上限（超限改走既有 DISABLE 事件直接失能兜底）。
+
+        :param cur: 当前状态。
+        :param nxt: 被推迟的下一跳状态。
+        :param reason: 推迟原因（进日志）。
+        """
+        self._fsm_defer_count += 1
+        if self._fsm_defer_count < _FSM_DEFER_RETRY_MAX:
+            logger.warning(
+                "joyarm.py - _fsm_tick：%s → %s 迁移推迟（原因：%s；连续第 %d 拍，"
+                "上限 %d）", cur.name, nxt.name, reason,
+                self._fsm_defer_count, _FSM_DEFER_RETRY_MAX)
+            return
+        if self._fsm_defer_count == _FSM_DEFER_RETRY_MAX:
+            # 上限兜底：迁移长时间未完成，改走既有 DISABLE 事件路径直接失能停机；
+            #          成功迁移或进入稳态后计数清零
+            logger.error(
+                "joyarm.py - _fsm_tick：%s → %s 迁移连续推迟 %d 拍达上限"
+                "（原因：%s），改走 DISABLE 直接失能停机兜底",
+                cur.name, nxt.name, self._fsm_defer_count, reason)
+            self.set_event(SafetyEvent.DISABLE)
+        # 超上限后的推迟拍：DISABLE 事件已置，静默等待迁移完成（防刷屏）
 
     def _enter_motion_state(self, state: MotionState) -> bool:
         """状态进入（enter）：转移时一次检查与设置 + 状态初始化（enter 列）。
@@ -1678,13 +1864,14 @@ class JoyArm:
             self._start_motion_thread()
             logger.info("joyarm.py - _enter_motion_state：进入 MOTION（plan/ctrl 两线程运行）")
         elif state is MotionState.HOLD:
-            self._enter_enable_mode(ControlMode.POSITION)
+            # 先采样、后切使能/模式：采样失败时旧态维持指令不被模式切换打断
             state_arm = self._backend.get_state_arm()
             if state_arm is None or state_arm.q is None:
                 logger.warning(
                     "joyarm.py - _enter_motion_state：HOLD 采样当前关节位置失败"
                     "（get_state_arm() 为 None），本次迁移推迟下拍重试")
                 return False
+            self._enter_enable_mode(ControlMode.POSITION)
             self._hold_q = np.asarray(state_arm.q, dtype=float).copy()
             logger.info("joyarm.py - _enter_motion_state：进入 HOLD（原位锁定）")
         elif state is MotionState.DAMPING:
@@ -1735,7 +1922,7 @@ class JoyArm:
             if self._hold_q is not None:
                 self._backend.send_position_arm(self._hold_q)
         elif state is MotionState.DAMPING:
-            self._backend.send_mit_arm(q=np.zeros(self._n_arm),kp=np.zeros(self._n_arm), kd=self._mit_kd_damping)
+            self._backend.send_mit_arm(q=np.zeros(self._n_arm), kp=np.zeros(self._n_arm), kd=self._mit_kd_damping)
 
     def _disable_clear_disable_arm(self) -> None:
         """「失能→清错→失能」序列（DISABLE 态 enter 用；直连 backend）。"""
@@ -1884,6 +2071,21 @@ class JoyArm:
                     self._viz_draw_trajectory(q_arr)
                 else:
                     self._viz_hide_trajectory()
+                self._viz_zmq_fails = 0
+            except zmq.error.ZMQError as e:
+                # zmq 看门狗：套接字已置 RCVTIMEO，server 死亡时 recv 超时抛 Again 而非永久阻塞；
+                # 连续失败计数达阈值则降级为仅 HTML 面板并停止 meshcat 步进
+                self._viz_zmq_fails += 1
+                if self._viz_zmq_fails >= _VIZ_ZMQ_FAIL_MAX:
+                    logger.warning(
+                        "joyarm.py - _state_viz_worker：meshcat 刷新连续 %s 次"
+                        "zmq 超时/失败（server 可能已死亡），降级为仅 HTML 状态面板"
+                        "并停止 meshcat 刷新", self._viz_zmq_fails)
+                    self._viz_pin = None
+                else:
+                    logger.warning(
+                        "joyarm.py - _state_viz_worker：meshcat 刷新 zmq 超时/失败"
+                        "（%s/%s）：%s", self._viz_zmq_fails, _VIZ_ZMQ_FAIL_MAX, e)
             except Exception as e:
                 logger.warning(
                     "joyarm.py - _state_viz_worker：meshcat 刷新失败：%s", e)
@@ -2196,12 +2398,14 @@ class JoyArm:
         frames = [target] if isinstance(target, TrajFrame) else list(target or [])
         viewer = self._viz_pin.viewer
         if not frames:
-            viewer["traj"].delete()
+            for key in ("traj", "traj_cur", "traj_tgt"):   # 标记球一并清（防旧冻结在屏上）
+                viewer[key].delete()
             return
         t_end = frames[-1].time
         t_now = time.time()
         if t_end is None or t_end - t_now <= 0.1:
-            viewer["traj"].delete()
+            for key in ("traj", "traj_cur", "traj_tgt"):   # 同上：早退也全清三键
+                viewer[key].delete()
             return
         ts = np.linspace(t_now, float(t_end), max(int(self._viz_traj_points), 2))
         fk = self._activated_fkine_solver
@@ -2232,18 +2436,18 @@ class JoyArm:
                            np.array([0.0, 0.0, 0.0, 1.0])]))
 
     def _viz_hide_trajectory(self) -> None:
-        """清除 meshcat 上的轨迹显示。"""
+        """清除 meshcat 上的轨迹显示。
+
+        正常抛异常：delete 走 zmq send+recv，server 死亡时的超时异常必须到达 zmq 看门狗才能计数降级。
+        """
         if self._viz_pin is None:
             return
-        try:
-            viewer = self._viz_pin.viewer
-            for key in ("traj", "traj_cur", "traj_tgt"):
-                viewer[key].delete()
-        except Exception:
-            pass
+        viewer = self._viz_pin.viewer
+        for key in ("traj", "traj_cur", "traj_tgt"):
+            viewer[key].delete()
 
     # ============================================================
-    # 七、公开接口区 —— 按「拿到一台机械臂后怎么用」的顺序分类
+    # 七、公开接口区
     # ============================================================
 
     # ============================================================
@@ -2528,13 +2732,12 @@ class JoyArm:
         return self._backend.get_mode_end()
 
     def set_mode_arm(self, mode: ControlMode = ControlMode.MIT) -> int:
-        """设置 arm 全组控制模式（MIT / POSITION / VELOCITY）。
+        """设置 arm 控制模式（MIT/POSITION/VELOCITY）：FSM 运行中被外部调用时空操作 + warn。
 
         成功返回 1 并**乐观更新**模式缓存，硬件一致性经 `get_mode_arm` 读回纠正；
         切 POSITION / VELOCITY 自动随写 POS_VEL 四增益（backend 子类实现）。
-        FSM 运行中被外部调用时空操作 + warn（拦截时返回 0）。
 
-        :param mode: 控制模式（必填；:class:`ControlMode` 枚举，非枚举直接返回 0）。
+        :param mode: 控制模式（缺省 MIT；:class:`ControlMode` 枚举，非枚举直接返回 0）。
         :return: 成功 1、失败 0。
         """
         if not self._fsm_guard("set_mode_arm"):
@@ -2547,7 +2750,7 @@ class JoyArm:
         成功返回 1 并**乐观更新**模式缓存，硬件一致性经 `get_mode_end` 读回纠正；
         切 POSITION / VELOCITY 自动随写 POS_VEL 四增益（backend 子类实现）。
 
-        :param mode: 控制模式（必填；:class:`ControlMode` 枚举，非枚举直接返回 0）。
+        :param mode: 控制模式（缺省 MIT；:class:`ControlMode` 枚举，非枚举直接返回 0）。
         :return: 成功 1、失败 0。
         """
         return self._backend.set_mode_end(mode)
@@ -2625,8 +2828,8 @@ class JoyArm:
         :param q: 位置目标 `(n_arm,)` rad，必填。
         :param dq: 速度前馈 `(n_arm,)` rad/s；缺省 `zeros(n_arm)`。
         :param tau: 力矩前馈 `(n_arm,)` N·m；缺省 `zeros(n_arm)`。
-        :param kp: 位置增益；缺省取 `_kp_mit_default_arm`。
-        :param kd: 速度增益；缺省取 `_kd_mit_default_arm`。
+        :param kp: 位置增益 `(n_arm,)`；缺省取 `_kp_mit_default_arm`。
+        :param kd: 速度增益 `(n_arm,)`；缺省取 `_kd_mit_default_arm`。
         """
         if not self._fsm_guard("send_mit_arm"):
             return
@@ -2638,8 +2841,8 @@ class JoyArm:
         :param q: 位置目标 `(n_end,)` rad，必填。
         :param dq: 速度前馈 `(n_end,)` rad/s；缺省 `zeros(n_end)`。
         :param tau: 力矩前馈 `(n_end,)` N·m；缺省 `zeros(n_end)`。
-        :param kp: 位置增益；缺省取 `_kp_mit_default_end`。
-        :param kd: 速度增益；缺省取 `_kd_mit_default_end`。
+        :param kp: 位置增益 `(n_end,)`；缺省取 `_kp_mit_default_end`。
+        :param kd: 速度增益 `(n_end,)`；缺省取 `_kd_mit_default_end`。
         """
         self._backend.send_mit_end(q, dq, tau, kp, kd)
 
@@ -2647,8 +2850,8 @@ class JoyArm:
         """arm 位置指令整组下发：FSM 运行中被外部调用时空操作 + warn（ctrl 线程自身豁免放行）。
 
         :param q: 位置目标 `(n_arm,)` rad；越硬限位就近裁剪 + warn。
-        :param vlim: 速度上限 rad/s；缺省取 cfg `POS_VEL.vlim`，超 `[0, dq_max]` 裁剪。
-        :param flim: 归一化力矩电流上限 0~1；缺省取 cfg `POS_VEL.flim`。
+        :param vlim: 速度上限 `(n_arm,)` rad/s；缺省取 cfg `POS_VEL.vlim`，超 `[0, dq_max]` 裁剪。
+        :param flim: 归一化力矩电流上限 `(n_arm,)` 0~1；缺省取 cfg `POS_VEL.flim`。
         """
         if not self._fsm_guard("send_position_arm"):
             return
@@ -2658,8 +2861,8 @@ class JoyArm:
         """end 位置指令整组下发。
 
         :param q: 位置目标 `(n_end,)` rad；越硬限位就近裁剪 + warn。
-        :param vlim: 速度上限 rad/s；缺省取 cfg `POS_VEL.vlim`，超 `[0, dq_max]` 裁剪。
-        :param flim: 归一化力矩电流上限 0~1；缺省取 cfg `POS_VEL.flim`。
+        :param vlim: 速度上限 `(n_end,)` rad/s；缺省取 cfg `POS_VEL.vlim`，超 `[0, dq_max]` 裁剪。
+        :param flim: 归一化力矩电流上限 `(n_end,)` 0~1；缺省取 cfg `POS_VEL.flim`。
         """
         self._backend.send_position_end(q, vlim, flim)
 
@@ -2855,7 +3058,7 @@ class JoyArm:
         twist_out = self._check_target_cart6(twist, Twist, "twist")
         accel_out = self._check_target_cart6(accel, Accel, "accel")
         wrench_out = self._check_target_cart6(wrench, Wrench, "wrench")
-        self.set_target_trajframe(TrajFrame(time=self._check_target_time(t),pose=pose_out, twist=twist_out, accel=accel_out, wrench=wrench_out))
+        self.set_target_trajframe(TrajFrame(time=self._check_target_time(t), pose=pose_out, twist=twist_out, accel=accel_out, wrench=wrench_out))
 
     @staticmethod
     def _check_target_time(t) -> float:
@@ -2918,16 +3121,26 @@ class JoyArm:
                 f"显式传参可离线计算")
         return q, dq
 
+    def _check_math_vector(self, v, key: str, caller: str) -> np.ndarray:
+        """数学门面的 `(n_arm,)` 向量校验。"""
+        arr = np.asarray(v, dtype=float).reshape(-1)
+        if arr.shape[0] != self._n_arm:
+            raise ValueError(
+                f"joyarm.py - {caller}：{key} 维度 {arr.shape[0]} ≠ 期望 {self._n_arm}（n_arm）")
+        return arr
+
     def solve_fkine(self, q=None, frame=None) -> Pose:
         """正运动学：`q` → `frame` 帧位姿。
 
         :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
         :param frame: 帧名；缺省取 cfg `joyarm.frame_end`。
         :return: :class:`Pose`——`frame` 帧位姿。
+        :raises ValueError: `q` 维度不符 `(n_arm,)`。
         """
         if q is None:
             q = self._current_q("solve_fkine")
-        return self._activated_of("fkine").solve(self, np.asarray(q, dtype=float),frame or self._frame_end)
+        q = self._check_math_vector(q, "q", "solve_fkine")
+        return self._activated_of("fkine").solve(self, q, frame if frame is not None else self._frame_end)
 
     def solve_ikine(self, pose, frame=None, q0=None, **kw) -> IKResult:
         """逆运动学单解：目标位姿 → 关节角（数值法自 `q0` 迭代；解析法选最近解）。
@@ -2937,10 +3150,14 @@ class JoyArm:
         :param q0: `(n_arm,)` 参考关节角；缺省取当前状态 q。
         :param kw: 求解器特有参数（`tol` / `iters` 等，无法识别的忽略）。
         :return: :class:`IKResult`——`q` 为 `(n_arm,)` 单解，无可行解时 `success=False`。
+        :raises TypeError: `pose` 非 :class:`Pose`。
         """
+        if not isinstance(pose, Pose):
+            raise TypeError(
+                f"joyarm.py - solve_ikine：pose 需为 Pose 类型，实际 {type(pose).__name__}")
         if q0 is None:
             q0 = self._current_q("solve_ikine")
-        return self._activated_of("ikine").solve(self, pose, frame or self._frame_end, np.asarray(q0, dtype=float), **kw)
+        return self._activated_of("ikine").solve(self, pose, frame if frame is not None else self._frame_end, np.asarray(q0, dtype=float), **kw)
 
     def solve_ikine_all(self, pose, frame=None, **kw):
         """逆运动学全部解（仅解析法实现）。
@@ -2949,8 +3166,13 @@ class JoyArm:
         :param frame: 目标帧名；缺省取 cfg `joyarm.frame_end`。
         :param kw: 求解器特有参数（无法识别的忽略）。
         :return: :class:`IKResult`——`q` 为 `(K, n_arm)` 全部解。
+        :raises TypeError: `pose` 非 :class:`Pose`。
         :raises RuntimeError: 激活求解器未实现 `solve_all`（数值法——提示换解析法）。
         """
+        if not isinstance(pose, Pose):
+            raise TypeError(
+                f"joyarm.py - solve_ikine_all：pose 需为 Pose 类型，实际 "
+                f"{type(pose).__name__}")
         try:
             return self._activated_of("ikine").solve_all(self, pose, frame=frame, **kw)
         except NotImplementedError as e:
@@ -2964,10 +3186,12 @@ class JoyArm:
         :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
         :param frame: 帧名；缺省取 cfg `joyarm.frame_end`。
         :return: 基座系雅可比 `(6, n_arm)`。
+        :raises ValueError: `q` 维度不符 `(n_arm,)`。
         """
         if q is None:
             q = self._current_q("get_jac")
-        return self._activated_of("jac").jac(self, np.asarray(q, dtype=float), frame or self._frame_end)
+        q = self._check_math_vector(q, "q", "get_jac")
+        return self._activated_of("jac").jac(self, q, frame if frame is not None else self._frame_end)
 
     def get_jac_pinv_damped(self, q=None, frame=None, damping: float = 1e-3) -> np.ndarray:
         """雅可比的阻尼最小二乘广义逆（`J* = Jᵀ(JJᵀ + λ²I)⁻¹`）。
@@ -2976,10 +3200,12 @@ class JoyArm:
         :param frame: 帧名；缺省取 cfg `joyarm.frame_end`。
         :param damping: 阻尼系数 λ；缺省 1e-3。
         :return: 广义逆 `(n_arm, 6)`。
+        :raises ValueError: `q` 维度不符 `(n_arm,)`。
         """
         if q is None:
             q = self._current_q("get_jac_pinv_damped")
-        return self._activated_of("jac").jac_pinv_damped(self, np.asarray(q, dtype=float), frame or self._frame_end, damping)
+        q = self._check_math_vector(q, "q", "get_jac_pinv_damped")
+        return self._activated_of("jac").jac_pinv_damped(self, q, frame if frame is not None else self._frame_end, damping)
 
     def solve_idyn(self, q=None, dq=None, ddq=None) -> np.ndarray:
         """逆动力学（RNEA）：`(q, dq, ddq)` → 各关节力矩。
@@ -2988,13 +3214,15 @@ class JoyArm:
         :param dq: `(n_arm,)` 关节速度 rad/s；缺省取 `joint_state_arm.dq` 快照。
         :param ddq: `(n_arm,)` 关节加速度 rad/s²；缺省零向量。
         :return: 各关节力矩 `(n_arm,)` N·m。
+        :raises ValueError: `q`/`dq`/`ddq` 维度不符 `(n_arm,)`。
         """
         if q is None or dq is None:
             q_cur, dq_cur = self._current_qdq("solve_idyn")
             q = q if q is not None else q_cur
             dq = dq if dq is not None else dq_cur
-        q, dq = np.asarray(q, dtype=float), np.asarray(dq, dtype=float)
-        ddq = np.zeros_like(q) if ddq is None else np.asarray(ddq, dtype=float)
+        q = self._check_math_vector(q, "q", "solve_idyn")
+        dq = self._check_math_vector(dq, "dq", "solve_idyn")
+        ddq = np.zeros_like(q) if ddq is None else self._check_math_vector(ddq, "ddq", "solve_idyn")
         return self._activated_of("dyn").idyn(self, q, dq, ddq)
 
     def get_mass_matrix(self, q=None) -> np.ndarray:
@@ -3002,10 +3230,12 @@ class JoyArm:
 
         :param q: `(n_arm,)` 关节角 rad；缺省取 `joint_state_arm.q` 快照。
         :return: 惯量阵 `(n_arm, n_arm)`。
+        :raises ValueError: `q` 维度不符 `(n_arm,)`。
         """
         if q is None:
             q = self._current_q("get_mass_matrix")
-        return self._activated_of("dyn").mass_matrix(self, np.asarray(q, dtype=float))
+        q = self._check_math_vector(q, "q", "get_mass_matrix")
+        return self._activated_of("dyn").mass_matrix(self, q)
 
     def get_coriolis(self, q=None, dq=None) -> np.ndarray:
         """科氏/向心项 `C(q, q̇)q̇`。
@@ -3054,7 +3284,7 @@ class JoyArm:
         if not bool(np.all(np.isfinite(q))):
             logger.warning("joyarm.py - is_in_pose_arm：无可用关节状态快照（未收到状态帧），判为未到位")
             return False
-        cur = self._activated_of("fkine").solve(self, q, frame or self._frame_end)
+        cur = self._activated_of("fkine").solve(self, q, frame if frame is not None else self._frame_end)
         d_pos = float(np.linalg.norm(
             np.asarray(cur.position, float) - np.asarray(pose.position, float)))
         q_err = quat_mul(quat_conj(np.asarray(cur.orientation, float)), np.asarray(pose.orientation, float))
@@ -3065,9 +3295,9 @@ class JoyArm:
         """arm 关节到位判断：`np.max(|q_cur − q|) ≤ tol_q` 全关节同时满足。
 
         :param q: 目标关节角 `(n_arm,)` rad（必填）。
-        :param tol_q: 容差 rad；缺省从 cfg `joyarm.arrival_tol.arm.q` 取（n_arm 元逐关节）。
+        :param tol_q: 容差 rad（标量或 `(n_arm,)`）；缺省从 cfg `joyarm.arrival_tol.arm.q` 取。
         :return: 全关节同时满足容差 `True`；未到位或无有效状态快照 `False`。
-        :raises ValueError: 目标维度与关节数不符。
+        :raises ValueError: 目标维度与关节数不符；`tol_q` 非标量且长度与关节数不符。
         """
         return self._is_in_q(q, tol_q, self._arrival_tol_q_arm, self._backend.joint_state_arm, self._n_arm, "arm")
 
@@ -3075,15 +3305,15 @@ class JoyArm:
         """end 电机到位判断：`np.max(|q_cur − q|) ≤ tol_q` 全电机同时满足。
 
         :param q: 目标电机角 `(n_end,)` rad（必填）。
-        :param tol_q: 容差 rad；缺省从 cfg `joyarm.arrival_tol.end.q` 取（n_end 元逐电机）。
+        :param tol_q: 容差 rad（标量或 `(n_end,)`）；缺省从 cfg `joyarm.arrival_tol.end.q` 取。
         :return: 全电机同时满足容差 `True`；未到位或无有效状态快照 `False`。
-        :raises ValueError: 目标维度与电机数不符。
+        :raises ValueError: 目标维度与电机数不符；`tol_q` 非标量且长度与电机数不符。
         """
         return self._is_in_q(q, tol_q, self._arrival_tol_q_end, self._backend.joint_state_end, self._n_end, "end")
 
     @staticmethod
     def _is_in_q(q, tol_q, tol_member, state, n: int, part: str) -> bool:
-        """关节到位判断实现（读快照）。"""
+        """关节到位判断实现（读快照）；`tol_q` 显式给出时须为标量或 n_arm/n_end 长度的列表。"""
         q = np.asarray(q, dtype=float).reshape(-1)
         if q.shape[0] != n:
             raise ValueError(
@@ -3092,7 +3322,18 @@ class JoyArm:
         if not bool(np.all(np.isfinite(q_cur))):
             logger.warning("joyarm.py - is_in_q_%s：无可用关节状态快照（未收到状态帧），判为未到位", part)
             return False
-        tol = tol_member if tol_q is None else np.asarray(tol_q, dtype=float)
+        if tol_q is None:
+            tol = tol_member
+        else:
+            tol = np.asarray(tol_q, dtype=float)
+            if tol.ndim == 0:
+                tol = np.full(n, float(tol))
+            else:
+                tol = tol.reshape(-1)
+                if tol.shape[0] != n:
+                    raise ValueError(
+                        f"joyarm.py - is_in_q_{part}：tol_q 长度 {tol.shape[0]} ≠ 关节数 {n}"
+                        f"（标量统一全关节或 n 元逐关节）")
         return bool(np.all(np.abs(q_cur - q) <= np.broadcast_to(tol, q.shape)))
 
     # ============================================================
@@ -3122,11 +3363,19 @@ class JoyArm:
         if self._fsm_running():
             logger.info("joyarm.py - start_motion_fsm：FSM 已在运行，忽略重复启动")
             return
+        # traj/ctrl 域配置检查：MOTION 态依赖 plan/ctrl 管线，未配置时启动则失败
+        for domain in ("traj", "ctrl"):
+            if not getattr(self, f"_{domain}_solvers"):
+                raise RuntimeError(
+                    f"joyarm.py - start_motion_fsm：robotics."
+                    f"{_DOMAIN_REGISTRIES[domain][0]} 域未配置任何求解器"
+                    f"（MOTION 态依赖 plan/ctrl 管线），拒绝启动")
         self._stop_motion_thread()                        # 规划/控制线程尚在运行则先停止
         # 幂等清理 FSM 全部缓存
         self._hold_q = None
         self._zero_moving = False
         self._home_arrived = False
+        self._fsm_defer_count = 0
         self._target_trajframe = None
         self._monitor_none_since = None
         self._safe_event = SafetyEvent.NORMAL            # 与 stop 置 ZEROING 对称（统一事件与目标）
@@ -3142,6 +3391,7 @@ class JoyArm:
 
         ① 前置 `is_connected_arm is True`；
         ② 置 `set_event(SafetyEvent.ZEROING)`，阻塞等待经 HOME 中转迁移至 ZERO 并完成到位失能；
+           当前危险度高于 ZEROING（DAMPING / DISABLE）时改置 DISABLE 直接失能停机；
         ③ `self._backend.disable_arm()` 失能 arm 全部电机（end 失能由调用方或销毁路径处理）；
         ④ 停 FSM 线程（join 带超时、超时 warn 不强杀——此时句柄保留、跳过缓存清理与状态复位，
            互斥与 ctrl 豁免判定继续生效）、清空全部 FSM 缓存、状态机退出。
@@ -3153,34 +3403,57 @@ class JoyArm:
                 f"joyarm.py - stop_motion_fsm：arm 未连接（断连急停不走本方法——"
                 f"无法下发任何指令，请走销毁路径 close()）")
         if self._fsm_running():
-            self.set_event(SafetyEvent.ZEROING)          # 统一事件与目标（与 start 置 NORMAL 对称）
-            deadline = time.monotonic() + self._move_wait_timeout
-            done = False
-            while time.monotonic() < deadline:
-                if (self._current_motion_state is MotionState.ZERO
-                        and not self._zero_moving):
-                    done = True
-                    break
-                time.sleep(0.02)
-            if not done:
-                logger.warning(
-                    "joyarm.py - stop_motion_fsm：%s s 内未完成回零失能"
-                    "（超时强制推进：disable → 清缓存 → 退出）", self._move_wait_timeout)
+            if _EVENT_DANGER[self._safe_event] > _EVENT_DANGER[SafetyEvent.ZEROING]:
+                # 当前事件比回零更危险：回零会带出保护态，故直接失能停机，复用既有 DISABLE 事件与迁移路径
+                logger.info("joyarm.py - stop_motion_fsm：当前事件 %s 危险度高于 "
+                            "ZEROING，改走直接失能停机（不回零、不切模式）",
+                            self._safe_event.name)
+                self.set_event(SafetyEvent.DISABLE)
+                deadline = time.monotonic() + self._move_wait_timeout
+                done = False
+                while time.monotonic() < deadline:
+                    if self._current_motion_state is MotionState.DISABLE:
+                        done = True
+                        break
+                    time.sleep(0.02)
+                if not done:
+                    logger.warning(
+                        "joyarm.py - stop_motion_fsm：%s s 内未完成直接失能停机"
+                        "（超时强制推进：disable → 清缓存 → 退出）",
+                        self._move_wait_timeout)
+            else:
+                self.set_event(SafetyEvent.ZEROING)          # 统一事件与目标（与 start 置 NORMAL 对称）
+                deadline = time.monotonic() + self._move_wait_timeout
+                done = False
+                while time.monotonic() < deadline:
+                    if (self._current_motion_state is MotionState.ZERO
+                            and not self._zero_moving):
+                        done = True
+                        break
+                    time.sleep(0.02)
+                if not done:
+                    logger.warning(
+                        "joyarm.py - stop_motion_fsm：%s s 内未完成回零失能"
+                        "（超时强制推进：disable → 清缓存 → 退出）", self._move_wait_timeout)
         else:
             logger.info("joyarm.py - stop_motion_fsm：FSM 未在运行，直接执行失能与清理")
         # ③ 失能 arm 全部电机
         self._backend.disable_arm()
         # ④ 停 FSM 线程 + 清空全部 FSM 缓存 + 状态机退出
+        self._fsm_shutdown_cleanup()
+
+    def _fsm_shutdown_cleanup(self) -> None:
+        """FSM 统一收尾：停 FSM/plan/ctrl 线程 + 清空全部缓存与状态复位。
+
+        FSM 线程停止超时：保留 `_fsm_periodic` 句柄（`_fsm_running` 仍为True，互斥与 ctrl 豁免判定继续生效）、
+            FSM 独占写的状态与缓存不得由用户线程改写——跳过清理提前返回，待线程退出后再次调用完成收尾。
+        """
         if self._fsm_periodic is not None:
             try:
                 self._fsm_periodic.stop()
             except RuntimeError as e:
-                # 超时未退出：保留 _fsm_periodic 句柄（_fsm_running 仍为 True，
-                # 互斥与 ctrl 豁免判定继续生效）；FSM 独占写的状态与缓存此时
-                # 不得由用户线程改写——跳过清理返回，待线程退出后再次调用本
-                # 方法完成清理
                 logger.warning(
-                    "joyarm.py - stop_motion_fsm：FSM 线程未按时退出（不强杀，"
+                    "joyarm.py - _fsm_shutdown_cleanup：FSM 线程未按时退出（不强杀，"
                     "句柄保留、跳过缓存清理与状态复位；待其退出后再次调用本方法"
                     "收尾）：%s", e)
                 self._stop_motion_thread()
@@ -3191,10 +3464,11 @@ class JoyArm:
         self._zero_moving = False
         self._home_arrived = False
         self._target_trajframe = None                     # 目标帧缓存仅在 FSM start/stop 边界清理
+        self._fsm_defer_count = 0
         self._safe_event = SafetyEvent.DISABLE
         self._target_motion_state = MotionState.DISABLE
         self._current_motion_state = MotionState.DISABLE
-        logger.info("joyarm.py - stop_motion_fsm：FSM 已停止并清空缓存"
+        logger.info("joyarm.py - _fsm_shutdown_cleanup：FSM 已停止并清空缓存"
                     "（再用需重新 start_motion_fsm）")
 
     def set_event(self, event: SafetyEvent) -> None:
@@ -3273,16 +3547,24 @@ class JoyArm:
         `_state_viz_worker` 只调只读接口刷新 meshcat 模型姿态与面板数据。
 
         :param traj_points: 轨迹显示采样点数（默认 200；0 = 关闭）。轨迹显示需 FSM 已启动且处于 MOTION 态。
+        :raises RuntimeError: 上次 stop 超时残留句柄未收尾（防旧服务泄漏），须先调用 stop_state_viz()。
         """
         if self._viz_periodic is not None and self._viz_periodic.is_alive():
             logger.info("joyarm.py - start_state_viz：可视化已在运行，忽略重复启动")
             return
+        leftovers = [attr for attr in ("_viz_httpd", "_viz_window", "_viz_pin")
+                     if getattr(self, attr) is not None]
+        if leftovers:                  # 上次 stop 超时残留：拒绝覆盖句柄（防泄漏）
+            raise RuntimeError(
+                f"joyarm.py - start_state_viz：上次可视化 stop 超时残留未收尾"
+                f"（{', '.join(leftovers)} 句柄保留中），拒绝另起；"
+                f"请先调用 stop_state_viz() 完成收尾再重试"
+                f"（防旧 HTTP 服务/监控窗口/meshcat-server 被覆盖引用后永久泄漏）")
         self._viz_traj_points = max(int(traj_points), 0)
         self._viz_traj_enabled = bool(self._viz_traj_points)
         # ---- 可视化专属 pin 模型（arm+end 联动；仅依赖 pinocchio）----
-        # 独立于下方 meshcat 初始化块：几何构建失败不影响模型本体（另有
-        # arm-only 兜底）。数学求解模型 _pin_model 保持不动（可视化专属
-        # 缩减模型，meshcat 几何也按本模型构建）。
+        # 独立于下方 meshcat 初始化块：几何构建失败不影响模型本体（另有 arm-only 兜底）。
+        # 数学求解模型 _pin_model 保持不动（可视化专属缩减模型，meshcat 几何也按本模型构建）。
         self._viz_model = None
         try:
             self._viz_model = self._build_pin_model(
@@ -3300,15 +3582,23 @@ class JoyArm:
             self._viz_static_payload()).encode("utf-8")
         # ---- meshcat 3D 初始化（直接依赖；失败降级路径）----
         self._viz_pin = None
+        self._viz_zmq_fails = 0
         iframe_src = "about:blank"
         try:
+            # package_dirs 指向 URDF 所在目录：URDF 内 mesh 全为相对路径（../meshes/*.STL）
+            pkg_dirs = [os.path.dirname(self._urdf_path)]
             collision = pin.buildGeomFromUrdf(self._viz_model, self._urdf_path,
-                                              pin.GeometryType.COLLISION)
+                                              pin.GeometryType.COLLISION,
+                                              package_dirs=pkg_dirs)
             visual = pin.buildGeomFromUrdf(self._viz_model, self._urdf_path,
-                                           pin.GeometryType.VISUAL)
+                                           pin.GeometryType.VISUAL,
+                                           package_dirs=pkg_dirs)
             viewer = meshcat.Visualizer()
+            # zmq 看门狗：meshcat 每次 send 后跟阻塞 recv，套接字置收包超时，
+            # server 死亡时 recv 超时抛异常而非永久阻塞（_state_viz_worker 捕获降级）
+            viewer.window.zmq_socket.setsockopt(zmq.RCVTIMEO, _VIZ_ZMQ_TIMEOUT_MS)
             viz = MeshcatVisualizer(self._viz_model, collision, visual)
-            viz.initViewer(meshcat_visualizer=viewer)
+            viz.initViewer(viewer=viewer)
             viz.loadViewerModel()
             self._viz_pin = viz
             iframe_src = viewer.url()
@@ -3410,7 +3700,18 @@ class JoyArm:
         if self._viz_window is not None:
             self._viz_window.stop()
             self._viz_window = None
-        self._viz_pin = None
+        # meshcat-server 子进程收尾：直接终止其内部句柄（Visualizer() 拉起的独立 server）
+        viz_pin, self._viz_pin = self._viz_pin, None
+        viewer_window = getattr(getattr(viz_pin, "viewer", None), "window", None)
+        server_proc = getattr(viewer_window, "server_proc", None)
+        if server_proc is not None:
+            try:
+                server_proc.terminate()
+                server_proc.wait(timeout=2.0)
+            except Exception as e:
+                logger.warning(
+                    "joyarm.py - stop_state_viz：meshcat-server 终止异常"
+                    "（弃置句柄，进程退出时由 atexit 兜底）：%s", e)
         self._viz_model = None          # 下次 start 重新构建（arm+end 联动）
         self._viz_q_cache = {}
         self._viz_static_bytes = b""    # 下次 start 重新装配
@@ -3423,17 +3724,36 @@ class JoyArm:
     def close(self) -> None:
         """安全退出：`stop_motion_fsm()`（best-effort）→ `disable_arm/end` → `disconnect_arm/end`。
 
-        各步异常捕获转 warn 不阻断收尾；同时停监视器与可视化线程。
+        arm 已断连时走豁免路径：跳过 stop 的回零/失能等下发类步骤，停 FSM/plan/ctrl 线程并清空 FSM 缓存；
+        `disconnect_arm` 保留。各步异常捕获不阻断收尾；同时停监视器与可视化线程。
         """
-        steps = (
-            ("stop_motion_fsm", self.stop_motion_fsm),
-            ("stop_monitor", self.stop_monitor),
-            ("stop_state_viz", self.stop_state_viz),
-            ("disable_arm", self._backend.disable_arm),
-            ("disable_end", self._backend.disable_end),
-            ("disconnect_arm", self._backend.disconnect_arm),
-            ("disconnect_end", self._backend.disconnect_end),
-        )
+        if self._backend.is_connected_arm is not True:
+            # 断连豁免：stop_motion_fsm、disable_arm 均跳过；线程收尾与缓存清理照常执行
+            logger.warning(
+                "joyarm.py - close：arm 未连接（is_connected_arm=%s），"
+                "stop_motion_fsm/disable_arm 豁免跳过（仍停线程并清缓存）",
+                self._backend.is_connected_arm)
+            try:
+                self._fsm_shutdown_cleanup()
+            except Exception as e:
+                logger.warning("joyarm.py - close：断连豁免收尾失败（继续收尾）：%s", e)
+            steps = (
+                ("stop_monitor", self.stop_monitor),
+                ("stop_state_viz", self.stop_state_viz),
+                ("disable_end", self._backend.disable_end),
+                ("disconnect_arm", self._backend.disconnect_arm),
+                ("disconnect_end", self._backend.disconnect_end),
+            )
+        else:
+            steps = (
+                ("stop_motion_fsm", self.stop_motion_fsm),
+                ("stop_monitor", self.stop_monitor),
+                ("stop_state_viz", self.stop_state_viz),
+                ("disable_arm", self._backend.disable_arm),
+                ("disable_end", self._backend.disable_end),
+                ("disconnect_arm", self._backend.disconnect_arm),
+                ("disconnect_end", self._backend.disconnect_end),
+            )
         for name, fn in steps:
             try:
                 fn()

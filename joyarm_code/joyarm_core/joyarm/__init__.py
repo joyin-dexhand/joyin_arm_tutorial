@@ -63,11 +63,9 @@ def _available_models() -> list:
 
     可行型号须**同时**满足（三条件）：
 
-    1. `config/<name>.yaml` 存在、非空 dict、含 `joyarm` / `robotics` / `backend`
-       三顶层键；
+    1. `config/<name>.yaml` 存在、非空 dict、含 `joyarm` / `robotics` / `backend` 三顶层键；
     2. `backend.name` ∈ `backend/__init__.py` 的 `REGISTRY` 键；
-    3. 四路径齐全（`_model_paths_missing` 为空）——模板 yaml 无 robot_model 目录，
-       由本条件自然排除（**不做文件名特判**）。
+    3. 四路径齐全（`_model_paths_missing` 为空）—— 模板 yaml 无 robot_model 目录，自然排除。
     """
     out = []
     try:
@@ -85,9 +83,9 @@ def _available_models() -> list:
             continue     # 解析失败 → 不可用
         if not isinstance(cfg, dict) or not cfg:
             continue
-        if not all(k in cfg for k in ("joyarm", "robotics", "backend")):
-            continue
-        if (cfg.get("backend") or {}).get("name") not in REGISTRY:
+        if not all(isinstance(cfg.get(k), dict) for k in ("joyarm", "robotics", "backend")):
+            continue     # 段缺失或写成非 dict（如列表）→ 不可用
+        if cfg["backend"].get("name") not in REGISTRY:
             continue
         if _model_paths_missing(name):
             continue
@@ -135,8 +133,9 @@ class JoyArmFactory:
             raise ValueError(
                 f"joyarm/__init__.py - JoyArmFactory.create：① config 校验失败：{e}；"
                 f"可用型号：{avail}") from e
-        # ② backend：cfg.backend.name ∈ REGISTRY
-        backend_name = (cfg.get("backend") or {}).get("name")
+        # ② backend：cfg.backend.name ∈ REGISTRY（backend 段须为 dict）
+        backend_cfg = cfg.get("backend")
+        backend_name = backend_cfg.get("name") if isinstance(backend_cfg, dict) else None
         if not isinstance(backend_name, str) or backend_name not in REGISTRY:
             raise ValueError(
                 f"joyarm/__init__.py - JoyArmFactory.create：② backend 校验失败："
