@@ -40,7 +40,7 @@ logger.setLevel(logging.INFO)  # 教学库：放行 INFO，成功信息默认可
 
 # 两个可选运行参数的默认值（cfg `backend:` 段顶层同名键可覆盖，缺省或非正数沿用默认并 warn）
 _WRITE_SETTLE_DEFAULT = 0.1    # write_settle（秒）：指令帧生效等待（连接后默认模式帧 / 断连前失能帧等）
-_REFRESH_HZ_DEFAULT = 20.0     # state_refresh_hz（Hz）：低频状态刷新频率
+_REFRESH_HZ_DEFAULT = 20.0     # state_refresh_hz（Hz）：状态数据新鲜度承诺（刷新线程按更高倍频供给）
 
 
 class Backend(ABC):
@@ -104,7 +104,7 @@ class Backend(ABC):
         self._joint_state_arm = JointState()                  # arm 整组实时关节状态
         self._joint_state_end = JointState()                  # end 整组实时关节状态
         self._write_settle = _WRITE_SETTLE_DEFAULT            # 指令帧生效等待（秒；cfg write_settle 可覆盖）
-        self._refresh_hz = _REFRESH_HZ_DEFAULT                # 低频状态刷新频率（Hz；cfg state_refresh_hz 可覆盖）
+        self._refresh_hz = _REFRESH_HZ_DEFAULT                # 状态新鲜度承诺 Hz（cfg state_refresh_hz 可覆盖；线程按更高倍频供给）
         self._refresh_stop = threading.Event()                # 刷新定时器停机标志（close() 置位；亦作测试冻结钩子）
         self._refresh_thread: Optional[threading.Thread] = None  # 刷新定时器线程（daemon，只持本对象弱引用）
 
@@ -178,7 +178,7 @@ class Backend(ABC):
                                                 args=(self._refresh_stop, weakref.ref(self), self._refresh_hz),
                                                 name="backend-state-refresh", daemon=True)
         self._refresh_thread.start()
-        logger.info("backend.py - Backend.__init__：低频状态刷新定时器已启动（%s Hz，arm=%d 关节，end=%d 关节）",
+        logger.info("backend.py - Backend.__init__：低频状态刷新定时器已启动（新鲜度承诺 %s Hz、节拍更高倍频供给，arm=%d 关节，end=%d 关节）",
                     self._refresh_hz, self._n_joints_arm, self._n_joints_end)
 
     # ============================================================
@@ -600,22 +600,30 @@ class Backend(ABC):
         须保持 `@staticmethod` 形态：绑定方法作 target 会持 `self` 强引用钉死对象，
         弱引用永不失效 → 「随对象销毁自动退出」路径失效。
         """
-        period = 1.0 / hz
-        while not stop.wait(period):
-            bk = backend_ref()
+        tick = 0.25 / hz  # 四倍频节拍
+        deadline = time.monotonic()
+        while not stop.is_set():
+            deadline += tick
+            now = time.monotonic()
+            if deadline > now:
+                if stop.wait(deadline - now):
+                    break
+            else:                              # 单拍太慢错过节拍：重新对齐，不追赶
+                deadline = now
+            bk = backend_ref()   # 每 tick 现解析弱引用＝「随对象销毁自动退出」机制
             if bk is None:
                 break
             try:
-                bk._refresh_tick(period)
+                bk._refresh_tick(tick)
             except Exception as e:
                 logger.warning("backend.py - 低频状态刷新：单拍异常（下周期重试）：%s", e)
 
-    def _refresh_tick(self, period: float) -> None:
-        """单拍刷新：逐族检查连接与陈旧度后读取状态，并按 `error` 码同步使能缓存。"""
+    def _refresh_tick(self, tick: float) -> None:
+        """单拍刷新：整族读状态，并按 `error` 码同步使能缓存。"""
         for family in ("arm", "end"):
             if self._n(family) == 0 or not getattr(self, f"_is_connected_{family}"):
                 continue
-            if time.time() - getattr(self, f"_joint_state_{family}").t <= 0.8 * period:
+            if time.time() - getattr(self, f"_joint_state_{family}").t <= 0.5 * tick:
                 continue
             if any(m is None for m in getattr(self, f"_joint_mode_{family}")):
                 getattr(self, f"get_mode_{family}")()

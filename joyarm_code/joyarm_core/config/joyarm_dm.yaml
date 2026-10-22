@@ -106,7 +106,7 @@ robotics:
 # ===================================================================
 backend:
   name: backend_dm # backend 类（backend/__init__.py REGISTRY 中的注册名），与 joyarm_<型号> 对应
-  state_refresh_hz: 50.0 # 低频状态刷新频率（Hz，默认 20）
+  state_refresh_hz: 20.0 # 低频状态刷新频率（Hz，默认 20）
   write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
   rx_hz: 1000.0 # RX 收取线程节拍（Hz，串口阻塞读超时=1/rx_hz；backend_dm 专用）
   arm: # arm本体后端（joints 条目四键限位 = 硬限位，数值须与 URDF limit 标定保持一致）

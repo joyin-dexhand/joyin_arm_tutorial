@@ -706,7 +706,7 @@ def test_21_refresh_thread(cfg):
             while not stop_t.is_set():
                 r._joint_state_arm.t = time.time()
                 r._joint_state_end.t = time.time()
-                time.sleep(0.005)
+                time.sleep(0.002)  # 2ms 更新快于跳过阈值（0.5×tick=0.125/hz=2.5ms@50Hz）→ 恒视为新鲜
 
         th = threading.Thread(target=toucher, daemon=True)
         th.start()
@@ -730,7 +730,7 @@ def test_21_refresh_thread(cfg):
         r._refresh_stop.set()
 
 
-# ---- T14b 刷新 0.8 陈旧度阈值（独立 dummy，20Hz：period=50ms，阈值=40ms） ----
+# ---- T14b 刷新半拍陈旧度阈值（独立 dummy，20Hz：节拍 tick=0.25/hz=12.5ms、跳过阈值=0.5×tick=6.25ms） ----
 def test_21b_refresh_threshold(cfg):
     cfg2 = copy.deepcopy(cfg)
     cfg2["state_refresh_hz"] = 20
@@ -745,20 +745,20 @@ def test_21b_refresh_threshold(cfg):
             while not stop_t.is_set():
                 r._joint_state_arm.t = time.time() - lag
                 r._joint_state_end.t = time.time() - lag
-                time.sleep(0.003)
+                time.sleep(0.001)  # 1ms 粒度回拨：观测龄=lag+1ms 内（阈值 6.25ms，两侧均须留出此余量）
 
-        # 回拨 0.6×period（30ms < 40ms 阈值）→ 视为新鲜（更高频读取在更新），不触发读取
-        th = threading.Thread(target=backdater, args=(0.6 * 0.05,), daemon=True)
+        # 回拨 0.6×跳过阈值（3.75ms+1ms 粒度 < 6.25ms）→ 视为新鲜（更高频读取在更新），不触发读取
+        th = threading.Thread(target=backdater, args=(0.6 * 0.00625,), daemon=True)
         th.start()
         time.sleep(0.3)
         assert not [c for c in r.calls if c[0].startswith("read_joint")]
         stop_t.set()
         th.join()
 
-        # 回拨 0.95×period（47.5ms > 40ms 阈值）→ 陈旧，触发读取
+        # 回拨 1.4×跳过阈值（8.75ms > 6.25ms）→ 陈旧，触发读取
         r.calls.clear()
         stop_t.clear()
-        th = threading.Thread(target=backdater, args=(0.95 * 0.05,), daemon=True)
+        th = threading.Thread(target=backdater, args=(1.4 * 0.00625,), daemon=True)
         th.start()
         time.sleep(0.3)
         assert [c for c in r.calls if c[0] == "read_joint_state_arm"]
@@ -1858,25 +1858,26 @@ def test_70_backend_dm(cfg):
     assert bus.cmd_verified(m, 0xFC, lambda e: e == 1) is True
     assert frames[-2][28] == 0xFC and frames[-1] == m.query_frame  # 先指令帧（超时）后 0xCC 查询帧
 
-    # 9) 状态读取非阻塞三态：硬陈旧先发刷新帧再上抛（恢复路径不锁死）/ 新鲜直返零帧 / 软陈旧发一帧 0xCC 即返当前快照
+    # 9) 状态读取非阻塞（简单语义）：陈旧补发 0xCC 不上抛 / 新鲜直返零帧 / 软陈旧发一帧 0xCC 即返当前快照
     dm0 = d._motors_arm[0]
     bus2 = _DMBus("/dev/null", 921600, 1000.0)
     d._bus_arm = bus2
     sent = []
     bus2.write = sent.append
-    with pytest.raises(TimeoutError):  # 初值快照（t=0）远超硬陈旧阈值 → 上抛
-        d._read_state("arm", 0)
-    assert sent == [dm0.query_frame]  # 上抛前已发刷新帧：电机在岸则下一拍自愈
+    T = 1.0 / d._refresh_hz                     # 承诺周期（阈值随 cfg state_refresh_hz 动态）
+    snap0 = d._read_state("arm", 0)             # 初值快照（t=0）远超半承诺周期：只补问不上抛，原样返回冻结快照
+    assert sent == [dm0.query_frame]
+    assert snap0["q"] == 0.0 and snap0["error"] == -1  # 冻结初值快照原样返回（非阻塞语义）
     dm0.state = (time.monotonic(), 1.0, 2.0, 3.0, 1, 40, 41)  # 模拟刷新应答已到（新鲜快照）
     bus2.write = lambda frame: pytest.fail("新鲜缓存读取不应发总线帧")
     snap_fresh = d._read_state("arm", 0)
     assert snap_fresh.pop("t") == pytest.approx(time.time(), abs=1.0)  # t=帧到达时刻（wall-clock 动态值，不精确相等）
     assert snap_fresh == {"q": 1.0, "dq": 2.0, "tau": 3.0, "error": 1,
                           "temp_mos": 40, "temp_rotor": 41}
-    dm0.state = (time.monotonic() - 0.015, 9.0, 8.0, 7.0, 0, 30, 31)  # 软陈旧（>_STATE_STALE=0.01 且 ≤_STATE_DEAD=0.02）
+    dm0.state = (time.monotonic() - 0.75 * T, 9.0, 8.0, 7.0, 0, 30, 31)  # 软陈旧（>0.5T 补发查询）
     sent = []
     bus2.write = sent.append
-    snap = d._read_state("arm", 0)  # 发一帧 0CCR 后立即返回当前（陈旧）缓存，不等待
+    snap = d._read_state("arm", 0)  # 发一帧 0xCC 后立即返回当前（陈旧）缓存，不等待、不上抛
     assert len(sent) == 1 and sent[0] == dm0.query_frame
     assert snap["q"] == 9.0 and snap["error"] == 0
 

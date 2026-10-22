@@ -8,8 +8,8 @@ Backend 子类全方位测试验证（上层视角）  joyarm_core/backend/backe
     做分组分项测试验证（测试项编号采用两位数十进制分组）：
       00 组  初始化验证：构造、属性初值、限位解析（离线，全低危）；
       10 组  连接编排：arm/end 六种连断次序 + 重复连断 + 断开重联（全低危）；
-      20 组  只读验证：单次状态获取、10s 实时刷新监视、模式获取、参数读取、
-             错误码读取 / 检查（全低危）；
+      20 组  只读验证：单次状态获取、实时刷新监视（10 拍错相）、模式获取、
+             参数读取、错误码读取 / 检查（全低危）；
       30 组  控制验证：三模式设置（低危）、非法模式门禁（低危）、使能 / 失能
              与重复调用、写参数（高危）、设置零点（极高危，仅显式单项 + 每族
              二次确认）；
@@ -99,7 +99,8 @@ SAFE_VLIM = 0.5       # 位置测试限速 rad/s
 SAFE_FLIM = 0.5       # 位置测试归一化力矩电流上限（0~1）
 LIMIT_MARGIN = 0.01   # 目标距硬限位的安全余量 rad
 SETTLE = 0.5          # 发送后观测等待 s
-WATCH_SECS = 10       # item 21 实时刷新监视时长（固定 10s，无 CLI 参数）
+WATCH_TICKS = 10      # item 21 实时刷新监视拍数（无 CLI 参数）
+SAMPLE_IV = 0.17      # item 21 采样间隔 s：与常见承诺周期（10/20/50Hz）均非整数倍，防采样相位锁定（整倍会恒显同一帧龄读数，掩盖真实锯齿）
 ZERO_TOL = 0.05       # item 38 设零后回读关节位置归零容差 rad
 
 # 子类未实现内核的桩消息标记（backend_template.py 桩约定，基类转 warn 后保留原文）
@@ -327,7 +328,7 @@ def _plan_prefill(s: Session, needs: list) -> list[tuple[str, str]]:
                     planned_conn.add(fam)
             elif kind == "mode":
                 mode = nd[2]
-                mode_cur = getattr(b, f"mode_{fam}", None) if b is not None else None
+                mode_cur = getattr(b, f"_mode_{fam}", None) if b is not None else None
                 if mode_cur != mode and planned_mode.get(fam) != mode:
                     if not conn:
                         plans.append((f"connect_{fam}", "低"))
@@ -371,7 +372,7 @@ def _prefill(s: Session, needs: list) -> tuple[str, list[str], str]:
                     return "fail", actions, f"connect_{fam} 未成功（连接为必实现核心能力，详见上方 warn）"
             elif kind == "mode":
                 mode = nd[2]
-                if getattr(b, f"mode_{fam}") == mode:
+                if getattr(b, f"_mode_{fam}") == mode:
                     continue
                 if getattr(b, f"is_connected_{fam}") is not True:  # 防御：先保连接
                     getattr(b, f"connect_{fam}")()
@@ -499,14 +500,18 @@ def _it04(s: Session):
         for fam in ("arm", "end"):
             if getattr(b, f"n_joints_{fam}") != _n_family_cfg(s.cfg, fam):
                 fails.append(f"{fam} 关节数 {getattr(b, f'n_joints_{fam}')} ≠ cfg {_n_family_cfg(s.cfg, fam)}")
-            for attr in (f"is_connected_{fam}", f"is_enabled_{fam}", f"mode_{fam}"):
+            for attr in (f"is_connected_{fam}", f"is_enabled_{fam}"):
                 if getattr(b, attr) is not None:
                     fails.append(f"{attr} 初值非 None")
+            if hasattr(b, f"mode_{fam}"):
+                fails.append(f"mode_{fam} 直读属性应不存在（契约：模式经 get_mode_{fam} 读时刷新）")
+            if getattr(b, f"get_mode_{fam}")() is not None:
+                fails.append(f"get_mode_{fam}() 未连接初值应 None（跳过 warn 不达总线）")
         exp_name = str(s.cfg.get("name", ""))
         if b.name != exp_name:
             fails.append(f"name={b.name!r} ≠ cfg {exp_name!r}")
         ev = (f"name={b.name!r}，arm={b.n_joints_arm} 关节，end={b.n_joints_end} 关节，"
-              f"is_connected*/is_enabled*/mode* 初值均为 None")
+              f"is_connected*/is_enabled* 初值 None；无 mode_* 直读属性；未连接 get_mode_* 返 None")
         return ("FAIL" if fails else "PASS"), ev + (f"；异常：{fails}" if fails else "")
     finally:
         b.close()
@@ -562,15 +567,16 @@ def _it06(s: Session):
 
 # ---------------- 10 组（真机：连接编排） ----------------
 def _snap(b: Backend, fam: str) -> tuple:
-    """族三值状态快照（连接/模式/使能），用于对侧族隔离断言对比。"""
-    return (getattr(b, f"is_connected_{fam}"), getattr(b, f"mode_{fam}"),
+    """族三值状态快照（连接/模式/使能；模式取私有乐观缓存 _mode_*），用于对侧族隔离断言对比。"""
+    return (getattr(b, f"is_connected_{fam}"), getattr(b, f"_mode_{fam}"),
             getattr(b, f"is_enabled_{fam}"))
 
 
 def _reset_disconnected(b: Backend) -> list[str]:
-    """把会话实例复位到全断开态（仅在已使能/已连接时动作），返回已执行动作。
+    """把会话实例复位到全断开态（仅在确知已使能/已连接时动作），返回已执行动作。
 
     连接编排项必须自全断开态出发；上电/上电可能残留使能，先失能再断连（安全方向）。
+    仅 is_connected 确知 True 才断连：None（从未连接/连接中间态）下调用会在断连内核的内部预失能处撞连接门禁，产生「未连接或状态未知」warn——对从未连接的族是纯噪声，易被误读为缺陷。
     """
     acts = []
     for fam in ("arm", "end"):
@@ -579,7 +585,7 @@ def _reset_disconnected(b: Backend) -> list[str]:
         if getattr(b, f"is_enabled_{fam}") is True:
             getattr(b, f"disable_{fam}")()
             acts.append(f"disable_{fam}")
-        if getattr(b, f"is_connected_{fam}") is not False:
+        if getattr(b, f"is_connected_{fam}") is True:
             getattr(b, f"disconnect_{fam}")()
             acts.append(f"disconnect_{fam}")
     return acts
@@ -590,7 +596,7 @@ def _check_connected(b: Backend, fam: str) -> tuple[str, bool]:
     if conn is not True:
         return f"is_connected={conn}（连接失败——核心能力）", False
     exp = _cfg_default_mode(b, fam)
-    mode = getattr(b, f"mode_{fam}")
+    mode = getattr(b, f"_mode_{fam}")
     if mode != exp:
         return f"已连接但 mode={_mode_name(mode)} ≠ cfg 默认 {exp.name}（默认模式未回填）", False
     return f"is_connected=True，mode={exp.name}", True
@@ -598,7 +604,7 @@ def _check_connected(b: Backend, fam: str) -> tuple[str, bool]:
 
 def _check_disconnected(b: Backend, fam: str) -> tuple[str, bool]:
     conn = getattr(b, f"is_connected_{fam}")
-    mode = getattr(b, f"mode_{fam}")
+    mode = getattr(b, f"_mode_{fam}")
     enabled = getattr(b, f"is_enabled_{fam}")
     ok = conn is False and mode is None and enabled is None
     return f"is_connected={conn}，mode={mode}，is_enabled={enabled}（缓存清空）", ok
@@ -655,7 +661,7 @@ def _it16(s: Session):
         getattr(b, f"connect_{fam}")()
         getattr(b, f"connect_{fam}")()  # 重复连接
         conn2 = getattr(b, f"is_connected_{fam}")
-        mode2 = getattr(b, f"mode_{fam}")
+        mode2 = getattr(b, f"_mode_{fam}")
         getattr(b, f"disconnect_{fam}")()
         getattr(b, f"disconnect_{fam}")()  # 重复断开
         ev3, ok = _check_disconnected(b, fam)
@@ -748,22 +754,23 @@ def _it20(s: Session):
 
 
 def _it21(s: Session):
-    """实时状态刷新监视（固定 10s，无参数）：连接后每秒读**被动快照**（不主动
-    get_state），打印 arm/end 全部关节量表格——测试点正是基类低频刷新线程在无
-    主动读取时持续更新快照；Ctrl+C 可提前结束（按已采样判定）。"""
+    """实时状态刷新监视（10 拍错相采样，无参数）：连接后按间隔读**被动快照**（不主动
+    get_state），打印 arm/end 全部关节量表格——测试点正是基类低频刷新线程在无主动读取时
+    持续更新快照；采样间隔与承诺周期非整数倍，防相位锁定恒显同一读数、漏看真实帧龄锯齿；
+    Ctrl+C 可提前结束（按已采样判定）。"""
     b = s.backend()
     fams = _both_fams(s)
-    secs = WATCH_SECS
+    ticks = WATCH_TICKS
     names = {fam: [j.get("name", f"joint{i}")
                    for i, j in enumerate((s.cfg.get(fam) or {}).get("joints") or [])]
              for fam in fams}
     header = (f"{'族.关节':<14}{'q(rad)':>10}{'dq(rad/s)':>11}{'tau(N·m)':>10}"
               f"{'T_mos(℃)':>10}{'T_rot(℃)':>10}{'error':>7}{'快照龄(ms)':>10}")
     ages: dict[str, list[float]] = {fam: [] for fam in fams}
-    print(f"── 实时状态刷新监视（固定 {secs}s，每秒采样被动快照 joint_state_*；Ctrl+C 提前结束）")
+    print(f"── 实时状态刷新监视（{ticks} 拍 × {SAMPLE_IV}s 错相采样被动快照 joint_state_*；Ctrl+C 提前结束）")
     try:
-        for sec in range(1, secs + 1):
-            print(f"── {sec}/{secs}s " + "─" * 52)
+        for k in range(1, ticks + 1):
+            print(f"── {k}/{ticks} 拍 " + "─" * 52)
             print(header)
             now = time.time()
             for fam in fams:
@@ -782,8 +789,8 @@ def _it21(s: Session):
                     cells.append(age_ms)
                     print(f"{cells[0]:<14}{cells[1]:>10}{cells[2]:>11}{cells[3]:>10}"
                           f"{cells[4]:>10}{cells[5]:>10}{cells[6]:>7}{cells[7]:>10}")
-            if sec < secs:
-                time.sleep(1.0)
+            if k < ticks:
+                time.sleep(SAMPLE_IV)
     except KeyboardInterrupt:
         print("（用户中断监视，按已采样判定）")
     results = []
@@ -803,7 +810,7 @@ def _it21(s: Session):
 
 def _it22(s: Session):
     """控制模式获取（双族）：输出逐 joint 模式与族模式（get_mode 返回值），并校验
-    成员变量 mode_* 及逐 joint 缓存与之一致。"""
+    私有缓存 _mode_*/_joint_mode_* 与之一致（无公开 mode_* 直读属性）。"""
     b = s.backend()
     results = []
     for fam in _both_fams(s):
@@ -811,17 +818,17 @@ def _it22(s: Session):
         ret = getattr(b, f"get_mode_{fam}")()
         # 测试基建：逐 joint 模式无公开访问器，读私有缓存 _joint_mode_* 仅作结果展示
         jm = list(getattr(b, f"_joint_mode_{fam}"))
-        cache = getattr(b, f"mode_{fam}")
+        cache = getattr(b, f"_mode_{fam}")
         jm_disp = "[" + "、".join(_mode_name(m) for m in jm) + "]"
         if isinstance(ret, ControlMode):
             ok = cache == ret and bool(jm) and all(m == ret for m in jm)
             ev = (f"单joint={jm_disp}；族模式 get_mode 返回={ret.name}；"
-                  f"mode_{fam}={_mode_name(cache)}（一致={'OK' if ok else '矛盾'}）")
+                  f"_mode_{fam}={_mode_name(cache)}（一致={'OK' if ok else '矛盾'}）")
             results.append((fam, "PASS" if ok else "FAIL", ev))
         else:
             results.append((fam, "SKIP",
                             f"单joint={jm_disp}；族模式 get_mode 返回 None（读失败、各 joint 模式"
-                            f"不一致或无回读能力——见上方 warn；mode_{fam}={_mode_name(cache)}）"))
+                            f"不一致或无回读能力——见上方 warn；_mode_{fam}={_mode_name(cache)}）"))
     return _aggregate(results)
 
 
@@ -905,7 +912,7 @@ def _modes_item(fam: str):
             before = getattr(b, f"get_mode_{fam}")()  # 先读
             i0 = _mark()
             ret = getattr(b, f"set_mode_{fam}")(mode)  # 再设
-            cache = getattr(b, f"mode_{fam}")
+            cache = getattr(b, f"_mode_{fam}")
             after = getattr(b, f"get_mode_{fam}")()  # 再读
             if ret == 1:
                 any_ok = True
@@ -1130,7 +1137,7 @@ def _it41(s: Session):
             continue
         n = getattr(b, f"n_joints_{fam}")
         i0 = _mark()
-        getattr(b, f"send_mit_{fam}")(np.zeros(n), q0, np.zeros(n),
+        getattr(b, f"send_mit_{fam}")(q0, np.zeros(n), np.zeros(n),
                                       np.full(n, SAFE_KP), np.full(n, SAFE_KD))
         verdict = _classify_send(_since(i0))
         time.sleep(SETTLE)
@@ -1376,7 +1383,7 @@ _item(2, "空 cfg 构造容错", "init", "低", None,
 _item(3, "运行参数非法回退", "init", "低", None,
       "验证 state_refresh_hz 等运行参数非法（非正数）时回退默认并 warn", [], _it03)
 _item(4, "只读属性初值", "init", "低", None,
-      "验证关节数/name 与 cfg 一致，is_connected*/is_enabled*/mode* 初值均为 None（三值未知）", [], _it04)
+      "验证关节数/name 与 cfg 一致，is_connected*/is_enabled* 初值 None；无 mode_* 直读属性（契约：模式经 get_mode_* 读时刷新）且未连接 get_mode_* 返 None", [], _it04)
 _item(5, "硬限位解析核对", "init", "低", None,
       "验证 joint_limits_* 的 q_min/q_max/dq_max/tau_max 与 cfg 各关节四键一致（发送裁剪的唯一依据）", [], _it05)
 _item(6, "joint_state 初值", "init", "低", None,
@@ -1418,13 +1425,13 @@ _item(20, "单次状态获取", "read", "低", None,
       "（在场字段 (n,) 且有限、t>0 且更新）+ 成员变量 joint_state_* 更新"
       "（与返回值同引用、旧引用冻结）",
       [("connected", "both")], _it20)
-_item(21, "实时状态刷新监视（10s）", "read", "低", None,
-      "验证连接后基类低频刷新线程持续更新快照：固定 10s 每秒打印 arm/end 全部关节量表"
-      "（被动快照，无 CLI 参数；全程快照龄 <500ms 判 PASS）",
+_item(21, "实时状态刷新监视（10 拍错相）", "read", "低", None,
+      "验证连接后基类低频刷新线程持续更新快照：10 错相采样打印 arm/end 全部关节量表"
+      "（被动快照，无 CLI 参数；间隔与承诺周期非整数倍防相位锁定；全程快照龄 <500ms 判 PASS）",
       [("connected", "both")], _it21)
 _item(22, "控制模式获取", "read", "低", None,
-      "双族输出逐 joint 模式 + 族模式（get_mode 返回值），并校验成员变量 mode_* 及逐 joint "
-      "缓存一致（读失败/各 joint 不一致/无回读能力 SKIP）",
+      "双族输出逐 joint 模式 + 族模式（get_mode 返回值），并校验私有缓存 _mode_*/_joint_mode_* "
+      "一致（读失败/各 joint 不一致/无回读能力 SKIP）",
       [("connected", "both")], _it22)
 _item(23, "参数读取", "read", "低", None,
       "双族验证参数读取返回逐关节标量 list（须 --param 指定子类定义的键；不可用则 SKIP）",
@@ -1662,14 +1669,22 @@ def run_item(it: dict, s: Session) -> tuple[str, str]:
 
 
 def _cleanup(s: Session):
-    """任何退出路径的兜底收尾：尽力失能 → 断连 → close（全程不抛）。"""
+    """任何退出路径的兜底收尾：已连接族断连（断连内核内部先尽力失能）→ close（全程不抛）。
+
+    仅 is_connected 确知 True 的族才断连：未连接/状态未知（None/False）的族调用 disable/disconnect 只会在连接门禁处产生「未连接或状态未知」warn——离线项收尾的纯噪声，易被误读为缺陷（门禁本就拦截、一个总线帧都不会多发，跳过即无副作用）。
+    """
     if s.b is None:
         return
-    for call in (s.b.disable_arm, s.b.disable_end, s.b.disconnect_arm, s.b.disconnect_end, s.b.close):
+    for fam in ("arm", "end"):
         try:
-            call()
+            if getattr(s.b, f"is_connected_{fam}") is True:
+                getattr(s.b, f"disconnect_{fam}")()
         except Exception:
             pass
+    try:
+        s.b.close()
+    except Exception:
+        pass
 
 
 def print_list():

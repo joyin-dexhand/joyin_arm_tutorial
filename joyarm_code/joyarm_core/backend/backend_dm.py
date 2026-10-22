@@ -20,8 +20,7 @@
 可靠性（读回验证与重试均在内核闭环）：参数写等 0x55 回显核对（uint 精确 / float 容差）、参数读等
 0x33 应答、使能/失能/设零/清错（0xFC/0xFD/0xFE/0xFB）等新状态帧核对 error 码，均重试 3 次（单次超时
 0.02s）；应答按「电机+RID+应答时刻 ≥ 发送时刻」配对，防陈旧应答洗白。状态读取非阻塞：缓存新鲜
-（≤10ms）直返，陈旧发一帧 0xCC 刷新后立即返回当前快照（下一拍自愈）；连续 >0.02s 无反馈先发刷新帧再按
-数据异常上抛（电机掉线防冻结值洗白，电机恢复后下一拍自愈）。
+直接返回，陈旧则发一帧 0xCC 刷新后立即返回当前快照（下一拍自愈）；先发刷新帧再按数据异常上抛（电机掉线防冻结值洗白，电机恢复后下一拍自愈）。
 """
 from __future__ import annotations
 
@@ -69,9 +68,6 @@ _RX_HZ_DEFAULT = 1000.0  # RX 收取线程默认节拍 Hz（cfg 顶层 rx_hz 可
 _RX_HZ_MAX = 5000.0      # rx_hz 上限（过高 = 串口空转轮询烧 CPU，挤占控制线程）
 _TX_TIMEOUT = 0.02       # 单次应答等待 s（正常回显毫秒级，20ms ≈ 4 倍余量）
 _TX_RETRIES = 3          # 验证失败重试次数
-_STATE_STALE = 0.01      # 电机状态缓存新鲜阈值 s：新鲜直返，陈旧发 0xCC 刷新
-_STATE_DEAD = 0.02        # 硬陈旧阈值 s：超过按数据异常上抛（电机掉线防冻结值洗白）
-
 
 def _f2u(x: float, x_min: float, x_max: float, bits: int) -> int:
     """float → 位域 uint（与厂商 `float_to_uint` 位级一致：钳位 → 归一化×满量程 → 向零截断）。"""
@@ -459,21 +455,17 @@ class BackendDM(Backend):
                 bus.param_write(motor, rid, gain)
 
     def _read_state(self, family: str, i: int) -> dict:
-        """非阻塞读单电机状态：新鲜（≤_STATE_STALE）直返缓存；陈旧先发一帧 0xCC 刷新——软陈旧立即返当前快照
-        （下一拍自愈），硬陈旧（>_STATE_DEAD）先发刷新帧再上抛（电机在岸则下一拍自愈，不会永久锁死）。
+        """非阻塞读单电机状态：新鲜（≤半承诺周期）直返缓存；陈旧先发一帧 0xCC 刷新。
 
         返回字典含 `t`（该电机最近一帧 RX 到达时刻 Unix 秒）：`state[0]` 为 monotonic 基准，此处每次调用
         现算偏移换算到 wall-clock（消费方均在 time.time() 域）。
-
-        :raises TimeoutError: 状态 >_STATE_DEAD 无刷新（电机掉线/接线异常，防冻结值洗白）。
         """
         motor = getattr(self, f"_motors_{family}")[i]
         st = motor.state
         age = time.monotonic() - st[0]
-        if age > _STATE_STALE:
+        half = 0.5 / self._refresh_hz               # 半承诺周期：超过即补发查询
+        if age > half:
             getattr(self, f"_bus_{family}").write(motor.query_frame)
-            if age > _STATE_DEAD:
-                raise TimeoutError(f"状态 {age:.1f}s 无刷新（motor 0x{motor.slave_id:02X} 在岸/接线异常）")
         return {"q": st[1], "dq": st[2], "tau": st[3], "error": st[4],
                 "temp_mos": st[5], "temp_rotor": st[6],
                 "t": st[0] + (time.time() - time.monotonic())}
