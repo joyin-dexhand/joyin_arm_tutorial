@@ -57,7 +57,7 @@ joyarm:
     t_max: 3.0 # N·m
 
   # home 位形（rad）。zero/neutral 由代码实现，neutral为软限位中点，zero为全零位形
-  home_arm: [0.0, -1.0, -1.0, -0.5, 0.0, 0.0]
+  home_arm: [0.0, -1.0, -1.0, 0.3, 0.0, 0.0]
   home_end: [-3.0]
 
   # 运行参数
@@ -131,8 +131,8 @@ backend:
           pos_ki: 0.5
           vel_kp: 0.0125
           vel_ki: 0.004
-          vlim: 5.0 
-          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
+          vlim: 0.65
+          flim: 0.5 # 归一化力矩电流上限（0.01~1），pos_force 帧标幺（0-10000）
 
       - name: joint2
         motor_id: 0x02
@@ -150,8 +150,8 @@ backend:
           pos_ki: 0.5
           vel_kp: 0.0125
           vel_ki: 0.004
-          vlim: 5.0
-          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
+          vlim: 0.65
+          flim: 0.5 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
 
       - name: joint3
         motor_id: 0x03
@@ -169,8 +169,8 @@ backend:
           pos_ki: 0.5
           vel_kp: 0.0125
           vel_ki: 0.004
-          vlim: 5.0
-          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
+          vlim: 0.65
+          flim: 0.5 # 归一化力矩电流上限（0.01~1），pos_force 帧标幺（0-10000）
 
       - name: joint4
         motor_id: 0x04
@@ -188,8 +188,8 @@ backend:
           pos_ki: 0.2
           vel_kp: 0.0008
           vel_ki: 0.002
-          vlim: 3.0
-          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
+          vlim: 0.8
+          flim: 0.5 # 归一化力矩电流上限（0.01~1），pos_force 帧标幺（0-10000）
 
       - name: joint5
         motor_id: 0x05
@@ -207,8 +207,8 @@ backend:
           pos_ki: 0.2
           vel_kp: 0.0008
           vel_ki: 0.002
-          vlim: 3.0
-          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
+          vlim: 0.8
+          flim: 0.5 # 归一化力矩电流上限（0.01~1），pos_force 帧标幺（0-10000）
 
       - name: joint6
         motor_id: 0x06
@@ -226,8 +226,8 @@ backend:
           pos_ki: 0.2                                                                      
           vel_kp: 0.0008
           vel_ki: 0.002
-          vlim: 3.0
-          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
+          vlim: 0.8
+          flim: 0.5 # 归一化力矩电流上限（0.01~1），pos_force 帧标幺（0-10000）
 
   end: # 末端后端
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
@@ -252,4 +252,4 @@ backend:
           vel_kp: 0.0008
           vel_ki: 0.002
           vlim: 3.0
-          flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
+          flim: 0.025 # 归一化力矩电流上限（0.01~1），pos_force 帧标幺（0-10000）

@@ -70,7 +70,7 @@ logger = logging.getLogger("joyarm_core.joyarm")
 
 
 # ============================================================
-# 路径常量：config/ 与 robot_model/ 目录位置
+# 路径与校验常量
 # ============================================================
 # config/ 目录（joyarm.py 位于 joyarm_core/joyarm/）
 _CONFIG_DIR = os.path.join(
@@ -186,7 +186,7 @@ def load_config(model: str) -> dict:
 
 
 # ============================================================
-# URDF 解析与校验助手
+# cfg 与 URDF 校验助手
 # ============================================================
 def _urdf_joint_table(urdf_path: str) -> dict:
     """解析 URDF 全部 <joint> 元素，返回 `{关节名: 信息}`。
@@ -749,6 +749,9 @@ def _json_arr(x) -> Optional[List[Optional[float]]]:
     return [_json_round(v) for v in np.asarray(x).reshape(-1)]
 
 
+# ============================================================
+# 原生状态可视化窗口（PySide6 子进程）
+# ============================================================
 class _VizWindow:
     """监控页原生窗口封装（PySide6 QtWebEngine 子进程，父/子进程两侧入口）。
 
@@ -2037,6 +2040,7 @@ class JoyArm:
         if chosen is not None and _EVENT_DANGER[chosen] > _EVENT_DANGER[self._safe_event]:
             self.set_event(chosen)
 
+    # =============== 状态可视化线程体与面板数据 ===============
     def _state_viz_worker(self) -> None:
         """可视化单拍：被动采集刷新面板数据与 meshcat 模型姿态。
 

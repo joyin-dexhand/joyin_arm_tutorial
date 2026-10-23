@@ -2,7 +2,7 @@
 
 Levenberg-Marquardt 迭代：世界系六维位姿误差 `[Δp; log3(R_ref·R_curᵀ)]`
 经 `computeFrameJacobian`（LOCAL_WORLD_ALIGNED）的阻尼伪逆修正关节角，
-步被拒（误差不降）则增大阻尼、被接受则衰减（自适应正则化），逐迭代钳硬限位；
+步被拒（误差不降）则增大阻尼、被接受则衰减（自适应正则化），逐迭代钳软限位；
 单起点失败时限位内随机重启（默认 3 次）规避局部极小。适用任意构型（5/6/7 轴通用）。
 """
 from __future__ import annotations
@@ -58,7 +58,7 @@ class PinIkineSolver(IkineSolver):
         :param kwargs: 其余关键字参数——未识别的参数名将被忽略。
         :return: `IKResult`；失败时 `success=False`、`err` 为最优残差、`q` 为取得该残差的最接近尝试解。
 
-        **实现**：LM 迭代（步被拒增大阻尼、被接受衰减，逐迭代钳硬限位）；重启采样确定性（固定种子，同输入同结果）。
+        **实现**：LM 迭代（步被拒增大阻尼、被接受衰减，逐迭代钳软限位）；重启采样确定性（固定种子，同输入同结果）。
         """
         model = arm.pin_model
         data = pin.Data(model)      # 整个求解一份私有 Data（迭代内复用、不共享）

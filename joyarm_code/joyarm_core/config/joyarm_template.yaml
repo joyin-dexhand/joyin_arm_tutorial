@@ -36,7 +36,7 @@ joyarm:
     t_max: 5.0 # N·m
 
   # home 位形（rad）。zero/neutral 由代码实现，neutral为软限位中点，zero为全零位形
-  home_arm: [0.0, -1.0, -1.0, -0.5, 0.0, 0.0]
+  home_arm: [0.0, -1.0, -1.0, 0.5, 0.0, 0.0]
   home_end: [-3.0]
 
   # 运行参数
@@ -109,7 +109,7 @@ backend:
           pos_ki: 0.5 # 位置环 Ki
           vel_kp: 0.0125 # 速度环 Kp（两模式共用）
           vel_ki: 0.004 # 速度环 Ki（两模式共用）
-          vlim: 5.0 # 位置/速度指令限速（rad/s）
+          vlim: 1.0 # 位置/速度指令限速（rad/s）
           flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
       # joint2 … jointN：同构复制上一条目，改 name / motor_id / feedback_id / 硬限位与增益
 
@@ -136,6 +136,6 @@ backend:
           pos_ki: 1.0
           vel_kp: 0.0008
           vel_ki: 0.002
-          vlim: 3.0
+          vlim: 2.0
           flim: 1.0 # 归一化力矩电流上限（0~1），pos_force 帧标幺（0-10000）
       # 多电机末端（如灵巧手）：同构追加条目，逐电机独立 ID / 行程 / 增益
