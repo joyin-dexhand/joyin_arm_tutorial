@@ -365,7 +365,8 @@ def _run_periodic(stop: threading.Event, hz, step: Callable[[], None], name: str
         deadline += period
         now = time.perf_counter()
         if deadline > now:
-            stop.wait(deadline - now)
+            if stop.wait(deadline - now):
+                break
         else:                              # 单步太慢错过节拍：重新对齐，不追赶
             deadline = now
         try:
@@ -420,6 +421,10 @@ class _PeriodicThread:
         """线程是否还在跑（从未启动过算没在跑）。"""
         return self._thread is not None and self._thread.is_alive()
 
+    def is_running(self) -> bool:
+        """线程存活且未请求停止；用于保护迁移取消后判断运动管线是否需要重建。"""
+        return self.is_alive() and not self._stop.is_set()
+
     def prepare(self) -> threading.Thread:
         """预创建底层线程对象并返回（未启动）。
 
@@ -455,6 +460,9 @@ class _PeriodicThread:
         self._stop.set()
         th = self._thread
         if th is None:
+            return
+        if th.ident is None:                 # prepare 后启动失败：没有线程可 join
+            self._thread = None
             return
         th.join(timeout=_JOIN_TIMEOUT)
         if th.is_alive():
@@ -946,13 +954,16 @@ class JoyArm:
         self._zero_moving: bool = False                  # ZERO 态「移动中」子阶段标志
         self._home_arrived: bool = False                 # HOME 态到位日志去重
         self._fsm_defer_count: int = 0                   # 迁移连续推迟拍数（告警与上限兜底）
+        self._fsm_disc_warned: bool = False              # 断连挂起告警去重（重连后复位）
         self._fsm_periodic: Optional[_PeriodicThread] = None  # FSM 周期线程句柄（fsm_hz）
 
         # ---- plan/ctrl 运动线程 ----
         self._plan_periodic: Optional[_PeriodicThread] = None  # plan 周期线程句柄
         self._ctrl_periodic: Optional[_PeriodicThread] = None  # ctrl 周期线程句柄
         self._ctrl_thread: Optional[threading.Thread] = None   # ctrl 线程句柄（互斥豁免判定）
-        self._motion_pause = threading.Event()           # 换规划器/启动期间 ctrl 暂停派发
+        self._motion_lock = threading.RLock()           # 算法选择、模式自愈与单拍下发互斥；join 不持锁
+        self._motion_ready = None                       # FSM 已确认就绪的控制器对象；None 禁止 ctrl 下发
+        self._fsm_shutdown = threading.Event()          # 最终收尾开始后禁止自愈/使能/运动下发
 
         # ---- safe_monitor ----
         self._monitor_periodic: Optional[_PeriodicThread] = None  # 监视器周期线程句柄
@@ -1607,52 +1618,34 @@ class JoyArm:
             return False
         new = solvers[name]
         if domain == "traj":
-            # 固定时序：① 新规划器先 plan 一次（成功才继续）→ ② 替换激活 → ③ 更新 hz
-            self._motion_pause.set()
-            try:
+            # 与 plan/sample/step 串行：试规划成功后才替换，不共享可被他处提前清除的暂停事件。
+            with self._motion_lock:
                 try:
                     ok = bool(new.plan(self, self._target_trajframe))
                 except Exception as e:
-                    logger.warning(
-                        "joyarm.py - set_traj_solver：新规划器『%s』试规划异常"
-                        "（保持原激活不变）：%s", name, e)
+                    logger.warning("joyarm.py - set_traj_solver：新规划器『%s』试规划异常"
+                                   "（保持原激活不变）：%s", name, e)
                     return False
                 if not ok:
-                    logger.warning(
-                        "joyarm.py - set_traj_solver：新规划器『%s』试规划失败"
-                        "（保持原激活不变）", name)
+                    logger.warning("joyarm.py - set_traj_solver：新规划器『%s』试规划失败"
+                                   "（保持原激活不变）", name)
                     return False
                 self._activated_traj_solver = new
                 self._plan_hz = self._plan_hz_by_name[name]
                 if self._plan_periodic is not None:
                     self._plan_periodic.set_hz(self._plan_hz)
-            finally:
-                self._motion_pause.clear()
         elif domain == "ctrl":
-            # 固定时序（对齐 traj 分支）：① 暂停下发 → ② set_mode_arm 成功才换激活
-            #（MODE 联动直连 backend，不经公开 set_mode、不受互斥拦截）→ ③ 更新 hz；
-            # 模式切换失败 / 异常时保持原激活并返回 False，防新控制器指令被
-            # backend 模式门禁无限期丢弃
-            self._motion_pause.set()
-            try:
-                try:
-                    mode_ok = self._backend.set_mode_arm(new.MODE) == 1
-                except Exception as e:
-                    logger.warning(
-                        "joyarm.py - set_ctrl_solver：控制器『%s』模式切换异常"
-                        "（保持原激活不变）：%s", name, e)
-                    return False
-                if not mode_ok:
-                    logger.warning(
-                        "joyarm.py - set_ctrl_solver：控制器『%s』模式切换失败"
-                        "（保持原激活不变）", name)
-                    return False
+            # 这里只选择算法；MOTION 的进入/维持拍负责核验 MODE 与使能。
+            # 先等待在途 step 完成，再撤销许可并换指针，防新控制器沿用旧模式下发。
+            if not isinstance(new.MODE, ControlMode):
+                logger.warning("joyarm.py - set_ctrl_solver：控制器『%s』MODE 非 ControlMode", name)
+                return False
+            with self._motion_lock:
+                self._motion_ready = None
                 self._activated_ctrl_solver = new
                 self._ctrl_hz = self._ctrl_hz_by_name[name]
                 if self._ctrl_periodic is not None:
                     self._ctrl_periodic.set_hz(self._ctrl_hz)
-            finally:
-                self._motion_pause.clear()
         else:
             setattr(self, f"_activated_{domain}_solver", new)
         return True
@@ -1660,57 +1653,42 @@ class JoyArm:
     # ============================================================
     # 四、plan/ctrl 两线程与 ctrl 线程互斥豁免
     # ============================================================
-    def _start_motion_thread(self) -> None:
-        """启动 plan/ctrl 两线程（固定时序）。
+    def _start_motion_thread(self, event: SafetyEvent) -> bool:
+        """首帧规划 → 硬件就绪检查 → 启动 plan/ctrl；仅 FSM 调用。
 
-        激活 traj 求解器 `plan(self, _target_trajframe)` 一次（保证首帧可用）→ 启动 plan 线程（`_plan_hz` 周期 plan）
-        → 启动 ctrl 线程（`_ctrl_hz` 每拍 `step(self, sample(time.time()), get_state_arm() 的 JointState)`）→ 清暂停开关。
-
-        :raises RuntimeError: traj/ctrl 域未配置 / 首帧规划失败 / 旧 plan/ctrl 线程 stop 超时未确认退出（句柄保留中，防双循环）。
+        规划先于硬件变更；异常由 FSM 统一计数并回收部分启动的线程。
+        停旧线程不持 `_motion_lock`，避免 join 等待正在取同一把锁的 worker。
         """
-        planner = self._activated_of("traj")
-        controller = self._activated_of("ctrl")
-        self._stop_motion_thread()                     # 清残留（防御性）
+        self._stop_motion_thread()
         leftovers = [attr for attr in ("_ctrl_periodic", "_plan_periodic")
                      if getattr(self, attr) is not None]
-        if leftovers:                                  # 上次 stop 超时残留：拒绝另起新线程
+        if leftovers:
             raise RuntimeError(
-                f"joyarm.py - _start_motion_thread：旧 plan/ctrl 线程 stop 超时"
-                f"未确认退出（{', '.join(leftovers)} 句柄保留中），拒绝另起新线程"
-                f"（防双循环；MOTION 进入失败，FSM 将重试）")
-        self._motion_pause.set()
-        try:
-            try:
-                ok = bool(planner.plan(self, self._target_trajframe))
-            except Exception as e:
-                raise RuntimeError(
-                    f"joyarm.py - _start_motion_thread：首帧规划异常（MOTION 进入失败，"
-                    f"FSM 将重试）：{e}") from e
-            if not ok:
-                raise RuntimeError(
-                    "joyarm.py - _start_motion_thread：首帧规划失败（MOTION 进入失败，"
-                    "FSM 将重试）")
-            self._plan_periodic = _PeriodicThread(self._tick_plan, self._plan_hz,
-                                                  name="joyarm-plan")
-            self._ctrl_periodic = _PeriodicThread(self._tick_ctrl, self._ctrl_hz,
-                                                  name="joyarm-ctrl")
+                f"joyarm.py - _start_motion_thread：旧 plan/ctrl 线程未确认退出：{leftovers}")
+        with self._motion_lock:
+            planner = self._activated_of("traj")
+            controller = self._activated_of("ctrl")
+            if not planner.plan(self, self._target_trajframe):
+                raise RuntimeError("joyarm.py - _start_motion_thread：首帧规划失败")
+            if not self._ensure_arm_ready(controller.MODE, event):
+                return False
+            self._plan_periodic = _PeriodicThread(self._tick_plan, self._plan_hz, name="joyarm-plan")
+            self._ctrl_periodic = _PeriodicThread(self._tick_ctrl, self._ctrl_hz, name="joyarm-ctrl")
             self._plan_periodic.start()
-            # ctrl 线程句柄须在线程起跑前登记，否则ctrl 首批 step 可能会被互斥误判为外部指令（warn + 丢拍）
-            self._ctrl_thread = self._ctrl_periodic.prepare()
+            self._ctrl_thread = self._ctrl_periodic.prepare()  # 起跑前登记 ctrl 豁免句柄
             self._ctrl_periodic.start()
-        finally:
-            self._motion_pause.clear()
+            self._motion_ready = controller
         logger.info("joyarm.py - _start_motion_thread：plan/ctrl 两线程已启动"
                     "（plan_hz=%s，ctrl_hz=%s，控制器 %s）",
                     self._plan_hz, self._ctrl_hz, type(controller).__name__)
+        return True
 
     def _stop_motion_thread(self) -> None:
-        """停 plan/ctrl 两线程（先 ctrl 后 plan）、超时回收（目标帧缓存不在此处清理）。
+        """撤销下发许可并停 plan/ctrl（先 ctrl 后 plan，join 不持运动锁）。
 
-        超时未退出的 worker **句柄保留**（不强杀）：`_PeriodicThread` 内部保留线程引用，不清属性句柄与 `_ctrl_thread`（互斥豁免判定依据）
-        ——旧线程仍在跑期间不得另起新线程（`_start_motion_thread` 会被拒绝），待其退出后再次调用本方法即完成回收；
-        目标帧缓存 `_target_trajframe` 仅在 FSM start/stop 边界进行清理，MOTION 态退出不清（保护性往返，后续走用户目标）。
+        超时保留线程句柄与 ctrl 豁免句柄，确认退出前不允许另起新线程；目标帧保留。
         """
+        self._motion_ready = None
         for attr in ("_ctrl_periodic", "_plan_periodic"):
             worker = getattr(self, attr)
             if worker is None:
@@ -1718,33 +1696,39 @@ class JoyArm:
             try:
                 worker.stop()
             except RuntimeError as e:
-                logger.warning("joyarm.py - _stop_motion_thread：%s（句柄保留，"
-                               "待其退出后重试）", e)
-                continue                       # 超时未退出：保留句柄，不得丢弃
+                logger.warning("joyarm.py - _stop_motion_thread：%s（句柄保留，待其退出后重试）", e)
+                continue
             setattr(self, attr, None)
         if self._ctrl_periodic is None:
-            self._ctrl_thread = None           # ctrl 线程确认退出后才清（豁免判定依据）
-        self._motion_pause.clear()
+            self._ctrl_thread = None
 
     def _tick_plan(self) -> None:
-        """plan 线程单步：把 `_target_trajframe` 整体交给激活规划器。"""
-        self._activated_traj_solver.plan(self, self._target_trajframe)
+        """与规划器切换及采样串行，收尾开始后不再规划；断连静默跳过（cubic 类取起点的读状态在断连时会抛错）。"""
+        with self._motion_lock:
+            if (not self._fsm_shutdown.is_set() and self._backend.is_connected_arm is True):
+                self._activated_traj_solver.plan(self, self._target_trajframe)
+
+    def _ctrl_ready(self) -> bool:
+        """只由 FSM 授予当前控制器许可；保护事件、断连或最终收尾立即禁止下发。"""
+        return (not self._fsm_shutdown.is_set()
+                and self._backend.is_connected_arm is True
+                and self._safe_event is SafetyEvent.NORMAL
+                and self._current_motion_state is MotionState.MOTION
+                and self._motion_ready is not None
+                and self._motion_ready is self._activated_ctrl_solver)
 
     def _tick_ctrl(self) -> None:
-        """ctrl 线程单步：读状态 → 采样当前帧 → 控制器 step 经本对象下发。
-
-        暂停开关置位期间（换规划器/启动过渡时）不派发；`get_state_arm()` 为 None 时跳过本拍 + warn。
-        """
-        if self._motion_pause.is_set():
-            return
-        state = self._backend.get_state_arm()
-        if state is None:
-            logger.warning(
-                "joyarm.py - _tick_ctrl：本拍 get_state_arm() 为 None"
-                "（未连接或读取失败），跳过本拍 step（下拍重试）")
-            return
-        frame = self._activated_traj_solver.sample(time.time())
-        self._activated_ctrl_solver.step(self, frame, state)
+        """就绪时读状态、采样、执行控制；单拍与算法选择/模式自愈互斥。"""
+        with self._motion_lock:
+            if not self._ctrl_ready():
+                return
+            state = self._backend.get_state_arm()
+            if state is None:
+                logger.warning("joyarm.py - _tick_ctrl：get_state_arm() 为 None，跳过本拍 step")
+                return
+            frame = self._activated_traj_solver.sample(time.time())
+            if self._ctrl_ready():              # 读取期间可能收到保护事件
+                self._activated_ctrl_solver.step(self, frame, state)
 
     def _is_internal_thread(self) -> bool:
         """当前线程是否为 JoyArm 自身内部的 ctrl 线程（互斥豁免判定）。"""
@@ -1753,10 +1737,10 @@ class JoyArm:
     def _fsm_guard(self, caller: str) -> bool:
         """FSM 外部指令互斥检查（arm 侧指令类方法用）；放行返回 True。
 
-        FSM 运行时，**外部**调用 arm 侧指令方法时拦截（空操作 + warn）；ctrl 线程自身调用放行。
+        FSM 运行时外部调用被拦截；ctrl 线程仅在当前控制器已就绪且处于正常 MOTION 时放行。
         """
         if self._is_internal_thread():
-            return True
+            return self._ctrl_ready()
         if self._fsm_running():
             logger.warning(
                 "joyarm.py - %s：FSM 运行中，外部线程的 arm 侧指令被互斥拦截"
@@ -1772,42 +1756,81 @@ class JoyArm:
         return self._fsm_periodic is not None and self._fsm_periodic.is_alive()
 
     def _fsm_worker(self) -> None:
-        """FSM 线程体单步（经 `_PeriodicThread` 以 `_fsm_hz` 周期驱动）。"""
-        self._fsm_tick()
+        """FSM 单拍；收尾期间在途自愈返回后再失能，防其晚于 stop 的失能完成。"""
+        try:
+            self._fsm_tick()
+        finally:
+            if self._fsm_shutdown.is_set():
+                self._backend.disable_arm()
 
     def _fsm_tick(self) -> None:
-        """FSM 单拍循环：消费事件 → 迁移（含门槛）→ 维持。"""
-        # 1) 消费 _safe_event 变化更新目标状态（与 set_event 的同步写幂等，兜底竞态）
-        self._target_motion_state = _EVENT_TO_STATE[self._safe_event]
+        """消费事件 → 进入/维持 → 成功才提交状态；失败与异常统一累计。"""
+        if self._fsm_shutdown.is_set():
+            return
+        if self._backend.is_connected_arm is not True:
+            # 断连挂起：不迁移、不维持——任何 backend 调用都会逐拍命中连接门禁 warn 刷屏；
+            # 一次性告警后静默等待重连自动恢复，defer 计数冻结（断连不消耗 50 拍兜底）
+            if not self._fsm_disc_warned:
+                logger.warning(
+                    "joyarm.py - _fsm_tick：arm 未连接（is_connected_arm=%s），"
+                    "FSM 挂起：暂停迁移与维持下发，等待重连后自动恢复",
+                    self._backend.is_connected_arm)
+                self._fsm_disc_warned = True
+            return
+        self._fsm_disc_warned = False
+        event = self._safe_event
+        self._target_motion_state = _EVENT_TO_STATE[event]
         cur, tgt = self._current_motion_state, self._target_motion_state
-        if cur is tgt:
-            self._fsm_defer_count = 0                     # 稳态：连续推迟计数清零
-            self._maintain_motion_state(cur)
-            return
-        nxt = _ROUTE[cur].get(tgt)
-        if nxt is None:
-            return
-        # 迁移门槛：current==HOME 且 target∈{ZERO, MOTION} 须 home 运动到位；
-        # 到位只认 _home_arrived（HOME 维持拍对 joint_state_arm 快照检测置位并记日志）；
-        # 未到位时继续执行 HOME 维持动作（驱动其运动到位），其他保护性直达目标不受门槛限制
-        if (cur is MotionState.HOME and tgt in (MotionState.ZERO, MotionState.MOTION)
-                and not self._home_arrived):
-            self._maintain_motion_state(cur)
-            return
-        self._exit_motion_state(cur)
-        if cur is MotionState.MOTION and self._ctrl_periodic is not None:
-            # MOTION 退出时 ctrl 线程停止超时残留：本拍不发指令，推迟下拍重试（确认退出后才继续迁移）
-            self._defer_motion_transition(cur, nxt, "ctrl 线程停止未确认（僵尸残留）")
-            return
-        if not self._enter_motion_state(nxt):
-            # 进入失败（如 HOLD 采样失败）：推迟期间旧态维持指令不中断，下拍重试
-            self._maintain_motion_state(cur)
-            self._defer_motion_transition(cur, nxt, "进入动作失败（见进入路径告警）")
-            return
-        self._current_motion_state = nxt
-        self._fsm_defer_count = 0                         # 迁移成功：连续推迟计数清零
-        logger.info("joyarm.py - _fsm_tick：状态迁移 %s → %s（目标 %s）",
-                    cur.name, nxt.name, tgt.name)
+        nxt = _ROUTE[cur].get(tgt, cur)
+        waiting_home = (cur is MotionState.HOME and tgt in (MotionState.ZERO, MotionState.MOTION)
+                        and not self._home_arrived)
+        starting_motion = False
+        try:
+            if cur is tgt or waiting_home:
+                if (cur is MotionState.MOTION
+                        and any(worker is None or not worker.is_running()
+                                for worker in (self._ctrl_periodic, self._plan_periodic))):
+                    # 保护迁移曾停线程但尚未提交新态，外部已恢复 NORMAL：重建管线。
+                    starting_motion = True
+                    ok = self._start_motion_thread(event)
+                else:
+                    ok = self._maintain_motion_state(cur, event)
+            else:
+                self._exit_motion_state(cur)
+                if cur is MotionState.MOTION and self._ctrl_periodic is not None:
+                    raise RuntimeError("ctrl 线程停止未确认（句柄保留）")
+                starting_motion = nxt is MotionState.MOTION
+                ok = self._enter_motion_state(nxt, event)
+                if ok:
+                    with self._motion_lock:
+                        if not self._arm_action_allowed(event):
+                            self._motion_ready = None
+                            ok = False
+                        else:
+                            if cur is MotionState.ZERO:
+                                self._zero_moving = False
+                            elif cur is MotionState.HOLD:
+                                self._hold_q = None
+                            self._current_motion_state = nxt
+                    if not ok:
+                        if nxt is MotionState.MOTION:
+                            self._stop_motion_thread()
+                        return
+                    logger.info("joyarm.py - _fsm_tick：状态迁移 %s → %s（目标 %s）",
+                                cur.name, nxt.name, tgt.name)
+            if ok:
+                self._fsm_defer_count = 0       # 自愈/维持成功后才清零，不能每拍提前清零
+                return
+            reason = "模式/使能或进入条件未就绪"
+        except Exception as e:
+            self._motion_ready = None
+            if starting_motion:
+                self._stop_motion_thread()     # 首帧/部分启动失败：回收，且不持运动锁
+            reason = f"{type(e).__name__}: {e}"
+            logger.warning("joyarm.py - _fsm_tick：FSM 单步失败：%s", reason)
+        # 事件已变化时立即让下拍处理新目标，不恢复旧态运动，也不覆盖新的保护事件。
+        if self._arm_action_allowed(event):
+            self._defer_motion_transition(cur, nxt, reason)
 
     def _defer_motion_transition(self, cur: MotionState, nxt: MotionState, reason: str) -> None:
         """迁移推迟处理：显式告警 + 连续拍数上限（超限改走既有 DISABLE 事件直接失能兜底）。
@@ -1833,102 +1856,114 @@ class JoyArm:
             self.set_event(SafetyEvent.DISABLE)
         # 超上限后的推迟拍：DISABLE 事件已置，静默等待迁移完成（防刷屏）
 
-    def _enter_motion_state(self, state: MotionState) -> bool:
-        """状态进入（enter）：转移时一次检查与设置 + 状态初始化（enter 列）。
+    def _arm_action_allowed(self, event: SafetyEvent) -> bool:
+        """阻塞 I/O 前后复查事件及最终停机标志，防按过期目标继续使能/下发。"""
+        return not self._fsm_shutdown.is_set() and self._safe_event is event
 
-        :return: `False` 表示本次迁移推迟（如 HOLD 采样失败），下拍重试。
-        :raises RuntimeError: 转移时发现未连接。
+    def _ensure_arm_ready(self, mode: ControlMode, event: SafetyEvent) -> bool:
+        """状态内模式/使能自愈（调用方持运动锁）；成功才允许运动下发。
+
+        每拍只读一次模式；不一致才写，先模式后使能。失败交由 FSM 下拍重试，
+        不清故障、不修改安全事件；未知使能不得当作已使能。
         """
+        self._motion_ready = None
+        if not self._arm_action_allowed(event):
+            return False
         if self._backend.is_connected_arm is not True:
-            raise RuntimeError(
-                f"joyarm.py - _enter_motion_state：转移至 {state.name} 时发现未连接"
-                f"（is_connected_arm={self._backend.is_connected_arm}）")
-        if state is MotionState.DISABLE:
-            self._disable_clear_disable_arm()
-            logger.info("joyarm.py - _enter_motion_state：进入 DISABLE（失能→清错→失能）")
-        elif state is MotionState.ZERO:
-            self._enter_enable_mode(ControlMode.POSITION)
-            self._backend.send_position_arm(self._zero_arm)     # enter 发一次（「移动中」子阶段每拍重发）
-            self._zero_moving = True
-            logger.info("joyarm.py - _enter_motion_state：进入 ZERO（移动至零位后失能维持）")
-        elif state is MotionState.HOME:
-            self._enter_enable_mode(ControlMode.POSITION)
-            self._home_arrived = False
-            logger.info("joyarm.py - _enter_motion_state：进入 HOME（空闲保持）")
-        elif state is MotionState.MOTION:
-            self._hold_q = None                                  # 清理缓存和残留
-            self._stop_motion_thread()
-            controller = self._activated_of("ctrl")              # 未配置 → enter 失败重试
-            self._activated_of("traj")
-            self._enter_enable_mode(controller.MODE)             # 设置 mode 为控制器 MODE
-            self._start_motion_thread()
-            logger.info("joyarm.py - _enter_motion_state：进入 MOTION（plan/ctrl 两线程运行）")
-        elif state is MotionState.HOLD:
-            # 先采样、后切使能/模式：采样失败时旧态维持指令不被模式切换打断
-            state_arm = self._backend.get_state_arm()
-            if state_arm is None or state_arm.q is None:
-                logger.warning(
-                    "joyarm.py - _enter_motion_state：HOLD 采样当前关节位置失败"
-                    "（get_state_arm() 为 None），本次迁移推迟下拍重试")
+            raise RuntimeError("joyarm.py - _ensure_arm_ready：arm 未连接")
+        actual = self._backend.get_mode_arm()
+        if not self._arm_action_allowed(event):
+            return False
+        if actual != mode:
+            if self._backend.set_mode_arm(mode) != 1:
                 return False
-            self._enter_enable_mode(ControlMode.POSITION)
-            self._hold_q = np.asarray(state_arm.q, dtype=float).copy()
-            logger.info("joyarm.py - _enter_motion_state：进入 HOLD（原位锁定）")
-        elif state is MotionState.DAMPING:
-            self._enter_enable_mode(ControlMode.MIT)
-            logger.info("joyarm.py - _enter_motion_state：进入 DAMPING（阻尼防护）")
-        return True
-
-    def _enter_enable_mode(self, mode: ControlMode) -> None:
-        """转移时一次完成的使能与模式设置（读标志，未达即设，不多发总线帧）。"""
+        if not self._arm_action_allowed(event):
+            return False
         if self._backend.is_enabled_arm is not True:
-            self._backend.enable_arm()
-        if self._backend.get_mode_arm() != mode:
-            self._backend.set_mode_arm(mode)
+            if self._backend.enable_arm() != 1:
+                return False
+        return (self._arm_action_allowed(event)
+                and self._backend.is_enabled_arm is True)
+
+    def _enter_motion_state(self, state: MotionState, event: SafetyEvent) -> bool:
+        """进入动作成功才提交状态；失败不清理旧 HOLD/ZERO 缓存，不盲目恢复旧指令。"""
+        if state is MotionState.MOTION:
+            return self._start_motion_thread(event)
+        with self._motion_lock:
+            if not self._arm_action_allowed(event):
+                return False
+            if self._backend.is_connected_arm is not True:
+                raise RuntimeError(f"joyarm.py - _enter_motion_state：转移至 {state.name} 时发现未连接")
+            if state is MotionState.DISABLE:
+                return self._disable_clear_disable_arm()
+            hold_q = None
+            if state is MotionState.HOLD:
+                st = self._backend.get_state_arm()
+                if st is None or st.q is None:
+                    return False
+                hold_q = np.asarray(st.q, dtype=float).copy()
+                if hold_q.shape != (self._n_arm,) or not np.isfinite(hold_q).all():
+                    return False
+            mode = ControlMode.MIT if state is MotionState.DAMPING else ControlMode.POSITION
+            if not self._ensure_arm_ready(mode, event):
+                return False
+            if state is MotionState.ZERO:
+                self._zero_moving = True
+                self._backend.send_position_arm(self._zero_arm)
+            elif state is MotionState.HOME:
+                self._home_arrived = False
+            elif state is MotionState.HOLD:
+                self._hold_q = hold_q
+            return True
 
     def _exit_motion_state(self, state: MotionState) -> None:
-        """状态退出清理（退出清理列）。"""
-        if state is MotionState.ZERO:
-            self._zero_moving = False     # 清到位轮询 / 子阶段标志
-        elif state is MotionState.MOTION:
-            self._stop_motion_thread()    # 停线程（帧缓存不在此清）
-        elif state is MotionState.HOLD:
-            self._hold_q = None
-        # DISABLE / HOME / DAMPING 无退出清理
+        """MOTION 先撤销许可、停线程；ZERO/HOLD 缓存仅在迁移成功后清理。"""
+        if state is MotionState.MOTION:
+            self._stop_motion_thread()       # join 不得持运动锁
 
-    def _maintain_motion_state(self, state: MotionState) -> None:
-        """状态维持动作（每拍核心动作；硬件操作一律直连 `self._backend`）。"""
-        if state is MotionState.DISABLE:
-            self._backend.disable_arm()                     # 幂等、无检查无 warn
-        elif state is MotionState.ZERO:
-            if self._zero_moving:
-                # 「移动中」子阶段：每拍重发零位位置指令 + 到位检查（与 HOME 态一致）
+    def _maintain_motion_state(self, state: MotionState, event: SafetyEvent) -> bool:
+        """每拍先确认模式/使能再维持；ZERO 到位与 DISABLE 只保持失能（确知已失能则静默不发帧）。"""
+        with self._motion_lock:
+            if not self._arm_action_allowed(event):
+                return False
+            if state is MotionState.DISABLE or (state is MotionState.ZERO and not self._zero_moving):
+                self._motion_ready = None
+                if self._backend.is_enabled_arm is False:
+                    return True          # 确知已失能：静默维持，免每拍刷屏
+                return self._backend.disable_arm() == 1
+            controller = self._activated_of("ctrl") if state is MotionState.MOTION else None
+            mode = (controller.MODE if controller is not None else
+                    ControlMode.MIT if state is MotionState.DAMPING else ControlMode.POSITION)
+            if not self._ensure_arm_ready(mode, event):
+                return False
+            if state is MotionState.ZERO:
                 self._backend.send_position_arm(self._zero_arm)
                 if self.is_in_q_arm(self._zero_arm):
-                    self._backend.disable_arm()
+                    if self._backend.disable_arm() != 1:
+                        return False
                     self._zero_moving = False
-                    logger.info("joyarm.py - _maintain_motion_state：ZERO 已到位并失能，"
-                                "转入「零位失能维持」子阶段")
-            else:
-                self._backend.disable_arm()                 # 零位失能维持（同 DISABLE）
-        elif state is MotionState.HOME:
-            self._backend.send_position_arm(self._home_arm)
-            if not self._home_arrived and self.is_in_q_arm(self._home_arm):
-                self._home_arrived = True
-                logger.info("joyarm.py - _maintain_motion_state：HOME 已到位")
-        elif state is MotionState.MOTION:
-            pass    # plan/ctrl 两线程自行维持；求解器热切换见 _switch_solver
-        elif state is MotionState.HOLD:
-            if self._hold_q is not None:
+                    logger.info("joyarm.py - _maintain_motion_state：ZERO 已到位并失能")
+            elif state is MotionState.HOME:
+                self._backend.send_position_arm(self._home_arm)
+                if not self._home_arrived and self.is_in_q_arm(self._home_arm):
+                    self._home_arrived = True
+                    logger.info("joyarm.py - _maintain_motion_state：HOME 已到位")
+            elif state is MotionState.MOTION:
+                self._motion_ready = controller
+            elif state is MotionState.HOLD:
+                if self._hold_q is None:
+                    return False
                 self._backend.send_position_arm(self._hold_q)
-        elif state is MotionState.DAMPING:
-            self._backend.send_mit_arm(q=np.zeros(self._n_arm), kp=np.zeros(self._n_arm), kd=self._mit_kd_damping)
+            elif state is MotionState.DAMPING:
+                self._backend.send_mit_arm(q=np.zeros(self._n_arm), kp=np.zeros(self._n_arm), kd=self._mit_kd_damping)
+            return True
 
-    def _disable_clear_disable_arm(self) -> None:
-        """「失能→清错→失能」序列（DISABLE 态 enter 用；直连 backend）。"""
+    def _disable_clear_disable_arm(self) -> bool:
+        """既有 DISABLE 进入序列；最后一次失能必须成功，不能仅凭调用完成提交状态。"""
+        self._motion_ready = None
         self._backend.disable_arm()
         self._backend.clear_error_arm()
-        self._backend.disable_arm()
+        return self._backend.disable_arm() == 1
 
     # ============================================================
     # 六、safe_monitor 与状态可视化线程体
@@ -2059,7 +2094,8 @@ class JoyArm:
         self._viz_state = snap
         # meshcat 模型姿态刷新与轨迹绘制（初始化失败降级；q 无效时保持上一帧）。
         # display q 按可视化模型（arm+end）关节序从快照按名映射拼装——其有效性与 q_ok（arm 快照当拍有效）经族级缓存解耦；
-        # 轨迹绘制入口因此保留 q_ok 条件：q_arr 无效时 _viz_draw_trajectory 内 fk.solve 会抛异常，必须整块跳过。
+        # 轨迹绘制入口因此保留 q_ok 与 fkine 已配置两条件：q_arr 无效或 fkine 域未配置时
+        # _viz_draw_trajectory 内 fk.solve 会抛异常，必须整块跳过（否则 10 Hz warn 无限刷）。
         if self._viz_pin is not None:
             try:
                 q_viz = self._viz_display_q(state_arm, state_end)
@@ -2067,7 +2103,8 @@ class JoyArm:
                     self._viz_pin.display(q_viz)
                 if (self._viz_traj_enabled and self._viz_traj_points > 0
                         and self._current_motion_state is MotionState.MOTION
-                        and q_ok):
+                        and q_ok
+                        and self._activated_fkine_solver is not None):
                     self._viz_draw_trajectory(q_arr)
                 else:
                     self._viz_hide_trajectory()
@@ -2981,10 +3018,10 @@ class JoyArm:
         return copy.deepcopy(sorted(self._require_solvers("ctrl")))
 
     def set_ctrl_solver(self, name: str) -> bool:
-        """切换 control 域激活控制器（替换指针 → MODE 联动电机模式 → 更新 ctrl 线程频率）
+        """选择 control 域控制器并更新频率；MOTION 进入/维持时由 FSM 自愈电机模式。
 
-        :param name: 注册名（必填）。
-        :return: 成功 `True`；名称不在已加载成员中 warn 并保持原激活，返回 `False`。
+        :param name: 注册名（必填）；离线也可选择，不触碰硬件。
+        :return: 选择成功 `True`（不代表硬件就绪）；无效名称/MODE 返回 `False`。
         """
         return self._switch_solver("ctrl", name)
 
@@ -3407,6 +3444,9 @@ class JoyArm:
                     f"{_DOMAIN_REGISTRIES[domain][0]} 域未配置任何求解器"
                     f"（MOTION 态依赖 plan/ctrl 管线），拒绝启动")
         self._stop_motion_thread()                        # 规划/控制线程尚在运行则先停止
+        if self._ctrl_periodic is not None or self._plan_periodic is not None:
+            raise RuntimeError("joyarm.py - start_motion_fsm：旧运动线程未确认退出")
+        self._fsm_shutdown.clear()
         # 幂等清理 FSM 全部缓存
         self._hold_q = None
         self._zero_moving = False
@@ -3428,9 +3468,9 @@ class JoyArm:
         ① 前置 `is_connected_arm is True`；
         ② 置 `set_event(SafetyEvent.ZEROING)`，阻塞等待经 HOME 中转迁移至 ZERO 并完成到位失能；
            当前危险度高于 ZEROING（DAMPING / DISABLE）时改置 DISABLE 直接失能停机；
-        ③ `self._backend.disable_arm()` 失能 arm 全部电机（end 失能由调用方或销毁路径处理）；
-        ④ 停 FSM 线程（join 带超时、超时 warn 不强杀——此时句柄保留、跳过缓存清理与状态复位，
-           互斥与 ctrl 豁免判定继续生效）、清空全部 FSM 缓存、状态机退出。
+        ③ 禁止后续自愈/下发，停 FSM/plan/ctrl 线程，确认退出后清缓存并复位；
+           join 超时仅告警，保留句柄与原状态、外部互斥继续生效，ctrl 保持禁止下发；
+        ④ 最后失能 arm（end 由调用方或销毁路径处理）。
 
         :raises RuntimeError: 未连接。
         """
@@ -3473,17 +3513,19 @@ class JoyArm:
                         "（超时强制推进：disable → 清缓存 → 退出）", self._move_wait_timeout)
         else:
             logger.info("joyarm.py - stop_motion_fsm：FSM 未在运行，直接执行失能与清理")
-        # ③ 失能 arm 全部电机
-        self._backend.disable_arm()
-        # ④ 停 FSM 线程 + 清空全部 FSM 缓存 + 状态机退出
+        # 回零结束/超时后进入最终收尾：禁止自愈 → 停线程 → 最后失能。
         self._fsm_shutdown_cleanup()
+        if self._backend.disable_arm() != 1:
+            logger.warning("joyarm.py - stop_motion_fsm：最终失能未确认成功")
 
     def _fsm_shutdown_cleanup(self) -> None:
         """FSM 统一收尾：停 FSM/plan/ctrl 线程 + 清空全部缓存与状态复位。
 
-        FSM 线程停止超时：保留 `_fsm_periodic` 句柄（`_fsm_running` 仍为True，互斥与 ctrl 豁免判定继续生效）、
+        FSM 线程停止超时：保留 `_fsm_periodic` 句柄（`_fsm_running` 仍为 True，外部互斥继续生效、ctrl 禁止下发）、
             FSM 独占写的状态与缓存不得由用户线程改写——跳过清理提前返回，待线程退出后再次调用完成收尾。
         """
+        self._fsm_shutdown.set()
+        self._motion_ready = None
         if self._fsm_periodic is not None:
             try:
                 self._fsm_periodic.stop()
@@ -3504,8 +3546,7 @@ class JoyArm:
         self._safe_event = SafetyEvent.DISABLE
         self._target_motion_state = MotionState.DISABLE
         self._current_motion_state = MotionState.DISABLE
-        logger.info("joyarm.py - _fsm_shutdown_cleanup：FSM 已停止并清空缓存"
-                    "（再用需重新 start_motion_fsm）")
+        logger.info("joyarm.py - _fsm_shutdown_cleanup：FSM 已停止并清空缓存")
 
     def set_event(self, event: SafetyEvent) -> None:
         """设置安全事件：原子赋值 `_safe_event` 并同步目标状态为事件映射状态。
@@ -3519,6 +3560,8 @@ class JoyArm:
                 f"{type(event).__name__}")
         self._safe_event = event
         self._target_motion_state = _EVENT_TO_STATE[event]
+        if event is not SafetyEvent.NORMAL:
+            self._motion_ready = None             # 不等运动锁，立即阻止在途 ctrl 后续下发
 
     def get_event(self) -> SafetyEvent:
         """读当前安全事件。"""

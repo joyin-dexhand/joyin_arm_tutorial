@@ -1,137 +1,64 @@
-"""
-==============================================================================
-JoyArm 层双模式分级验收脚本  joyarm_core/joyarm/joyarm_verify.py
-==============================================================================
-【功能概要】
-    对 JoyArm 整机层（joyarm/joyarm.py 的组合根：工厂/自检/只读面/委托面/求解器
-    域/数学门面/MotionFSM/safe_monitor/可视化/销毁路径）做分组分项**分级**验收，
-    双模式共用同一套骨架（两位数十进制分组（组号×10+组内序号）、_item 注册表
-    （组/级/风险/用途）、逐项 pre/post 打印、PASS/SKIP/FAIL 三分判定、结尾机器
-    可解析 SUMMARY 行）：
-    - 缺省【离线模式】：DummyBackend 注入全自动（零交互、非终端可跑、可当门控）；
-    - --real【真机模式】：真配置（joyarm_dm.yaml 的 backend.name=backend_dm）真
-      连接交互验收，不经 Dummy 注入，按危险度分级确认（对齐 backend_verify.py
-      的风险确认惯例）。
-    离线分级（00~09 组 → 级 L0~L5）：
-      L0 = factory(00)+init(01)+readonly(02)   工厂构建/初始化自检/只读面
-      L1 = delegate(03)                        直接委托类指令（互斥与拒绝路径）
-      L2 = solvers(04)+math(05)                求解器域/数学门面
-      L3 = fsm(06)+monitor(07)                 MotionFSM/safe_monitor
-      L4 = viz(08)                             可视化
-      L5 = close(09)                           销毁路径
-    真机分级（100~15x 组 → 级 r0~r5，危险度递进）：
-      r0(100 组) 连接/硬件只读（低危直执）
-      r1(110 组) 使能/模式/参数写（模式低危；使能/写参高危输入 yes）
-      r2(120 组) 委托指令小幅运动（高危 + 发送前参数预览 + 二次确认，--yes 不放行）
-      r3(130 组) 状态机运动（高危输入 yes：FSM 启动将使能电机并运动至 home）
-      r4(140 组) 监视器/可视化（中危回车确认）
-      r5(150 组) 清错（高危）；设零 151（极高危：每族二次确认、--yes 不放行、
-                 仅显式 --real --step=151 执行，任何组展开不含本项）
-    离线 00~09 组逐组说明：
-      00 组  工厂与 listArm：未知名异常含可用列表（临时禁用注入直连真实
-             ①config/②backend 错误消息路径）、listArm 三条件（临时目录
-             变量控制）、模板排除、Dummy 注入下的工厂成功路径；
-      01 组  初始化自检：坏 cfg 变体逐条异常（缺顶层键/坏注册名/缺 plan_hz/
-             非整值/home 越软限位/软限位越硬限位/限位与 URDF 不符/数值叶
-             NaN·null 拒绝构造）；
-      02 组  只读属性与防篡改：writeable=False 原地写抛异常、get_config 深拷贝
-             （外部篡改不反哺内部）、只读 @property 零拷贝返本体、
-             get_joint_names 1 基边界；
-      03 组  委托面与互斥：DummyBackend 内核透传核对、FSM 运行中外部 arm 侧
-             指令空操作 + warn、ctrl 线程豁免；
-      04 组  求解器域：get/set_activated/get_<域>_solvers、坏名 warn 保持原激活、
-             traj 先 plan 后换指针 + plan_hz 联动、ctrl 切换 MODE 联动；
-      05 组  数学门面：显式传参离线计算 vs pinocchio 原生 API 逐项对照
-             （fkine/ikine/ikine_all/jac/jac_pinv/idyn/mass/coriolis/gravity 9 方法）、
-             到位判断三函数、rand_q 限位内采样、frame=0 基座帧回归；
-      06 组  MotionFSM（DummyBackend 推演）：start 前置 RuntimeError、
-             DISABLE→HOME→MOTION 自动迁移、home 到位门槛、保护事件直达、
-             stop 超时强推、set_target 拒绝路径、目标帧通道 deepcopy 隔离、
-             wait_for_motion_state 四路径（到达 1 / 超时·未运行·非枚举 0）；
-      07 组  safe_monitor：硬规则 error≥2→DAMPING、断连/连续 None→DISABLE
-             （断连项含 close 后线程清点断言）、自定义规则绑定（state_arm 允许
-             None）与同拍仲裁（硬+自定义命中合并取危险最高）；
-      08 组  可视化：start/stop_state_viz 离线降级不炸、meshcat 初始化失败降级 warn、
-             HTTP /state.json 轮询端点、重复启停幂等与 stop→start 循环、线程退出；
-      09 组  销毁路径：close 幂等、with __exit__ 收尾序列、__del__ 冒烟
-             （__del__ 不做执行时序承诺，仅验证存在与不炸）。
-    DummyBackend 注入：脚本内自包含实现最小 DummyBackend(Backend)（29 个抽象
-    内核全部脚本化：calls 记录 / modes·jstates 可编程 / 寄存器模拟 / 位置指令
-    跟随开关），经「临时改 cfg 的 backend.name + backend.REGISTRY 原地加键
-    （joyarm.py import 时值引用捕获各域 REGISTRY，替换模块属性无效）+ 临时换
-    load_config 返回注入 cfg」注入（用完恢复，不触碰仓库文件）。
-    交互性：离线模式全部测试项无交互（非终端可跑）；FSM/监视器/可视化线程类
-    用例在每项内部 finally 收尾（stop/join），不悬挂线程、不影响退出码。真机
-    模式为交互验收（危险分级确认见下），非终端环境高危/极高危项自动 SKIP。
+"""JoyArm 分层逐项验收：默认离线 DummyBackend，显式 --real 才连接真机。
 
-【旧→新编号覆盖映射】（离线回归覆盖不降级：旧 42 项断言全部保留、编号恒等，
-    断言函数体一字未改；仅重排注册表字段与统一 pre/post 打印模板）
-    旧 0,1,2,3        → 新 0,1,2,3        （factory，L0）
-    旧 10,11,…,17     → 新 10,11,…,17     （init，L0；8 项）
-    旧 20,21,22,23    → 新 20,21,22,23    （readonly，L0）
-    旧 30,31,32       → 新 30,31,32       （delegate，L1）
-    旧 40,41,42       → 新 40,41,42       （solvers，L2）
-    旧 50,51,52,53    → 新 50,51,52,53    （math，L2）
-    旧 60,61,…,66     → 新 60,61,…,66     （fsm，L3；7 项）
-    旧 70,71,72       → 新 70,71,72       （monitor，L3）
-    旧 80,81,82       → 新 80,81,82       （viz，L4）
-    旧 90,91,92       → 新 90,91,92       （close，L5）
-    合计 42 条全对应（4+8+4+3+3+4+7+3+3+3=42），无合并、无删除；真机项
-    100+ 与离线 67（wait_for_motion_state，新增公开方法）为后续新增，不在旧清单内。
+【执行顺序】
+    L0 基础线程 / 工厂 / 配置自检 / 只读模型
+    L1 硬件后端公开委托契约（Dummy）
+    L2 求解器 / 数学门面 / 目标通道 / 验收判据自检
+    L3 FSM 基础迁移 / 自愈 / 失败恢复 / 完整运动管线
+    L4 安全监视 / 保护抢占 / 控制器切换与停止并发
+    L5 可视化 HTTP 服务 / 降级 / 重复启停
+    L6 close / with 退出 / 析构与资源回收
 
-【环境与运行】
-    # 1. 安装 uv（仅首次）
-    curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
-    # Windows PowerShell:  irm https://astral.sh/uv/install.sh | iex
+    编号用于稳定定位，功能组用于筛选，level 决定执行顺序。原有 43 项编号
+    保留，新增 16 项近期契约，总计 59 项离线验收。FSM 互斥31/32移至L4，
+    目标写入65/66移至L2，避免依赖上层功能的检查抢在基础验证前执行。
+    新增项覆盖：周期停止不多跑一拍/超时防双启动，控制器选择不切模式，
+    自愈一致零重复写/临时失败恢复/持续失败失能，首帧返回False与异常计数，
+    ZERO到位失能/HOLD锁定位置，保护事件抢占，部分启动恢复，停止与自愈并发，
+    目标经plan/ctrl实际到达后端，以及陈旧反馈/完全不动不被验收为PASS。
 
-    # 2. 创建虚拟环境并同步依赖（Python 须满足 requires-python >=3.10,<3.12）
+【逐项与逐级判定】
+    每项打印层级/内容目的/结果/证据；各项自带 finally 收尾，故障注入局部恢复。
+    当前层出现 FAIL 后继续测同层其他项，默认跳过更高层；已选择的收尾项仍执行。
+    --keep-going 可继续高层诊断。每项结束显式关闭本项 Dummy 刷新线程，结束时
+    恢复 REGISTRY/load_config 注入；不依赖上一项的硬件、缓存或线程残留。
+    PASS=已测契约满足；FAIL=违反契约；SKIP=未验证（环境/能力/依赖/用户跳过），
+    SKIP不能当作通过。退出码：任一FAIL=1，用法错误=2，其余=0。
+    结尾 SUMMARY / LEVEL / GROUP 行提供机器可解析统计。
+
+【真机】
+    保留 r0连接只读→r1使能模式参数→r2小幅指令→r3状态机→r4监视可视化→r5清错。
+    前置缺失自动补齐，前置风险并入项级确认；低危直执，中危回车确认（--yes可跳），
+    高危/极高危仍须交互输入yes，非终端自动SKIP，--yes不放行。
+    运动项发送前预览并再次确认；反馈须新鲜有效，目标通道131须实际位移并在
+    0.01rad容差内到位。151设零永久改写标定，逐族二次确认，仅显式 --step=151
+    选择；r5/rall/--level/--through均不包含151。真机未注入Dummy。
+
+【环境与使用】
+    # 首次环境安装（Python >=3.10,<3.12；uv未安装时先安装uv）
     cd <仓库>/joyarm_code
     uv sync
     source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下；离线全离线零交互、真机交互分级确认；
-    #    系统 python 超 requires-python 上界，一律经 uv 运行）
-    python joyarm_core/joyarm/joyarm_verify.py --help        # 完整用法
-    python joyarm_core/joyarm/joyarm_verify.py --list        # 离线测试项清单
-    python joyarm_core/joyarm/joyarm_verify.py               # 离线全部（缺省 all）
-    python joyarm_core/joyarm/joyarm_verify.py --step=fsm    # 离线单组
-    python joyarm_core/joyarm/joyarm_verify.py --step=61,71  # 离线单项混选
-    python joyarm_core/joyarm/joyarm_verify.py --step=math,monitor  # 离线组名混选
-    python joyarm_core/joyarm/joyarm_verify.py --real --list # 真机测试项清单
-    python joyarm_core/joyarm/joyarm_verify.py --real        # 真机 r0~r5（151 除外）
-    python joyarm_core/joyarm/joyarm_verify.py --real --step=r2       # 真机单级
-    python joyarm_core/joyarm/joyarm_verify.py --real --step=120,151  # 真机单项混选
-    python joyarm_core/joyarm/joyarm_verify.py --real --step=151      # 极高危设零（仅显式编号）
+    python joyarm_core/joyarm/joyarm_verify.py --list
+    python joyarm_core/joyarm/joyarm_verify.py                  # 全部，由底到高
+    python joyarm_core/joyarm/joyarm_verify.py --level L3        # 仅L3
+    python joyarm_core/joyarm/joyarm_verify.py --through L3      # L0→L3
+    python joyarm_core/joyarm/joyarm_verify.py --step 68,69,74    # 单项定位
+    python joyarm_core/joyarm/joyarm_verify.py --step fsm        # 功能组，可跨层
+    python joyarm_core/joyarm/joyarm_verify.py --real --list     # 只列清单，不连接
+    python joyarm_core/joyarm/joyarm_verify.py --real --through r2
+    python joyarm_core/joyarm/joyarm_verify.py --real --step 151
 
-【命令行参数】
-    --step    数字=单项编号（离线如 61；真机如 120）；组名逗号混选（离线：
-              factory/init/readonly/delegate/solvers/math/fsm/monitor/viz/
-              close/all；真机：r0/r1/r2/r3/r4/r5/rall）；缺省 all（按模式取全）
-    --list    仅列出测试项（缺省列离线项；--real --list 列真机项），不执行
-    --real    真机交互模式：真配置真连接 backend_dm（不经 Dummy 注入），按危险
-              度分级确认；进入真机段前总告知（工作空间已清空、急停可用、有人监护）
-    --yes     真机模式：跳过中危回车确认（--yes 或非终端直执）；高危/极高危永不
-              自动执行（仍需交互输入 yes；非终端自动 SKIP）
-    退出码：全 PASS/SKIP=0；任一 FAIL=1；用法错误=2（便于 agent 判定）
-    结尾输出 SUMMARY: total=… pass=… fail=… skip=…（机器可解析）+ 各组统计行
-
-【真机风险与确认策略】（对齐 backend_verify.py 惯例）
-    低危（r0 连接/只读、r1 模式设置）：直接执行；
-    中危（r4 监视器/可视化）：交互回车确认（--yes 或非终端直接执行）；
-    高危（r1 使能/写参、r2 委托运动、r3 状态机运动、r5 清错）：强制交互输入
-        yes（--yes 不放行；非终端自动 SKIP）；
-    极高危（r5 之 151 设零）：永久改写零位标定（不可逆），仅显式 --real
-        --step=151 执行（任何组展开不含本项），且每族（arm/end）各自二次确认
-        （任一次非 yes 即跳过该族及后续），--yes 不放行。
-    前置自动补齐：真机单项可独立执行（如 --real --step=120 自动 connect +
-        set_mode + enable），前置风险并入该项确认等级（enable 为高危前置）；
-        低危前置（connect/set_mode）静默补齐。
-    运动组（r2）：发送前参数预览（当前实测值 vs 目标值）+ 二次确认（--yes 不放行）。
-==============================================================================
+    --step / --level / --through互斥；--list可与选择器组合。完整参数见 --help。
+    源码直接可运行，不依赖pytest；L0～L4可脱离图形/HTTP服务完成基础验收。
 """
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+from types import SimpleNamespace
+from unittest.mock import patch
 import copy
 import logging
 import os
@@ -160,18 +87,21 @@ import joyarm_core.joyarm as _joyarm_pkg           # joyarm 包（JoyArmFactory/
 from joyarm_core.joyarm.joyarm import JoyArm
 from joyarm_core.robotics.control import Controller
 from joyarm_core.utils.transforms import quat_conj, quat_mul, quat_to_axis_angle
-from joyarm_core.utils.types import ControlMode, MotionState, Pose, SafetyEvent
+from joyarm_core.utils.types import ControlMode, JointState, MotionState, Pose, SafetyEvent
 
 __all__ = ["main"]
 
 MODEL = "joyarm_dm"                      # 被测型号（真实 config + robot_model 资产）
 DUMMY_KEY = "backend_verify_dummy"       # DummyBackend 临时注册名（注入用，用完恢复）
-VERIFY_CTRL = "verify_test_controller"   # ctrl 切换 MODE 联动验证用临时控制器注册名
+VERIFY_CTRL = "verify_test_controller"   # ctrl 选择算法/频率（模式由 FSM 管理）验证用临时控制器注册名
 
 # FSM / 事件类用例的状态等待上限（秒；fsm_hz=50，正常迁移 ≤ 数拍）
 _WAIT_STATE = 3.0
 # monitor 类用例的事件等待上限（秒；monitor_hz=50）
 _WAIT_EVENT = 2.0
+
+# 仅验收程序管理 Dummy 生命周期，逐项结束时显式停止其刷新线程。
+_CASE_BACKENDS: list = []
 
 
 # ---------------- 日志捕获（joyarm_core 全包，含 joyarm/backend/robotics logger） ----------------
@@ -244,6 +174,7 @@ class DummyBackend(Backend):
         self.registers: dict = {}
         self.follow: bool = False
         super().__init__(cfg)
+        _CASE_BACKENDS.append(self)
         self.modes = {f: [ControlMode.POSITION] * self._n(f) for f in ("arm", "end")}
         # jstates 默认：q=0（零位）、error=1（使能码，供刷新线程推导 is_enabled=True）
         self.jstates = {f: [{"q": 0.0, "dq": 0.0, "tau": 0.0,
@@ -413,9 +344,9 @@ class DummyBackend(Backend):
         return not self._hit("clear_joint_error_end", i)
 
 
-# ctrl 切换 MODE 联动验证用临时控制器（MODE=VELOCITY，与默认 POSITION 控制器可区分）
+# ctrl 选择算法/频率（模式由 FSM 管理）验证用临时控制器（MODE=VELOCITY，与默认 POSITION 控制器可区分）
 class _VerifyTestController(Controller):
-    """仅验收用：切换后经 MODE 联动把电机模式置 VELOCITY 的哑控制器。"""
+    """仅验收用：MODE=VELOCITY 的哑控制器，模式由 MOTION 进入/维持核验。"""
 
     MODE = ControlMode.VELOCITY
 
@@ -501,8 +432,18 @@ def install_injection() -> None:
 
 def restore_injection() -> None:
     """恢复全部注入（与 install_injection 对偶；重复调用安全）。"""
+    _cleanup_backends()
     while _PATCHES:
         _PATCHES.pop().restore()
+    CFG_SOURCE.next = None
+
+
+def _cleanup_backends(start: int = 0) -> None:
+    """回收当前验收项创建的 Dummy 刷新线程；SDK 本身的生命周期语义不变。"""
+    created = _CASE_BACKENDS[start:]
+    del _CASE_BACKENDS[start:]
+    for backend in created:
+        backend.close()
 
 
 def _tweak_cfg(cfg: dict) -> dict:
@@ -511,7 +452,7 @@ def _tweak_cfg(cfg: dict) -> dict:
     - backend.name → DUMMY_KEY（Dummy 注入点）；
     - runtime.move_wait_timeout → 1.0 s（默认 10 s，stop 超时强推项时长可控）；
     - traj 两规划器 plan_hz 拉开（hold 10 / cubic 20，切换联动可判）；
-    - control 追加 verify_test_controller（ctrl_hz=100，MODE 联动切换可判）。"""
+    - control 追加 verify_test_controller（ctrl_hz=100，选择/切换与 FSM MODE 自愈可判）。"""
     cfg = copy.deepcopy(cfg)
     cfg["backend"]["name"] = DUMMY_KEY
     cfg["joyarm"].setdefault("runtime", {})["move_wait_timeout"] = 1.0
@@ -1089,7 +1030,7 @@ _DOMAINS = {
 
 
 def _it40():
-    """六域查询/切换：名单=cfg、默认激活=cfg 首位、切换后激活名与 hz/MODE 联动更新。"""
+    """六域查询/切换：名单=cfg、默认激活=cfg 首位、切换后激活名与 hz 更新，选择控制器不触碰模式。"""
     arm, d = make_arm()
     try:
         cfg = _tweak_cfg(load_base_cfg())
@@ -1117,23 +1058,19 @@ def _it40():
         hz_hold = arm.plan_hz
         checks.append(("traj plan_hz 联动", hz_cubic == 20.0 and hz_hold == 10.0,
                        f"cubic={hz_cubic}→hold={hz_hold}（期望 20→10）"))
-        # ctrl 切换 MODE 联动（直连 _backend.set_mode_arm，不经公开 set_mode）
-        arm.connect_arm()
-        i0 = len(d.calls)
+        # 离线选择控制器不触碰模式；连接后选择也不改当前模式。
         r = arm.set_ctrl_solver(VERIFY_CTRL)
-        got = d.calls_since(i0, "set_joint_mode_arm")
-        checks.append(("ctrl 切换 MODE 联动",
-                       r is True and arm.get_activated_ctrl_solver() == VERIFY_CTRL
-                       and len(got) == arm.n_arm
-                       and all(c[2] is ControlMode.VELOCITY for c in got)
-                       and arm.get_mode_arm() is ControlMode.VELOCITY
-                       and arm.ctrl_hz == 100.0,
-                       f"set_joint_mode_arm×{len(got)}→VELOCITY，ctrl_hz={arm.ctrl_hz}"))
+        checks.append(("ctrl 离线选择", r is True and arm.ctrl_hz == 100.0,
+                       f"ret={r}, ctrl_hz={arm.ctrl_hz}"))
+        arm.connect_arm()
+        before_mode = arm.get_mode_arm()
+        i0 = len(d.calls)
         r = arm.set_ctrl_solver("joint_position_controller")
-        checks.append(("ctrl 切回默认",
-                       r is True and arm.ctrl_hz == 200.0
-                       and arm.get_mode_arm() is ControlMode.POSITION,
-                       f"ctrl_hz={arm.ctrl_hz}"))
+        got = d.calls_since(i0, "set_joint_mode_arm")
+        checks.append(("ctrl 只选择算法与频率",
+                       r is True and arm.ctrl_hz == 200.0 and not got
+                       and arm.get_mode_arm() is before_mode,
+                       f"切模式内核帧={len(got)}, ctrl_hz={arm.ctrl_hz}"))
         ok = all(c for _, c, _ in checks)
         ev = "；".join(f"{lb}={'OK' if c else 'FAIL'}（{dt}）" for lb, c, dt in checks)
         return ("PASS" if ok else "FAIL"), ev
@@ -1716,72 +1653,77 @@ def _it70():
 
 
 def _it71():
-    """断连与连续 None → DISABLE；state_arm=None 仍调自定义规则；断连收尾走 close。"""
-    # ---- a) 断连 → DISABLE（事件通路 + FSM 迁移被 enter 未连接门禁拦（规格：
-    #      断连下无法迁移，急停走销毁路径 close()，见 stop_motion_fsm docstring）----
-    arm, d = make_arm()
+    """断连静默挂起/重连恢复，以及持续无新鲜状态触发 DISABLE 的两条独立路径。"""
+    arm, backend = make_arm()
     try:
-        d.follow = False
-        d.set_q("arm", arm.home_arm)
+        backend.follow = True
+        backend.set_q('arm', arm.home_arm)
         arm.connect_arm()
         arm.start_motion_fsm()
-        home_a = _wait_state(arm, MotionState.HOME)
+        _require(_wait_state(arm, MotionState.MOTION), '断连测试前未进入 MOTION')
         arm.start_monitor()
-        time.sleep(0.1)
-        i0 = _mark()
-        d.disconnect_arm()
-        ok_a = _wait_event(arm, SafetyEvent.DISABLE)
-        time.sleep(0.15)                       # FSM 尝试迁移：enter 撞未连接门禁 → 重试 warn
-        retry_warn = _hit(_since(i0), "单步", "失败")
-        stuck_state = arm.get_current_motion_state().name   # 规格预期：无法迁移，保持原态
+        mark = _mark()
+        backend.disconnect_arm()
+        _require(_wait_event(arm, SafetyEvent.DISABLE), '断连监视规则未设置 DISABLE')
         arm.stop_monitor()
-        e_close = _exc(arm.close)
-        time.sleep(0.1)                        # 等 daemon 线程退出可观测后再清点
-        # 断连豁免收尾后 FSM/plan/ctrl 线程须全部退出（backend-state-refresh 为
-        # backend 构造期自启线程，归 backend 对象生命周期管、随对象回收退出，
-        # 不在 JoyArm.close() 收尾范围，不计入清点）
-        leaked = [t for t in _joyarm_thread_names() if t != "backend-state-refresh"]
-        ev_a = (f"dummy 断连后 event={arm.get_event().name}，current 保持 {stuck_state}"
-                f"（enter 未连接抛 RuntimeError，FSM 每拍重试 warn={retry_warn}；"
-                f"断连急停走销毁路径 close()：不抛={e_close is None}，"
-                f"close 后 joyarm 线程清点残留={leaked or '无'}）")
-        ok_a = home_a and ok_a and retry_warn and e_close is None and not leaked
+        deadline = time.monotonic() + 1.0
+        while not arm._fsm_disc_warned and time.monotonic() < deadline:
+            time.sleep(0.02)
+        _require(arm._fsm_disc_warned, '断连未进入挂起分支')
+        # 已挂起期间注入非零计数，以区分“冻结”与“每拍被清零”。
+        arm._fsm_defer_count = 7
+        current = arm.get_current_motion_state()
+        call_mark = len(backend.calls)
+        time.sleep(0.15)
+        messages = _since(mark)
+        warns = sum('FSM 挂起' in message for message in messages)
+        _require(warns == 1, f'一次断连应只告警一次，实际 {warns} 次')
+        _require(arm._fsm_defer_count == 7 and arm.get_current_motion_state() is current,
+                 '断连挂起没有冻结失败计数/当前状态')
+        _require(not _hit(messages, 'FSM 单步失败'), '断连仍逐拍产生单步失败')
+        _require(all(not backend.calls_since(call_mark, name) for name in
+                     ('send_joint_position_arm', 'send_joint_mit_arm', 'send_joint_vel_arm',
+                      'enable_joint_arm', 'set_joint_mode_arm')), '断连挂起期间仍有控制/自愈下发')
+        _require(arm.connect_arm() is True, 'Dummy 重连失败')
+        _require(_wait_state(arm, MotionState.DISABLE), '重连后未继续处理挂起期间的 DISABLE 事件')
+        _require(not arm._fsm_disc_warned and arm.get_event() is SafetyEvent.DISABLE,
+                 '重连未复位告警标志，或自动清除了保护事件')
+        arm.set_event(SafetyEvent.NORMAL)
+        _require(_wait_state(arm, MotionState.MOTION), '显式恢复 NORMAL 后未恢复运动管线')
+        arm.set_event(SafetyEvent.DISABLE)
+        arm.close()
+        leaked = [name for name in _joyarm_thread_names() if name != 'backend-state-refresh']
+        _require(not leaked, f'断连/重连验收收尾残留线程：{leaked}')
     finally:
         arm.close()
-    # ---- b) 连续 None → DISABLE（整族读失败注入） ----
-    arm, d = make_arm()
+    # 保持连接但反馈持续失败：监视器应过滤陈旧快照，设置 DISABLE。
+    arm, backend = make_arm()
     try:
-        d.follow = False
-        d.set_q("arm", arm.home_arm)
+        backend.follow = True
+        backend.set_q('arm', arm.home_arm)
         arm.connect_arm()
         arm.start_motion_fsm()
-        home_b = _wait_state(arm, MotionState.HOME)
+        _require(_wait_state(arm, MotionState.MOTION), '反馈失败测试前未进入 MOTION')
         seen_none = []
 
-        def probe(sa, se, mo, ev):
-            seen_none.append(sa is None)
+        def probe(state_arm, state_end, motion, event):
+            seen_none.append(state_arm is None)
             return None
 
         arm.set_monitor_rules(probe)
         arm.start_monitor()
-        time.sleep(0.1)
-        i0 = _mark()
-        d.fail_at["read_joint_state_arm"] = None       # 整族读失败 → get_state_arm None
-        ok_b = _wait_event(arm, SafetyEvent.DISABLE)
-        st_b = _wait_state(arm, MotionState.DISABLE)
-        ctrl_skip = _hit(_since(i0), "跳过本拍 step")
-        d.fail_at.pop("read_joint_state_arm", None)
-        ok = ok_a and home_b and ok_b and st_b and any(seen_none) and ctrl_skip
-        ev = (f"断连：{ev_a}；读状态整族失败（连续 None>0.1s）：event={arm.get_event().name}，"
-              f"current={arm.get_current_motion_state().name}；自定义规则收到 "
-              f"state_arm=None（读取失败仍调用）={any(seen_none)}"
-              f"（{sum(seen_none)}/{len(seen_none)} 拍为 None）；"
-              f"ctrl 线程跳拍 warn={ctrl_skip}（纳入判定）")
-        return ("PASS" if ok else "FAIL"), ev
+        mark = _mark()
+        backend.fail_at['read_joint_state_arm'] = None
+        _require(_wait_event(arm, SafetyEvent.DISABLE), '持续无新鲜状态未触发 DISABLE')
+        _require(_wait_state(arm, MotionState.DISABLE), '反馈失败未进入失能状态')
+        _require(any(seen_none) and _hit(_since(mark), '跳过本拍 step'),
+                 '自定义规则未收到 None，或 ctrl 未跳过反馈失败拍')
     finally:
-        d.fail_at.pop("read_joint_state_arm", None)
-        _settle_fsm(arm, d)
+        backend.fail_at.pop('read_joint_state_arm', None)
+        _settle_fsm(arm, backend)
         arm.close()
+    return 'PASS', ('断连仅1次挂起告警，计数7冻结且无下发；重连先处理DISABLE，显式NORMAL恢复；'
+                    '持续反馈失败→DISABLE，自定义规则收到None，ctrl跳拍；收尾无线程残留')
 
 
 def _it72():
@@ -2029,14 +1971,503 @@ def _it92():
 
 
 # ============================================================
-# 测试项注册表（编号=组号×10+组内序号；全离线低危）
+# 分层补充项：基础线程 → 目标管线 → 自愈 → 保护与并发
 # ============================================================
+def _require(condition, message: str) -> None:
+    """验收断言不受 python -O 影响；失败由逐项执行器转为 FAIL。"""
+    if not condition:
+        raise AssertionError(message)
+
+
+@contextmanager
+def _case_arm():
+    """确定性故障注入用例：真配置 + Dummy，冻结后台刷新，由用例控制快照。"""
+    arm, backend = make_arm(lambda cfg: cfg['backend'].update(write_settle=0.001))
+    try:
+        arm.connect_arm()
+        backend.close()
+        backend.set_q('arm', arm.home_arm)
+        arm.get_state_arm()
+        yield arm, backend
+    finally:
+        arm.set_event(SafetyEvent.DISABLE)
+        arm.close()
+        backend.close()
+
+
+def _probe_thread(fn):
+    """并发检查保留子线程异常，主线程必须核验，避免异常仅打印而测试误通过。"""
+    errors = []
+
+    def run():
+        try:
+            fn()
+        except Exception as e:
+            errors.append(e)
+
+    thread = threading.Thread(target=run, daemon=True)
+    return thread, errors
+
+
+def _it18():
+    """prepare 仅建句柄；停止唤醒周期等待后不得额外执行一步。"""
+    stop = threading.Event()
+    calls = []
+
+    class StopOnWait:
+        def is_set(self):
+            return stop.is_set()
+
+        def wait(self, timeout):
+            stop.set()
+            return True
+
+    _jm_mod._run_periodic(StopOnWait(), 1.0, lambda: calls.append(True))
+    _require(not calls, '停止唤醒等待后仍执行了额外一拍')
+    worker = _jm_mod._PeriodicThread(lambda: None, 10.0, 'verify-periodic')
+    try:
+        thread = worker.prepare()
+        _require(worker.thread is thread and thread.ident is None, 'prepare 应登记未启动线程')
+        worker.stop()
+        _require(worker.thread is None, '未起跑句柄 stop 后没有回收')
+        worker.set_hz(20.0)
+        worker.start()
+        _require(worker.is_running() and worker.hz == 20.0, '周期线程未正确启动/改频')
+    finally:
+        worker.stop()
+    return 'PASS', 'prepare/未启动回收/重新 start/20Hz/停止不多执行一拍均通过'
+
+
+def _it19():
+    """stop 超时保留句柄并拒绝双启动，原线程退出后可回收重启。"""
+    entered, release = threading.Event(), threading.Event()
+    worker = _jm_mod._PeriodicThread(lambda: (entered.set(), release.wait(2.0)), 100.0,
+                                     'verify-periodic')
+    try:
+        worker.start()
+        _require(entered.wait(1.0), '阻塞周期未启动')
+        with patch.object(_jm_mod, '_JOIN_TIMEOUT', 0.01):
+            error = _exc(worker.stop)
+        _require(isinstance(error, RuntimeError) and worker.is_alive(), 'stop 超时未保留存活句柄')
+        _require(not worker.is_running(), '收到 stop 的线程仍被判定可运行')
+        _require(isinstance(_exc(worker.start), RuntimeError), '旧线程存活时允许了双启动')
+    finally:
+        release.set()
+        worker.stop()
+    worker.start()
+    worker.stop()
+    return 'PASS', '阻塞 stop 超时→句柄保留→拒绝双启动→退出后回收/重启通过'
+
+
+def _it43():
+    """保护态选择控制器不改硬件模式，MOTION 检查成功后才恢复下发。"""
+    with _case_arm() as (arm, backend):
+        arm._current_motion_state = MotionState.DAMPING
+        arm.set_event(SafetyEvent.DAMPING)
+        backend.set_mode_arm(ControlMode.MIT)
+        mark = len(backend.calls)
+        _require(arm.set_ctrl_solver(VERIFY_CTRL), '控制器选择失败')
+        _require(not backend.calls_since(mark, 'set_joint_mode_arm'), '选择控制器触碰了硬件模式')
+        _require(arm._maintain_motion_state(MotionState.DAMPING, SafetyEvent.DAMPING), '阻尼维持失败')
+        _require(backend.get_mode_arm() is ControlMode.MIT, '选择控制器破坏了 MIT 阻尼模式')
+        calls = []
+        arm._current_motion_state = MotionState.MOTION
+        arm.set_event(SafetyEvent.NORMAL)
+        with patch.object(arm._activated_ctrl_solver, 'step', lambda *args: calls.append(True)):
+            arm._tick_ctrl()
+            _require(not calls, 'FSM 确认模式前新控制器已执行')
+            _require(arm._maintain_motion_state(MotionState.MOTION, SafetyEvent.NORMAL), 'MOTION 自愈失败')
+            arm._activated_traj_solver.plan(arm, None)
+            arm._tick_ctrl()
+            _require(calls == [True] and backend.get_mode_arm() is ControlMode.VELOCITY,
+                     'MOTION 未按当前控制器 MODE 恢复下发')
+    return 'PASS', 'DAMPING 保持 MIT；ctrl 选择后禁发；MOTION 核验 VELOCITY 后恢复 step'
+
+
+def _it44():
+    """在途 step 与控制器选择互斥，选择操作不下发切模式命令。"""
+    with _case_arm() as (arm, backend):
+        entered, release, switched = threading.Event(), threading.Event(), threading.Event()
+
+        class BlockingController:
+            MODE = ControlMode.POSITION
+
+            def step(self, owner, frame, state):
+                entered.set()
+                _require(release.wait(2.0), '在途 step 未被释放')
+                owner.send_position_arm(frame.q)
+
+        arm._activated_ctrl_solver = BlockingController()
+        arm._motion_ready = arm._activated_ctrl_solver
+        arm._current_motion_state = MotionState.MOTION
+        arm.set_event(SafetyEvent.NORMAL)
+        backend.set_mode_arm(ControlMode.POSITION)
+        arm._activated_traj_solver.plan(arm, None)
+        worker, errors = _probe_thread(arm._tick_ctrl)
+        arm._ctrl_thread = worker  # 仅测试夹具登记当前 probe；不是第二个控制线程。
+        setter, setter_errors = _probe_thread(lambda: (arm.set_ctrl_solver(VERIFY_CTRL), switched.set()))
+        mark = len(backend.calls)
+        worker.start()
+        try:
+            _require(entered.wait(1.0), '在途 step 未进入')
+            setter.start()
+            _require(not switched.wait(0.05), '在途 step 未结束就切换了控制器')
+        finally:
+            release.set()
+            worker.join(2.0)
+            if setter.ident is not None:
+                setter.join(2.0)
+        _require(not worker.is_alive() and not setter.is_alive() and not errors and not setter_errors,
+                 f'并发线程残留/异常：{errors + setter_errors}')
+        _require(switched.is_set() and arm._motion_ready is None, '选择完成后未撤销下发许可')
+        _require(not backend.calls_since(mark, 'set_joint_mode_arm'), '选择控制器发送了切模式命令')
+    return 'PASS', '在途 step 阻止选择抢入；step 结束后选择完成且不切模式，未留线程'
+
+
+def _it54():
+    """验收反馈校验器本身拒绝陈旧/未来/坏维度/NaN/发送前快照。"""
+    cfg = {'backend': {'state_refresh_hz': 20.0}}
+    source = SimpleNamespace(n_arm=6, get_config=lambda: cfg)
+    checks = []
+    for kind in ('stale', 'future', 'shape', 'nan', 'before_send'):
+        q, timestamp, after = np.zeros(6), time.time(), 0.0
+        if kind == 'stale':
+            timestamp -= 1.0
+        elif kind == 'future':
+            timestamp += 1.0
+        elif kind == 'shape':
+            q = np.zeros((6, 1))
+        elif kind == 'nan':
+            q[0] = np.nan
+        else:
+            after = timestamp + 0.001
+        state = JointState(q=q, t=timestamp)
+        source.get_state_arm = lambda: state
+        source.joint_state_arm = state
+        _require(_real_current_q(source, after=after)[0] is None, f'{kind} 反馈被误接纳')
+        checks.append(kind)
+    source.get_state_arm = lambda: None
+    source.joint_state_arm = JointState(q=np.zeros(6), t=time.time())
+    q, origin = _real_current_q(source)
+    _require(q is not None and '快照' in origin, '新鲜缓存兜底失效')
+    return 'PASS', f'拒绝 {checks}；新鲜缓存兜底可用'
+
+
+def _it55():
+    """真机运动判据离线自检：完全不动 FAIL，实际到位 PASS，裕量不足 SKIP。"""
+    class Clock:
+        now = 100.0
+
+        def time(self):
+            return self.now
+
+        def monotonic(self):
+            return self.now
+
+        def sleep(self, duration):
+            self.now += duration
+
+    verdicts = []
+    for follows, margin, expected in ((False, 1.0, 'FAIL'), (True, 1.0, 'PASS'),
+                                      (False, 0.01, 'SKIP')):
+        clock = Clock()
+        q = np.zeros(6)
+        arm = SimpleNamespace(n_arm=6, get_config=lambda: {'backend': {'state_refresh_hz': 20.0}},
+                              joint_limits_soft_arm=SimpleNamespace(q_min=np.full(6, -margin),
+                                                                    q_max=np.full(6, margin)),
+                              start_motion_fsm=lambda: None)
+
+        def read():
+            arm.joint_state_arm = JointState(q=q.copy(), t=clock.time())
+            return arm.joint_state_arm
+
+        def target(t, values):
+            if follows:
+                q[:] = values
+
+        arm.get_state_arm, arm.set_target_joint = read, target
+        read()
+        with patch.object(sys.modules[__name__], 'time', clock), \
+                patch.object(sys.modules[__name__], '_wait_state', lambda *args, **kw: True):
+            verdict, evidence = _rt131(SimpleNamespace(arm=lambda: arm))
+        _require(verdict == expected, f'运动判据应为 {expected}，实际 {verdict}：{evidence}')
+        verdicts.append(verdict)
+    return 'PASS', f'完全不动/实际到位/裕量不足分别为 {verdicts}（均为离线探针）'
+
+
+def _it56():
+    """公开目标通道贯通 plan→ctrl→后端，核对目标实际出现在发送参数与状态中。"""
+    arm, backend = make_arm()
+    try:
+        backend.follow = True
+        backend.set_q('arm', arm.home_arm)
+        arm.connect_arm()
+        arm.start_motion_fsm()
+        _require(_wait_state(arm, MotionState.MOTION), '未进入 MOTION')
+        target = arm.home_arm.copy()
+        target[0] += 0.04
+        mark = len(backend.calls)
+        arm.set_target_joint(time.time() + 0.5, target)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and not arm.is_in_q_arm(target, tol_q=0.01):
+            time.sleep(0.02)
+        sent = backend.calls_since(mark, 'send_joint_position_arm')
+        _require(arm.is_in_q_arm(target, tol_q=0.01), '目标通道未驱动 Dummy 实际到位')
+        _require(any(c[1] == 0 and abs(c[2] - target[0]) < 1e-9 for c in sent),
+                 '后端未收到新的关节目标')
+        return 'PASS', f'目标关节1 +0.04rad，经 plan/ctrl 下发并到位；记录位置帧 {len(sent)} 个'
+    finally:
+        _settle_fsm(arm, backend)
+        arm.close()
+
+
+def _it68():
+    """逐态核对模式/使能恢复与一致时不重复写。"""
+    checked = []
+    for state, event, mode in ((MotionState.HOME, SafetyEvent.HOMING, ControlMode.POSITION),
+                               (MotionState.HOLD, SafetyEvent.HOLDING, ControlMode.POSITION),
+                               (MotionState.MOTION, SafetyEvent.NORMAL, ControlMode.POSITION),
+                               (MotionState.DAMPING, SafetyEvent.DAMPING, ControlMode.MIT),
+                               (MotionState.ZERO, SafetyEvent.ZEROING, ControlMode.POSITION)):
+        with _case_arm() as (arm, backend):
+            arm._current_motion_state = state
+            arm._hold_q, arm._zero_moving = arm.home_arm.copy(), True
+            arm.set_event(event)
+            backend.set_mode_arm(ControlMode.VELOCITY)
+            backend.disable_arm()
+            mark = len(backend.calls)
+            _require(arm._maintain_motion_state(state, event), f'{state.name} 自愈失败')
+            _require(backend.get_mode_arm() is mode and backend.is_enabled_arm is True,
+                     f'{state.name} 模式/使能未恢复')
+            _require(len(backend.calls_since(mark, 'set_joint_mode_arm')) == arm.n_arm
+                     and len(backend.calls_since(mark, 'enable_joint_arm')) == arm.n_arm,
+                     f'{state.name} 未完成整组恢复')
+            mark = len(backend.calls)
+            _require(arm._maintain_motion_state(state, event), f'{state.name} 一致态维持失败')
+            _require(not backend.calls_since(mark, 'set_joint_mode_arm')
+                     and not backend.calls_since(mark, 'enable_joint_arm'), f'{state.name} 一致仍重复写')
+            checked.append(state.name)
+    return 'PASS', f'{checked} 均恢复所需模式/使能，一致时零重复写'
+
+
+def _it69():
+    """一次切模式失败后跳拍、不发阻尼指令；下拍恢复并清零失败计数。"""
+    with _case_arm() as (arm, backend):
+        arm._current_motion_state = MotionState.DAMPING
+        arm.set_event(SafetyEvent.DAMPING)
+        backend.set_mode_arm(ControlMode.POSITION)
+        backend.fail_at['set_joint_mode_arm'] = None
+        mark = len(backend.calls)
+        arm._fsm_tick()
+        _require(arm._fsm_defer_count == 1 and not backend.calls_since(mark, 'send_joint_mit_arm'),
+                 '自愈失败未计数/仍下发了阻尼指令')
+        backend.fail_at.clear()
+        arm._fsm_tick()
+        _require(arm._fsm_defer_count == 0 and backend.calls_since(mark, 'send_joint_mit_arm'),
+                 '下一拍未恢复或计数未清零')
+    return 'PASS', '一次失败→禁发且计数1；故障解除→MIT 阻尼恢复且计数清零'
+
+
+def _it73():
+    """使能/模式持续失败，维持态计数不能被每拍清零，达到上限转 DISABLE。"""
+    for failed in ('set_joint_mode_arm', 'enable_joint_arm'):
+        with _case_arm() as (arm, backend), patch.object(_jm_mod, '_FSM_DEFER_RETRY_MAX', 3):
+            arm._current_motion_state = MotionState.DAMPING
+            arm.set_event(SafetyEvent.DAMPING)
+            backend.set_mode_arm(ControlMode.POSITION)
+            backend.disable_arm()
+            backend.fail_at[failed] = None
+            mark = len(backend.calls)
+            for expected in range(1, 4):
+                arm._fsm_tick()
+                _require(arm._fsm_defer_count == expected, f'{failed} 连续失败次数不符')
+                _require(not backend.calls_since(mark, 'send_joint_mit_arm'), f'{failed} 失败仍在下发')
+            _require(arm.get_event() is SafetyEvent.DISABLE, f'{failed} 达上限未转 DISABLE')
+            arm._fsm_tick()
+            _require(arm.get_current_motion_state() is MotionState.DISABLE
+                     and backend.is_enabled_arm is False, f'{failed} 兜底失能未完成')
+    return 'PASS', '模式/使能失败各连续3拍（临时阈值）→DISABLE，失败期间无 MIT 指令'
+
+
+def _it74():
+    """首帧 plan 返回 False 与抛异常均计数，持续失败转 DISABLE。"""
+    for throws in (False, True):
+        with _case_arm() as (arm, backend), patch.object(_jm_mod, '_FSM_DEFER_RETRY_MAX', 3):
+            arm._current_motion_state, arm._home_arrived = MotionState.HOME, True
+            arm.set_event(SafetyEvent.NORMAL)
+
+            def fail(*args):
+                if throws:
+                    raise RuntimeError('scripted first-plan failure')
+                return False
+
+            with patch.object(arm._activated_traj_solver, 'plan', fail):
+                mark = len(backend.calls)
+                for expected in range(1, 4):
+                    arm._fsm_tick()
+                    _require(arm._fsm_defer_count == expected, '规划失败/异常绕过了 FSM 计数')
+                    _require(arm.get_current_motion_state() is MotionState.HOME, '规划失败错误提交了 MOTION')
+                    _require(arm._ctrl_periodic is None and arm._plan_periodic is None,
+                             '首帧失败后残留运动线程')
+                _require(not backend.calls_since(mark, 'enable_joint_arm'), '首帧失败前提前使能')
+                _require(arm.get_event() is SafetyEvent.DISABLE, '首帧持续失败未转 DISABLE')
+                arm._fsm_tick()
+                _require(backend.is_enabled_arm is False, '规划失败兜底未失能')
+    return 'PASS', 'plan=False / RuntimeError 两条路径均累计3次后失能，无半启动线程'
+
+
+def _it75():
+    """进入失败不得提交新状态或清除旧 HOLD 位置。"""
+    with _case_arm() as (arm, backend):
+        arm._current_motion_state, arm._hold_q = MotionState.HOLD, arm.home_arm.copy()
+        arm.set_event(SafetyEvent.HOMING)
+        backend.set_mode_arm(ControlMode.MIT)
+        backend.fail_at['set_joint_mode_arm'] = None
+        arm._fsm_tick()
+        _require(arm.get_current_motion_state() is MotionState.HOLD and arm._fsm_defer_count == 1,
+                 '进入 HOME 失败却提交了状态/未计数')
+        _require(np.array_equal(arm._hold_q, arm.home_arm), '进入失败清掉了原 HOLD 位置')
+    return 'PASS', 'HOLD→HOME 模式失败：状态与 hold_q 保留，计数1'
+
+
+def _it76():
+    """ZERO 到位后保持失能，HOLD 自愈保持原锁定位形。"""
+    with _case_arm() as (arm, backend):
+        arm._current_motion_state, arm._zero_moving = MotionState.ZERO, True
+        arm.set_event(SafetyEvent.ZEROING)
+        backend.set_q('arm', arm.zero_arm)
+        arm.get_state_arm()
+        _require(arm._maintain_motion_state(MotionState.ZERO, SafetyEvent.ZEROING), '回零到位处理失败')
+        _require(not arm._zero_moving and backend.is_enabled_arm is False, 'ZERO 到位未失能')
+        mark = len(backend.calls)
+        for _ in range(3):
+            _require(arm._maintain_motion_state(MotionState.ZERO, SafetyEvent.ZEROING), 'ZERO 失能保持失败')
+        _require(not backend.calls_since(mark, 'enable_joint_arm'), 'ZERO 到位后被自愈重新使能')
+        arm._current_motion_state = MotionState.HOLD
+        arm.set_event(SafetyEvent.HOLDING)
+        _require(arm._enter_motion_state(MotionState.HOLD, SafetyEvent.HOLDING), 'HOLD 进入失败')
+        saved = arm._hold_q.copy()
+        backend.set_q('arm', arm.home_arm)
+        backend.disable_arm()
+        mark = len(backend.calls)
+        _require(arm._maintain_motion_state(MotionState.HOLD, SafetyEvent.HOLDING), 'HOLD 自愈失败')
+        sent = backend.calls_since(mark, 'send_joint_position_arm')
+        _require(bool(sent) and all(c[2] == saved[c[1]] for c in sent), 'HOLD 自愈重采了漂移位置')
+    return 'PASS', 'ZERO 到位后连续维持失能；HOLD 漂移后仍下发最初锁定位置'
+
+
+def _it77():
+    """阻塞模式读取期间新保护事件抢占旧目标。"""
+    with _case_arm() as (arm, backend):
+        arm.set_event(SafetyEvent.HOMING)
+        backend.disable_arm()
+
+        def read_mode():
+            arm.set_event(SafetyEvent.DISABLE)
+            return ControlMode.MIT
+
+        mark = len(backend.calls)
+        with patch.object(backend, 'get_mode_arm', read_mode):
+            _require(not arm._maintain_motion_state(MotionState.HOME, SafetyEvent.HOMING),
+                     '事件已改变仍按旧目标自愈')
+        _require(all(not backend.calls_since(mark, name) for name in
+                     ('enable_joint_arm', 'set_joint_mode_arm', 'send_joint_position_arm')),
+                 'DISABLE 事件后仍进行了旧目标的模式/使能/位置下发')
+    return 'PASS', '模式读取期间收到 DISABLE，旧 HOME 目标的切模式/使能/下发全部取消'
+
+
+def _it78():
+    """部分启动失败可回收，取消失败的保护迁移后可重建管线。"""
+    with _case_arm() as (arm, backend):
+        arm._current_motion_state, arm._home_arrived = MotionState.HOME, True
+        arm.set_event(SafetyEvent.NORMAL)
+        original = _jm_mod._PeriodicThread.start
+
+        def start(worker):
+            if worker.name == 'joyarm-ctrl':
+                raise RuntimeError('scripted ctrl start failure')
+            return original(worker)
+
+        with patch.object(_jm_mod._PeriodicThread, 'start', start):
+            arm._fsm_tick()
+        _require(arm._fsm_defer_count == 1 and arm._ctrl_periodic is None and arm._plan_periodic is None,
+                 '部分启动失败未计数/未回收')
+        arm._fsm_tick()
+        _require(arm.get_current_motion_state() is MotionState.MOTION, '部分启动失败后未恢复')
+        backend.fail_at['read_joint_state_arm'] = None
+        arm.set_event(SafetyEvent.HOLDING)
+        arm._fsm_tick()
+        _require(arm.get_current_motion_state() is MotionState.MOTION
+                 and arm._ctrl_periodic is None, '失败保护迁移的旧线程未停止')
+        backend.fail_at.clear()
+        arm.set_event(SafetyEvent.NORMAL)
+        arm._fsm_tick()
+        _require(arm._ctrl_ready() and arm._ctrl_periodic.is_running() and arm._plan_periodic.is_running(),
+                 '保护迁移取消后运动管线未重建')
+    return 'PASS', 'ctrl 部分启动失败可回收恢复；HOLD 采样失败后恢复 NORMAL 可重建管线'
+
+
+def _it79():
+    """停止抢占在途自愈，最终失能后不得重新使能。"""
+    with _case_arm() as (arm, backend):
+        entered, release = threading.Event(), threading.Event()
+        original = backend.get_mode_arm
+
+        def read():
+            entered.set()
+            _require(release.wait(2.0), '自愈阻塞未释放')
+            return original()
+
+        arm._current_motion_state = MotionState.DAMPING
+        arm.set_event(SafetyEvent.DAMPING)
+        backend.disable_arm()
+        arm._move_wait_timeout = 0.01
+        arm._fsm_periodic = _jm_mod._PeriodicThread(arm._fsm_worker, 100.0, 'verify-fsm')
+        stopper, errors = _probe_thread(arm.stop_motion_fsm)
+        mark = len(backend.calls)
+        with patch.object(backend, 'get_mode_arm', read):
+            arm._fsm_periodic.start()
+            try:
+                _require(entered.wait(1.0), '自愈拍未进入')
+                stopper.start()
+                _require(arm._fsm_shutdown.wait(1.0), 'stop 未进入最终收尾')
+            finally:
+                release.set()
+                if stopper.ident is not None:
+                    stopper.join(2.0)
+        _require(not stopper.is_alive() and not errors and not arm._fsm_running(),
+                 f'停机线程残留或异常：{errors}')
+        _require(not backend.calls_since(mark, 'enable_joint_arm') and backend.is_enabled_arm is False,
+                 '最终收尾后被在途自愈重新使能')
+    return 'PASS', '自愈读模式与 stop 并发：收尾禁止使能，FSM/stop 退出，最终失能'
+
+
+# ============================================================
+# 测试项注册表（稳定编号独立于依赖层级；全离线低危）
+# ============================================================
+# 级别是执行依赖顺序；编号保留兼容，功能组用于定向筛选，不决定顺序。
+LEVELS = {
+    'L0': '基础线程、工厂、配置自检与只读模型',
+    'L1': '硬件后端公开委托契约（Dummy）',
+    'L2': '求解器、数学门面、目标通道与验收判据',
+    'L3': 'FSM 基础迁移、自愈、失败恢复与运动管线',
+    'L4': '安全监视、保护抢占与并发互斥',
+    'L5': '可视化服务与重复启停',
+    'L6': '销毁、上下文退出与资源回收',
+}
+_GROUP_LEVEL = {
+    'factory': 'L0', 'init': 'L0', 'readonly': 'L0', 'delegate': 'L1',
+    'solvers': 'L2', 'math': 'L2', 'feedback': 'L2', 'fsm': 'L3',
+    'monitor': 'L4', 'viz': 'L5', 'close': 'L6',
+}
+_ITEM_LEVEL = {31: 'L4', 32: 'L4', 43: 'L4', 44: 'L4', 56: 'L3',
+               65: 'L2', 66: 'L2', 77: 'L4', 79: 'L4'}
 ITEMS: list[dict] = []
 
 
 def _item(num, name, group, risk, purpose, fn):
     ITEMS.append(dict(num=num, name=name, group=group, risk=risk,
-                      purpose=purpose, fn=fn))
+                      level=_ITEM_LEVEL.get(num, _GROUP_LEVEL[group]), purpose=purpose, fn=fn))
 
 
 # —— 00 组（工厂与 listArm）——
@@ -2094,7 +2525,7 @@ _item(32, "ctrl 线程豁免", "delegate", "低",
 
 # —— 04 组（求解器域）——
 _item(40, "六域查询与切换联动", "solvers", "低",
-      "get_*_solvers=cfg 名单、默认激活=cfg 首位、切换后激活名/plan_hz/ctrl_hz/MODE 联动（切换直连 _backend.set_mode）", _it40)
+      "get_*_solvers=cfg 名单、默认激活=cfg 首位、切换后激活名/plan_hz/ctrl_hz 更新；控制器可离线选择，不触碰硬件模式", _it40)
 _item(41, "坏名 warn 保持原激活", "solvers", "低",
       "六域 set_*('no_such_solver') 均返回 False + warn『未在该域已加载成员中』且激活不变", _it41)
 _item(42, "traj 先 plan 后换指针", "solvers", "低",
@@ -2132,7 +2563,7 @@ _item(67, "wait_for_motion_state 四路径", "fsm", "低",
 _item(70, "硬规则 error≥2→DAMPING", "monitor", "低",
       "单关节故障码触发监视器 set_event(DAMPING)，FSM 迁入 DAMPING 并维持 MIT 阻尼", _it70)
 _item(71, "断连/连续 None→DISABLE", "monitor", "低",
-      "断连与连续 None>0.1s 双路径触发 DISABLE；state_arm=None 仍调自定义规则；ctrl 线程跳拍 warn；断连收尾走 close", _it71)
+      "断连仅一次告警挂起、计数冻结且禁发，重连处理保护事件后可显式恢复；持续None→DISABLE，规则仍收None、ctrl跳拍", _it71)
 _item(72, "自定义规则与同拍仲裁", "monitor", "低",
       "命中合并取危险最高（硬+自定义统一取最危险，与到达顺序无关）、异常/非法返回忽略且不影响其他规则", _it72)
 
@@ -2152,32 +2583,46 @@ _item(91, "with __exit__ 序列", "close", "低",
 _item(92, "__del__ 冒烟", "close", "低",
       "__del__ 存在且 best-effort（del+gc 回收、进程不崩；不做执行时序承诺——正式收尾走 with/close）", _it92)
 
-ALL_NUMS = {it["num"] for it in ITEMS}
-_BY_NUM = {it["num"]: it for it in ITEMS}
+# 新增项目仍逐项打印目的与证据；原有 00~92 编号保持不变。
+_item(18, '周期线程基础契约', 'init', '低',
+      'prepare/未启动回收/改频重启；stop 唤醒等待后不得额外执行一拍', _it18)
+_item(19, '周期线程超时与防双启动', 'init', '低',
+      '阻塞 stop 保留句柄，拒绝双启动，原线程退出后可回收重启', _it19)
+_item(43, '控制器选择与 FSM 模式归属', 'solvers', '低',
+      'DAMPING 中选择控制器不改 MIT；进入 MOTION 由 FSM 按 MODE 自愈后才恢复下发', _it43)
+_item(44, '控制器切换等待在途 step', 'solvers', '低',
+      '阻塞 step 与选择互斥，选择完成撤销旧许可，不发送切模式命令，无残留线程', _it44)
+_item(54, '验收反馈新鲜度自检', 'feedback', '低',
+      '拒绝过期/未来/维度异常/NaN/发送前反馈；新鲜缓存允许兜底', _it54)
+_item(55, '运动验收判据自检', 'feedback', '低',
+      '离线探针验证完全不动 FAIL、实际到位 PASS、裕量不足 SKIP，防假通过', _it55)
+_item(56, '目标到后端的完整运动管线', 'fsm', '低',
+      '公共目标通道→plan→ctrl→Dummy 位置指令与反馈到位，核对真实发送参数', _it56)
+_item(68, '五种运动态模式/使能自愈', 'fsm', '低',
+      'HOME/HOLD/MOTION/DAMPING/ZERO 运动中逐态自愈；一致时不重复写', _it68)
+_item(69, '自愈暂时失败后恢复', 'fsm', '低',
+      '切模式失败计数且禁发，下一拍恢复后下发并清零计数', _it69)
+_item(73, '自愈连续失败安全兜底', 'fsm', '低',
+      '模式/使能连续失败各达临时阈值3次→DISABLE；失败期间无运动下发', _it73)
+_item(74, '首帧规划失败与异常计数', 'fsm', '低',
+      '首帧 plan=False/抛异常同样计数，达到阈值失能，失败不提交 MOTION、不留线程', _it74)
+_item(75, '进入失败保留旧态缓存', 'fsm', '低',
+      'HOLD→HOME 切模式失败不提交新态、不清 hold_q，失败次数递增', _it75)
+_item(76, 'ZERO 失能与 HOLD 锁定位形', 'fsm', '低',
+      'ZERO 到位后不被自愈重新使能；HOLD 自愈不重新采集漂移位置', _it76)
+_item(77, '保护事件抢占自愈', 'fsm', '低',
+      '模式读取期间收到 DISABLE，旧 HOME 目标的切模式/使能/下发取消', _it77)
+_item(78, '部分启动与取消保护后的恢复', 'fsm', '低',
+      'ctrl 启动失败清理 plan/ctrl；HOLD 进入失败后恢复 NORMAL 可重建运动管线', _it78)
+_item(79, '停止与在途自愈并发', 'fsm', '低',
+      '最终收尾先禁止使能/控制，停线程后失能；在途自愈不得重新使能', _it79)
 
-GROUPS: dict[str, list[int]] = {
-    "factory": [0, 1, 2, 3],
-    "init": [10, 11, 12, 13, 14, 15, 16, 17],
-    "readonly": [20, 21, 22, 23],
-    "delegate": [30, 31, 32],
-    "solvers": [40, 41, 42],
-    "math": [50, 51, 52, 53],
-    "fsm": [60, 61, 62, 63, 64, 65, 66, 67],
-    "monitor": [70, 71, 72],
-    "viz": [80, 81, 82],
-    "close": [90, 91, 92],
-}
-GROUPS["all"] = [n for ns in GROUPS.values() for n in ns]
-
-# 离线组 → 级（L0~L5 逐级分组骨架，与真机 r0~r5 同构；打印与统计用）
-_GROUP_LEVEL = {
-    "factory": "L0", "init": "L0", "readonly": "L0",
-    "delegate": "L1",
-    "solvers": "L2", "math": "L2",
-    "fsm": "L3", "monitor": "L3",
-    "viz": "L4",
-    "close": "L5",
-}
+ALL_NUMS = {it['num'] for it in ITEMS}
+_BY_NUM = {it['num']: it for it in ITEMS}
+GROUPS: dict[str, list[int]] = {}
+for _entry in ITEMS:
+    GROUPS.setdefault(_entry['group'], []).append(_entry['num'])
+GROUPS['all'] = list(_BY_NUM)
 
 
 # ============================================================
@@ -2366,16 +2811,33 @@ def _describe_real_needs(needs: list) -> str:
     return "、".join(parts)
 
 
-def _real_current_q(arm: JoyArm, fam: str = "arm") -> tuple:
-    """读当前实测 q：get_state_{fam}（读时刷新）优先，被动快照兜底。"""
-    st = getattr(arm, f"get_state_{fam}")()
-    if st is not None and st.q is not None and bool(np.all(np.isfinite(st.q))):
-        return np.asarray(st.q, dtype=float), f"get_state_{fam} 实测"
+def _real_state_fresh(arm: JoyArm, fam: str, state, after: float = 0.0) -> bool:
+    """真机运动判据：整组 q 有效、帧龄在承诺周期内，必要时须为发送后的帧。"""
+    if state is None:
+        return False
+    try:
+        q = np.asarray(state.q, dtype=float)
+        t = float(state.t)
+        n = getattr(arm, f"n_{fam}")
+        hz = float(arm.get_config()["backend"].get("state_refresh_hz", 20.0))
+        return bool(q.shape == (n,) and n > 0 and np.isfinite(q).all()
+                    and np.isfinite(t) and t > 0 and t >= after
+                    and 0 <= time.time() - t <= 1.0 / hz)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return False
+
+
+def _real_current_q(arm: JoyArm, fam: str = "arm", after: float = 0.0) -> tuple:
+    """读时结果与缓存均校验帧龄，after 可要求发送后的反馈。"""
+    try:
+        st = getattr(arm, f"get_state_{fam}")()
+    except Exception:
+        st = None
     snap = getattr(arm, f"joint_state_{fam}")
-    q = np.asarray(snap.q, dtype=float)
-    if q.size and bool(np.all(np.isfinite(q))):
-        return q, f"joint_state_{fam} 快照"
-    return None, "无可用状态（读取失败且快照无效）"
+    for candidate, src in ((st, f"get_state_{fam} 实测"), (snap, f"joint_state_{fam} 快照")):
+        if _real_state_fresh(arm, fam, candidate, after):
+            return np.asarray(candidate.q, dtype=float).copy(), src
+    return None, "无新鲜有效状态（帧龄/时间戳/位置维度不满足要求）"
 
 
 def _real_safe_target(arm: JoyArm, fam: str, q0: np.ndarray, amp: float) -> np.ndarray:
@@ -2600,11 +3062,12 @@ def _rt120(s: _RealSession):
     arm = s.arm()
     q0, src = _real_current_q(arm, "arm")
     if q0 is None:
-        return "SKIP", f"{src}——无法自实际位置小幅出发，盲发目标有大幅运动风险"
+        return "FAIL", f"{src}——取消发送，无法自实际位置小幅出发"
     target = _real_safe_target(arm, "arm", q0, REAL_POS_AMP)
+    sent_at = time.time()
     arm.send_position_arm(target, np.full(arm.n_arm, REAL_VLIM))
     time.sleep(REAL_SETTLE)
-    q1, src1 = _real_current_q(arm, "arm")
+    q1, src1 = _real_current_q(arm, "arm", after=sent_at)
     moved = q1 is not None and float(np.max(np.abs(q1 - q0))) > 0.005
     delta = "—" if q1 is None else f"{float(np.max(np.abs(q1 - q0))):.4f}"
     ok = moved
@@ -2631,12 +3094,13 @@ def _rt121(s: _RealSession):
     arm = s.arm()
     q0, src = _real_current_q(arm, "arm")
     if q0 is None:
-        return "SKIP", f"{src}——无法取当前位置作保持目标"
+        return "FAIL", f"{src}——取消发送，无法取当前位置作保持目标"
     n = arm.n_arm
+    sent_at = time.time()
     arm.send_mit_arm(q=q0, dq=np.zeros(n), tau=np.zeros(n),
                      kp=np.full(n, REAL_MIT_KP), kd=np.full(n, REAL_MIT_KD))
     time.sleep(1.0)
-    q1, _ = _real_current_q(arm, "arm")
+    q1, _ = _real_current_q(arm, "arm", after=sent_at)
     drift = None if q1 is None else float(np.max(np.abs(q1 - q0)))
     ok = drift is not None and drift < 0.05
     ev = (f"目标 q=当前实测（{src}）{np.round(q0, 4).tolist()}，kp={REAL_MIT_KP}、"
@@ -2664,15 +3128,23 @@ def _rt122(s: _RealSession):
     arm = s.arm()
     q0, src = _real_current_q(arm, "arm")
     if q0 is None:
-        return "SKIP", f"{src}——电机反馈异常时不宜做速度测试"
+        return "FAIL", f"{src}——取消发送，电机反馈异常"
     n = arm.n_arm
     target = _real_safe_target(arm, "arm", q0, REAL_POS_AMP)
     dq_cmd = np.sign(np.asarray(target) - q0) * REAL_VEL
-    arm.send_vel_arm(dq_cmd)
-    time.sleep(REAL_VEL_DUR)
-    st = arm.get_state_arm()
-    arm.send_vel_arm(np.zeros(n))                     # 停止
-    dq_meas = None if (st is None or st.dq is None) else np.asarray(st.dq, float)
+    sent_at = time.time()
+    st = None
+    try:
+        arm.send_vel_arm(dq_cmd)
+        time.sleep(REAL_VEL_DUR)
+        st = arm.get_state_arm()
+    finally:
+        arm.send_vel_arm(np.zeros(n))           # 反馈读取异常也必须发停止命令。
+    dq_meas = None
+    if _real_state_fresh(arm, "arm", st, after=sent_at) and st.dq is not None:
+        candidate = np.asarray(st.dq, float)
+        if candidate.shape == (n,) and np.isfinite(candidate).all():
+            dq_meas = candidate
     resp = dq_meas is not None and float(np.max(np.abs(dq_meas))) > 0.01
     ev = (f"dq 指令={np.round(dq_cmd, 2).tolist()} rad/s ×{REAL_VEL_DUR}s 后已发 dq=0；"
           f"运动中实测 dq={np.round(dq_meas, 3).tolist() if dq_meas is not None else None}"
@@ -2702,11 +3174,12 @@ def _rt123(s: _RealSession):
         return "SKIP", "end 族未配置任何电机（n_end=0），空族自动跳过"
     q0, src = _real_current_q(arm, "end")
     if q0 is None:
-        return "SKIP", f"{src}——无法自实际位置小幅出发"
+        return "FAIL", f"{src}——取消发送，无法自实际位置小幅出发"
     target = _real_safe_target(arm, "end", q0, REAL_POS_AMP)
+    sent_at = time.time()
     arm.send_position_end(target, np.full(arm.n_end, REAL_VLIM))
     time.sleep(REAL_SETTLE)
-    q1, _ = _real_current_q(arm, "end")
+    q1, _ = _real_current_q(arm, "end", after=sent_at)
     moved = q1 is not None and float(np.max(np.abs(q1 - q0))) > 0.005
     ev = (f"end 目标（{src} ±{REAL_POS_AMP}）={np.round(target, 4).tolist()}；"
           f"{REAL_SETTLE}s 后实测 q={np.round(q1, 4).tolist() if q1 is not None else None}")
@@ -2742,25 +3215,30 @@ def _rt131(s: _RealSession):
         return "FAIL", f"未进入 MOTION（current={arm.get_current_motion_state().name}）"
     q0, src = _real_current_q(arm, "arm")
     if q0 is None:
-        return "SKIP", f"{src}——无法取当前位置作小幅目标"
+        return "FAIL", f"{src}——取消发送，无法取当前位置作小幅目标"
     target = _real_safe_target(arm, "arm", q0, REAL_POS_AMP)
+    tol = 0.01
+    if float(np.max(np.abs(target - q0))) <= 2.0 * tol:
+        return "SKIP", "软限位裕量不足，无法在既定小幅范围内形成大于两倍容差的目标"
     print(f"  目标通道预览：当前 q（{src}）={np.round(q0, 4).tolist()} → "
-          f"目标（±{REAL_POS_AMP} 选向）={np.round(target, 4).tolist()}（t+3.0s）")
-    arm.set_target_joint(time.time() + 3.0, target)
+          f"目标={np.round(target, 4).tolist()}（t+3.0s，容差 {tol} rad）")
+    sent_at = time.time()
+    arm.set_target_joint(sent_at + 3.0, target)
     deadline = time.monotonic() + 5.0
     arrived = False
+    q1 = None
     while time.monotonic() < deadline:
-        if arm.is_in_q_arm(target, tol_q=0.1):
+        q1, _ = _real_current_q(arm, "arm", after=sent_at)
+        if (q1 is not None and float(np.max(np.abs(q1 - target))) <= tol
+                and float(np.max(np.abs(q1 - q0))) > tol):
             arrived = True
             break
         time.sleep(0.1)
-    q1, _ = _real_current_q(arm, "arm")
     err = None if q1 is None else float(np.max(np.abs(q1 - target)))
-    ok = arrived
-    ev = (f"set_target_joint(t+3.0, ±{REAL_POS_AMP}) 后 5s 内到位={arrived}"
-          f"（is_in_q_arm(tol=0.1)）；实测 q={np.round(q1, 4).tolist() if q1 is not None else None}，"
-          f"|q−目标|max={err if err is not None else '—'} rad")
-    return ("PASS" if ok else "FAIL"), ev
+    ev = (f"set_target_joint(t+3.0, ≤{REAL_POS_AMP}) 后 5s 内实际运动并到位={arrived}"
+          f"（容差 {tol}、要求发送后新鲜反馈）；实测 q="
+          f"{np.round(q1, 4).tolist() if q1 is not None else None}，|q−目标|max={err}")
+    return ("PASS" if arrived else "FAIL"), ev
 
 
 def _rt132(s: _RealSession):
@@ -3005,7 +3483,7 @@ _ritem(130, "FSM 启动与自动迁移", "r3", "高",
        "start_motion_fsm → DISABLE→HOME→MOTION 自动迁移（HOME 已到位日志 + 真实运动耗时计入）",
        [("connected", "arm")], _rt130)
 _ritem(131, "目标通道小幅运动", "r3", "高",
-       f"set_target_joint(当前 ±{REAL_POS_AMP}) 经 plan/ctrl 管线运动并到位（is_in_q_arm tol=0.1）",
+       f"set_target_joint(当前 ±{REAL_POS_AMP}) 经 plan/ctrl 管线实际运动并到位（tol=0.01、发送后新鲜反馈）",
        [("connected", "arm")], _rt131)
 _ritem(132, "保护事件直达 HOLD", "r3", "高",
        "MOTION 下 set_event(HOLDING) 直达 HOLD 原位锁定，set_event(NORMAL) 恢复 MOTION",
@@ -3037,6 +3515,16 @@ _ritem(151, "设置零点", "r5", "极高",
 REAL_ALL_NUMS = {it["num"] for it in REAL_ITEMS}
 _REAL_BY_NUM = {it["num"]: it for it in REAL_ITEMS}
 
+REAL_LEVELS = {
+    'r0': '构造、连接与硬件只读',
+    'r1': '模式、使能与参数写回',
+    'r2': '三模式及末端小幅指令',
+    'r3': '状态机运动与保护恢复',
+    'r4': '监视器与状态可视化',
+    'r5': '故障清除（设零151仅显式单项）',
+}
+
+
 # 组名 → 编号集合（151 极高危排除出 r5/rall，仅显式编号执行——对齐 backend_verify 38 惯例）
 REAL_GROUPS: dict[str, list[int]] = {
     "r0": [100, 101, 102, 103, 104, 105],
@@ -3056,36 +3544,99 @@ class _UsageError(Exception):
     """用法错误（退出码 2）。"""
 
 
-def resolve_steps(spec: str, real: bool = False) -> list[int]:
-    """解析 --step：单项编号 / 组名逗号混选（按模式取离线或真机组表）。
+def _item_order(it: dict) -> tuple:
+    """先依赖层级、后稳定编号；编号较小的集成项不能抢在基础 FSM 前执行。"""
+    return int(it['level'][1:]), it['num']
 
-    真机模式下 "all" 为 "rall" 别名（--real 缺省 --step=all 直达真机全项）。
-    """
+
+def _level_groups(real: bool = False) -> dict:
+    if real:
+        # 使用既有组表，151 永久标定不进入任何级别/累计选择。
+        return {key: list(REAL_GROUPS[key]) for key in REAL_LEVELS}
+    return {level: [it['num'] for it in ITEMS if it['level'] == level] for level in LEVELS}
+
+
+def _normalize_level(value: str, real: bool = False) -> str:
+    value = value.strip()
+    if value.isdigit():
+        value = ('r' if real else 'L') + value
+    value = value.lower() if real else value.upper()
+    if value not in _level_groups(real):
+        raise _UsageError(f'未知层级 {value!r}；可用：{list(_level_groups(real))}')
+    return value
+
+
+def resolve_steps(spec: str, real: bool = False) -> list[int]:
+    """解析稳定编号/功能组/级别，去重后始终按低层到高层排序。"""
     groups = REAL_GROUPS if real else GROUPS
-    all_nums = REAL_ALL_NUMS if real else ALL_NUMS
-    nums: list[int] = []
-    for tok in spec.split(","):
-        tok = tok.strip().lower()
-        if not tok:
+    by_num = _REAL_BY_NUM if real else _BY_NUM
+    levels = {key.lower(): nums for key, nums in _level_groups(real).items()}
+    selected = []
+    for token in spec.split(','):
+        token = token.strip().lower()
+        if not token:
             continue
-        if real and tok == "all":
-            tok = "rall"                       # 真机模式别名：缺省 --step=all → rall
-        if tok.isdigit():
-            n = int(tok)
-            if n not in all_nums:
-                hint = "（编号 ≥100 为真机项，须加 --real）" if not real and n >= 100 else ""
-                raise _UsageError(f"未知步骤编号 {n}；有效编号：{sorted(all_nums)}{hint}")
-            nums.append(n)
-        elif tok in groups:
-            nums.extend(groups[tok])
+        if real and token == 'all':
+            token = 'rall'
+        if token.isdigit():
+            num = int(token)
+            if num not in by_num:
+                raise _UsageError(f'未知步骤编号 {num}；当前模式有效编号：{sorted(by_num)}')
+            selected.append(num)
+        elif token in levels:
+            selected.extend(levels[token])
+        elif token in groups:
+            selected.extend(groups[token])
         else:
-            other = "（真机项见 --real --list）" if not real else ""
-            raise _UsageError(
-                f"未知步骤 {tok!r}；有效组名：{[k for k in groups if k not in ('all', 'rall')] + (['all'] if not real else ['rall'])}"
-                f"，或编号 {sorted(all_nums)}{other}")
-    if not nums:
-        raise _UsageError(f"--step={spec!r} 未解析出任何测试项")
-    return sorted(set(nums))
+            raise _UsageError(f'未知步骤 {token!r}；组名：{list(groups)}；层级：{list(levels)}')
+    if not selected:
+        raise _UsageError(f'--step={spec!r} 未解析出任何测试项')
+    return sorted(set(selected), key=lambda num: _item_order(by_num[num]))
+
+
+def _selected_steps(args: argparse.Namespace) -> list[int]:
+    levels = _level_groups(args.real)
+    if args.level is not None:
+        level = _normalize_level(args.level, args.real)
+        return resolve_steps(','.join(map(str, levels[level])), args.real)
+    if args.through is not None:
+        top = _normalize_level(args.through, args.real)
+        nums = [num for level, entries in levels.items()
+                if int(level[1:]) <= int(top[1:]) for num in entries]
+        return resolve_steps(','.join(map(str, nums)), args.real)
+    return resolve_steps(args.step or 'all', args.real)
+
+
+def _run_suite(items: list, execute, keep_going: bool = False) -> list:
+    """逐层执行：当前层尽量测完，低层 FAIL 阻止升级；收尾层始终允许执行。"""
+    results = []
+    failed = set()
+    current = None
+    for it in sorted(items, key=_item_order):
+        level = it['level']
+        rank = int(level[1:])
+        if current != level:
+            current = level
+            print(f"\n{'=' * 68}\n开始层级 {level}：{(REAL_LEVELS if level.startswith('r') else LEVELS)[level]}")
+        lower_failed = sorted(low for low in failed if int(low[1:]) < rank)
+        if lower_failed and not keep_going and it['group'] != 'close':
+            verdict, evidence = 'SKIP', f"较低层 {lower_failed} 已失败，停止升级（可用 --keep-going 继续诊断）"
+            _print_pre(it, '真机' if level.startswith('r') else '离线')
+            _print_post(it, verdict, evidence)
+        else:
+            try:
+                verdict, evidence = execute(it)
+                if verdict not in ('PASS', 'FAIL', 'SKIP', 'QUIT'):
+                    raise ValueError(f'非法验收结果 {verdict!r}')
+            except Exception as e:
+                verdict, evidence = 'FAIL', f'执行框架异常 {type(e).__name__}: {e}'
+                _print_post(it, verdict, evidence)
+        results.append((it, verdict, evidence))
+        if verdict == 'FAIL':
+            failed.add(level)
+        if verdict == 'QUIT':
+            break
+    return results
 
 
 # ---------------- 逐项 pre/post 统一打印模板（双模式共用） ----------------
@@ -3106,10 +3657,16 @@ def _print_post(it: dict, verdict: str, evidence: str) -> None:
 def run_item(it: dict) -> tuple[str, str]:
     """离线单项执行：pre 打印 → 执行 → post 打印（无交互）。"""
     _print_pre(it, "离线")
+    start = len(_CASE_BACKENDS)
     try:
-        verdict, evidence = it["fn"]()
-    except Exception as e:  # noqa: BLE001（验收脚本须捕获一切）
-        verdict, evidence = "FAIL", f"未预期异常 {type(e).__name__}: {e}"
+        try:
+            verdict, evidence = it['fn']()
+        except Exception as e:
+            verdict, evidence = 'FAIL', f'未预期异常 {type(e).__name__}: {e}'
+    finally:
+        # 构造失败也可能已启动后台刷新；统一回收本项新建的 Dummy，防串项污染。
+        _cleanup_backends(start)
+        CFG_SOURCE.next = None
     _print_post(it, verdict, evidence)
     return verdict, evidence
 
@@ -3174,80 +3731,64 @@ def run_real_item(it: dict, s: _RealSession) -> tuple[str, str]:
     return verdict, evidence
 
 
-def print_list(real: bool = False) -> None:
+def print_list(real: bool = False, nums=None) -> None:
+    by_num = _REAL_BY_NUM if real else _BY_NUM
+    entries = [by_num[num] for num in nums] if nums is not None else list(by_num.values())
+    print(f"JoyArm {'真机' if real else '离线'}分层验收清单（由底到高；稳定编号/功能组/层级可独立筛选）")
+    current = None
+    for it in sorted(entries, key=_item_order):
+        level = it['level']
+        if level != current:
+            current = level
+            print(f"\n{level}｜{(REAL_LEVELS if level.startswith('r') else LEVELS)[level]}")
+        tag = '｜仅显式 --real --step=151 可执行' if it['num'] == 151 else ''
+        print(f"  [{it['num']:02d}] {it['name']}｜组={it['group']}｜风险={it['risk']}{tag}")
+        print(f"       目的：{it['purpose']}")
+        if real:
+            print(f"       前置：{_describe_real_needs(it['needs']) or '（无）'}")
+    print(f"\n共 {len(entries)} 项；支持 --level 单级、--through 从底层累计、--step 单项/功能组。")
+    print('默认低层 FAIL 后停止升级，当前层测完，已选收尾项仍执行；--keep-going 可继续诊断。')
+    print('PASS=契约满足；FAIL=契约违反；SKIP=未验证（环境/能力/依赖/用户跳过），不能当作通过。')
     if real:
-        print("JoyArm 层真机验收测试项清单（--real；编号=组号×10+序号，级 r0~r5 危险度递进）")
-        print("=" * 68)
-        for it in sorted(REAL_ITEMS, key=lambda x: x["num"]):
-            tag = ("　★极高危：仅显式 --real --step=151 执行，不含于 r5/rall"
-                   if it["risk"] == "极高" else "")
-            print(f"[{it['num']:02d}] {it['name']}｜组={it['group']}｜风险={it['risk']}{tag}")
-            print(f"      用途：{it['purpose']}")
-            print(f"      前置：{_describe_real_needs(it['needs']) or '（无）'}")
-        print("=" * 68)
-        print("级：r0(100 连接/硬件只读) / r1(110 使能/模式/参数写) / r2(120 委托小幅运动·发送前预览) /")
-        print("    r3(130 状态机运动) / r4(140 监视器/可视化) / r5(150 清错)；rall=全部（151 除外）")
-        print("风险与确认：低=直执；中=回车确认（--yes 或非终端直执）；高=交互 yes（--yes 不放行，")
-        print("            非终端自动 SKIP）；极高（151 设零）=每族二次确认、--yes 不放行、仅显式编号执行。")
-        print("判定：PASS=符合契约；SKIP=环境/能力条件不满足（非缺陷）；FAIL=违反契约。")
-        return
-    print("JoyArm 层离线验收测试项清单（编号=组号×10+组内序号；全离线低危、无交互）")
-    print("=" * 68)
-    for it in sorted(ITEMS, key=lambda x: x["num"]):
-        print(f"[{it['num']:02d}] {it['name']}｜组={it['group']}｜级={_GROUP_LEVEL.get(it['group'], '-')}"
-              f"｜风险={it['risk']}")
-        print(f"      用途：{it['purpose']}")
-    print("=" * 68)
-    print("组（级）：factory(00,L0) / init(01,L0) / readonly(02,L0) / delegate(03,L1) /")
-    print("         solvers(04,L2) / math(05,L2) / fsm(06,L3) / monitor(07,L3) /")
-    print("         viz(08,L4) / close(09,L5)；all=全部（缺省；真机项见 --real --list）")
-    print("判定：PASS=符合规格；SKIP=环境条件不满足（非缺陷，如已装 meshcat）；FAIL=违反契约。")
+        print('高危/极高危仍需交互确认，--yes 不放行；设零151不属于任何层级或累计选择。')
 
 
 EPILOG = """\
-示例：
-  python joyarm_core/joyarm/joyarm_verify.py --help        # 本说明
-  python joyarm_core/joyarm/joyarm_verify.py --list        # 离线测试项清单
-  python joyarm_core/joyarm/joyarm_verify.py               # 离线全部（缺省 all）
-  python joyarm_core/joyarm/joyarm_verify.py --step=fsm    # 离线单组（06 组 60~66）
-  python joyarm_core/joyarm/joyarm_verify.py --step=61,71  # 离线单项混选
-  python joyarm_core/joyarm/joyarm_verify.py --real --list # 真机测试项清单
-  python joyarm_core/joyarm/joyarm_verify.py --real        # 真机 r0~r5（151 除外）
-  python joyarm_core/joyarm/joyarm_verify.py --real --step=r2      # 真机单级
-  python joyarm_core/joyarm/joyarm_verify.py --real --step=120,151 # 真机单项混选
-  python joyarm_core/joyarm/joyarm_verify.py --real --step=151     # 极高危设零（仅显式编号）
+在 joyarm_code/ 目录运行（激活 .venv 或使用 uv run）：
+  python joyarm_core/joyarm/joyarm_verify.py --list             # 按层查看全部离线项
+  python joyarm_core/joyarm/joyarm_verify.py                    # 全部，由底到高
+  python joyarm_core/joyarm/joyarm_verify.py --level L3          # 仅 FSM 基础与自愈
+  python joyarm_core/joyarm/joyarm_verify.py --through L3        # L0→L3 累计验收
+  python joyarm_core/joyarm/joyarm_verify.py --step 68,69,74      # 定位指定项目
+  python joyarm_core/joyarm/joyarm_verify.py --step fsm          # 功能组（可能跨层）
+  python joyarm_core/joyarm/joyarm_verify.py --keep-going        # 低层失败后继续诊断
+  python joyarm_core/joyarm/joyarm_verify.py --real --list       # 仅列真机项，不连接
+  python joyarm_core/joyarm/joyarm_verify.py --real --through r2 # 真机由 r0 验到 r2
+  python joyarm_core/joyarm/joyarm_verify.py --real --step 151   # 设零：仅显式单项
 
-定位：缺省离线（DummyBackend 注入推演、零交互、非终端可跑、可当门控）；
-      --real 真机交互模式（真配置真连接 backend_dm、分级危险确认）。离线
-      FSM/监视器/可视化线程类用例每项内部收尾（stop/join），不悬挂线程。
-
-退出码：全 PASS/SKIP=0；任一 FAIL=1；用法错误=2。结尾输出
-        SUMMARY: total=… pass=… fail=… skip=…（机器可解析）+ 各组统计行。
+离线 L0基础/构造→L1硬件委托→L2算法/目标→L3状态机→L4安全集成→L5可视化→L6收尾。
+每项打印目的/结果/证据，每层汇总；原有单项编号保持兼容。默认同层继续、低层
+FAIL 后跳过更高层，已选收尾项仍执行；各项自带 finally 收尾与注入恢复，不依赖前项残留。
+--real 才连接真实硬件，保留逐项风险确认；高危/极高危非终端自动跳过。
+退出码：任一 FAIL=1；用法错误=2；其余=0（SKIP 为未验证，不代表通过）。
+SUMMARY 行与 LEVEL/GROUP 统计可用于自动化解析。
 """
 
 
 def parse_args(argv=None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        prog="joyarm_verify.py",
-        description=("JoyArm 层双模式分级验收脚本：缺省离线（DummyBackend 注入，"
-                     "L0 工厂/自检/只读 → L1 委托指令 → L2 求解器/数学 → L3 "
-                     "MotionFSM/safe_monitor → L4 可视化 → L5 销毁）；--real 真机"
-                     "交互模式（真配置真连接 backend_dm，r0~r5 危险度递进分级确认）。"
-                     "PASS/SKIP/FAIL 三分判定。"),
+    parser = argparse.ArgumentParser(
+        prog='joyarm_verify.py',
+        description='JoyArm 分层逐项验收：缺省离线 L0→L6；--real 真机 r0→r5，按层递进并保留风险确认。',
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--step", default="all",
-                   help="数字=单项编号（离线如 61；真机如 120）；组名（离线："
-                        "factory/init/readonly/delegate/solvers/math/fsm/monitor/"
-                        "viz/close/all；真机：r0~r5/rall）；逗号分隔混选；缺省 all")
-    p.add_argument("--list", action="store_true",
-                   help="仅列出测试项（缺省离线；--real --list 列真机项），不执行")
-    p.add_argument("--real", action="store_true",
-                   help="真机交互模式：真配置真连接 backend_dm（不经 Dummy 注入），"
-                        "按危险度分级确认")
-    p.add_argument("--yes", action="store_true",
-                   help="真机模式：跳过中危回车确认（高危/极高危永不自动执行："
-                        "仍需交互 yes，非终端自动 SKIP）")
-    return p.parse_args(argv)
+    select = parser.add_mutually_exclusive_group()
+    select.add_argument('--step', help='稳定编号、功能组或层级，逗号混选；缺省 all')
+    select.add_argument('--level', help='只验证某一级，如 L3；真机用 r2')
+    select.add_argument('--through', help='从最低层累计验到此级，如 L3；真机用 r2')
+    parser.add_argument('--keep-going', action='store_true', help='低层失败后仍继续更高层，用于诊断')
+    parser.add_argument('--list', action='store_true', help='仅列出所选项目，不执行、不连接')
+    parser.add_argument('--real', action='store_true', help='真机模式，真实配置与连接，逐项风险确认')
+    parser.add_argument('--yes', action='store_true', help='真机仅跳过中危回车；高危/极高危仍需交互确认')
+    return parser.parse_args(argv)
 
 
 def _print_summary(results: list, group_order: tuple, mode_label: str) -> int:
@@ -3258,6 +3799,10 @@ def _print_summary(results: list, group_order: tuple, mode_label: str) -> int:
     print()
     print("=" * 68)
     print(f"SUMMARY: total={len(results)} pass={n_pass} fail={n_fail} skip={n_skip}")
+    for level in sorted({it['level'] for it, _, _ in results}, key=lambda value: int(value[1:])):
+        sub = [verdict for it, verdict, _ in results if it['level'] == level]
+        print(f"LEVEL {level}: total={len(sub)} pass={sub.count('PASS')} fail={sub.count('FAIL')} "
+              f"skip={sum(verdict not in ('PASS', 'FAIL') for verdict in sub)}")
     for gname in group_order:
         sub = [(it, v) for it, v, _ in results if it["group"] == gname]
         if not sub:
@@ -3271,7 +3816,7 @@ def _print_summary(results: list, group_order: tuple, mode_label: str) -> int:
     if not fails:
         concl = f"结论：无失败项，JoyArm 层符合本次{mode_label}验收全部已测契约。"
         if skips:
-            concl += f"共 {n_skip} 项跳过（环境条件不满足或用户确认跳过，非缺陷，详见各项证据）。"
+            concl += f"共 {n_skip} 项未验证（环境/能力/依赖或用户跳过，不能视为通过，详见证据）。"
     else:
         print(f"结论：{n_fail} 项失败——")
         for it, ev in fails:
@@ -3291,16 +3836,11 @@ def _run_real(nums: list, args: argparse.Namespace) -> int:
     print("危险分级：低=直执；中=回车确认（--yes 或非终端直执）；高=交互 yes；"
           "极高（151）=每族二次确认、仅显式编号执行")
     print(f"待执行 {len(nums)} 项：{[f'{n:02d}' for n in nums]}")
-    results: list[tuple[dict, str, str]] = []
     try:
-        for num in nums:
-            it = _REAL_BY_NUM[num]
-            v, ev = run_real_item(it, s)
-            results.append((it, v, ev))
-            if v == "QUIT":
-                break                          # 用户 q 退出：后续项不再执行
+        results = _run_suite([_REAL_BY_NUM[num] for num in nums],
+                             lambda it: run_real_item(it, s), keep_going=args.keep_going)
     finally:
-        s.close()                              # 共享收尾：stop/disable/disconnect（幂等）
+        s.close()
     return _print_summary(results, ("r0", "r1", "r2", "r3", "r4", "r5"), "真机")
 
 
@@ -3311,14 +3851,16 @@ def main(argv=None) -> int:
     except (AttributeError, ValueError):
         pass
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    if args.list:
-        print_list(real=args.real)
-        return 0
     try:
-        nums = resolve_steps(args.step, real=args.real)
+        nums = _selected_steps(args)
     except _UsageError as e:
-        print(f"用法错误：{e}", file=sys.stderr)
+        print(f'用法错误：{e}', file=sys.stderr)
         return 2
+    if args.list:
+        # 完整真机清单仍展示151供发现，但它不进入默认/层级执行集合。
+        list_nums = None if args.real and not any((args.step, args.level, args.through)) else nums
+        print_list(real=args.real, nums=list_nums)
+        return 0
     if args.real:
         return _run_real(nums, args)
     # ---- 离线模式（缺省）：Dummy 注入全自动 ----
@@ -3331,17 +3873,11 @@ def main(argv=None) -> int:
     print(f"交互终端：{'是' if sys.stdin.isatty() else '否'}（离线用例全部无交互）；"
           "FSM/monitor/viz 用例逐项收尾线程；真机验收走 --real")
     print(f"待执行 {len(nums)} 项：{[f'{n:02d}' for n in nums]}")
-    results: list[tuple[dict, str, str]] = []
     try:
-        for num in nums:
-            it = _BY_NUM[num]
-            v, ev = run_item(it)
-            results.append((it, v, ev))
+        results = _run_suite([_BY_NUM[num] for num in nums], run_item, keep_going=args.keep_going)
     finally:
         restore_injection()
-    return _print_summary(results, ("factory", "init", "readonly", "delegate",
-                                    "solvers", "math", "fsm", "monitor", "viz",
-                                    "close"), "离线")
+    return _print_summary(results, tuple(key for key in GROUPS if key != 'all'), '离线')
 
 
 if __name__ == "__main__":
