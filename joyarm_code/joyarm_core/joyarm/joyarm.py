@@ -727,8 +727,6 @@ _VIZ_ZMQ_TIMEOUT_MS: int = 1000
 _VIZ_ZMQ_FAIL_MAX: int = 3
 # 监视器「状态连续 None」判 DISABLE 的时长阈值（连续 0.1 s）
 _MONITOR_NONE_TIMEOUT: float = 0.1
-# FSM 迁移连续推迟拍数上限（超限改走 DISABLE 直接失能兜底）
-_FSM_DEFER_RETRY_MAX: int = 50
 
 
 def _json_round(x) -> Optional[float]:
@@ -945,6 +943,7 @@ class JoyArm:
         self._current_motion_state: MotionState = MotionState.DISABLE   # FSM 线程独占写
         self._target_motion_state: MotionState = MotionState.DISABLE    # 安全事件响应设置
         self._safe_event: SafetyEvent = SafetyEvent.DISABLE             # 当前安全事件（set_event 原子写入）
+        self._event_lock = threading.RLock()             # 事件发布与监视器升档仲裁原子化；不持锁做 I/O
         self._fsm_hz: float = 50.0                       # cfg.joyarm.MotionFSM.fsm_hz
         self._mit_kd_damping: np.ndarray = np.zeros(0)   # DAMPING 态 MIT kd（cfg 必配）
         self._monitor_hz: float = 50.0                   # 缺省 = fsm_hz
@@ -956,7 +955,6 @@ class JoyArm:
         self._hold_q: Optional[np.ndarray] = None        # HOLD 态锁定的关节位置
         self._zero_moving: bool = False                  # ZERO 态「移动中」子阶段标志
         self._home_arrived: bool = False                 # HOME 态到位日志去重
-        self._fsm_defer_count: int = 0                   # 迁移连续推迟拍数（告警与上限兜底）
         self._fsm_disc_warned: bool = False              # 断连挂起告警去重（重连后复位）
         self._fsm_periodic: Optional[_PeriodicThread] = None  # FSM 周期线程句柄（fsm_hz）
 
@@ -1659,28 +1657,31 @@ class JoyArm:
     def _start_motion_thread(self, event: SafetyEvent) -> bool:
         """首帧规划 → 硬件就绪检查 → 启动 plan/ctrl；仅 FSM 调用。
 
-        规划先于硬件变更；异常由 FSM 统一计数并回收部分启动的线程。
+        失败时回收部分启动的线程，不修改事件；异常交给周期线程记录。
         停旧线程不持 `_motion_lock`，避免 join 等待正在取同一把锁的 worker。
         """
         self._stop_motion_thread()
-        leftovers = [attr for attr in ("_ctrl_periodic", "_plan_periodic")
-                     if getattr(self, attr) is not None]
-        if leftovers:
-            raise RuntimeError(
-                f"joyarm.py - _start_motion_thread：旧 plan/ctrl 线程未确认退出：{leftovers}")
-        with self._motion_lock:
-            planner = self._activated_of("traj")
-            controller = self._activated_of("ctrl")
-            if not planner.plan(self, self._target_trajframe):
-                raise RuntimeError("joyarm.py - _start_motion_thread：首帧规划失败")
-            if not self._ensure_arm_ready(controller.MODE, event):
-                return False
-            self._plan_periodic = _PeriodicThread(self._tick_plan, self._plan_hz, name="joyarm-plan")
-            self._ctrl_periodic = _PeriodicThread(self._tick_ctrl, self._ctrl_hz, name="joyarm-ctrl")
-            self._plan_periodic.start()
-            self._ctrl_thread = self._ctrl_periodic.prepare()  # 起跑前登记 ctrl 豁免句柄
-            self._ctrl_periodic.start()
-            self._motion_ready = controller
+        if self._ctrl_periodic is not None or self._plan_periodic is not None:
+            return False                       # 旧线程尚未退出，下拍重试
+        started = False
+        try:
+            with self._motion_lock:
+                planner = self._activated_of("traj")
+                controller = self._activated_of("ctrl")
+                if not planner.plan(self, self._target_trajframe):
+                    return False               # 首帧尚未就绪，不提交 MOTION
+                if not self._ensure_arm_ready(controller.MODE, event):
+                    return False
+                self._plan_periodic = _PeriodicThread(self._tick_plan, self._plan_hz, name="joyarm-plan")
+                self._ctrl_periodic = _PeriodicThread(self._tick_ctrl, self._ctrl_hz, name="joyarm-ctrl")
+                self._plan_periodic.start()
+                self._ctrl_thread = self._ctrl_periodic.prepare()  # 起跑前登记 ctrl 豁免句柄
+                self._ctrl_periodic.start()
+                self._motion_ready = controller
+                started = True
+        finally:
+            if not started:
+                self._stop_motion_thread()     # 仅做资源清理，join 时不持运动锁
         logger.info("joyarm.py - _start_motion_thread：plan/ctrl 两线程已启动"
                     "（plan_hz=%s，ctrl_hz=%s，控制器 %s）",
                     self._plan_hz, self._ctrl_hz, type(controller).__name__)
@@ -1706,9 +1707,9 @@ class JoyArm:
             self._ctrl_thread = None
 
     def _tick_plan(self) -> None:
-        """与规划器切换及采样串行，收尾开始后不再规划；断连静默跳过（cubic 类取起点的读状态在断连时会抛错）。"""
+        """与规划器切换及采样串行；单拍失败不修改事件，异常由周期线程记录。"""
         with self._motion_lock:
-            if (not self._fsm_shutdown.is_set() and self._backend.is_connected_arm is True):
+            if not self._fsm_shutdown.is_set() and self._backend.is_connected_arm is True:
                 self._activated_traj_solver.plan(self, self._target_trajframe)
 
     def _ctrl_ready(self) -> bool:
@@ -1721,15 +1722,16 @@ class JoyArm:
                 and self._motion_ready is self._activated_ctrl_solver)
 
     def _tick_ctrl(self) -> None:
-        """就绪时读状态、采样、执行控制；单拍与算法选择/模式自愈互斥。"""
+        """就绪时读状态、采样、执行控制；缺少输入则跳拍，不修改安全事件。"""
         with self._motion_lock:
             if not self._ctrl_ready():
                 return
             state = self._backend.get_state_arm()
             if state is None:
-                logger.warning("joyarm.py - _tick_ctrl：get_state_arm() 为 None，跳过本拍 step")
                 return
             frame = self._activated_traj_solver.sample(time.time())
+            if frame is None:
+                return
             if self._ctrl_ready():              # 读取期间可能收到保护事件
                 self._activated_ctrl_solver.step(self, frame, state)
 
@@ -1767,12 +1769,10 @@ class JoyArm:
                 self._backend.disable_arm()
 
     def _fsm_tick(self) -> None:
-        """消费事件 → 进入/维持 → 成功才提交状态；失败与异常统一累计。"""
+        """消费事件及目标 → 进入/维持 → 成功才提交状态；不作安全事件判定。"""
         if self._fsm_shutdown.is_set():
             return
         if self._backend.is_connected_arm is not True:
-            # 断连挂起：不迁移、不维持——任何 backend 调用都会逐拍命中连接门禁 warn 刷屏；
-            # 一次性告警后静默等待重连自动恢复，defer 计数冻结（断连不消耗 50 拍兜底）
             if not self._fsm_disc_warned:
                 logger.warning(
                     "joyarm.py - _fsm_tick：arm 未连接（is_connected_arm=%s），"
@@ -1781,83 +1781,42 @@ class JoyArm:
                 self._fsm_disc_warned = True
             return
         self._fsm_disc_warned = False
-        event = self._safe_event
-        self._target_motion_state = _EVENT_TO_STATE[event]
-        cur, tgt = self._current_motion_state, self._target_motion_state
+        with self._event_lock:
+            event, tgt = self._safe_event, self._target_motion_state
+        cur = self._current_motion_state
         nxt = _ROUTE[cur].get(tgt, cur)
         waiting_home = (cur is MotionState.HOME and tgt in (MotionState.ZERO, MotionState.MOTION)
-                        and not self._home_arrived)
-        starting_motion = False
-        try:
-            if cur is tgt or waiting_home:
-                if (cur is MotionState.MOTION
-                        and any(worker is None or not worker.is_running()
-                                for worker in (self._ctrl_periodic, self._plan_periodic))):
-                    # 保护迁移曾停线程但尚未提交新态，外部已恢复 NORMAL：重建管线。
-                    starting_motion = True
-                    ok = self._start_motion_thread(event)
-                else:
-                    ok = self._maintain_motion_state(cur, event)
+                        and (not self._home_arrived or not self.is_in_q_arm(self._home_arm)))
+        if cur is tgt or waiting_home:
+            if (cur is MotionState.MOTION
+                    and any(worker is None or not worker.is_running()
+                            for worker in (self._ctrl_periodic, self._plan_periodic))):
+                # 重建管线。
+                self._start_motion_thread(event)
             else:
-                self._exit_motion_state(cur)
-                if cur is MotionState.MOTION and self._ctrl_periodic is not None:
-                    raise RuntimeError("ctrl 线程停止未确认（句柄保留）")
-                starting_motion = nxt is MotionState.MOTION
-                ok = self._enter_motion_state(nxt, event)
-                if ok:
-                    with self._motion_lock:
-                        if not self._arm_action_allowed(event):
-                            self._motion_ready = None
-                            ok = False
-                        else:
-                            if cur is MotionState.ZERO:
-                                self._zero_moving = False
-                            elif cur is MotionState.HOLD:
-                                self._hold_q = None
-                            self._current_motion_state = nxt
-                    if not ok:
-                        if nxt is MotionState.MOTION:
-                            self._stop_motion_thread()
-                        return
-                    logger.info("joyarm.py - _fsm_tick：状态迁移 %s → %s（目标 %s）",
-                                cur.name, nxt.name, tgt.name)
-            if ok:
-                self._fsm_defer_count = 0       # 自愈/维持成功后才清零，不能每拍提前清零
-                return
-            reason = "模式/使能或进入条件未就绪"
-        except Exception as e:
-            self._motion_ready = None
-            if starting_motion:
-                self._stop_motion_thread()     # 首帧/部分启动失败：回收，且不持运动锁
-            reason = f"{type(e).__name__}: {e}"
-            logger.warning("joyarm.py - _fsm_tick：FSM 单步失败：%s", reason)
-        # 事件已变化时立即让下拍处理新目标，不恢复旧态运动，也不覆盖新的保护事件。
-        if self._arm_action_allowed(event):
-            self._defer_motion_transition(cur, nxt, reason)
-
-    def _defer_motion_transition(self, cur: MotionState, nxt: MotionState, reason: str) -> None:
-        """迁移推迟处理：显式告警 + 连续拍数上限（超限改走既有 DISABLE 事件直接失能兜底）。
-
-        :param cur: 当前状态。
-        :param nxt: 被推迟的下一跳状态。
-        :param reason: 推迟原因（进日志）。
-        """
-        self._fsm_defer_count += 1
-        if self._fsm_defer_count < _FSM_DEFER_RETRY_MAX:
-            logger.warning(
-                "joyarm.py - _fsm_tick：%s → %s 迁移推迟（原因：%s；连续第 %d 拍，"
-                "上限 %d）", cur.name, nxt.name, reason,
-                self._fsm_defer_count, _FSM_DEFER_RETRY_MAX)
+                self._maintain_motion_state(cur, event)
             return
-        if self._fsm_defer_count == _FSM_DEFER_RETRY_MAX:
-            # 上限兜底：迁移长时间未完成，改走既有 DISABLE 事件路径直接失能停机；
-            #          成功迁移或进入稳态后计数清零
-            logger.error(
-                "joyarm.py - _fsm_tick：%s → %s 迁移连续推迟 %d 拍达上限"
-                "（原因：%s），改走 DISABLE 直接失能停机兜底",
-                cur.name, nxt.name, self._fsm_defer_count, reason)
-            self.set_event(SafetyEvent.DISABLE)
-        # 超上限后的推迟拍：DISABLE 事件已置，静默等待迁移完成（防刷屏）
+        self._exit_motion_state(cur)
+        if cur is MotionState.MOTION and self._ctrl_periodic is not None:
+            return                             # 控制线程尚未退出，不进入下一状态
+        if not self._enter_motion_state(nxt, event):
+            return
+        with self._motion_lock:
+            allowed = self._arm_action_allowed(event)
+            if allowed:
+                if cur is MotionState.ZERO:
+                    self._zero_moving = False
+                elif cur is MotionState.HOLD:
+                    self._hold_q = None
+                self._current_motion_state = nxt
+            else:
+                self._motion_ready = None
+        if not allowed:
+            if nxt is MotionState.MOTION:
+                self._stop_motion_thread()
+            return
+        logger.info("joyarm.py - _fsm_tick：状态迁移 %s → %s（目标 %s）",
+                    cur.name, nxt.name, tgt.name)
 
     def _arm_action_allowed(self, event: SafetyEvent) -> bool:
         """阻塞 I/O 前后复查事件及最终停机标志，防按过期目标继续使能/下发。"""
@@ -1873,7 +1832,7 @@ class JoyArm:
         if not self._arm_action_allowed(event):
             return False
         if self._backend.is_connected_arm is not True:
-            raise RuntimeError("joyarm.py - _ensure_arm_ready：arm 未连接")
+            return False
         actual = self._backend.get_mode_arm()
         if not self._arm_action_allowed(event):
             return False
@@ -1896,7 +1855,7 @@ class JoyArm:
             if not self._arm_action_allowed(event):
                 return False
             if self._backend.is_connected_arm is not True:
-                raise RuntimeError(f"joyarm.py - _enter_motion_state：转移至 {state.name} 时发现未连接")
+                return False
             if state is MotionState.DISABLE:
                 return self._disable_clear_disable_arm()
             hold_q = None
@@ -1948,9 +1907,10 @@ class JoyArm:
                     logger.info("joyarm.py - _maintain_motion_state：ZERO 已到位并失能")
             elif state is MotionState.HOME:
                 self._backend.send_position_arm(self._home_arm)
-                if not self._home_arrived and self.is_in_q_arm(self._home_arm):
-                    self._home_arrived = True
+                arrived = self.is_in_q_arm(self._home_arm)
+                if arrived and not self._home_arrived:
                     logger.info("joyarm.py - _maintain_motion_state：HOME 已到位")
+                self._home_arrived = arrived
             elif state is MotionState.MOTION:
                 self._motion_ready = controller
             elif state is MotionState.HOLD:
@@ -1979,7 +1939,8 @@ class JoyArm:
         """
         snap = getattr(self._backend, f"joint_state_{family}")
         hz = float(self._backend.cfg.get("state_refresh_hz", 20.0))
-        if snap.t <= 0 or time.time() - snap.t > max(_MONITOR_NONE_TIMEOUT, 2.0 / hz):
+        if (snap is None or not np.isfinite(snap.t) or snap.t <= 0
+                or not 0 <= time.time() - snap.t <= max(_MONITOR_NONE_TIMEOUT, 2.0 / hz)):
             return None
         return snap
 
@@ -2037,8 +1998,9 @@ class JoyArm:
             chosen = max(hard + custom, key=lambda e: _EVENT_DANGER[e])
         # 只升不降：仅当命中事件危险程度高于当前事件才 set_event，
         # 防止覆写并发设置的更高危险事件（外部 set_event 不受限，恢复 NORMAL 走外部通路）
-        if chosen is not None and _EVENT_DANGER[chosen] > _EVENT_DANGER[self._safe_event]:
-            self.set_event(chosen)
+        with self._event_lock:
+            if chosen is not None and _EVENT_DANGER[chosen] > _EVENT_DANGER[self._safe_event]:
+                self.set_event(chosen)
 
     # =============== 状态可视化线程体与面板数据 ===============
     def _state_viz_worker(self) -> None:
@@ -3103,15 +3065,18 @@ class JoyArm:
 
     @staticmethod
     def _check_target_time(t) -> float:
-        """目标时刻校验（Unix 秒标量）。"""
+        """目标时刻校验（Unix 秒标量，须有限）。"""
         if isinstance(t, bool) or not isinstance(t, (int, float, np.integer, np.floating)):
             raise ValueError(
                 f"joyarm.py - set_target：t 需为 Unix 秒标量，实际 {type(t).__name__}")
-        return float(t)
+        out = float(t)
+        if not np.isfinite(out):
+            raise ValueError(f"joyarm.py - set_target：t={t!r} 非有限（NaN/inf 拒绝）")
+        return out
 
     @staticmethod
     def _check_target_vector(v, n: int, key: str, required: bool):
-        """便捷封装的 `(n,)` 向量校验（None 且非必填 → None；否则转 float 数组并验维）。"""
+        """便捷封装的 `(n,)` 向量校验（None 且非必填 → None；否则转 float 数组、验维且须全有限）。"""
         if v is None:
             if required:
                 raise ValueError(f"joyarm.py - set_target：{key} 必填（None）")
@@ -3120,11 +3085,13 @@ class JoyArm:
         if arr.shape[0] != n:
             raise ValueError(
                 f"joyarm.py - set_target：{key} 维度 {arr.shape[0]} ≠ 期望 {n}")
+        if not bool(np.all(np.isfinite(arr))):
+            raise ValueError(f"joyarm.py - set_target：{key} 含非有限值（NaN/inf 拒绝）")
         return arr
 
     @classmethod
     def _check_target_cart6(cls, v, cls6, key: str):
-        """便捷封装的笛卡尔 6 维量校验（类型对象或 `(6,)` 序列 → 对应数据类）。"""
+        """便捷封装的笛卡尔 6 维量校验（类型对象深拷贝；`(6,)` 序列转对应数据类，须全有限）。"""
         if v is None:
             return None
         if isinstance(v, cls6):
@@ -3134,6 +3101,8 @@ class JoyArm:
             raise ValueError(
                 f"joyarm.py - set_target：{key} 需为 {cls6.__name__} 或 (6,) 序列，"
                 f"实际长度 {arr.shape[0]}")
+        if not bool(np.all(np.isfinite(arr))):
+            raise ValueError(f"joyarm.py - set_target：{key} 含非有限值（NaN/inf 拒绝）")
         if cls6 is Wrench:
             return Wrench(force=np.array(arr[:3]), torque=np.array(arr[3:]))
         return cls6(linear=np.array(arr[:3]), angular=np.array(arr[3:]))
@@ -3321,8 +3290,9 @@ class JoyArm:
                 f"{type(pose).__name__}")
         tol_pos = self._arrival_tol_pos if tol_pos is None else float(tol_pos)
         tol_rot = self._arrival_tol_rot if tol_rot is None else float(tol_rot)
-        q = np.asarray(self._backend.joint_state_arm.q, dtype=float)
-        if not bool(np.all(np.isfinite(q))):
+        snapshot = self._fresh_joint_state("arm")
+        q = np.asarray(snapshot.q if snapshot is not None else None, dtype=float)
+        if q.shape != (self._n_arm,) or not bool(np.all(np.isfinite(q))):
             logger.warning("joyarm.py - is_in_pose_arm：无可用关节状态快照（未收到状态帧），判为未到位")
             return False
         cur = self._activated_of("fkine").solve(self, q, frame if frame is not None else self._frame_end)
@@ -3340,7 +3310,7 @@ class JoyArm:
         :return: 全关节同时满足容差 `True`；未到位或无有效状态快照 `False`。
         :raises ValueError: 目标维度与关节数不符；`tol_q` 非标量且长度与关节数不符。
         """
-        return self._is_in_q(q, tol_q, self._arrival_tol_q_arm, self._backend.joint_state_arm, self._n_arm, "arm")
+        return self._is_in_q(q, tol_q, self._arrival_tol_q_arm, self._fresh_joint_state("arm"), self._n_arm, "arm")
 
     def is_in_q_end(self, q, tol_q=None) -> bool:
         """end 电机到位判断：`np.max(|q_cur − q|) ≤ tol_q` 全电机同时满足。
@@ -3350,7 +3320,7 @@ class JoyArm:
         :return: 全电机同时满足容差 `True`；未到位或无有效状态快照 `False`。
         :raises ValueError: 目标维度与电机数不符；`tol_q` 非标量且长度与电机数不符。
         """
-        return self._is_in_q(q, tol_q, self._arrival_tol_q_end, self._backend.joint_state_end, self._n_end, "end")
+        return self._is_in_q(q, tol_q, self._arrival_tol_q_end, self._fresh_joint_state("end"), self._n_end, "end")
 
     @staticmethod
     def _is_in_q(q, tol_q, tol_member, state, n: int, part: str) -> bool:
@@ -3359,8 +3329,8 @@ class JoyArm:
         if q.shape[0] != n:
             raise ValueError(
                 f"joyarm.py - is_in_q_{part}：目标维度 {q.shape[0]} ≠ 关节数 {n}")
-        q_cur = np.asarray(state.q, dtype=float)
-        if not bool(np.all(np.isfinite(q_cur))):
+        q_cur = np.asarray(state.q if state is not None else None, dtype=float)
+        if q_cur.shape != (n,) or not bool(np.all(np.isfinite(q_cur))):
             logger.warning("joyarm.py - is_in_q_%s：无可用关节状态快照（未收到状态帧），判为未到位", part)
             return False
         if tol_q is None:
@@ -3427,11 +3397,12 @@ class JoyArm:
     def start_motion_fsm(self) -> None:
         """启动运动状态机（非阻塞）。
 
-        前置：`is_connected_arm is True`。
+        前置：已连接、反馈新鲜有效、无电机故障、traj/ctrl 已配置。
+        不执行监视规则；运行期安全判定始终由独立监视线程负责。
         若规划/控制线程尚在运行则先停止，清理 FSM 全部缓存（`_hold_q`、plan/ctrl 线程句柄与轨迹帧缓存；`_safe_event` 置 NORMAL、目标置 MOTION），
         启动 FSM 线程（固定 `_fsm_hz`）：初始 `current=DISABLE`、按路线表自动迁移 DISABLE → HOME → MOTION。
 
-        :raises RuntimeError: 未连接；traj/ctrl 域未配置。
+        :raises RuntimeError: 连接/反馈/电机故障前置检查不通过；traj/ctrl 域未配置。
         """
         if self._backend.is_connected_arm is not True:
             raise RuntimeError(
@@ -3447,6 +3418,18 @@ class JoyArm:
                     f"joyarm.py - start_motion_fsm：robotics."
                     f"{_DOMAIN_REGISTRIES[domain][0]} 域未配置任何求解器"
                     f"（MOTION 态依赖 plan/ctrl 管线），拒绝启动")
+        # 仅检查启动所需的即时反馈，不调用 monitor，也不改写其计时器或规则状态。
+        state = self._backend.get_state_arm()
+        hz = float(self._backend.cfg.get("state_refresh_hz", 20.0))
+        if (state is None or not np.isfinite(state.t) or state.t <= 0
+                or not 0 <= time.time() - state.t <= 1.0 / hz):
+            raise RuntimeError("joyarm.py - start_motion_fsm：arm 无新鲜反馈，拒绝启动")
+        q = np.asarray(state.q, dtype=float)
+        error = np.asarray(state.error)
+        if q.shape != (self._n_arm,) or not np.all(np.isfinite(q)):
+            raise RuntimeError("joyarm.py - start_motion_fsm：arm 位置反馈无效，拒绝启动")
+        if error.shape != (self._n_arm,) or not np.all(np.isin(error, (0, 1))):
+            raise RuntimeError("joyarm.py - start_motion_fsm：arm 电机故障或故障码无效，拒绝启动")
         self._stop_motion_thread()                        # 规划/控制线程尚在运行则先停止
         if self._ctrl_periodic is not None or self._plan_periodic is not None:
             raise RuntimeError("joyarm.py - start_motion_fsm：旧运动线程未确认退出")
@@ -3455,12 +3438,10 @@ class JoyArm:
         self._hold_q = None
         self._zero_moving = False
         self._home_arrived = False
-        self._fsm_defer_count = 0
         self._target_trajframe = None
-        self._monitor_none_since = None
-        self._safe_event = SafetyEvent.NORMAL            # 与 stop 置 ZEROING 对称（统一事件与目标）
-        self._target_motion_state = MotionState.MOTION
-        self._current_motion_state = MotionState.DISABLE
+        with self._event_lock:
+            self._current_motion_state = MotionState.DISABLE
+            self.set_event(SafetyEvent.NORMAL)          # 同步 target=MOTION，生命周期初始化
         self._fsm_periodic = _PeriodicThread(self._fsm_worker, self._fsm_hz, name="joyarm-fsm")
         self._fsm_periodic.start()
         logger.info("joyarm.py - start_motion_fsm：FSM 已启动（fsm_hz=%s，"
@@ -3483,38 +3464,26 @@ class JoyArm:
                 f"joyarm.py - stop_motion_fsm：arm 未连接（断连急停不走本方法——"
                 f"无法下发任何指令，请走销毁路径 close()）")
         if self._fsm_running():
-            if _EVENT_DANGER[self._safe_event] > _EVENT_DANGER[SafetyEvent.ZEROING]:
-                # 当前事件比回零更危险：回零会带出保护态，故直接失能停机，复用既有 DISABLE 事件与迁移路径
-                logger.info("joyarm.py - stop_motion_fsm：当前事件 %s 危险度高于 "
-                            "ZEROING，改走直接失能停机（不回零、不切模式）",
-                            self._safe_event.name)
-                self.set_event(SafetyEvent.DISABLE)
-                deadline = time.monotonic() + self._move_wait_timeout
-                done = False
-                while time.monotonic() < deadline:
-                    if self._current_motion_state is MotionState.DISABLE:
-                        done = True
-                        break
-                    time.sleep(0.02)
-                if not done:
-                    logger.warning(
-                        "joyarm.py - stop_motion_fsm：%s s 内未完成直接失能停机"
-                        "（超时强制推进：disable → 清缓存 → 退出）",
-                        self._move_wait_timeout)
-            else:
-                self.set_event(SafetyEvent.ZEROING)          # 统一事件与目标（与 start 置 NORMAL 对称）
-                deadline = time.monotonic() + self._move_wait_timeout
-                done = False
-                while time.monotonic() < deadline:
-                    if (self._current_motion_state is MotionState.ZERO
-                            and not self._zero_moving):
-                        done = True
-                        break
-                    time.sleep(0.02)
-                if not done:
-                    logger.warning(
-                        "joyarm.py - stop_motion_fsm：%s s 内未完成回零失能"
-                        "（超时强制推进：disable → 清缓存 → 退出）", self._move_wait_timeout)
+            # 与监视器升档仲裁串行，不能用旧事件覆盖并发 DISABLE。
+            with self._event_lock:
+                direct = _EVENT_DANGER[self._safe_event] > _EVENT_DANGER[SafetyEvent.ZEROING]
+                self.set_event(SafetyEvent.DISABLE if direct else SafetyEvent.ZEROING)
+            deadline = time.monotonic() + self._move_wait_timeout
+            done = False
+            while time.monotonic() < deadline:
+                # 回零过程中出现更高危事件或失连，立即结束等待并进入最终失能收尾。
+                if (self._backend.is_connected_arm is not True
+                        or _EVENT_DANGER[self._safe_event] > _EVENT_DANGER[SafetyEvent.ZEROING]):
+                    self.set_event(SafetyEvent.DISABLE)
+                    done = True
+                    break
+                if self._current_motion_state is MotionState.ZERO and not self._zero_moving:
+                    done = True
+                    break
+                time.sleep(0.02)
+            if not done:
+                logger.warning("joyarm.py - stop_motion_fsm：%s s 内未完成回零失能，超时强制推进最终失能收尾",
+                               self._move_wait_timeout)
         else:
             logger.info("joyarm.py - stop_motion_fsm：FSM 未在运行，直接执行失能与清理")
         # 回零结束/超时后进入最终收尾：禁止自愈 → 停线程 → 最后失能。
@@ -3546,10 +3515,9 @@ class JoyArm:
         self._zero_moving = False
         self._home_arrived = False
         self._target_trajframe = None                     # 目标帧缓存仅在 FSM start/stop 边界清理
-        self._fsm_defer_count = 0
-        self._safe_event = SafetyEvent.DISABLE
-        self._target_motion_state = MotionState.DISABLE
-        self._current_motion_state = MotionState.DISABLE
+        with self._event_lock:
+            self._current_motion_state = MotionState.DISABLE
+            self.set_event(SafetyEvent.DISABLE)
         logger.info("joyarm.py - _fsm_shutdown_cleanup：FSM 已停止并清空缓存")
 
     def set_event(self, event: SafetyEvent) -> None:
@@ -3562,10 +3530,11 @@ class JoyArm:
             raise TypeError(
                 f"joyarm.py - set_event：event 需为 SafetyEvent 枚举，实际 "
                 f"{type(event).__name__}")
-        self._safe_event = event
-        self._target_motion_state = _EVENT_TO_STATE[event]
-        if event is not SafetyEvent.NORMAL:
-            self._motion_ready = None             # 不等运动锁，立即阻止在途 ctrl 后续下发
+        with self._event_lock:
+            self._safe_event = event
+            self._target_motion_state = _EVENT_TO_STATE[event]
+            if event is not SafetyEvent.NORMAL:
+                self._motion_ready = None         # 不等运动锁，立即阻止在途 ctrl 后续下发
 
     def get_event(self) -> SafetyEvent:
         """读当前安全事件。"""
@@ -3809,6 +3778,7 @@ class JoyArm:
 
         arm 已断连时走豁免路径：跳过 stop 的回零/失能等下发类步骤，停 FSM/plan/ctrl 线程并清空 FSM 缓存；
         `disconnect_arm` 保留。各步异常捕获不阻断收尾；同时停监视器与可视化线程。
+        最后关闭 backend 的刷新线程和残留总线；close 后请新建对象再连接。
         """
         if self._backend.is_connected_arm is not True:
             # 断连豁免：stop_motion_fsm、disable_arm 均跳过；线程收尾与缓存清理照常执行
@@ -3842,6 +3812,15 @@ class JoyArm:
                 fn()
             except Exception as e:
                 logger.warning("joyarm.py - close：%s 失败（继续收尾）：%s", name, e)
+                if name == "stop_motion_fsm":
+                    try:
+                        self._fsm_shutdown_cleanup()
+                    except Exception as cleanup_error:
+                        logger.warning("joyarm.py - close：强制线程收尾失败：%s", cleanup_error)
+        try:
+            self._backend.close()                      # 显式回收后台刷新与残留总线
+        except Exception as e:
+            logger.warning("joyarm.py - close：backend.close 失败：%s", e)
         logger.info("joyarm.py - close：安全退出完成（%s）", self._model)
 
     def __enter__(self) -> "JoyArm":
@@ -3850,6 +3829,8 @@ class JoyArm:
 
     def __exit__(self, exc_type, exc, tb) -> None:
         """`with` 退出收尾。"""
+        if exc_type is not None:
+            self.set_event(SafetyEvent.DISABLE)   # 异常/中断退出不得自动回零
         self.close()
 
     def __del__(self) -> None:

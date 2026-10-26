@@ -682,7 +682,8 @@ def test_20_send_end_action(b):
     b.send_position_end(-4.0)
     c13d = [c for c in b.calls if c[0] == "send_joint_position_end"]
     assert len(c13d) == 1 and c13d[0][1] == 0 and c13d[0][2] == -4.0
-    assert np.allclose(c13d[0][3], 3.0) and np.allclose(c13d[0][4], 1.0)  # 标量升维 + vlim/flim 回退 cfg
+    defaults = b.cfg["end"]["joints"][0]["POS_VEL"]
+    assert np.allclose(c13d[0][3], defaults["vlim"]) and np.allclose(c13d[0][4], defaults["flim"])
     b.send_action_end("open", speed=2.0)
     assert any(c[0] == "send_action_end" and c[1] == "open"
                and c[2] == {"speed": 2.0} for c in b.calls)
@@ -1794,10 +1795,11 @@ def test_70_backend_dm(cfg):
     _, q1, dq1, tau1, err1, _, _ = m.state
     assert (q1, dq1, tau1, err1) == (pytest.approx(12.5), pytest.approx(30.0), pytest.approx(10.0), 1)
 
-    # 6c) 分发隔离：data[2]∈{0x33,0x55} 的帧只进参数应答槽，绝不误写状态缓存（反向零污染）
+    # 6c) 位置低字节撞操作码仍须更新状态；真正的参数应答不污染状态
     st_ref = m.state
-    bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0x10, 0x55, 0, 0, 0, 0, 0, 0x55)))  # dq 高字节撞 0x55
-    assert m.state is st_ref
+    bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0x10, 0x55, 0, 0, 0, 0, 0, 0x55)))  # 位置低字节撞 0x55，完整 SlaveID 不匹配
+    assert m.state is not st_ref
+    st_ref = m.state
     bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0x00, 0x33, 27)) + _struct.pack("<f", 9.9)
               + bytes((0x55,)))
     assert m.state is st_ref  # 参数应答同样不落状态缓存
@@ -1858,16 +1860,16 @@ def test_70_backend_dm(cfg):
     assert bus.cmd_verified(m, 0xFC, lambda e: e == 1) is True
     assert frames[-2][28] == 0xFC and frames[-1] == m.query_frame  # 先指令帧（超时）后 0xCC 查询帧
 
-    # 9) 状态读取非阻塞（简单语义）：陈旧补发 0xCC 不上抛 / 新鲜直返零帧 / 软陈旧发一帧 0xCC 即返当前快照
+    # 9) 状态读取非阻塞：过期先补查询再拒绝 / 新鲜直返 / 半周期后补查询
     dm0 = d._motors_arm[0]
     bus2 = _DMBus("/dev/null", 921600, 1000.0)
     d._bus_arm = bus2
     sent = []
     bus2.write = sent.append
     T = 1.0 / d._refresh_hz                     # 承诺周期（阈值随 cfg state_refresh_hz 动态）
-    snap0 = d._read_state("arm", 0)             # 初值快照（t=0）远超半承诺周期：只补问不上抛，原样返回冻结快照
+    with pytest.raises(TimeoutError):
+        d._read_state("arm", 0)  # t=0 无真实反馈，不得发布初值
     assert sent == [dm0.query_frame]
-    assert snap0["q"] == 0.0 and snap0["error"] == -1  # 冻结初值快照原样返回（非阻塞语义）
     dm0.state = (time.monotonic(), 1.0, 2.0, 3.0, 1, 40, 41)  # 模拟刷新应答已到（新鲜快照）
     bus2.write = lambda frame: pytest.fail("新鲜缓存读取不应发总线帧")
     snap_fresh = d._read_state("arm", 0)
@@ -1933,6 +1935,8 @@ def test_72_backend_dm_action_end(cfg):
     d = BackendDM(cfg)
     try:
         me = d._motors_end[0]
+        defaults = cfg["end"]["joints"][0]["POS_VEL"]
+        vlim, flim = defaults["vlim"], defaults["flim"]
         bus = _DMBus("/dev/null", 921600, 1000.0)
         bus.register([me])
         d._bus_end = bus
@@ -1951,26 +1955,26 @@ def test_72_backend_dm_action_end(cfg):
         def pos_frames():  # 已发出的 pos_force 帧子集（CAN id = 0x300+SlaveID 唯一标识）
             return [f for f in frames if f[13:15] == me.prefix_pos[13:15]]
 
-        # open：自动切 POSITION（RID10=4 + 4 增益共 5 个参数帧）→ 1 帧 pos_force（cfg vlim=3.0 / flim=1.0）
+        # open：自动切 POSITION（RID10=4 + 4 增益共 5 个参数帧）→ 1 帧 pos_force（vlim/flim 取当前配置）
         d.send_action_end("open")
         assert d._mode_end is ControlMode.POSITION
-        assert frames[-1] == me.prefix_pos + _pack_pos(_END_ACTION_POS["open"], 3.0, 1.0) + b"\x00"
+        assert frames[-1] == me.prefix_pos + _pack_pos(_END_ACTION_POS["open"], vlim, flim) + b"\x00"
         assert frames[-2][21:29] == bytes((0x07, 0x00, 0x55, 26)) + _struct.pack("<f", 0.002)  # 末帧增益=vel_ki
         n = len(frames)
 
         # 已在位模式：close/home 不再切模式，各仅 1 帧
         d.send_action_end("close")
-        assert len(frames) == n + 1 and frames[-1] == me.prefix_pos + _pack_pos(0.0, 3.0, 1.0) + b"\x00"
+        assert len(frames) == n + 1 and frames[-1] == me.prefix_pos + _pack_pos(0.0, vlim, flim) + b"\x00"
         d.send_action_end("home")
         assert len(frames) == n + 2
 
         # position 按需透传；越限（q_min=-5.49）被基类管道裁硬限位 + warn
         d.send_action_end("position", position=-4.2)
-        assert frames[-1] == me.prefix_pos + _pack_pos(-4.2, 3.0, 1.0) + b"\x00"
+        assert frames[-1] == me.prefix_pos + _pack_pos(-4.2, vlim, flim) + b"\x00"
         cap.msgs.clear()
         d.send_action_end("position", position=-9.0)
         assert any("q 指令越限" in m for m in cap.msgs)
-        assert frames[-1] == me.prefix_pos + _pack_pos(-5.49, 3.0, 1.0) + b"\x00"
+        assert frames[-1] == me.prefix_pos + _pack_pos(-5.49, vlim, flim) + b"\x00"
 
         # 异常路径（_call 统一转 warn 不抛）：未知动作 / position 缺参 / 切模式失败
         cap.msgs.clear()
@@ -2011,3 +2015,43 @@ def test_73_joint_state_property(e):
     assert e.get_state_end() is None
     assert e.joint_state_end is new
     del e.fail_at["read_joint_state_end"]
+
+
+@pytest.mark.parametrize('low', [0x33, 0x55])
+@pytest.mark.parametrize('error', [0, 1, 8])
+def test_dm_status_position_byte_does_not_impersonate_parameter(low, error):
+    from joyarm_core.backend.backend_dm import _DMBus, _DMMotor
+    bus = _DMBus('/dev/null', 921600, 1000)
+    motor = _DMMotor(1, 0x11, 12.5, 30, 10)
+    bus.register([motor])
+    bus._dispatch(0x11, bytes((error << 4 | 1, 0x80, low, 0x80, 0, 0, 30, 31)))
+    assert motor.state[0] > 0
+    assert motor.state[4] == error
+    assert motor.state[1] == pytest.approx(-12.5 + (0x8000 | low) * 25 / 65535)
+    assert motor.param_rid == -1
+
+
+def test_dm_read_reply_cannot_ack_write():
+    import struct
+    from joyarm_core.backend.backend_dm import _DMBus, _DMMotor
+    bus = _DMBus('/dev/null', 921600, 1000)
+    motor = _DMMotor(1, 0x11, 12.5, 30, 10)
+    bus.register([motor])
+    bus.write = lambda frame: bus._dispatch(0x11, bytes((1, 0, 0x33, 27)) + struct.pack('<f', 150))
+    with pytest.raises(TimeoutError):
+        bus.param_write(motor, 27, 150)
+
+
+def test_dm_expired_feedback_requests_refresh_but_does_not_publish(cfg):
+    from joyarm_core.backend.backend_dm import BackendDM, _DMBus
+    d = BackendDM(cfg)
+    d.close()
+    motor = d._motors_arm[0]
+    bus = _DMBus('/dev/null', 921600, 1000)
+    sent = []
+    bus.write = sent.append
+    d._bus_arm = bus
+    motor.state = (time.monotonic() - 1, 0, 0, 0, 1, 30, 31)
+    with pytest.raises(TimeoutError):
+        d._read_state('arm', 0)
+    assert sent == [motor.query_frame]

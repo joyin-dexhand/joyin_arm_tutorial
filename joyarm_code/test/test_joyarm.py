@@ -85,20 +85,21 @@ def test_zero_arrival_stays_disabled_and_hold_keeps_original_position(rig):
 
 
 @pytest.mark.parametrize('failed', ['set_joint_mode_arm', 'enable_joint_arm'])
-def test_failed_self_repair_blocks_commands_and_counts_until_disable(rig, monkeypatch, failed):
+def test_failed_self_repair_blocks_commands_without_changing_event(rig, failed):
     arm, bk = rig
-    monkeypatch.setattr(jm, '_FSM_DEFER_RETRY_MAX', 3)
     arm._current_motion_state = MotionState.DAMPING
     arm.set_event(SafetyEvent.DAMPING)
     bk.set_mode_arm(ControlMode.POSITION)
     bk.disable_arm()
     bk.fail_at[failed] = None
     begin = len(bk.calls)
-    for expected in range(1, 4):
+    for _ in range(55):
         arm._fsm_tick()
-        assert arm._fsm_defer_count == expected
+        assert arm.get_event() is SafetyEvent.DAMPING
+        assert arm.get_current_motion_state() is MotionState.DAMPING
+        assert arm.get_target_motion_state() is MotionState.DAMPING
         assert not bk.calls_since(begin, 'send_joint_mit_arm')
-    assert arm.get_event() is SafetyEvent.DISABLE
+    arm.set_event(SafetyEvent.DISABLE)  # 由外部/monitor 发布事件后才迁移。
     arm._fsm_tick()
     assert arm.get_current_motion_state() is MotionState.DISABLE
     assert bk.is_enabled_arm is False
@@ -111,10 +112,8 @@ def test_temporary_self_repair_failure_recovers_on_next_tick(rig):
     bk.set_mode_arm(ControlMode.POSITION)
     bk.fail_at['set_joint_mode_arm'] = None
     arm._fsm_tick()
-    assert arm._fsm_defer_count == 1
     bk.fail_at.clear()
     arm._fsm_tick()
-    assert arm._fsm_defer_count == 0
     assert bk.get_mode_arm() is ControlMode.MIT
     assert bk.calls_since(0, 'send_joint_mit_arm')
 
@@ -129,13 +128,11 @@ def test_failed_enter_does_not_commit_state_or_clear_hold(rig):
     arm._fsm_tick()
     assert arm.get_current_motion_state() is MotionState.HOLD
     np.testing.assert_array_equal(arm._hold_q, arm.home_arm)
-    assert arm._fsm_defer_count == 1
 
 
 @pytest.mark.parametrize('throws', [False, True])
-def test_first_plan_failure_and_exception_share_retry_limit(rig, monkeypatch, throws):
+def test_first_plan_failure_does_not_commit_motion_or_change_event(rig, monkeypatch, throws):
     arm, bk = rig
-    monkeypatch.setattr(jm, '_FSM_DEFER_RETRY_MAX', 3)
     arm._current_motion_state = MotionState.HOME
     arm._home_arrived = True
     arm.set_event(SafetyEvent.NORMAL)
@@ -147,15 +144,17 @@ def test_first_plan_failure_and_exception_share_retry_limit(rig, monkeypatch, th
 
     monkeypatch.setattr(arm._activated_traj_solver, 'plan', fail)
     begin = len(bk.calls)
-    for expected in range(1, 4):
-        arm._fsm_tick()
-        assert arm._fsm_defer_count == expected
+    for _ in range(3):
+        if throws:
+            with pytest.raises(RuntimeError, match='first-plan failure'):
+                arm._fsm_tick()
+        else:
+            arm._fsm_tick()
         assert arm.get_current_motion_state() is MotionState.HOME
         assert arm._ctrl_periodic is None and arm._plan_periodic is None
     assert not bk.calls_since(begin, 'enable_joint_arm')  # 规划应在硬件操作之前。
-    assert arm.get_event() is SafetyEvent.DISABLE
-    arm._fsm_tick()
-    assert arm.get_current_motion_state() is MotionState.DISABLE
+    assert arm.get_event() is SafetyEvent.NORMAL
+    assert arm.get_target_motion_state() is MotionState.MOTION
 
 
 def test_ctrl_selection_preserves_damping_and_waits_for_motion_check(rig):
@@ -195,14 +194,13 @@ def test_partial_motion_start_is_cleaned_up_and_next_tick_recovers(rig, monkeypa
         return original(worker)
 
     monkeypatch.setattr(jm._PeriodicThread, 'start', start)
-    arm._fsm_tick()
+    with pytest.raises(RuntimeError, match='ctrl start failure'):
+        arm._fsm_tick()
     assert arm.get_current_motion_state() is MotionState.HOME
-    assert arm._fsm_defer_count == 1
     assert arm._ctrl_periodic is None and arm._plan_periodic is None
     monkeypatch.setattr(jm._PeriodicThread, 'start', original)
     arm._fsm_tick()
     assert arm.get_current_motion_state() is MotionState.MOTION
-    assert arm._fsm_defer_count == 0
     assert arm._ctrl_periodic.is_running() and arm._plan_periodic.is_running()
 
 
@@ -555,16 +553,14 @@ def test_verification_item_failure_stops_created_dummy_refresh(rig):
             arm.close()
 
 
-def test_disconnected_fsm_freezes_counter_warns_once_and_recovers_after_reconnect(rig, caplog):
+def test_disconnected_fsm_preserves_state_warns_once_and_recovers_after_reconnect(rig, caplog):
     arm, backend = rig
     arm._current_motion_state = MotionState.HOME
     arm.set_event(SafetyEvent.DISABLE)
     backend.disconnect_arm()
-    arm._fsm_defer_count = 7
     mark = len(backend.calls)
     for _ in range(3):
         arm._fsm_tick()
-    assert arm._fsm_defer_count == 7
     assert arm.get_current_motion_state() is MotionState.HOME
     assert sum('FSM 挂起' in record.message for record in caplog.records) == 1
     assert not backend.calls[mark:]
@@ -573,4 +569,235 @@ def test_disconnected_fsm_freezes_counter_warns_once_and_recovers_after_reconnec
     assert arm.get_current_motion_state() is MotionState.DISABLE
     assert arm.get_event() is SafetyEvent.DISABLE
     assert not arm._fsm_disc_warned
-    assert arm._fsm_defer_count == 0
+
+
+@pytest.mark.parametrize('stamp', [0.0, float('nan'), float('inf'), -1.0])
+def test_arrival_rejects_invalid_timestamp(rig, stamp):
+    arm, bk = rig
+    bk._joint_state_arm.t = stamp
+    assert not arm.is_in_q_arm(arm.home_arm)
+
+
+def test_home_gate_rechecks_position_after_previous_arrival(rig):
+    arm, bk = rig
+    arm._current_motion_state = MotionState.HOME
+    arm._home_arrived = True
+    bk.set_q('arm', arm.home_arm + 0.2)
+    arm.get_state_arm()
+    arm.set_event(SafetyEvent.NORMAL)
+    arm._fsm_tick()
+    assert arm.get_current_motion_state() is MotionState.HOME
+    assert arm._ctrl_periodic is None
+
+
+@pytest.mark.parametrize('stage', ['plan', 'sample', 'step'])
+@pytest.mark.parametrize('throws', [False, True])
+def test_runtime_pipeline_failure_does_not_change_event(rig, monkeypatch, stage, throws):
+    arm, bk = rig
+    arm._current_motion_state = MotionState.MOTION
+    arm.set_event(SafetyEvent.NORMAL)
+    arm._motion_ready = arm._activated_ctrl_solver
+    arm._activated_traj_solver.plan(arm, None)
+
+    def fail(*args):
+        if throws:
+            raise RuntimeError('pipeline failure')
+        return None if stage == 'sample' else False
+
+    owner = arm._activated_ctrl_solver if stage == 'step' else arm._activated_traj_solver
+    monkeypatch.setattr(owner, stage, fail)
+    tick = arm._tick_plan if stage == 'plan' else arm._tick_ctrl
+    if throws:
+        with pytest.raises(RuntimeError, match='pipeline failure'):
+            tick()
+    else:
+        tick()
+    assert arm.get_event() is SafetyEvent.NORMAL
+    assert arm.get_current_motion_state() is MotionState.MOTION
+    assert arm.get_target_motion_state() is MotionState.MOTION
+    assert arm._ctrl_ready()
+
+
+def test_stop_escalation_during_zero_wait_finishes_without_full_timeout(rig, monkeypatch):
+    arm, _ = rig
+    arm._current_motion_state = MotionState.HOME
+    arm.set_event(SafetyEvent.NORMAL)
+    clock = FakeClock()
+    monkeypatch.setattr(jm, 'time', clock)
+    monkeypatch.setattr(arm, '_fsm_running', lambda: True)
+    slept = []
+
+    def sleep(seconds):
+        slept.append(seconds)
+        clock.now += seconds
+        arm.set_event(SafetyEvent.DISABLE)
+        arm._current_motion_state = MotionState.DISABLE
+
+    monkeypatch.setattr(clock, 'sleep', sleep)
+    arm.stop_motion_fsm()
+    assert len(slept) <= 2
+
+
+def test_exception_in_context_disables_without_return_to_zero(rig, monkeypatch):
+    arm, _ = rig
+    seen = []
+    monkeypatch.setattr(arm, 'close', lambda: seen.append(arm.get_event()))
+    arm.set_event(SafetyEvent.NORMAL)
+    with pytest.raises(RuntimeError):
+        with arm:
+            raise RuntimeError('operator abort')
+    assert seen == [SafetyEvent.DISABLE]
+
+
+def test_close_reclaims_backend_refresh_thread():
+    verify.install_injection()
+    arm, bk = verify.make_arm()
+    try:
+        arm.close()
+        assert not bk._refresh_thread.is_alive()
+    finally:
+        bk.close()
+        verify.restore_injection()
+
+
+@pytest.mark.parametrize('offset', [-1.0, 1.0])
+def test_arrival_rejects_old_or_future_snapshot(rig, offset):
+    arm, bk = rig
+    pose = arm.solve_fkine(arm.home_arm)
+    bk._joint_state_arm.t = time.time() + offset
+    assert not arm.is_in_q_arm(arm.home_arm)
+    assert not arm.is_in_pose_arm(pose)
+
+
+def test_set_target_rejects_nonfinite(rig):
+    arm, _ = rig
+    n = arm.n_arm
+    with pytest.raises(ValueError, match='非有限'):
+        arm.set_target_joint(float('nan'), np.zeros(n))
+    with pytest.raises(ValueError, match='非有限'):
+        arm.set_target_joint(time.time() + 1.0, np.full(n, np.nan))
+    with pytest.raises(ValueError, match='非有限'):
+        arm.set_target_joint(time.time() + 1.0, np.full(n, np.inf))
+    with pytest.raises(ValueError, match='非有限'):
+        arm.set_target_cart(time.time() + 1.0, np.full(7, np.inf))
+    with pytest.raises(ValueError, match='非有限'):
+        arm.set_target_cart(time.time() + 1.0, np.zeros(7), twist=np.full(6, np.nan))
+    assert arm.get_target_trajframe() is None
+
+
+@pytest.mark.parametrize('state,event', [(MotionState.HOME, SafetyEvent.HOMING),
+                                        (MotionState.ZERO, SafetyEvent.ZEROING)])
+def test_arrival_wait_does_not_set_safety_event(rig, state, event):
+    arm, bk = rig
+    arm._move_wait_timeout = 0.0
+    bk.set_q('arm', arm.home_arm + 0.5)
+    arm.get_state_arm()
+    arm._current_motion_state = state
+    arm.set_event(event)
+    arm._home_arrived = False
+    arm._zero_moving = True
+    for _ in range(3):
+        arm._fsm_tick()
+    assert arm.get_event() is event
+    assert arm.get_current_motion_state() is state
+    assert arm.get_target_motion_state() is state
+
+
+@pytest.mark.parametrize('bad', ['disconnected', 'missing', 'stale', 'future', 'zero_time',
+                                 'nan_time', 'inf_time', 'shape', 'nan_q',
+                                 'fault', 'missing_error', 'bad_error'])
+def test_start_rejects_invalid_preconditions_without_changing_state(rig, monkeypatch, bad):
+    arm, bk = rig
+    state = arm.get_state_arm()
+    if bad == 'disconnected':
+        bk.disconnect_arm()
+    elif bad == 'missing':
+        state = None
+    elif bad in ('stale', 'future', 'zero_time', 'nan_time', 'inf_time'):
+        state.t = {'stale': time.time() - 1, 'future': time.time() + 1,
+                   'zero_time': 0.0, 'nan_time': np.nan, 'inf_time': np.inf}[bad]
+    elif bad == 'shape':
+        state.q = np.zeros((arm.n_arm, 1))
+    elif bad == 'nan_q':
+        state.q[0] = np.nan
+    elif bad == 'missing_error':
+        state.error = None
+    else:
+        state.error[0] = 2 if bad == 'fault' else -1
+    monkeypatch.setattr(bk, 'get_state_arm', lambda: state)
+    arm.set_event(SafetyEvent.HOLDING)
+    before = (arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+    mark = len(bk.calls)
+    with pytest.raises(RuntimeError, match='拒绝启动'):
+        arm.start_motion_fsm()
+    assert (arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event()) == before
+    assert arm._fsm_periodic is None
+    assert not bk.calls[mark:]  # 前置检查失败不使能、不切模式、不下发运动。
+
+
+def test_start_initial_state_and_monitor_rules_remain_on_monitor_thread(rig, monkeypatch):
+    arm, _ = rig
+    entered, release = threading.Event(), threading.Event()
+    callers, initial = [], []
+    original_start = jm._PeriodicThread.start
+
+    def rule(*args):
+        callers.append(threading.current_thread())
+        entered.set()
+        assert release.wait(2.0)
+        return SafetyEvent.DAMPING
+
+    def start(worker):
+        if worker.name == 'joyarm-fsm':
+            initial.append((arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event()))
+        else:
+            original_start(worker)
+
+    monkeypatch.setattr(jm._PeriodicThread, 'start', start)
+    arm.set_monitor_rules(rule)
+    arm.start_monitor()
+    try:
+        assert entered.wait(1.0)
+        arm._monitor_none_since = 123.0
+        arm.start_motion_fsm()
+        assert initial == [(MotionState.DISABLE, MotionState.MOTION, SafetyEvent.NORMAL)]
+        assert arm._monitor_none_since == 123.0
+    finally:
+        release.set()
+        arm.stop_monitor()
+    assert callers and all(t.name == 'joyarm-monitor' for t in callers)
+    assert arm.get_event() is SafetyEvent.DAMPING
+    assert arm.get_target_motion_state() is MotionState.DAMPING
+
+
+def test_missing_control_feedback_skips_step_without_changing_event(rig):
+    arm, bk = rig
+    arm._current_motion_state = MotionState.MOTION
+    arm.set_event(SafetyEvent.NORMAL)
+    arm._motion_ready = arm._activated_ctrl_solver
+    bk.fail_at['read_joint_state_arm'] = None
+    mark = len(bk.calls)
+    arm._tick_ctrl()
+    assert not bk.calls_since(mark, 'send_joint_position_arm')
+    assert arm.get_event() is SafetyEvent.NORMAL
+    assert arm._ctrl_ready()
+
+
+def test_periodic_retries_algorithm_exception_without_setting_event(rig, monkeypatch, caplog):
+    arm, _ = rig
+    arm.set_event(SafetyEvent.NORMAL)
+    stop = threading.Event()
+    calls = []
+
+    def plan(*args):
+        calls.append(True)
+        if len(calls) == 1:
+            raise RuntimeError('scripted transient plan failure')
+        stop.set()
+        return True
+
+    monkeypatch.setattr(arm._activated_traj_solver, 'plan', plan)
+    jm._run_periodic(stop, 100.0, arm._tick_plan)
+    assert len(calls) == 2
+    assert arm.get_event() is SafetyEvent.NORMAL
+    assert '下周期重试' in caplog.text

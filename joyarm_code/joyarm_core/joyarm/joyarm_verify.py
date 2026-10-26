@@ -13,7 +13,7 @@
     保留，新增 16 项近期契约，总计 59 项离线验收。FSM 互斥31/32移至L4，
     目标写入65/66移至L2，避免依赖上层功能的检查抢在基础验证前执行。
     新增项覆盖：周期停止不多跑一拍/超时防双启动，控制器选择不切模式，
-    自愈一致零重复写/临时失败恢复/持续失败失能，首帧返回False与异常计数，
+    自愈一致零重复写/临时失败恢复/持续失败不改事件，首帧返回False与异常回收，
     ZERO到位失能/HOLD锁定位置，保护事件抢占，部分启动恢复，停止与自愈并发，
     目标经plan/ctrl实际到达后端，以及陈旧反馈/完全不动不被验收为PASS。
 
@@ -1670,16 +1670,14 @@ def _it71():
         while not arm._fsm_disc_warned and time.monotonic() < deadline:
             time.sleep(0.02)
         _require(arm._fsm_disc_warned, '断连未进入挂起分支')
-        # 已挂起期间注入非零计数，以区分“冻结”与“每拍被清零”。
-        arm._fsm_defer_count = 7
         current = arm.get_current_motion_state()
         call_mark = len(backend.calls)
         time.sleep(0.15)
         messages = _since(mark)
         warns = sum('FSM 挂起' in message for message in messages)
         _require(warns == 1, f'一次断连应只告警一次，实际 {warns} 次')
-        _require(arm._fsm_defer_count == 7 and arm.get_current_motion_state() is current,
-                 '断连挂起没有冻结失败计数/当前状态')
+        _require(arm.get_current_motion_state() is current,
+                 '断连挂起未保持当前状态')
         _require(not _hit(messages, 'FSM 单步失败'), '断连仍逐拍产生单步失败')
         _require(all(not backend.calls_since(call_mark, name) for name in
                      ('send_joint_position_arm', 'send_joint_mit_arm', 'send_joint_vel_arm',
@@ -1716,14 +1714,18 @@ def _it71():
         backend.fail_at['read_joint_state_arm'] = None
         _require(_wait_event(arm, SafetyEvent.DISABLE), '持续无新鲜状态未触发 DISABLE')
         _require(_wait_state(arm, MotionState.DISABLE), '反馈失败未进入失能状态')
-        _require(any(seen_none) and _hit(_since(mark), '跳过本拍 step'),
-                 '自定义规则未收到 None，或 ctrl 未跳过反馈失败拍')
+        # ctrl 缺反馈只跳拍；监视器过滤旧快照并独立发布 DISABLE。
+        deadline = time.monotonic() + 1.0
+        while not any(seen_none) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        _require(any(seen_none) and not arm._ctrl_ready(),
+                 '自定义规则未收到 None，或 ctrl 未撤销运动许可')
     finally:
         backend.fail_at.pop('read_joint_state_arm', None)
         _settle_fsm(arm, backend)
         arm.close()
-    return 'PASS', ('断连仅1次挂起告警，计数7冻结且无下发；重连先处理DISABLE，显式NORMAL恢复；'
-                    '持续反馈失败→DISABLE，自定义规则收到None，ctrl跳拍；收尾无线程残留')
+    return 'PASS', ('断连仅1次挂起告警，状态保持且无下发；重连先处理DISABLE，显式NORMAL恢复；'
+                    '反馈失败→DISABLE，自定义规则收到None，ctrl撤销运动许可；收尾无线程残留')
 
 
 def _it72():
@@ -2251,7 +2253,7 @@ def _it68():
 
 
 def _it69():
-    """一次切模式失败后跳拍、不发阻尼指令；下拍恢复并清零失败计数。"""
+    """一次切模式失败后跳拍；下拍恢复，事件始终由外部或 monitor 决定。"""
     with _case_arm() as (arm, backend):
         arm._current_motion_state = MotionState.DAMPING
         arm.set_event(SafetyEvent.DAMPING)
@@ -2259,40 +2261,39 @@ def _it69():
         backend.fail_at['set_joint_mode_arm'] = None
         mark = len(backend.calls)
         arm._fsm_tick()
-        _require(arm._fsm_defer_count == 1 and not backend.calls_since(mark, 'send_joint_mit_arm'),
-                 '自愈失败未计数/仍下发了阻尼指令')
+        _require(not backend.calls_since(mark, 'send_joint_mit_arm'), '自愈失败仍下发阻尼指令')
         backend.fail_at.clear()
         arm._fsm_tick()
-        _require(arm._fsm_defer_count == 0 and backend.calls_since(mark, 'send_joint_mit_arm'),
-                 '下一拍未恢复或计数未清零')
-    return 'PASS', '一次失败→禁发且计数1；故障解除→MIT 阻尼恢复且计数清零'
+        _require(backend.calls_since(mark, 'send_joint_mit_arm'), '下一拍未恢复')
+        _require(arm.get_event() is SafetyEvent.DAMPING, '自愈改写了安全事件')
+    return 'PASS', '一次失败→跳拍；故障解除→MIT 阻尼恢复，事件保持'
 
 
 def _it73():
-    """使能/模式持续失败，维持态计数不能被每拍清零，达到上限转 DISABLE。"""
+    """使能/模式持续失败只跳拍，不自动改写安全事件。"""
     for failed in ('set_joint_mode_arm', 'enable_joint_arm'):
-        with _case_arm() as (arm, backend), patch.object(_jm_mod, '_FSM_DEFER_RETRY_MAX', 3):
+        with _case_arm() as (arm, backend):
             arm._current_motion_state = MotionState.DAMPING
             arm.set_event(SafetyEvent.DAMPING)
             backend.set_mode_arm(ControlMode.POSITION)
             backend.disable_arm()
             backend.fail_at[failed] = None
             mark = len(backend.calls)
-            for expected in range(1, 4):
+            for _ in range(55):
                 arm._fsm_tick()
-                _require(arm._fsm_defer_count == expected, f'{failed} 连续失败次数不符')
+                _require(arm.get_event() is SafetyEvent.DAMPING, f'{failed} 失败改写了事件')
                 _require(not backend.calls_since(mark, 'send_joint_mit_arm'), f'{failed} 失败仍在下发')
-            _require(arm.get_event() is SafetyEvent.DISABLE, f'{failed} 达上限未转 DISABLE')
+            arm.set_event(SafetyEvent.DISABLE)
             arm._fsm_tick()
             _require(arm.get_current_motion_state() is MotionState.DISABLE
-                     and backend.is_enabled_arm is False, f'{failed} 兜底失能未完成')
-    return 'PASS', '模式/使能失败各连续3拍（临时阈值）→DISABLE，失败期间无 MIT 指令'
+                     and backend.is_enabled_arm is False, f'{failed} 显式失能未完成')
+    return 'PASS', '模式/使能各连续55拍失败不改事件、不发 MIT；显式 DISABLE 后失能'
 
 
 def _it74():
-    """首帧 plan 返回 False 与抛异常均计数，持续失败转 DISABLE。"""
+    """首帧 plan 失败不提交 MOTION；异常由周期线程统一记录，不修改事件。"""
     for throws in (False, True):
-        with _case_arm() as (arm, backend), patch.object(_jm_mod, '_FSM_DEFER_RETRY_MAX', 3):
+        with _case_arm() as (arm, backend):
             arm._current_motion_state, arm._home_arrived = MotionState.HOME, True
             arm.set_event(SafetyEvent.NORMAL)
 
@@ -2303,17 +2304,19 @@ def _it74():
 
             with patch.object(arm._activated_traj_solver, 'plan', fail):
                 mark = len(backend.calls)
-                for expected in range(1, 4):
-                    arm._fsm_tick()
-                    _require(arm._fsm_defer_count == expected, '规划失败/异常绕过了 FSM 计数')
-                    _require(arm.get_current_motion_state() is MotionState.HOME, '规划失败错误提交了 MOTION')
+                for _ in range(3):
+                    try:
+                        arm._fsm_tick()
+                    except RuntimeError as exc:
+                        _require(throws and str(exc) == 'scripted first-plan failure', str(exc))
+                    else:
+                        _require(not throws, 'FSM 意外吞掉算法异常')
+                    _require(arm.get_current_motion_state() is MotionState.HOME, '规划失败错误提交 MOTION')
                     _require(arm._ctrl_periodic is None and arm._plan_periodic is None,
                              '首帧失败后残留运动线程')
                 _require(not backend.calls_since(mark, 'enable_joint_arm'), '首帧失败前提前使能')
-                _require(arm.get_event() is SafetyEvent.DISABLE, '首帧持续失败未转 DISABLE')
-                arm._fsm_tick()
-                _require(backend.is_enabled_arm is False, '规划失败兜底未失能')
-    return 'PASS', 'plan=False / RuntimeError 两条路径均累计3次后失能，无半启动线程'
+                _require(arm.get_event() is SafetyEvent.NORMAL, '首帧持续失败改写事件')
+    return 'PASS', 'plan=False / RuntimeError 均不改事件、不提交 MOTION，无半启动线程'
 
 
 def _it75():
@@ -2324,10 +2327,10 @@ def _it75():
         backend.set_mode_arm(ControlMode.MIT)
         backend.fail_at['set_joint_mode_arm'] = None
         arm._fsm_tick()
-        _require(arm.get_current_motion_state() is MotionState.HOLD and arm._fsm_defer_count == 1,
-                 '进入 HOME 失败却提交了状态/未计数')
+        _require(arm.get_current_motion_state() is MotionState.HOLD,
+                 '进入 HOME 失败却提交了状态')
         _require(np.array_equal(arm._hold_q, arm.home_arm), '进入失败清掉了原 HOLD 位置')
-    return 'PASS', 'HOLD→HOME 模式失败：状态与 hold_q 保留，计数1'
+    return 'PASS', 'HOLD→HOME 模式失败：状态与 hold_q 保留'
 
 
 def _it76():
@@ -2389,9 +2392,14 @@ def _it78():
             return original(worker)
 
         with patch.object(_jm_mod._PeriodicThread, 'start', start):
-            arm._fsm_tick()
-        _require(arm._fsm_defer_count == 1 and arm._ctrl_periodic is None and arm._plan_periodic is None,
-                 '部分启动失败未计数/未回收')
+            try:
+                arm._fsm_tick()
+            except RuntimeError as exc:
+                _require(str(exc) == 'scripted ctrl start failure', str(exc))
+            else:
+                raise AssertionError('未观察到注入的线程启动异常')
+        _require(arm._ctrl_periodic is None and arm._plan_periodic is None,
+                 '部分启动失败未回收')
         arm._fsm_tick()
         _require(arm.get_current_motion_state() is MotionState.MOTION, '部分启动失败后未恢复')
         backend.fail_at['read_joint_state_arm'] = None
@@ -2563,7 +2571,7 @@ _item(67, "wait_for_motion_state 四路径", "fsm", "低",
 _item(70, "硬规则 error≥2→DAMPING", "monitor", "低",
       "单关节故障码触发监视器 set_event(DAMPING)，FSM 迁入 DAMPING 并维持 MIT 阻尼", _it70)
 _item(71, "断连/连续 None→DISABLE", "monitor", "低",
-      "断连仅一次告警挂起、计数冻结且禁发，重连处理保护事件后可显式恢复；持续None→DISABLE，规则仍收None、ctrl跳拍", _it71)
+      "断连仅一次告警挂起、状态保持且禁发，重连处理保护事件后可显式恢复；持续None→DISABLE，规则仍收None、ctrl跳拍", _it71)
 _item(72, "自定义规则与同拍仲裁", "monitor", "低",
       "命中合并取危险最高（硬+自定义统一取最危险，与到达顺序无关）、异常/非法返回忽略且不影响其他规则", _it72)
 
@@ -2601,11 +2609,11 @@ _item(56, '目标到后端的完整运动管线', 'fsm', '低',
 _item(68, '五种运动态模式/使能自愈', 'fsm', '低',
       'HOME/HOLD/MOTION/DAMPING/ZERO 运动中逐态自愈；一致时不重复写', _it68)
 _item(69, '自愈暂时失败后恢复', 'fsm', '低',
-      '切模式失败计数且禁发，下一拍恢复后下发并清零计数', _it69)
-_item(73, '自愈连续失败安全兜底', 'fsm', '低',
-      '模式/使能连续失败各达临时阈值3次→DISABLE；失败期间无运动下发', _it73)
-_item(74, '首帧规划失败与异常计数', 'fsm', '低',
-      '首帧 plan=False/抛异常同样计数，达到阈值失能，失败不提交 MOTION、不留线程', _it74)
+      '切模式失败只跳拍，下一拍恢复后下发，事件保持', _it69)
+_item(73, '自愈连续失败职责边界', 'fsm', '低',
+      '模式/使能各连续55拍失败不改事件、不下发；外部显式 DISABLE 后迁移', _it73)
+_item(74, '首帧规划失败与异常回收', 'fsm', '低',
+      '首帧 plan=False/抛异常不改事件，失败不提交 MOTION、不留线程', _it74)
 _item(75, '进入失败保留旧态缓存', 'fsm', '低',
       'HOLD→HOME 切模式失败不提交新态、不清 hold_q，失败次数递增', _it75)
 _item(76, 'ZERO 失能与 HOLD 锁定位形', 'fsm', '低',

@@ -22,6 +22,8 @@
 11. **大道至简·第一性原理（执行约束）**：**用最简单的操作做复杂的事**——先看透问题本质，提炼能覆盖整类问题的本质原语并把它用深用透（如config 驱动之于型号差异），一个原语胜过堆叠多个浅层机制；代码实现与文档说人话、精简、易于理解，少用黑科技（动态建类/反射/元编程/隐式回调链等）及术语黑话，仅当常规手段无法实现或存在明显缺陷时才引入深层技术并就地文档说明——简洁是深度理解事物本质的产物，不是能力妥协。
 12. **utils 归置（共享基础层）**：凡**跨域、基础、可复用且非特定功能/任务**的功能与数据类型，一律定义于 `utils/`——整个核心代码库的共享功能与数据类型层（依赖规则见 §1.2）；特定于某域/某层（robotics 六域、backend、joyarm）的功能不下沉 utils（如 JoyArm 私有周期线程机制），通用能力不得在域内重复实现——先复用 utils，缺则补入。
 
+13. **状态机 / 监控 / 显示职责分离**：FSM 与 plan/ctrl 只负责状态迁移、维持与运动执行，不因发送失败、算法异常或到位超时设置安全事件；运行期自动安全判定与事件/目标状态设置只归 monitor，自定义规则只在监视线程执行。运动状态机启动入口仅校验连接、新鲜有效反馈、无电机故障及算法配置，初始化 `current=DISABLE / target=MOTION / event=NORMAL`；启停生命周期与外部显式 `set_event` 保留。状态可视化只读显示。
+
 ## 1. 架构细化
 
 > 补充 README「基本架构」：分层图与核心概念见 README，本节给文件级细节。
@@ -57,7 +59,7 @@ joyarm_code/
 │       └── joyarm_template.yaml     #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 listArm）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性；基础设施优先复用 joyarm_core，章节算法可自行实现）
-├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；test_robotics.py：robotics 六域；test_joyarm.py：FSM 自愈/切换并发/验收反馈回归）
+├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；test_robotics.py：robotics 六域）
 ├── quickstart/                      # 快速上手示例（占位待补；CLI/GUI 入口规划见 §2.3）
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
 ├── README.md                        # 用户向入口
@@ -78,7 +80,7 @@ joyarm_code/
 ```yaml
 joyarm: {frame_end, arm_mdh, T_linkn_endtcp, joint_limits_soft_arm/end, tcp_limits, home_arm/end, MotionFSM, arrival_tol, runtime}   # 软限位四键直值 {q_min,q_max,dq_max,tau_max}（q_min/q_max 必配、缺键拒绝构造，dq_max/tau_max 缺键回退 ±∞；标量广播或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero=全零（构造期校验在各关节硬限位内）、neutral=软限位中点（代码固定，不经 config）；home 逐关节须在软限位内；arm_mdh（6×4：α/a/d/θ）/T_linkn_endtcp 为教学数据（约束8）；tcp_limits.workspace_box 为 (3,2) 每行 [min,max]（兼容旧 (2,3) 布局），v_lin_max/v_ang_max/f_max/t_max 须 >0；MotionFSM 三键 {fsm_hz(缺省50), mit_kd_damping(必配，DAMPING 态 MIT kd), monitor_hz(缺省=fsm_hz)}；arrival_tol 缺省 0.05/1e-3/1e-2；runtime.move_wait_timeout 缺省 10.0（stop_motion_fsm 回零等待超时；同段其余键暂无消费方）
 robotics: {六域契约规格}   # 六域选型（注册名 / {name, **参数} / 规格列表，全部加载、首个激活）；显式配置，注册名无效/实例化失败即硬失败（约束2）；traj 每规格必配 plan_hz、control 每规格必配 ctrl_hz（int 或整值浮点 ≥1，JoyArm 剥离消费、不传构造器；电机模式由控制器 MODE 类属性声明）
-backend: {name: backend_dm, 可选运行键 state_refresh_hz/write_settle（默认 20Hz/0.1s；state_refresh_hz=状态新鲜度承诺、刷新线程按 0.5/hz 两倍频绝对对齐节拍供给，读侧帧龄 >0.5/hz 补查询、≥1/hz 断供上抛；backend_dm 另有 rx_hz 默认 1000Hz、上限 5000Hz=RX 收取线程节拍）, arm/end 同构：{channel, protocol, baud_rate, default_mode（连接后自动设置，缺省 MIT；无 MIT 型号配 position/velocity）, joints}}   # joints 条目：四限位键 q_min/q_max/dq_max/tau_max（= 硬限位来源）+ 协议标识三键 motor_id/feedback_id/model + 能力段 MIT {kp,kd}（MIT 指令发送默认）与 POS_VEL {pos_kp,pos_ki,vel_kp,vel_ki,vlim,flim}（切 POSITION/VELOCITY 随写增益寄存器；整段缺省静默 NaN、段在键缺 warn），均由 backend `__init__` 自解析；cfg.backend ↔ URDF 硬校验（任一不符构造失败，ValueError 列全部问题）：arm 关节须 joint1~jointN、end 须 joint_end1~joint_endM 且与 URDF 驱动关节同名同序；只登记非 fixed 非 mimic 驱动关节且须全部登记；四限位键与 URDF <limit> 逐键差 ≤1e-4；q_min≤q_max；joint/link 名无重复
+backend: {name: backend_dm, 可选运行键 state_refresh_hz/write_settle（默认 20Hz/0.1s；state_refresh_hz=状态新鲜度承诺、刷新线程按 0.25/hz 四倍频绝对对齐节拍供给，读侧帧龄 >0.5/hz 补查询、≥1/hz 断供上抛；backend_dm 另有 rx_hz 默认 1000Hz、上限 5000Hz=RX 收取线程节拍）, arm/end 同构：{channel, protocol, baud_rate, default_mode（连接后自动设置，缺省 MIT；无 MIT 型号配 position/velocity）, joints}}   # joints 条目：四限位键 q_min/q_max/dq_max/tau_max（= 硬限位来源）+ 协议标识三键 motor_id/feedback_id/model + 能力段 MIT {kp,kd}（MIT 指令发送默认）与 POS_VEL {pos_kp,pos_ki,vel_kp,vel_ki,vlim,flim}（切 POSITION/VELOCITY 随写增益寄存器；整段缺省静默 NaN、段在键缺 warn），均由 backend `__init__` 自解析；cfg.backend ↔ URDF 硬校验（任一不符构造失败，ValueError 列全部问题）：arm 关节须 joint1~jointN、end 须 joint_end1~joint_endM 且与 URDF 驱动关节同名同序；只登记非 fixed 非 mimic 驱动关节且须全部登记；四限位键与 URDF <limit> 逐键差 ≤1e-4；q_min≤q_max；joint/link 名无重复
 ```
 
 **限位语义**：**backend 下发指令只裁硬限位**（`Backend.send_*` 守卫模板，唯一执行点）；软限位由 JoyArm 直配加载（`joint_limits_soft_arm/end`，必配）作上层状态判断依据（到位判断容差域、neutral 中点、home 校验区间、`rand_q_*` 缺省采样域），不拦指令；config 改动重启生效，**不回写 yaml**。硬限位解析鲁棒性（`limits_from_joint_cfgs`）：限位键值为 NaN/inf → 该键回退未限位（`q_min`→`-inf`、其余→`+inf`）并 warn（防 `np.clip` 产出 NaN 指令静默下发）；`q_min > q_max` 由 cfg↔URDF 硬校验拦截（utils 层仅 warn，勿依赖）。
@@ -139,7 +141,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `robotics/trajectory/` | `TrajPlanner(ABC)`（plan/sample 两内核：目标单点/序列 → 轨迹存对象内、按绝对时间采样产帧）+ 双实现：`SingleJointHoldTrajPlanner`（单点直传：仅取单帧 q 恒定输出、dq/ddq=0；q 空/维度不符/多帧回退 q_home）与 `SingleJointCubicTrajPlanner`（单点三次多项式：当前 q/dq 起点 + 目标 q/dq 终点四约束，T=目标时刻−当前、τ 钳位超末保持；无效回退恒定 q_home、已过期直接恒定发布目标），config 默认激活直传 ✅ | Ch5 | ✅ |
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（idyn/M/C/G 四内核）+ `PinDynamicsSolver`（rnea/crba 对称化/nonLinearEffects）✅ | Ch8 | ✅ |
 | `robotics/control/` | `Controller(ABC)`（step 内核 + `MODE` 类属性声明所需电机模式：基类缺省 MIT、子类覆写，FSM 在 MOTION 进入/维持时依此自愈模式与使能）+ `JointPositionController` 关节位置控制器（`MODE=POSITION`；step 跟踪当前帧 q 经 `send_position_arm` 下发，NaN/缺 q 拒绝下发）✅ | Ch6 | ✅ |
-| `joyarm/joyarm.py` | `JoyArm` 主类：两阶段初始化（私有成员声明 → 按依赖序赋真值）+ cfg 全套自检（三段数值叶有限非空 + zero∈硬限位 + cfg↔URDF 硬校验）+ pin 缩减模型（锁定非 cfg 名单活动关节 → nq=n_arm）+ 硬件委托面（§3.3）+ 六域求解器与热切换 + 目标帧通道 + plan/ctrl 两线程 + 数学门面 9 方法（q/dq 维度校验、frame=0 合法直传）+ MotionFSM（六状态 + 路线表 + start/stop + 进入/维持自愈，失败与异常统一计数、连续上限转 DISABLE；最终收尾禁止自愈后停线程再失能）+ SafetyEvent/safe_monitor（硬规则 + 自定义规则）+ 运行状态可视化（HTTP 轮询 + meshcat 依赖 + zmq 超时看门狗降级与 server 回收）+ `close()` 销毁路径；模块级 `load_config` 与私有周期线程机制 `_run_periodic`/`_PeriodicThread`（含 prepare() 预登记线程句柄；FSM/监视/可视化/运动线程共用，不入 utils） | — | ✅ |
+| `joyarm/joyarm.py` | `JoyArm` 主类：两阶段初始化（私有成员声明 → 按依赖序赋真值）+ cfg 全套自检（三段数值叶有限非空 + zero∈硬限位 + cfg↔URDF 硬校验）+ pin 缩减模型（锁定非 cfg 名单活动关节 → nq=n_arm）+ 硬件委托面（§3.3）+ 六域求解器与热切换 + 目标帧通道 + plan/ctrl 两线程 + 数学门面 9 方法（q/dq 维度校验、frame=0 合法直传）+ MotionFSM（六状态 + 路线表 + start/stop + 进入/维持自愈，失败保留状态，下拍重试（职责见约束13）；最终收尾禁止自愈后停线程再失能）+ SafetyEvent/safe_monitor（硬规则 + 自定义规则）+ 运行状态可视化（HTTP 轮询 + meshcat 依赖 + zmq 超时看门狗降级与 server 回收）+ `close()` 销毁路径；模块级 `load_config` 与私有周期线程机制 `_run_periodic`/`_PeriodicThread`（含 prepare() 预登记线程句柄；FSM/监视/可视化/运动线程共用，不入 utils） | — | ✅ |
 | `joyarm/__init__.py` | `JoyArmFactory`/`joyArm`/`listArm`/`load_config`（对象创建入口，四步校验失败语义见约束4；`listArm` 三条件过滤与失败消息共用实现） | — | ✅ |
 | `joyarm/joyarm.py` 内 `_VizWindow` | 监控页原生窗口封装类（JoyArm 成员 `_viz_window`：init 占位 None、start 时创建赋值、stop 终止；`launch()` 经 `python -c` 拉起子进程跑 `child_main()`——`QMainWindow`+`QWebEngineView` 内嵌 Chromium 加载三栏页，内置早夭看护（主动停止标志防误告警、stop 超时 kill 兜底）；零数据逻辑，数据仍来自 HTTP 服务；关窗即退出子进程） | — | ✅ |
 | `config/joyarm_dm.yaml` | 型号 YAML 三段（结构与限位语义见 §1.3） | — | ✅ |
@@ -182,7 +184,7 @@ JoyArm.get_config() → dict    # 深拷贝快照（教学数据读取口，约�
 JoyArm.get_joint_names_arm/end(joint="all"|1基序号) · rand_q_arm/end(joint_limits=None)    # 缺省软限位内均匀采样 ✅
 # 硬件后端委托面（§4.1 总表同构直连；动态数据读时刷新）
 connect/disconnect_arm/end · enable/disable_arm/end · read/write_param_arm/end · get/set_mode_arm/end · get_state_arm/end() → JointState · set_zero_arm/end · get/check/clear_error_arm/end · send_mit_arm/end(q,dq=None,tau=None,kp=None,kd=None) · send_position_arm/end(q,vlim=None,flim=None) · send_vel_arm/end(dq) · set_action_end(action,**kw) ✅
-#   FSM 外部指令互斥：FSM 运行中外部线程调 arm 侧指令类方法（enable/disable/set_mode/set_zero/clear_error/send_*_arm）空操作+warn；ctrl 线程仅在 MOTION、NORMAL 事件且当前控制器已由 FSM 确认就绪时豁免；句柄经 prepare() 预登记；end 侧与参数读写、状态读取不受互斥
+#   FSM 外部指令互斥：FSM 运行中外部线程调 arm 侧指令类方法（enable/disable/set_mode/set_zero/clear_error/send_*_arm）空操作+warn；ctrl 线程仅在 MOTION、NORMAL 事件且当前控制器已由 FSM 确认就绪时豁免；句柄经 prepare() 预登记；运行中 plan/sample/step 失败或控制反馈缺失只跳拍，异常交周期线程记日志；end 侧与参数读写、状态读取不受互斥
 # 六域求解器管理（每域三方法）
 JoyArm.get_<域>_solvers() → list[str] · set_<域>_solver(name) → bool · get_activated_<域>_solver() → str ✅
 #   热切换协议：traj 域在运动锁内先试 plan，成功才替换并同步 plan_hz；ctrl 域在同锁内仅选择算法/更新 ctrl_hz（可离线、不切模式），撤销下发许可，由 MOTION 进入/维持按 MODE 核验模式/使能后恢复；plan/sample/step 与切换串行，join 不持锁；其余四域直接换指针；坏名保持原激活
@@ -190,16 +192,16 @@ JoyArm.get_<域>_solvers() → list[str] · set_<域>_solver(name) → bool · g
 JoyArm.set_target_trajframe(单帧|序列|None) · get_target_trajframe() · set_target_joint(t, q, dq?, ddq?, tau?) · set_target_cart(t, pose, twist?, accel?, wrench?)    # 便捷封装内部组帧走同一通道；t=Unix 秒、q=(n,)、pose=Pose 或 (7,) ✅
 # 数学门面 9 方法（显式传参离线可用；q/dq 缺省取 joint_state_arm 被动快照（无有效快照抛 RuntimeError）、frame 缺省 frame_end（0=universe 帧合法直传）、ddq 缺省零；显式 q/dq 验维度 (n_arm,)、pose 非 Pose 抛 TypeError；域未配置抛 RuntimeError）
 JoyArm.solve_fkine(q?, frame?) → Pose · solve_ikine(pose, frame?, q0?, **kw) → IKResult · solve_ikine_all(pose, frame?)（仅解析法；数值法转 RuntimeError）· get_jac(q?, frame?) → (6,n) · get_jac_pinv_damped(q?, frame?, damping=1e-3) → (n,6) · solve_idyn(q?, dq?, ddq?) · get_mass_matrix(q?) → (n,n) · get_coriolis(q?, dq?) · get_gravity(q?) ✅
-# 到位判断（读 joint_state_arm/end 被动快照；tol_q 标量统一或 n 元逐关节、缺省 cfg joyarm.arrival_tol）
+# 到位判断（读 joint_state_arm/end 被动快照，过期/未来/无效时间戳或位置维度错误均判未到位；tol_q 标量统一或 n 元逐关节、缺省 cfg joyarm.arrival_tol）
 JoyArm.is_in_q_arm/end(q, tol_q?) → bool · is_in_pose_arm(pose, tol_pos?, tol_rot?, frame?) → bool ✅
-# 运动状态机 MotionFSM（六状态 DISABLE/ZERO/HOME/MOTION/HOLD/DAMPING；home(3) 中枢路线表；状态内硬件操作直连 _backend；进入/维持均核验模式与使能，不符自愈、失败跳过下发，失败/异常连续 50 拍转 DISABLE；ZERO 到位与 DISABLE 只保持失能、HOLD 自愈不重采位置；进入失败保留旧态必要缓存，不盲目恢复旧运动；周期等待被 stop 唤醒后不再执行一步）
-JoyArm.start_motion_fsm()（前置已连接且 traj/ctrl 域已配置，否则 RuntimeError；非阻塞；自动 DISABLE→HOME→MOTION，3→4 受 home 到位门槛）· stop_motion_fsm()（阻塞安全停机：事件危险度高于 ZEROING 时直接失能不回零，否则回零失能；超时 move_wait_timeout 强制推进；最终收尾先禁止自愈/ctrl 再停线程、最后失能；未连接抛 RuntimeError）· get_current_motion_state() · get_target_motion_state() · wait_for_motion_state(fsm_state, timeout=5.0)（只读轮询等待，不受 FSM 互斥拦截：到达返 1；超时/FSM 未运行（含中途停止）/非枚举返 0 各带 warn；timeout 非正有限抛 ValueError）✅
-# 安全事件与监视器（事件→目标状态映射：NORMAL→MOTION…DISABLE 危险度最高；FSM 每拍消费，延迟 ≤1/fsm_hz）
-JoyArm.set_event(SafetyEvent) · get_event() · start_monitor() / stop_monitor() · set_monitor_rules(rules)    # 监视器独立 daemon 线程（monitor_hz）：硬规则（error≥2→DAMPING；断连或连续 0.1s 无新鲜快照→DISABLE，快照过期过滤判 None）与自定义规则命中合并、统一取危险度最高（结果与到达顺序无关）；rule(state_arm, state_end, motion, event) → SafetyEvent|None ✅
+# 运动状态机 MotionFSM（六状态 DISABLE/ZERO/HOME/MOTION/HOLD/DAMPING；home(3) 中枢路线表；状态内硬件操作直连 _backend；进入/维持均核验模式与使能，不符自愈、失败跳过下发，失败/异常不改安全事件（约束13）；ZERO 到位与 DISABLE 只保持失能、HOLD 自愈不重采位置；进入失败保留旧态必要缓存，不盲目恢复旧运动；周期等待被 stop 唤醒后不再执行一步）
+JoyArm.start_motion_fsm()（前置已连接、反馈新鲜有效、无电机故障且 traj/ctrl 域已配置，否则 RuntimeError；非阻塞；自动 DISABLE→HOME→MOTION，3→4 每次复核新鲜 home 到位反馈；初始化 DISABLE/MOTION/NORMAL；不调用监视规则）· stop_motion_fsm()（阻塞安全停机：事件危险度高于 ZEROING 时直接失能不回零，否则回零失能、等待中升档或失连立即收尾；超时 move_wait_timeout 强制推进；最终收尾先禁止自愈/ctrl 再停线程、最后失能；未连接抛 RuntimeError）· get_current_motion_state() · get_target_motion_state() · wait_for_motion_state(fsm_state, timeout=5.0)（只读轮询等待，不受 FSM 互斥拦截：到达返 1；超时/FSM 未运行（含中途停止）/非枚举返 0 各带 warn；timeout 非正有限抛 ValueError）✅
+# 安全事件与监视器（事件→目标状态映射：NORMAL→MOTION…DISABLE 危险度最高；FSM 每拍消费，实际响应延迟还受总线 I/O 与线程调度影响）
+JoyArm.set_event(SafetyEvent) · get_event() · start_monitor() / stop_monitor() · set_monitor_rules(rules)    # 监视器独立 daemon 线程（monitor_hz）：硬规则（error≥2→DAMPING；断连或连续 0.1s 无新鲜快照→DISABLE，快照过期过滤判 None）与自定义规则命中合并、统一取危险度最高、事件锁保证比较与升档发布原子化；rule(state_arm, state_end, motion, event) → SafetyEvent|None ✅
 # 运行状态可视化（HTTP 轮询、零新增依赖、纯被动快照零总线帧、与 FSM/规划控制线程正交）
 JoyArm.start_state_viz(traj_points=200) / stop_state_viz()    # 单页面三栏监控网页（中间 1:1、两侧 1:3 内部纵滚），start 后默认自动弹出 PySide6 QtWebEngine 原生窗口（joyarm.py 内 `_VizWindow` 子进程加载同页、JoyArm 成员 `_viz_window` 持有，stop 随手关窗；`JOYARM_VIZ_NOWINDOW=1`/无显示器/启动失败降级仅打 URL 日志）：左静态（/static.json，start 时装配一次、页面加载拉取一次：标识与关节/限位（硬+软逐关节+tcp_limits）/特征位形/控制默认值（仅跨型号通用键）/cfg 原文折叠五组）+ 中 3D（iframe 嵌 meshcat（初始化失败降级占位）；arm+end 联动的可视化专属缩减 pin 模型（数学用 _pin_model 不动），display q 按关节名映射快照拼装、无效保持上一帧、构建失败降级 arm-only）+ 右动态（JS ~5Hz fetch /state.json：运行态/快照时刻与新鲜度标注/arm+end 关节表/末端位姿速度/求解器激活与目标帧摘要；控制模式无被动来源不展示）；单一只读 daemon 线程（绝不下发指令）；meshcat 刷新带 zmq 超时看门狗（连续失败降级仅 HTML）、stop 回收 meshcat-server 子进程；轨迹显示可选（需 MOTION 态，开关在中栏 3D 角部）✅
 # 销毁（支持 with 上下文）
-JoyArm.close()    # stop_motion_fsm → stop_monitor → stop_state_viz → disable_arm/end → disconnect_arm/end（各步异常转 warn 不阻断收尾；arm 断连时豁免下发类步骤、仍停线程清缓存）✅
+JoyArm.close()    # stop_motion_fsm → stop_monitor → stop_state_viz → disable_arm/end → disconnect_arm/end → backend.close（各步异常转 warn 不阻断收尾；arm 断连时仍停线程清缓存；with 异常退出先置 DISABLE，不回零；close 后需新建对象再连接）✅
 ```
 
 #### Robotics 独立 API（各域 ABC）
