@@ -119,12 +119,12 @@ def _build_route() -> dict:
     """按状态转移路线表构造 `{from: {to: next}}`（`home` 为中枢）。"""
     states = (MotionState.DISABLE, MotionState.ZERO, MotionState.HOME, MotionState.MOTION, MotionState.HOLD, MotionState.DAMPING)
     table = {
-        # from disable：→zero/→home/→motion 经 home 中转；→hold/→damping 保护性直达
+        # from disable：→zero/→motion 经 home 中转；→home/→hold/→damping 保护性直达
         MotionState.DISABLE: {
             MotionState.ZERO: MotionState.HOME, MotionState.HOME: MotionState.HOME,
             MotionState.MOTION: MotionState.HOME, MotionState.HOLD: MotionState.HOLD,
             MotionState.DAMPING: MotionState.DAMPING},
-        # from zero：→home 直达；→motion 经 home；→disable/hold/damping 直达
+        # from zero：→motion 经 home；→home/disable/hold/damping 直达
         MotionState.ZERO: {
             MotionState.DISABLE: MotionState.DISABLE, MotionState.HOME: MotionState.HOME,
             MotionState.MOTION: MotionState.HOME, MotionState.HOLD: MotionState.HOLD,
@@ -658,7 +658,7 @@ function renderCtrl(cd) {
   h += `default_mode：arm=${dm.arm || "—"} end=${dm.end || "—"}<br>`;
   h += `write_settle=${fmt(bp.write_settle, 3)} state_refresh_hz=${fmt(bp.state_refresh_hz, 1)}<br>`;
   h += `fsm_hz=${fmt(cd.fsm_hz, 1)} monitor_hz=${fmt(cd.monitor_hz, 1)} `
-     + `mit_kd_damping=${arrOrDash(cd.mit_kd_damping)}<br>`;
+     + `damping_kd=${arrOrDash(cd.damping_kd)} damping_k_gravity=${arrOrDash(cd.damping_k_gravity)}<br>`;
   h += `到位容差 arm_q=${arrOrDash(at.arm_q)} end_q=${arrOrDash(at.end_q)} `
      + `pos=${fmt(at.pos, 4)} rot=${fmt(at.rot, 4)}<br>`;
   h += `move_wait_timeout=${fmt(cd.move_wait_timeout, 2)}`;
@@ -945,7 +945,8 @@ class JoyArm:
         self._safe_event: SafetyEvent = SafetyEvent.DISABLE             # 当前安全事件（set_event 原子写入）
         self._event_lock = threading.RLock()             # 事件发布与监视器升档仲裁原子化；不持锁做 I/O
         self._fsm_hz: float = 50.0                       # cfg.joyarm.MotionFSM.fsm_hz
-        self._mit_kd_damping: np.ndarray = np.zeros(0)   # DAMPING 态 MIT kd（cfg 必配）
+        self._damping_kd: np.ndarray = np.zeros(0)       # DAMPING 态 MIT kd（cfg 必配）
+        self._damping_k_gravity: np.ndarray = np.zeros(0)  # DAMPING 态重力补偿率（cfg 必配）
         self._monitor_hz: float = 50.0                   # 缺省 = fsm_hz
         self._arrival_tol_q_arm = np.zeros(0)            # 到位容差（逐关节）
         self._arrival_tol_q_end = np.zeros(0)            # 到位容差（逐电机）
@@ -965,6 +966,7 @@ class JoyArm:
         self._motion_lock = threading.RLock()           # 算法选择、模式自愈与单拍下发互斥；join 不持锁
         self._motion_ready = None                       # FSM 已确认就绪的控制器对象；None 禁止 ctrl 下发
         self._fsm_shutdown = threading.Event()          # 最终收尾开始后禁止自愈/使能/运动下发
+        self._closed: bool = False                      # close() 已完成标志（重复 close 静默跳过）
 
         # ---- safe_monitor ----
         self._monitor_periodic: Optional[_PeriodicThread] = None  # 监视器周期线程句柄
@@ -1401,7 +1403,7 @@ class JoyArm:
     def _parse_fsm_params(self, jcfg: dict) -> None:
         """解析 `joyarm.MotionFSM` / `joyarm.arrival_tol` / `joyarm.runtime.move_wait_timeout`。
 
-        :raises ValueError: `mit_kd_damping` 未配置或非法；其余参数显式给出但非法。
+        :raises ValueError: `damping_kd` / `damping_k_gravity` 未配置或非法；其余参数显式给出但非法。
         """
         fsm = jcfg.get("MotionFSM") or {}
 
@@ -1428,29 +1430,38 @@ class JoyArm:
                 f"joyarm.py - JoyArm._parse_fsm_params：joyarm.MotionFSM.monitor_hz="
                 f"{fsm.get('monitor_hz')!r} 非法（须为正有限数，缺省 = fsm_hz）")
 
-        # DAMPING 态 MIT kd（必配）
-        kd_raw = fsm.get("mit_kd_damping")
-        if kd_raw is None:
-            raise ValueError(
-                "joyarm.py - JoyArm._parse_fsm_params：joyarm.MotionFSM.mit_kd_damping"
-                " 未配置（正有限数，标量广播或 n_arm 元列表；DAMPING 态必需）")
-        try:
-            kd = np.asarray(kd_raw, dtype=float)
-        except (TypeError, ValueError):
-            kd = np.full(1, np.nan)
-        if kd.ndim == 0:
-            kd = np.full(self._n_arm, float(kd))
-        else:
-            kd = kd.reshape(-1)
-            if kd.shape[0] != self._n_arm:
+        # DAMPING 状态增益（kd 速度阻尼、k_gravity 重力补偿率）
+        def _broadcast_cfg(key: str, ok: Callable[[np.ndarray], bool], req: str) -> np.ndarray:
+            raw = fsm.get(key)
+            if raw is None:
                 raise ValueError(
-                    f"joyarm.py - JoyArm._parse_fsm_params：mit_kd_damping 长度 "
-                    f"{kd.shape[0]} ≠ arm 关节数 {self._n_arm}")
-        if not (np.isfinite(kd).all() and (kd > 0).all()):
-            raise ValueError(
-                f"joyarm.py - JoyArm._parse_fsm_params：mit_kd_damping={kd_raw!r}"
-                f" 非法（须为正有限数，标量广播或 n_arm 元列表）")
-        self._mit_kd_damping = _freeze_arrays(kd)
+                    f"joyarm.py - JoyArm._parse_fsm_params：joyarm.MotionFSM.{key}"
+                    f" 未配置（{req}；DAMPING 态必需）")
+            try:
+                arr = np.asarray(raw, dtype=float)
+            except (TypeError, ValueError):
+                arr = np.full(1, np.nan)
+            if arr.ndim == 0:
+                arr = np.full(self._n_arm, float(arr))
+            else:
+                arr = arr.reshape(-1)
+                if arr.shape[0] != self._n_arm:
+                    raise ValueError(
+                        f"joyarm.py - JoyArm._parse_fsm_params：{key} 长度 "
+                        f"{arr.shape[0]} ≠ arm 关节数 {self._n_arm}")
+            if not ok(arr):
+                raise ValueError(
+                    f"joyarm.py - JoyArm._parse_fsm_params：{key}={raw!r}"
+                    f" 非法（{req}）")
+            return _freeze_arrays(arr)
+
+        self._damping_kd = _broadcast_cfg(
+            "damping_kd", lambda a: bool(np.isfinite(a).all() and (a > 0).all()),
+            "正有限数，标量广播或 n_arm 元列表")
+        self._damping_k_gravity = _broadcast_cfg(
+            "damping_k_gravity",
+            lambda a: bool(np.isfinite(a).all() and ((a >= 0) & (a <= 1)).all()),
+            "[0,1] 有限数（1=完全补偿），标量广播或 n_arm 元列表")
 
         # 到位容差（缺省 0.05 / 1e-3 / 1e-2 标量广播）
         at = jcfg.get("arrival_tol") or {}
@@ -1541,7 +1552,7 @@ class JoyArm:
             f"；v_lin_max={self._tcp_limits.v_lin_max}；v_ang_max={self._tcp_limits.v_ang_max}"
             f"；f_max={self._tcp_limits.f_max}；t_max={self._tcp_limits.t_max}",
             f"fsm_hz={self._fsm_hz}；monitor_hz={self._monitor_hz}；"
-            f"mit_kd_damping={_r(self._mit_kd_damping)}",
+            f"damping_kd={_r(self._damping_kd)}；damping_k_gravity={_r(self._damping_k_gravity)}",
         ]
         logger.info("%s 初始化和自检完毕（仅必要校验，不确保完全无误）！\n%s",
                     self._model, "\n".join(lines))
@@ -1876,6 +1887,10 @@ class JoyArm:
                 self._home_arrived = False
             elif state is MotionState.HOLD:
                 self._hold_q = hold_q
+            elif (state is MotionState.DAMPING and self._activated_dyn_solver is None
+                    and bool((self._damping_k_gravity > 0).any())):
+                logger.warning("joyarm.py - _enter_motion_state：dynamics 域未配置，"
+                               "DAMPING 重力补偿不可用，退化为纯阻尼")
             return True
 
     def _exit_motion_state(self, state: MotionState) -> None:
@@ -1918,7 +1933,12 @@ class JoyArm:
                     return False
                 self._backend.send_position_arm(self._hold_q)
             elif state is MotionState.DAMPING:
-                self._backend.send_mit_arm(q=np.zeros(self._n_arm), kp=np.zeros(self._n_arm), kd=self._mit_kd_damping)
+                tau_ff = np.zeros(self._n_arm)            # 重力补偿前馈 k_gravity·G(q)；缺求解器或快照无效时置零（纯阻尼）
+                dyn = self._activated_dyn_solver
+                q = np.asarray(self._backend.joint_state_arm.q, dtype=float)
+                if dyn is not None and bool(np.isfinite(q).all()):
+                    tau_ff = self._damping_k_gravity * dyn.gravity(self, q)
+                self._backend.send_mit_arm(q=np.zeros(self._n_arm), kp=np.zeros(self._n_arm), kd=self._damping_kd, tau=tau_ff)
             return True
 
     def _disable_clear_disable_arm(self) -> bool:
@@ -2299,7 +2319,7 @@ class JoyArm:
 
         :param cfg: `get_config()` 深拷贝（`_viz_static_payload` 传入）。
         :return: `{mit, pos_vel, default_mode, backend_params, fsm_hz, monitor_hz,
-            mit_kd_damping, arrival_tol, move_wait_timeout}` 分组 dict（纯 JSON 值）。
+            damping_kd, damping_k_gravity, arrival_tol, move_wait_timeout}` 分组 dict（纯 JSON 值）。
         """
         def _joint_gain(fam: str, seg: str, keys: tuple) -> dict:
             """walk cfg `backend.<fam>.joints[].<seg>.<keys>` → 逐关节数组。
@@ -2337,7 +2357,8 @@ class JoyArm:
             },
             "fsm_hz": _json_round(self._fsm_hz),
             "monitor_hz": _json_round(self._monitor_hz),
-            "mit_kd_damping": _json_arr(self._mit_kd_damping),
+            "damping_kd": _json_arr(self._damping_kd),
+            "damping_k_gravity": _json_arr(self._damping_k_gravity),
             "arrival_tol": {
                 "arm_q": _json_arr(self._arrival_tol_q_arm),
                 "end_q": _json_arr(self._arrival_tol_q_end),
@@ -3779,7 +3800,10 @@ class JoyArm:
         arm 已断连时走豁免路径：跳过 stop 的回零/失能等下发类步骤，停 FSM/plan/ctrl 线程并清空 FSM 缓存；
         `disconnect_arm` 保留。各步异常捕获不阻断收尾；同时停监视器与可视化线程。
         最后关闭 backend 的刷新线程和残留总线；close 后请新建对象再连接。
+        本方法幂等：已完成收尾后再次调用（含 `__del__` 兜底）静默跳过。
         """
+        if self._closed:                                # 幂等：已完成收尾的重复调用直接返回
+            return
         if self._backend.is_connected_arm is not True:
             # 断连豁免：stop_motion_fsm、disable_arm 均跳过；线程收尾与缓存清理照常执行
             logger.warning(
@@ -3821,6 +3845,7 @@ class JoyArm:
             self._backend.close()                      # 显式回收后台刷新与残留总线
         except Exception as e:
             logger.warning("joyarm.py - close：backend.close 失败：%s", e)
+        self._closed = True                            # 收尾完成（置位后重复 close 静默跳过）
         logger.info("joyarm.py - close：安全退出完成（%s）", self._model)
 
     def __enter__(self) -> "JoyArm":

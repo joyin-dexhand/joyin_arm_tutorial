@@ -1466,12 +1466,16 @@ def _it63():
         ok_d = _wait_state(arm, MotionState.DAMPING)
         time.sleep(0.15)
         got = d.calls_since(i0, "send_joint_mit_arm")
-        kd_cfg = float(np.asarray(
-            arm.get_config()["joyarm"]["MotionFSM"]["mit_kd_damping"]).reshape(-1)[0])
-        checks.append(("DAMPING→直达 + MIT 纯阻尼（kp=0, kd=cfg）",
+        kd_cfg = np.asarray(
+            arm.get_config()["joyarm"]["MotionFSM"]["damping_kd"], dtype=float).reshape(-1)
+        kg_cfg = np.asarray(
+            arm.get_config()["joyarm"]["MotionFSM"]["damping_k_gravity"], dtype=float).reshape(-1)
+        tau_exp = kg_cfg * arm.get_gravity()             # 被动快照当前 q 下的重力补偿期望
+        checks.append(("DAMPING→直达 + MIT 阻尼（kp=0, kd=cfg, tau=k_gravity·G(q)）",
                        ok_d and bool(got)
-                       and all(abs(c[5]) < 1e-12 and abs(c[6] - kd_cfg) < 1e-9 for c in got),
-                       f"{len(got)} 帧 kp=0, kd={kd_cfg}"))
+                       and all(abs(c[5]) < 1e-12 and abs(c[6] - kd_cfg[c[1]]) < 1e-9
+                               and abs(c[2] - tau_exp[c[1]]) < 1e-6 for c in got),
+                       f"{len(got)} 帧 kp=0, kd=cfg_i, tau=k_i·G_i"))
         i0 = len(d.calls)
         arm.set_event(SafetyEvent.DISABLE)
         ok_x = _wait_state(arm, MotionState.DISABLE)

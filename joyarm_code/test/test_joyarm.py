@@ -181,6 +181,53 @@ def test_ctrl_selection_preserves_damping_and_waits_for_motion_check(rig):
     assert calls == ['step']
 
 
+def test_damping_maintain_sends_gravity_feedforward(rig):
+    arm, bk = rig
+    arm._current_motion_state = MotionState.DAMPING
+    arm.set_event(SafetyEvent.DAMPING)
+    begin = len(bk.calls)
+    assert arm._maintain_motion_state(MotionState.DAMPING, SafetyEvent.DAMPING)
+    got = bk.calls_since(begin, 'send_joint_mit_arm')
+    assert len(got) == arm.n_arm
+    kd_cfg = np.asarray(arm.get_config()['joyarm']['MotionFSM']['damping_kd'], dtype=float).reshape(-1)
+    kg_cfg = np.asarray(arm.get_config()['joyarm']['MotionFSM']['damping_k_gravity'], dtype=float).reshape(-1)
+    tau_exp = kg_cfg * arm.get_gravity()                    # 被动快照 q（=home）下的补偿期望
+    for c in got:
+        assert c[5] == 0.0                                  # kp=0（无刚度项）
+        assert c[6] == pytest.approx(kd_cfg[c[1]])          # kd=cfg 逐关节
+        assert c[2] == pytest.approx(tau_exp[c[1]])         # tau=k_gravity·G(q) 重力补偿前馈
+
+
+def test_damping_maintain_degrades_to_pure_damping_without_dyn_solver(rig, monkeypatch):
+    arm, bk = rig
+    arm._current_motion_state = MotionState.DAMPING
+    arm.set_event(SafetyEvent.DAMPING)
+    monkeypatch.setattr(arm, '_activated_dyn_solver', None)
+    begin = len(bk.calls)
+    assert arm._maintain_motion_state(MotionState.DAMPING, SafetyEvent.DAMPING)
+    got = bk.calls_since(begin, 'send_joint_mit_arm')
+    assert got and all(c[2] == 0.0 for c in got)            # dyn 域缺失：tau 全零退化纯阻尼
+
+
+@pytest.mark.parametrize('bad', ['missing', 'over', 'negative'])
+def test_damping_k_gravity_cfg_bounds_rejected(bad):
+    def mutate(cfg):
+        seg = cfg['joyarm']['MotionFSM']
+        if bad == 'missing':
+            del seg['damping_k_gravity']
+        elif bad == 'over':
+            seg['damping_k_gravity'] = [1.5] * 6
+        else:
+            seg['damping_k_gravity'] = [-0.1] * 6
+
+    verify.install_injection()
+    try:
+        with pytest.raises(ValueError, match='damping_k_gravity'):
+            verify.make_arm(mutate)
+    finally:
+        verify.restore_injection()
+
+
 def test_partial_motion_start_is_cleaned_up_and_next_tick_recovers(rig, monkeypatch):
     arm, _ = rig
     arm._current_motion_state = MotionState.HOME

@@ -67,7 +67,8 @@ joyarm:
   # 运动状态机（MotionFSM）
   MotionFSM:
     fsm_hz: 50.0 # 主循环频率 Hz
-    mit_kd_damping: 4.0 # 阻尼模式 kd
+    damping_kd: [3.0, 5.0, 5.0, 5.0, 4.0, 3.0] # 阻尼模式逐关节 kd
+    damping_k_gravity: [0.7, 0.7, 0.7, 0.8, 0.7, 0.7] # 阻尼模式逐关节重力补偿率（[0,1]）
     monitor_hz: 50.0 # 运动过程监测频率
 
   # 到位判断容差阈值
