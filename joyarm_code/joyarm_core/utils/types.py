@@ -16,8 +16,9 @@ from .transforms import T_to_Rp, R_to_quat, quat_to_R, Rp_to_T
 __all__ = [
     # 枚举
     "ControlMode",      # 关节控制模式：MIT / POSITION / VELOCITY
-    "MotionState",      # 运动状态机六状态：DISABLE / ZERO / HOME / MOTION / HOLD / DAMPING
+    "MotionState",      # 运动状态机六状态：DISABLE / ZERO / HOME / MOTION / HOLD / DAMP
     "SafetyEvent",      # 安全事件等级：NORMAL ~ DISABLE（危险程度递增，DISABLE 最高）
+    "STATE_FROM",       # SafetyEvent → MotionState 映射表
     # 数据类
     "Wrench",           # 六维力/力矩：force + torque
     "Twist",            # 空间速度：linear + angular
@@ -60,7 +61,7 @@ class MotionState(Enum):
     :cvar HOME: 空闲保持——逐拍发 home 位形位置指令的空闲状态。
     :cvar MOTION: 正常运动——正常运动状态。
     :cvar HOLD: 原位锁定——逐拍重发锁定的关节位置指令。
-    :cvar DAMPING: 阻尼防护——MIT 纯阻尼软防护。
+    :cvar DAMP: 阻尼防护——MIT 纯阻尼软防护。
     """
 
     DISABLE = "disable"
@@ -68,13 +69,13 @@ class MotionState(Enum):
     HOME = "home"
     MOTION = "motion"
     HOLD = "hold"
-    DAMPING = "damping"
+    DAMP = "damp"
 
 
 class SafetyEvent(Enum):
     """安全事件等级（危险程度递增，`DISABLE` 最高）
 
-    事件表达安全监视层的判定（要求进入的降级等级），状态机按`事件 → 目标 MotionState` 映射执行转移：
+    事件表达安全监视层的判定，状态机按模块级 `STATE_FROM` 映射执行转移：
 
     ==================  ============  ==================
     SafetyEvent         语义            目标 MotionState
@@ -83,7 +84,7 @@ class SafetyEvent(Enum):
     `HOLDING`           原位锁定        `HOLD`
     `HOMING`            回退锁定        `HOME`
     `ZEROING`           回零失能        `ZERO`
-    `DAMPING`           阻尼防护        `DAMPING`
+    `DAMPING`           阻尼防护        `DAMP`
     `DISABLE`           电机失能        `DISABLE`
     ==================  ============  ==================
 
@@ -101,6 +102,17 @@ class SafetyEvent(Enum):
     ZEROING = "zeroing"
     DAMPING = "damping"
     DISABLE = "disable"
+
+
+# SafetyEvent → MotionState 映射
+STATE_FROM = {
+    SafetyEvent.NORMAL: MotionState.MOTION,
+    SafetyEvent.HOLDING: MotionState.HOLD,
+    SafetyEvent.HOMING: MotionState.HOME,
+    SafetyEvent.ZEROING: MotionState.ZERO,
+    SafetyEvent.DAMPING: MotionState.DAMP,
+    SafetyEvent.DISABLE: MotionState.DISABLE,
+}
 
 
 # ============================================================

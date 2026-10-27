@@ -28,6 +28,7 @@ from joyarm_core import (
     ControlMode,
     MotionState,
     SafetyEvent,
+    STATE_FROM,
     TrajFrame,
     joyArm,
     listArm,
@@ -42,39 +43,69 @@ if __name__ == "__main__":
         # ---- 硬件后端委托面（真机操作居多，启用前确认安全） ----
         arm.connect_arm()                                # 连接本体（channel/protocol 缺省取 cfg）
         arm.connect_end()                                # 连接末端
-        arm.enable_arm()                                 # 使能（电机上力，注意安全）
-        arm.enable_end()                                 # 等待使能完成
-        print(arm.is_enabled_arm, arm.is_enabled_end)    # 使能状态
+        # arm.enable_arm()                                 # 使能（电机上力，注意安全）
+        # arm.enable_end()                                 # 等待使能完成
+        # print(arm.is_enabled_arm, arm.is_enabled_end)    # 使能状态
 
-        # ---- 7.8 MotionFSM 真机测试（按 ①→⑥ 逐段放开；FSM 自动切模式+使能，运动注意安全） ----
-        # ① 启动状态机：DISABLE → HOME（机械臂运动到 home 位形；HOME 态进入即返 1，不含到位）
-        arm.start_motion_fsm()                           # 启动状态机（DISABLE -> HOME -> MOTION）
-        print(arm.wait_for_motion_state(MotionState.MOTION, timeout=3.0))   # 约 1.93 秒启动完毕并进入 MOTION（若电脑配置较差，可能需要更长时间）
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event()) # 打印当前的状态
-        # ② 小幅单关节目标：第 6 关节 +2°（从当前实测位置出发，三次规划 3 s 到达）
-        q_goal = arm.joint_state_arm.q.copy()            # 当前快照
-        q_goal[5] += np.deg2rad(20.0)                    # 第 6 关节（1 基）+20°，须在软限位内
-        arm.set_target_joint(time.time() + 3.0, q_goal)  # 目标到达时刻 = now + 3 s
-        time.sleep(3.1)                                  # 等运动走完
-        print(arm.is_in_q_arm(q_goal, 0.01), "\n", arm.joint_state_arm.q)   # True=1 运动到位
-        # ③ 保护事件演练：原位锁定 → 恢复
-        # arm.set_event(SafetyEvent.HOLDING)             # HOLD：锁存当前 q 逐拍重发
-        # print(arm.wait_for_motion_state(MotionState.HOLD, timeout=5.0))
-        # arm.set_event(SafetyEvent.NORMAL)              # 恢复正常运动（须显式发 NORMAL）
-        # print(arm.wait_for_motion_state(MotionState.MOTION, timeout=10.0))
-        # ④ 阻尼演练：MIT 纯阻尼 kp=0，臂顺重力缓落——确认支撑后再放开！
-        # arm.set_event(SafetyEvent.DAMPING)             # 发安全事件（六档，DISABLE 最高）
-        # print(arm.wait_for_motion_state(MotionState.DAMPING, timeout=5.0))
-        # time.sleep(2.0)                                # 观察阻尼滞留
-        # arm.set_event(SafetyEvent.NORMAL)              # 恢复（DAMPING 经 HOME 回 MOTION）
-        # print(arm.wait_for_motion_state(MotionState.MOTION, timeout=30.0))
-        # ⑤ 停机：经 HOME 回全零位并失能（显式回零路径）
-        # arm.stop_motion_fsm()                          # 停止状态机（阻塞，含回零等待）
-        # print(arm.get_current_motion_state(), arm.is_enabled_arm)   # 期望 DISABLE / False
-        # ---- 急停（随时放开：不回零直接失能；恢复须先 set_event(NORMAL)） ----
-        # arm.set_event(SafetyEvent.DISABLE)
-        # ---- 收尾 ----（with 退出时再调 close() 为幂等跳过）
-        arm.close()                                      # 停 FSM/监视/可视化、断连并回收
+        # ---- MotionFSM 真机测试：状态转移路线表验证（FSM 自动切模式+使能，运动注意安全） ----
+
+        event0=SafetyEvent.DISABLE
+        # event0=SafetyEvent.HOLDING
+        # event0=SafetyEvent.HOMING
+        # event0=SafetyEvent.ZEROING
+        # event0=SafetyEvent.DAMPING
+        # event0=SafetyEvent.NORMAL
+
+        arm.start_motion_fsm()
+        print("=================================================================")
+
+        arm.set_event(event0)
+        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        arm.set_event(SafetyEvent.NORMAL)
+        arm.wait_for_motion_state(MotionState.MOTION, timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        print("=================================================================")
+
+        arm.set_event(event0)
+        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        arm.set_event(SafetyEvent.HOMING)
+        arm.wait_for_motion_state(MotionState.HOME, timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        print("=================================================================")
+
+        arm.set_event(event0)
+        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        arm.set_event(SafetyEvent.HOLDING)
+        arm.wait_for_motion_state(MotionState.HOLD, timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        print("=================================================================")
+
+        arm.set_event(event0)
+        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        arm.set_event(SafetyEvent.ZEROING)
+        arm.wait_for_motion_state(MotionState.ZERO, timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        print("=================================================================")
+
+        arm.set_event(event0)
+        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        arm.set_event(SafetyEvent.DAMPING)
+        arm.wait_for_motion_state(MotionState.DAMP, timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        print("=================================================================")
+
+        arm.set_event(event0)
+        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        arm.set_event(SafetyEvent.DISABLE)
+        arm.wait_for_motion_state(MotionState.DISABLE, timeout=5.0)
+        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        print("=================================================================")
 
         # ----safe_monitor 监视器 ----
         # arm.start_monitor()                            # 启动安全监视（内置硬规则）
@@ -91,10 +122,3 @@ if __name__ == "__main__":
         # arm.start_state_viz()                          # 启动（traj_points 缺省 200）
         # time.sleep(1000)
         # arm.stop_state_viz()                           # 停止（JOYARM_VIZ_NOWINDOW=1 禁弹窗）
-
-
-
-        try:
-            time.sleep(1000)                             # 保持进程存活，便于手动测试 / 观察日志 / 连接调试器
-        except KeyboardInterrupt:
-            pass                                         # 吞掉中断：以正常退出路径走 with 收尾（默认回零停机）

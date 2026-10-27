@@ -8,14 +8,14 @@ listArm：列出当前可用的机械臂型号（三条件过滤，与工厂失�
 
     from joyarm_core import joyArm
 
-    arm1 = joyArm("joyarm_<型号>")    # 任一步校验失败抛携带具体原因的异常（不返回 None）
+    arm1 = joyArm("joyarm_<型号>")    # 任一步校验失败抛携带具体原因的异常
 
 工厂四步固定顺序校验（任一步失败抛异常，错误消息附可用型号列表 = `listArm()` 结果）：
 
 ① config——`config/<型号>.yaml` 存在且解析为非空 dict（空文件、纯注释、yaml 语法错误均判失败）；
 ② backend——cfg 的 `backend.name` ∈ `backend/__init__.py` 的 `REGISTRY` 键；
 ③ robot_model——四路径按序存在：`robot_model/<型号>/`、`meshes/`、`urdf/`、`urdf/<型号>.urdf`；
-④ 构造——调用 `JoyArm(<型号>)` 做类内初始化自检（异常向上抛、保留原因链）。
+④ 构造——调用 `JoyArm(<型号>)` 做类内初始化自检（异常上抛、保留原因链）。
 
 对象的创建流程：
 ① 传入型号名 → ② 加载对应 config 文件 → ③ 按 config 配置初始化并创建 JoyArm 对象。
@@ -45,10 +45,9 @@ logger = logging.getLogger("joyarm_core.joyarm")
 
 
 def _model_paths_missing(name: str) -> list:
-    """工厂第③步四路径的缺失清单（空列表 = 齐全）。
+    """工厂路径的缺失清单（空列表 = 齐全）。
 
-    四路径按序：`robot_model/<name>/`、`<name>/meshes/`、`<name>/urdf/`、
-    `<name>/urdf/<name>.urdf`（型号名 = 目录名 = URDF 文件名）。
+    路径按序：`robot_model/<name>/`、`<name>/meshes/`、`<name>/urdf/`、`<name>/urdf/<name>.urdf`（型号名 = 目录名 = URDF 文件名）。
     """
     base = os.path.join(_ROBOT_MODEL_DIR, name)
     paths = [base,
@@ -61,7 +60,7 @@ def _model_paths_missing(name: str) -> list:
 def _available_models() -> list:
     """listArm 的共享实现（与工厂失败消息共用）：扫描 `config/*.yaml` 逐型号过滤。
 
-    可行型号须**同时**满足（三条件）：
+    可行型号须**同时**满足：
 
     1. `config/<name>.yaml` 存在、非空 dict、含 `joyarm` / `robotics` / `backend` 三顶层键；
     2. `backend.name` ∈ `backend/__init__.py` 的 `REGISTRY` 键；
@@ -94,11 +93,7 @@ def _available_models() -> list:
 
 
 def listArm() -> list:
-    """列出可用机械臂型号（返回 `list[str]` 并打印；与工厂失败消息共用实现）。
-
-    三条件见 :func:`_available_models`；`joyarm_template.yaml` 三键齐全但无
-    robot_model 目录，由路径条件自然排除（不做文件名特判）。
-    """
+    """列出可用机械臂型号（返回 `list[str]` 并打印）。"""
     models = _available_models()
     print(f"可用机械臂型号：{models}")
     return models
@@ -107,9 +102,8 @@ def listArm() -> list:
 class JoyArmFactory:
     """按型号名创建机械臂：四步固定顺序外部资源校验 → 实例化 JoyArm。
 
-    每次调用返回新实例（机械臂对象有状态、可连真机，不做缓存）；任一步校验失败
-    **抛携带具体原因的异常**（不返回 None），错误消息附可用型号列表（= `listArm()`
-    结果）。
+    每次调用返回新实例（机械臂对象有状态、可连真机，不做缓存）；
+    任一步校验失败**抛携带具体原因的异常**，错误消息附可用型号列表。
     """
 
     # ----------------------------------------------------------
@@ -118,12 +112,9 @@ class JoyArmFactory:
     def create(self, name: str) -> JoyArm:
         """创建指定型号的 JoyArm 实例（四步固定顺序校验）。
 
-        :param name: 型号名（如 `"joyarm_dm"`）——= config 文件名（URDF 目录
-            `robot_model/<型号>/` 同名）。
+        :param name: 型号名（如 "joyarm_dm"）—— = config 文件名（URDF 目录`robot_model/<型号>/` 同名）。
         :return: 初始化自检通过的 JoyArm 实例；四步全过 `logger.info`『创建成功』。
-        :raises ValueError: ①config 缺失/解析失败、②backend 名不在 REGISTRY、
-            ③robot_model 四路径缺失（消息含逐项缺失清单）、④JoyArm 构造自检失败
-            （原因链保留）；均附可用型号列表。
+        :raises ValueError: ①config 缺失/解析失败、②backend 名不在 REGISTRY、③robot_model 四路径缺失、④JoyArm 构造自检失败。
         """
         avail = _available_models()
         # ① config：存在且解析为非空 dict（load_config 抛错消息含路径与原始解析错误）

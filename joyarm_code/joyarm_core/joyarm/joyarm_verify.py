@@ -1463,7 +1463,7 @@ def _it63():
                        f"{len(got)} 帧 hold_q≈home"))
         i0 = len(d.calls)
         arm.set_event(SafetyEvent.DAMPING)
-        ok_d = _wait_state(arm, MotionState.DAMPING)
+        ok_d = _wait_state(arm, MotionState.DAMP)
         time.sleep(0.15)
         got = d.calls_since(i0, "send_joint_mit_arm")
         kd_cfg = np.asarray(
@@ -1607,10 +1607,10 @@ def _it67():
         arm.connect_arm()
         arm.start_motion_fsm()
         r_ok = arm.wait_for_motion_state(MotionState.MOTION, timeout=5.0)
-        # 超时路径：等待无事件触发的不可达态 DAMPING
+        # 超时路径：等待无事件触发的不可达态 DAMP
         i0 = _mark()
         t0 = time.monotonic()
-        r_to = arm.wait_for_motion_state(MotionState.DAMPING, timeout=0.3)
+        r_to = arm.wait_for_motion_state(MotionState.DAMP, timeout=0.3)
         dt = time.monotonic() - t0
         warn_to = _hit(_since(i0), "超时")
         ok = (r_enum == 0 and warn_enum and bad_timeout
@@ -1641,14 +1641,14 @@ def _it70():
         i0 = len(d.calls)
         d.jstates["arm"][0]["error"] = 2      # 单关节故障码
         ok_ev = _wait_event(arm, SafetyEvent.DAMPING)
-        ok_st = _wait_state(arm, MotionState.DAMPING)
+        ok_st = _wait_state(arm, MotionState.DAMP)
         time.sleep(0.15)                       # 等数拍维持指令（50 Hz）落地再计数
         got = d.calls_since(i0, "send_joint_mit_arm")
         d.jstates["arm"][0]["error"] = 1
         ok = home and ok_ev and ok_st and bool(got)
         ev = (f"监视器前置 HOME 就绪={home}；error[0]=2 后：get_event()={arm.get_event().name}，"
               f"current={arm.get_current_motion_state().name}，"
-              f"DAMPING 维持 MIT 帧 {len(got)} 个（>0）")
+              f"DAMP 维持 MIT 帧 {len(got)} 个（>0）")
         return ("PASS" if ok else "FAIL"), ev
     finally:
         d.jstates["arm"][0]["error"] = 1
@@ -2068,13 +2068,13 @@ def _it19():
 def _it43():
     """保护态选择控制器不改硬件模式，MOTION 检查成功后才恢复下发。"""
     with _case_arm() as (arm, backend):
-        arm._current_motion_state = MotionState.DAMPING
+        arm._current_motion_state = MotionState.DAMP
         arm.set_event(SafetyEvent.DAMPING)
         backend.set_mode_arm(ControlMode.MIT)
         mark = len(backend.calls)
         _require(arm.set_ctrl_solver(VERIFY_CTRL), '控制器选择失败')
         _require(not backend.calls_since(mark, 'set_joint_mode_arm'), '选择控制器触碰了硬件模式')
-        _require(arm._maintain_motion_state(MotionState.DAMPING, SafetyEvent.DAMPING), '阻尼维持失败')
+        _require(arm._maintain_motion_state(MotionState.DAMP, SafetyEvent.DAMPING), '阻尼维持失败')
         _require(backend.get_mode_arm() is ControlMode.MIT, '选择控制器破坏了 MIT 阻尼模式')
         calls = []
         arm._current_motion_state = MotionState.MOTION
@@ -2087,7 +2087,7 @@ def _it43():
             arm._tick_ctrl()
             _require(calls == [True] and backend.get_mode_arm() is ControlMode.VELOCITY,
                      'MOTION 未按当前控制器 MODE 恢复下发')
-    return 'PASS', 'DAMPING 保持 MIT；ctrl 选择后禁发；MOTION 核验 VELOCITY 后恢复 step'
+    return 'PASS', 'DAMP 保持 MIT；ctrl 选择后禁发；MOTION 核验 VELOCITY 后恢复 step'
 
 
 def _it44():
@@ -2233,7 +2233,7 @@ def _it68():
     for state, event, mode in ((MotionState.HOME, SafetyEvent.HOMING, ControlMode.POSITION),
                                (MotionState.HOLD, SafetyEvent.HOLDING, ControlMode.POSITION),
                                (MotionState.MOTION, SafetyEvent.NORMAL, ControlMode.POSITION),
-                               (MotionState.DAMPING, SafetyEvent.DAMPING, ControlMode.MIT),
+                               (MotionState.DAMP, SafetyEvent.DAMPING, ControlMode.MIT),
                                (MotionState.ZERO, SafetyEvent.ZEROING, ControlMode.POSITION)):
         with _case_arm() as (arm, backend):
             arm._current_motion_state = state
@@ -2259,7 +2259,7 @@ def _it68():
 def _it69():
     """一次切模式失败后跳拍；下拍恢复，事件始终由外部或 monitor 决定。"""
     with _case_arm() as (arm, backend):
-        arm._current_motion_state = MotionState.DAMPING
+        arm._current_motion_state = MotionState.DAMP
         arm.set_event(SafetyEvent.DAMPING)
         backend.set_mode_arm(ControlMode.POSITION)
         backend.fail_at['set_joint_mode_arm'] = None
@@ -2277,7 +2277,7 @@ def _it73():
     """使能/模式持续失败只跳拍，不自动改写安全事件。"""
     for failed in ('set_joint_mode_arm', 'enable_joint_arm'):
         with _case_arm() as (arm, backend):
-            arm._current_motion_state = MotionState.DAMPING
+            arm._current_motion_state = MotionState.DAMP
             arm.set_event(SafetyEvent.DAMPING)
             backend.set_mode_arm(ControlMode.POSITION)
             backend.disable_arm()
@@ -2430,7 +2430,7 @@ def _it79():
             _require(release.wait(2.0), '自愈阻塞未释放')
             return original()
 
-        arm._current_motion_state = MotionState.DAMPING
+        arm._current_motion_state = MotionState.DAMP
         arm.set_event(SafetyEvent.DAMPING)
         backend.disable_arm()
         arm._move_wait_timeout = 0.01
@@ -2573,7 +2573,7 @@ _item(67, "wait_for_motion_state 四路径", "fsm", "低",
 
 # —— 07 组（safe_monitor）——
 _item(70, "硬规则 error≥2→DAMPING", "monitor", "低",
-      "单关节故障码触发监视器 set_event(DAMPING)，FSM 迁入 DAMPING 并维持 MIT 阻尼", _it70)
+      "单关节故障码触发监视器 set_event(DAMPING)，FSM 迁入 DAMP 并维持 MIT 阻尼", _it70)
 _item(71, "断连/连续 None→DISABLE", "monitor", "低",
       "断连仅一次告警挂起、状态保持且禁发，重连处理保护事件后可显式恢复；持续None→DISABLE，规则仍收None、ctrl跳拍", _it71)
 _item(72, "自定义规则与同拍仲裁", "monitor", "低",
@@ -2601,7 +2601,7 @@ _item(18, '周期线程基础契约', 'init', '低',
 _item(19, '周期线程超时与防双启动', 'init', '低',
       '阻塞 stop 保留句柄，拒绝双启动，原线程退出后可回收重启', _it19)
 _item(43, '控制器选择与 FSM 模式归属', 'solvers', '低',
-      'DAMPING 中选择控制器不改 MIT；进入 MOTION 由 FSM 按 MODE 自愈后才恢复下发', _it43)
+      'DAMP 中选择控制器不改 MIT；进入 MOTION 由 FSM 按 MODE 自愈后才恢复下发', _it43)
 _item(44, '控制器切换等待在途 step', 'solvers', '低',
       '阻塞 step 与选择互斥，选择完成撤销旧许可，不发送切模式命令，无残留线程', _it44)
 _item(54, '验收反馈新鲜度自检', 'feedback', '低',
@@ -2611,7 +2611,7 @@ _item(55, '运动验收判据自检', 'feedback', '低',
 _item(56, '目标到后端的完整运动管线', 'fsm', '低',
       '公共目标通道→plan→ctrl→Dummy 位置指令与反馈到位，核对真实发送参数', _it56)
 _item(68, '五种运动态模式/使能自愈', 'fsm', '低',
-      'HOME/HOLD/MOTION/DAMPING/ZERO 运动中逐态自愈；一致时不重复写', _it68)
+      'HOME/HOLD/MOTION/DAMP/ZERO 运动中逐态自愈；一致时不重复写', _it68)
 _item(69, '自愈暂时失败后恢复', 'fsm', '低',
       '切模式失败只跳拍，下一拍恢复后下发，事件保持', _it69)
 _item(73, '自愈连续失败职责边界', 'fsm', '低',

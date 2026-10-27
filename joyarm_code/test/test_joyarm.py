@@ -34,7 +34,7 @@ def rig():
 @pytest.mark.parametrize('state,event,mode', [
     (MotionState.HOME, SafetyEvent.HOMING, ControlMode.POSITION),
     (MotionState.HOLD, SafetyEvent.HOLDING, ControlMode.POSITION),
-    (MotionState.DAMPING, SafetyEvent.DAMPING, ControlMode.MIT),
+    (MotionState.DAMP, SafetyEvent.DAMPING, ControlMode.MIT),
     (MotionState.MOTION, SafetyEvent.NORMAL, ControlMode.POSITION),
     (MotionState.ZERO, SafetyEvent.ZEROING, ControlMode.POSITION),
 ])
@@ -87,7 +87,7 @@ def test_zero_arrival_stays_disabled_and_hold_keeps_original_position(rig):
 @pytest.mark.parametrize('failed', ['set_joint_mode_arm', 'enable_joint_arm'])
 def test_failed_self_repair_blocks_commands_without_changing_event(rig, failed):
     arm, bk = rig
-    arm._current_motion_state = MotionState.DAMPING
+    arm._current_motion_state = MotionState.DAMP
     arm.set_event(SafetyEvent.DAMPING)
     bk.set_mode_arm(ControlMode.POSITION)
     bk.disable_arm()
@@ -96,8 +96,8 @@ def test_failed_self_repair_blocks_commands_without_changing_event(rig, failed):
     for _ in range(55):
         arm._fsm_tick()
         assert arm.get_event() is SafetyEvent.DAMPING
-        assert arm.get_current_motion_state() is MotionState.DAMPING
-        assert arm.get_target_motion_state() is MotionState.DAMPING
+        assert arm.get_current_motion_state() is MotionState.DAMP
+        assert arm.get_target_motion_state() is MotionState.DAMP
         assert not bk.calls_since(begin, 'send_joint_mit_arm')
     arm.set_event(SafetyEvent.DISABLE)  # 由外部/monitor 发布事件后才迁移。
     arm._fsm_tick()
@@ -107,7 +107,7 @@ def test_failed_self_repair_blocks_commands_without_changing_event(rig, failed):
 
 def test_temporary_self_repair_failure_recovers_on_next_tick(rig):
     arm, bk = rig
-    arm._current_motion_state = MotionState.DAMPING
+    arm._current_motion_state = MotionState.DAMP
     arm.set_event(SafetyEvent.DAMPING)
     bk.set_mode_arm(ControlMode.POSITION)
     bk.fail_at['set_joint_mode_arm'] = None
@@ -159,13 +159,13 @@ def test_first_plan_failure_does_not_commit_motion_or_change_event(rig, monkeypa
 
 def test_ctrl_selection_preserves_damping_and_waits_for_motion_check(rig):
     arm, bk = rig
-    arm._current_motion_state = MotionState.DAMPING
+    arm._current_motion_state = MotionState.DAMP
     arm.set_event(SafetyEvent.DAMPING)
     bk.set_mode_arm(ControlMode.MIT)
     begin = len(bk.calls)
     assert arm.set_ctrl_solver(verify.VERIFY_CTRL)
     assert not bk.calls_since(begin, 'set_joint_mode_arm')
-    assert arm._maintain_motion_state(MotionState.DAMPING, SafetyEvent.DAMPING)
+    assert arm._maintain_motion_state(MotionState.DAMP, SafetyEvent.DAMPING)
     assert bk.get_mode_arm() is ControlMode.MIT
     calls = []
     selected = arm._activated_ctrl_solver
@@ -183,10 +183,10 @@ def test_ctrl_selection_preserves_damping_and_waits_for_motion_check(rig):
 
 def test_damping_maintain_sends_gravity_feedforward(rig):
     arm, bk = rig
-    arm._current_motion_state = MotionState.DAMPING
+    arm._current_motion_state = MotionState.DAMP
     arm.set_event(SafetyEvent.DAMPING)
     begin = len(bk.calls)
-    assert arm._maintain_motion_state(MotionState.DAMPING, SafetyEvent.DAMPING)
+    assert arm._maintain_motion_state(MotionState.DAMP, SafetyEvent.DAMPING)
     got = bk.calls_since(begin, 'send_joint_mit_arm')
     assert len(got) == arm.n_arm
     kd_cfg = np.asarray(arm.get_config()['joyarm']['MotionFSM']['damping_kd'], dtype=float).reshape(-1)
@@ -200,11 +200,11 @@ def test_damping_maintain_sends_gravity_feedforward(rig):
 
 def test_damping_maintain_degrades_to_pure_damping_without_dyn_solver(rig, monkeypatch):
     arm, bk = rig
-    arm._current_motion_state = MotionState.DAMPING
+    arm._current_motion_state = MotionState.DAMP
     arm.set_event(SafetyEvent.DAMPING)
     monkeypatch.setattr(arm, '_activated_dyn_solver', None)
     begin = len(bk.calls)
-    assert arm._maintain_motion_state(MotionState.DAMPING, SafetyEvent.DAMPING)
+    assert arm._maintain_motion_state(MotionState.DAMP, SafetyEvent.DAMPING)
     got = bk.calls_since(begin, 'send_joint_mit_arm')
     assert got and all(c[2] == 0.0 for c in got)            # dyn 域缺失：tau 全零退化纯阻尼
 
@@ -337,7 +337,7 @@ def test_stop_during_self_repair_cannot_reenable_after_shutdown(rig, monkeypatch
         return original()
 
     monkeypatch.setattr(bk, 'get_mode_arm', blocked_read)
-    arm._current_motion_state = MotionState.DAMPING
+    arm._current_motion_state = MotionState.DAMP
     arm.set_event(SafetyEvent.DAMPING)
     bk.disable_arm()
     arm._move_wait_timeout = 0.01
@@ -814,7 +814,7 @@ def test_start_initial_state_and_monitor_rules_remain_on_monitor_thread(rig, mon
         arm.stop_monitor()
     assert callers and all(t.name == 'joyarm-monitor' for t in callers)
     assert arm.get_event() is SafetyEvent.DAMPING
-    assert arm.get_target_motion_state() is MotionState.DAMPING
+    assert arm.get_target_motion_state() is MotionState.DAMP
 
 
 def test_missing_control_feedback_skips_step_without_changing_event(rig):

@@ -50,6 +50,7 @@ from ..utils.types import (
     MotionState,
     Pose,
     SafetyEvent,
+    STATE_FROM,
     TcpLimits,
     TrajFrame,
     Twist,
@@ -90,17 +91,8 @@ _ACTIVE_JOINT_TYPES = ("revolute", "continuous", "prismatic")
 
 
 # ============================================================
-# SafetyEvent ↔ MotionState 映射与危险度
+# SafetyEvent 危险度
 # ============================================================
-_EVENT_TO_STATE = {
-    SafetyEvent.NORMAL: MotionState.MOTION,
-    SafetyEvent.HOLDING: MotionState.HOLD,
-    SafetyEvent.HOMING: MotionState.HOME,
-    SafetyEvent.ZEROING: MotionState.ZERO,
-    SafetyEvent.DAMPING: MotionState.DAMPING,
-    SafetyEvent.DISABLE: MotionState.DISABLE,
-}
-
 # 危险程度递增序（同拍多命中仲裁用）
 _EVENT_DANGER = {
     SafetyEvent.NORMAL: 0,
@@ -117,35 +109,35 @@ _EVENT_DANGER = {
 # ============================================================
 def _build_route() -> dict:
     """按状态转移路线表构造 `{from: {to: next}}`（`home` 为中枢）。"""
-    states = (MotionState.DISABLE, MotionState.ZERO, MotionState.HOME, MotionState.MOTION, MotionState.HOLD, MotionState.DAMPING)
+    states = (MotionState.DISABLE, MotionState.ZERO, MotionState.HOME, MotionState.MOTION, MotionState.HOLD, MotionState.DAMP)
     table = {
-        # from disable：→zero/→motion 经 home 中转；→home/→hold/→damping 保护性直达
+        # from disable：→zero/→motion 经 home 中转；→home/→hold/→damp 保护性直达
         MotionState.DISABLE: {
             MotionState.ZERO: MotionState.HOME, MotionState.HOME: MotionState.HOME,
             MotionState.MOTION: MotionState.HOME, MotionState.HOLD: MotionState.HOLD,
-            MotionState.DAMPING: MotionState.DAMPING},
-        # from zero：→motion 经 home；→home/disable/hold/damping 直达
+            MotionState.DAMP: MotionState.DAMP},
+        # from zero：→motion 经 home；→home/disable/hold/damp 直达
         MotionState.ZERO: {
             MotionState.DISABLE: MotionState.DISABLE, MotionState.HOME: MotionState.HOME,
             MotionState.MOTION: MotionState.HOME, MotionState.HOLD: MotionState.HOLD,
-            MotionState.DAMPING: MotionState.DAMPING},
+            MotionState.DAMP: MotionState.DAMP},
         # from home：中枢，各状态直达
         MotionState.HOME: {
             MotionState.DISABLE: MotionState.DISABLE, MotionState.ZERO: MotionState.ZERO,
             MotionState.MOTION: MotionState.MOTION, MotionState.HOLD: MotionState.HOLD,
-            MotionState.DAMPING: MotionState.DAMPING},
-        # from motion：→zero 经 home；→home/disable/hold/damping 直达
+            MotionState.DAMP: MotionState.DAMP},
+        # from motion：→zero 经 home；→home/disable/hold/damp 直达
         MotionState.MOTION: {
             MotionState.DISABLE: MotionState.DISABLE, MotionState.ZERO: MotionState.HOME,
             MotionState.HOME: MotionState.HOME, MotionState.HOLD: MotionState.HOLD,
-            MotionState.DAMPING: MotionState.DAMPING},
-        # from hold：→zero/→motion 经 home；→home/disable/damping 直达
+            MotionState.DAMP: MotionState.DAMP},
+        # from hold：→zero/→motion 经 home；→home/disable/damp 直达
         MotionState.HOLD: {
             MotionState.DISABLE: MotionState.DISABLE, MotionState.ZERO: MotionState.HOME,
             MotionState.HOME: MotionState.HOME, MotionState.MOTION: MotionState.HOME,
-            MotionState.DAMPING: MotionState.DAMPING},
-        # from damping：→zero/→motion 经 home；→home/disable/hold 直达
-        MotionState.DAMPING: {
+            MotionState.DAMP: MotionState.DAMP},
+        # from damp：→zero/→motion 经 home；→home/disable/hold 直达
+        MotionState.DAMP: {
             MotionState.DISABLE: MotionState.DISABLE, MotionState.ZERO: MotionState.HOME,
             MotionState.HOME: MotionState.HOME, MotionState.MOTION: MotionState.HOME,
             MotionState.HOLD: MotionState.HOLD},
@@ -945,8 +937,8 @@ class JoyArm:
         self._safe_event: SafetyEvent = SafetyEvent.DISABLE             # 当前安全事件（set_event 原子写入）
         self._event_lock = threading.RLock()             # 事件发布与监视器升档仲裁原子化；不持锁做 I/O
         self._fsm_hz: float = 50.0                       # cfg.joyarm.MotionFSM.fsm_hz
-        self._damping_kd: np.ndarray = np.zeros(0)       # DAMPING 态 MIT kd（cfg 必配）
-        self._damping_k_gravity: np.ndarray = np.zeros(0)  # DAMPING 态重力补偿率（cfg 必配）
+        self._damping_kd: np.ndarray = np.zeros(0)       # DAMP 态 MIT kd（cfg 必配）
+        self._damping_k_gravity: np.ndarray = np.zeros(0)  # DAMP 态重力补偿率（cfg 必配）
         self._monitor_hz: float = 50.0                   # 缺省 = fsm_hz
         self._arrival_tol_q_arm = np.zeros(0)            # 到位容差（逐关节）
         self._arrival_tol_q_end = np.zeros(0)            # 到位容差（逐电机）
@@ -1430,13 +1422,13 @@ class JoyArm:
                 f"joyarm.py - JoyArm._parse_fsm_params：joyarm.MotionFSM.monitor_hz="
                 f"{fsm.get('monitor_hz')!r} 非法（须为正有限数，缺省 = fsm_hz）")
 
-        # DAMPING 状态增益（kd 速度阻尼、k_gravity 重力补偿率）
+        # DAMP 状态增益（kd 速度阻尼、k_gravity 重力补偿率）
         def _broadcast_cfg(key: str, ok: Callable[[np.ndarray], bool], req: str) -> np.ndarray:
             raw = fsm.get(key)
             if raw is None:
                 raise ValueError(
                     f"joyarm.py - JoyArm._parse_fsm_params：joyarm.MotionFSM.{key}"
-                    f" 未配置（{req}；DAMPING 态必需）")
+                    f" 未配置（{req}；DAMP 态必需）")
             try:
                 arr = np.asarray(raw, dtype=float)
             except (TypeError, ValueError):
@@ -1877,7 +1869,7 @@ class JoyArm:
                 hold_q = np.asarray(st.q, dtype=float).copy()
                 if hold_q.shape != (self._n_arm,) or not np.isfinite(hold_q).all():
                     return False
-            mode = ControlMode.MIT if state is MotionState.DAMPING else ControlMode.POSITION
+            mode = ControlMode.MIT if state is MotionState.DAMP else ControlMode.POSITION
             if not self._ensure_arm_ready(mode, event):
                 return False
             if state is MotionState.ZERO:
@@ -1887,10 +1879,10 @@ class JoyArm:
                 self._home_arrived = False
             elif state is MotionState.HOLD:
                 self._hold_q = hold_q
-            elif (state is MotionState.DAMPING and self._activated_dyn_solver is None
+            elif (state is MotionState.DAMP and self._activated_dyn_solver is None
                     and bool((self._damping_k_gravity > 0).any())):
                 logger.warning("joyarm.py - _enter_motion_state：dynamics 域未配置，"
-                               "DAMPING 重力补偿不可用，退化为纯阻尼")
+                               "DAMP 重力补偿不可用，退化为纯阻尼")
             return True
 
     def _exit_motion_state(self, state: MotionState) -> None:
@@ -1910,7 +1902,7 @@ class JoyArm:
                 return self._backend.disable_arm() == 1
             controller = self._activated_of("ctrl") if state is MotionState.MOTION else None
             mode = (controller.MODE if controller is not None else
-                    ControlMode.MIT if state is MotionState.DAMPING else ControlMode.POSITION)
+                    ControlMode.MIT if state is MotionState.DAMP else ControlMode.POSITION)
             if not self._ensure_arm_ready(mode, event):
                 return False
             if state is MotionState.ZERO:
@@ -1932,7 +1924,7 @@ class JoyArm:
                 if self._hold_q is None:
                     return False
                 self._backend.send_position_arm(self._hold_q)
-            elif state is MotionState.DAMPING:
+            elif state is MotionState.DAMP:
                 tau_ff = np.zeros(self._n_arm)            # 重力补偿前馈 k_gravity·G(q)；缺求解器或快照无效时置零（纯阻尼）
                 dyn = self._activated_dyn_solver
                 q = np.asarray(self._backend.joint_state_arm.q, dtype=float)
@@ -3553,7 +3545,7 @@ class JoyArm:
                 f"{type(event).__name__}")
         with self._event_lock:
             self._safe_event = event
-            self._target_motion_state = _EVENT_TO_STATE[event]
+            self._target_motion_state = STATE_FROM[event]
             if event is not SafetyEvent.NORMAL:
                 self._motion_ready = None         # 不等运动锁，立即阻止在途 ctrl 后续下发
 
