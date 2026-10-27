@@ -8,7 +8,7 @@ listArm：列出当前可用的机械臂型号（三条件过滤，与工厂失�
 
     from joyarm_core import joyArm
 
-    arm1 = joyArm("joyarm_<型号>")    # 任一步校验失败抛携带具体原因的异常
+    arm1 = joyArm("<型号>")    # 任一步校验失败抛携带具体原因的异常
 
 工厂四步固定顺序校验（任一步失败抛异常，错误消息附可用型号列表 = `listArm()` 结果）：
 
@@ -24,8 +24,8 @@ listArm：列出当前可用的机械臂型号（三条件过滤，与工厂失�
 
 **新型号接入步骤**：
 
-    1. 完善配置文件：拷贝 `config/joyarm_template.yaml` 为 `joyarm_<型号>.yaml` 并完成型号的配置填写；
-    2. 放置模型资产：按照本库约定，将导出或修复后的机械臂URDF和Mesh资产放入到`robot_model/joyarm_<型号>/` ；
+    1. 完善配置文件：拷贝 `config/template.yaml` 为 `<型号>.yaml` 并完成型号的配置填写；
+    2. 放置模型资产：按照本库约定，将导出或修复后的机械臂URDF和Mesh资产放入到`robot_model/<型号>/` ；
     3. 连接硬件后端：拷贝 `backend/backend_template.py` 为 `backend/backend_<型号>.py`，并实现子类(详见`backend/backend_template.py`)。
 """
 from __future__ import annotations

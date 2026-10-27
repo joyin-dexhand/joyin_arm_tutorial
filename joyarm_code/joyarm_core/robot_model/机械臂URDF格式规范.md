@@ -5,13 +5,13 @@
 ## 1. 总原则
 
 1. **纯 URDF**：不使用 `xacro`。
-2. **型号标识**：`<robot name>` = 型号名（joyarm_<型号>） = `robot_model/joyarm_<型号>/` 目录名。
+2. **型号标识**：`<robot name>` = 型号名（<型号>） = `robot_model/<型号>/` 目录名。
 3. **单位**：一律 SI——长度 m、质量 kg、角度 rad、时间 s；`rpy` 为rad。
 
 ## 2. 文件与目录结构
 
-robot_model/joyarm_<型号>/
-├── urdf/joyarm_<型号>.urdf      # URDF 文件
+robot_model/<型号>/
+├── urdf/<型号>.urdf      # URDF 文件
 └── meshes/*.STL           # mesh 文件
 
 - urdf 中的 mesh 标签采用**相对路径**引用（如 `../meshes/link0.STL`），便于移植。
@@ -45,7 +45,7 @@ robot_model/joyarm_<型号>/
 
 | # | 检查项 | 通过标准 |
 |:---:|:---:|:---:|
-| 1 | XML 与型号名 | well-formed；`<robot name>` = 型号名（joyarm_<型号>） |
+| 1 | XML 与型号名 | well-formed；`<robot name>` = 型号名（<型号>） |
 | 2 | mesh 引用完整 | 每个 `../meshes/*.STL` 存在，且无孤立 mesh |
 | 3 | arm 关节命名 | `joint1`~`jointN` 无下划线，N<=9 |
 | 4 | arm 连杆命名 | `link0`~`linkN` 无下划线，N<=9 |

@@ -1,5 +1,5 @@
 # ===================================================================
-# JoyArm 型号配置模板（joyarm / robotics / backend）
+# JoyArm 型号配置模板 template.yaml（joyarm / robotics / backend）
 # ===================================================================
 # 用途：新型号开发时复制本文件为 config/<型号>.yaml（文件名 = 型号名 = URDF名），再按真机逐段填写；
 #      配套动作：robot_model/<型号>/ 放 URDF+meshes、新写 backend/backend_<型号>.py（REGISTRY 注册）。
@@ -27,7 +27,7 @@ joyarm:
     dq_max: 8.0 # rad/s
     tau_max: 1.5 # N·m
 
-  # end_frame 系三维位置空间限位
+  # frame_end 系三维位置空间限位
   tcp_limits:
     workspace_box: [[-0.2, 0.7], [-0.6, 0.6], [0.05, 0.8]] # 3 行 [min, max]，对应 x/y/z (m)
     v_lin_max: 1.0 # m/s
@@ -82,11 +82,12 @@ robotics:
 # 通信层（backend）：arm 与 end 的硬件通讯（以 DM 实现为参照）
 # -------------------------------------------------------------------
 backend:
-  name: backend_dm # backend 类（backend/__init__.py REGISTRY 中的注册名），与 joyarm_<型号> 对应
+  name: backend_dm # backend 子类（backend/__init__.py REGISTRY 中的注册名），与 <型号> 对应
 
   # 可选运行参数（缺省或非正数时沿用默认并 warn）
-  state_refresh_hz: 20.0 # 低频状态刷新频率（Hz，默认 20）
+  state_refresh_hz: 20.0 # 状态新鲜度承诺（Hz，默认 20）
   write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
+  rx_hz: 1000.0 # RX 收取线程节拍（Hz，串口阻塞读超时=1/rx_hz）
   arm: # arm 段
     channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）
     protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
@@ -129,9 +130,9 @@ backend:
         q_max: 0.0 # 行程上限（rad）
         dq_max: 8.0 # 速度上限（rad/s）
         tau_max: 1.5 # 力矩上限（N·m）
-        MIT: 
-          kp: 0.0
-          kd: 0.0
+        MIT: # MIT 模式增益（MIT 指令未传 kp/kd 时使用；配非零值）
+          kp: 8.0
+          kd: 1.0
         POS_VEL:
           pos_kp: 50.0
           pos_ki: 1.0

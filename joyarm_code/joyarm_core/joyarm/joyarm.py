@@ -1,7 +1,7 @@
-"""`JoyArm` —— 机械臂组合根（config 驱动的整机对象）
+"""`JoyArm` —— 机械臂（config 驱动的整机对象）
 
-按 `config/<型号>.yaml` 把 `backend`、`robotics` 与 `robot_model`组合成整机对象，
-对外提供统一调用入口。一级功能块包括：
+按 `config/<型号>.yaml` 把 `backend`、`robotics` 与 `robot_model`组合成整机对象，对外提供统一调用入口。
+一级功能块包括：
 
 - 初始化与自检（定义与赋值两阶段 + cfg 全套自检 + pin 锁末端缩减模型 + 完成后 info）；
 - 硬件后端委托面（arm/end 两组薄委托 + FSM 运行中的外部指令互斥与 ctrl 线程豁免）；
@@ -474,15 +474,15 @@ _VIZ_PAGE_HTML = """<!DOCTYPE html>
 <meta charset="utf-8">
 <title>JoyArm 运行状态监控</title>
 <style>
- :root { --colh: min(100vh, calc(60vw - 16px)); } /* 三栏总宽 = 5/3·colh + 2×8px gap，
-        上限须扣 16px gap，否则居中布局下左栏左缘溢出不可达（永久裁切） */
+ :root { --colh: min(100vh, calc(50vw - 8px)); } /* 三栏总宽 = colh + colh/2×2 + 2×8px gap，
+        上限须扣 16px gap（colh ≤ (100vw - 16px)/2），否则居中布局下左栏左缘溢出不可达（永久裁切） */
  body { margin: 0; font-family: system-ui, sans-serif; background: #1e1e1e;
         color: #ddd; height: 100vh; display: flex; justify-content: center;
         align-items: center; gap: 8px; }
  .col { height: var(--colh); box-sizing: border-box; padding: 10px; }
- #col-left { flex: none; aspect-ratio: 1/3; overflow-y: auto; }   /* 竖长条，内容内部纵滚 */
+ #col-left { flex: none; aspect-ratio: 1/2; overflow-y: auto; }   /* 竖长条（宽 = colh/2），内容内部纵滚 */
  #col-mid { flex: none; aspect-ratio: 1/1; position: relative; overflow: hidden; }
- #col-right { flex: none; aspect-ratio: 1/3; overflow-y: auto; }
+ #col-right { flex: none; aspect-ratio: 1/2; overflow-y: auto; }
  #col-mid iframe { width: 100%; height: 100%; border: 0; }
  #placeholder { position: absolute; inset: 0; display: flex; align-items: center;
                 justify-content: center; color: #777; font-size: 15px; }
@@ -491,10 +491,16 @@ _VIZ_PAGE_HTML = """<!DOCTYPE html>
                 background: rgba(30, 30, 30, .72); padding: 4px 8px;
                 border-radius: 4px; }
  h2 { font-size: 15px; margin: 12px 0 6px; color: #7fd1ff; }
- table { width: 100%; border-collapse: collapse; font-size: 12px;
-         font-family: monospace; }
- th, td { border: 1px solid #444; padding: 2px 5px; text-align: center; }
- .kv { font-size: 13px; margin: 4px 0; font-family: monospace; word-break: break-all; }
+ h3 { font-size: 13px; margin: 8px 0 2px; color: #7fd1ff; } /* 组内子表标题（控制默认值拆分后四表） */
+ table { width: 100%; border-collapse: collapse; font-size: 11px;
+         font-family: monospace; margin: 2px 0 10px; }
+ th, td { border: 1px solid #444; padding: 1px 3px; text-align: center;
+          white-space: nowrap; } /* 全部单元格居中；nowrap 防折行，超宽由 fitTables() 整体缩字号 */
+ #limits-arm th, #limits-end th, #poses-arm th, #poses-end th,
+ #ctrl-fsm th, #ctrl-mit th, #ctrl-pv th, #arm th, #end th { font-size: 0.91em; } /* 逐关节表表头小一号（em 随表字号等比缩） */
+ .lbl { font-size: 0.91em; }   /* 标签列小一号（数据格保持表字号；em 随表字号等比缩） */
+ .urdf { font-size: 0.91em; white-space: normal; word-break: break-all; } /* URDF 绝对路径放不进单行，允许折行（优于截断） */
+ .wrapv { white-space: normal; } /* 超长文本值（如位置上/下限）在空格处自然折行 */
  .ok { color: #7fe27f; } .bad { color: #ff7f7f; } .na { color: #999; }
  .warn { color: #ffd97f; }
  details { margin: 12px 0 4px; }
@@ -505,10 +511,19 @@ _VIZ_PAGE_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="col" id="col-left">
-  <h2>标识与关节</h2><div class="kv" id="ident">等待数据…</div>
-  <h2>限位</h2><div class="kv" id="limits">等待数据…</div>
-  <h2>特征位形</h2><div class="kv" id="poses">等待数据…</div>
-  <h2>控制默认值</h2><div class="kv" id="ctrl-defaults">等待数据…</div>
+  <h2>标识</h2><table id="ident"><tr><td>等待数据…</td></tr></table>
+  <h2>关节与限位</h2>
+  <table id="limits-arm"><tr><td>等待数据…</td></tr></table>
+  <table id="limits-end"><tr><td>等待数据…</td></tr></table>
+  <h2>末端与限位</h2><table id="limits-tcp"><tr><td>等待数据…</td></tr></table>
+  <h2>特征位形</h2>
+  <table id="poses-arm"><tr><td>等待数据…</td></tr></table>
+  <table id="poses-end"><tr><td>等待数据…</td></tr></table>
+  <h2>控制默认值</h2>
+  <h3>电机默认模式</h3><table id="ctrl-mode"><tr><td>等待数据…</td></tr></table>
+  <h3>运动状态机</h3><table id="ctrl-fsm"><tr><td>等待数据…</td></tr></table>
+  <h3>MIT 模式默认值</h3><table id="ctrl-mit"><tr><td>等待数据…</td></tr></table>
+  <h3>POS_VEL 电机内部增益</h3><table id="ctrl-pv"><tr><td>等待数据…</td></tr></table>
   <details>
     <summary>cfg 原文（已滤除通信拓扑/名义运动学参数）</summary>
     <pre id="cfg-raw">等待数据…</pre>
@@ -520,13 +535,13 @@ _VIZ_PAGE_HTML = """<!DOCTYPE html>
   <div id="mid-overlay"><label><input type="checkbox" id="traj"> 轨迹（MOTION 态）</label></div>
 </div>
 <div class="col" id="col-right">
-  <h2>运行态</h2><div class="kv" id="fsm">等待数据…</div>
-  <div class="kv" id="snap">等待数据…</div>
-  <div class="kv" id="bk">等待数据…</div>
-  <h2 id="tcp-title">末端位姿与速度</h2><div class="kv" id="tcp">等待数据…</div>
-  <h2 id="arm-title">arm 关节</h2><table id="arm"></table>
-  <h2 id="end-title">end 关节</h2><table id="end"></table>
-  <h2>求解器与管线</h2><div class="kv" id="solvers">等待数据…</div>
+  <h2>运行状态</h2>
+  <table id="bk"><tr><td>等待数据…</td></tr></table>
+  <table id="fsm"><tr><td>等待数据…</td></tr></table>
+  <h2>末端位姿与速度</h2><table id="tcp"><tr><td>等待数据…</td></tr></table>
+  <h2 id="arm-title">arm 关节状态</h2><table id="arm"><tr><td>等待数据…</td></tr></table>
+  <h2 id="end-title">end 关节状态</h2><table id="end"><tr><td>等待数据…</td></tr></table>
+  <h2>当前求解器</h2><table id="solvers"><tr><td>等待数据…</td></tr></table>
 </div>
 <script>
 const HAS_MC = __HAS_MESHCAT__;
@@ -547,114 +562,155 @@ function fmtClock(t) {   // Unix 秒 → 本地 HH:MM:SS.mmm（仅 time.time() �
   const d = new Date(t * 1000), p = (x, n = 2) => String(x).padStart(n, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
 }
-function jointTable(el, g, emptyText) {
+function jointTable(el, fam, g, emptyText) {   // 关节状态表：行=数据项、列=关节（#/name 并入关节名表头）
   if (!g || !g.names || !g.names.length) { el.innerHTML = `<tr><td>${emptyText}</td></tr>`; return; }
-  let h = "<tr><th>#</th><th>name</th><th>q rad</th><th>dq rad/s</th><th>tau N·m</th>"
-        + "<th>T_mos ℃</th><th>T_rot ℃</th><th>err</th></tr>";
-  g.names.forEach((n, i) => {
+  const row = (label, cell) => leafRow(label, g.names.map((n, i) => cell(i)).join(""));
+  let h = headJ(fam, g.names);
+  h += row("q rad", (i) => `<td>${fmt(g.q && g.q[i])}</td>`);
+  h += row("dq rad/s", (i) => `<td>${fmt(g.dq && g.dq[i])}</td>`);
+  h += row("tau N·m", (i) => `<td>${fmt(g.tau && g.tau[i])}</td>`);
+  h += row("T_mos ℃", (i) => `<td>${fmt(g.temp_mos && g.temp_mos[i])}</td>`);
+  h += row("T_rot ℃", (i) => `<td>${fmt(g.temp_rotor && g.temp_rotor[i])}</td>`);
+  h += row("err", (i) => {
     const err = (g.error && g.error[i] !== undefined) ? g.error[i] : null;
-    const errCell = (err === null || err === undefined) ? '<td class="na">—</td>'
-                  : err === -1 ? '<td class="na">未读</td>'
-                  : `<td class="${err >= 2 ? 'bad' : 'ok'}">${err}</td>`;
-    h += `<tr><td>${i + 1}</td><td>${n}</td>`
-       + `<td>${fmt(g.q && g.q[i])}</td><td>${fmt(g.dq && g.dq[i])}</td>`
-       + `<td>${fmt(g.tau && g.tau[i])}</td><td>${fmt(g.temp_mos && g.temp_mos[i])}</td>`
-       + `<td>${fmt(g.temp_rotor && g.temp_rotor[i])}</td>${errCell}</tr>`;
+    return (err === null || err === undefined) ? '<td class="na">—</td>'
+         : err === -1 ? '<td class="na">未读</td>'
+         : `<td class="${err >= 2 ? 'bad' : 'ok'}">${err}</td>`;
   });
   el.innerHTML = h;
 }
-function snapLine(label, m, noMotor) {   // 快照标注行：陈旧仅标注、不隐藏数据
-  if (noMotor) return `${label} 快照（无电机）`;
+// ---- 表格行构造（两列表不设表头行；关节表表头 = 首列 corner + 逐关节名）----
+function headJ(corner, names) {   // 关节表表头（首列 corner，其后逐关节名一列一格）
+  return `<tr><th class="lbl">${corner}</th>${names.map(n => `<th>${n}</th>`).join("")}</tr>`;
+}
+function leafRow(label, val) {   // 叶子行：标签格 + 值格序列
+  return `<tr><td class="lbl">${label}</td>${val}</tr>`;
+}
+function cellsOf(a, names, d = 3) {   // 逐关节值格（整组 null → 各格「—」）
+  return names.map((_, i) => `<td>${fmt(a && a[i], d)}</td>`).join("");
+}
+function spanOf(html, n) {   // 标量/end 侧数组跨列合并格（补满总列数）
+  return `<td colspan="${n}">${html}</td>`;
+}
+function failRow(g) {   // 组装配失败/空组占位行（_error → 装配失败，缺组 → —）
+  return `<tr><td>${(g && g._error) ? "装配失败" : "—"}</td></tr>`;
+}
+function fitTables() {   // 通用 n 关节兼容：任一表超栏宽则整体等比缩字号（11px 起步、7px 下限）
+  for (const t of document.querySelectorAll("#col-left table, #col-right table")) {
+    const avail = t.closest(".col").clientWidth - 20;   // 扣栏左右 padding 10×2
+    t.style.fontSize = "";
+    for (let f = 11; f >= 7; f -= 0.5) {
+      t.style.fontSize = f + "px";
+      if (t.offsetWidth <= avail) break;
+    }
+  }
+}
+function cellLim(a, i, side) {   // 单格限位：整组 null →「—」；元素 null → 不限位 ±∞
+  if (a === null || a === undefined) return "—";
+  const v = a[i];
+  return (v === null || v === undefined) ? (side === "min" ? "−∞" : "∞") : fmt(v);
+}
+function snapCell(m) {   // 快照格：陈旧仅标注、不隐藏数据
   const badge = m.state === "新鲜" ? '<span class="ok">［新鲜］</span>'
               : m.state === "陈旧" ? '<span class="warn">［陈旧］</span>'
               : '<span class="na">［未读取］</span>';
   const age = (m.age === null || m.age === undefined) ? "—" : (+m.age).toFixed(2) + "s";
-  return `${label} 快照 t=${fmtClock(m.t)} age=${age} ${badge}`;
+  return `t=${fmtClock(m.t)} age=${age} ${badge}`;
 }
-function renderSnap(s) {
-  const nEnd = (s.end && s.end.names) ? s.end.names.length : 0;
-  $("snap").innerHTML = snapLine("arm", s.snapshot.arm, false) + "<br>"
-                      + snapLine("end", s.snapshot.end, nEnd === 0);
-}
-function renderSolvers(s) {
-  const d = s.solvers;
-  let h = ["fkine", "ikine", "jac", "dyn", "traj", "ctrl"]
-    .map(k => `${k}=<b>${d[k] || "（未配置）"}</b>`).join(" ");
-  h += `<br>plan_hz=${fmt(d.plan_hz, 1)} ctrl_hz=${fmt(d.ctrl_hz, 1)}`;
-  let tgt = "未设置";
-  if (d.target) {
-    const tl = (d.target.t_last === null || d.target.t_last === undefined)
-             ? "—" : (+d.target.t_last).toFixed(3);
-    tgt = d.target.kind === "seq"
-        ? `序列 ×${d.target.frames} 末帧 t=${tl}` : `单帧 t=${tl}`;
-  }
-  return h + `<br>目标帧：${tgt}`;
-}
-function limArr(v, side) {   // 限位区间数组（null 元素 = 不限位 ±∞）
-  return "[" + v.map(x => (x === null || x === undefined)
-    ? (side === "min" ? "−∞" : "∞") : fmt(x)).join(", ") + "]";
-}
-// ---- 左栏静态组渲染（/static.json；组装配失败 _error 显「装配失败」）----
+// ---- 左栏静态组渲染（/static.json；组装配失败 _error 显「装配失败」；关节表列 = ident 关节名）----
 function renderIdent(st) {
-  if (!st || st._error) { $("ident").innerHTML = (st && st._error) ? "装配失败" : "—"; return; }
-  $("ident").innerHTML = `型号=<b>${st.model}</b><br>frame_end=<b>${st.frame_end}</b><br>`
-    + `urdf=${st.urdf}<br>n_arm=${st.n_arm} n_end=${st.n_end}<br>`
-    + `arm 关节名：${st.joint_names_arm.join(", ") || "（无关节）"}<br>`
-    + `end 关节名：${st.joint_names_end.join(", ") || "（无电机）"}`;
+  $("ident").innerHTML = (!st || st._error) ? failRow(st)
+    : leafRow("机械臂型号", `<td>${st.model}</td>`)
+    + leafRow("末端系 frame_end", `<td>${st.frame_end}</td>`)
+    + leafRow("URDF 模型", `<td class="urdf">${st.urdf}</td>`);
+}
+function limJointTable(el, fam, g, names) {   // 单族关节限位表：行 硬/软限位 × 上/下限（不设分节行）
+  if (fam === "end" && (!g || !names.length)) {   // end 无电机：整表占位
+    el.innerHTML = "<tr><td>（无电机）</td></tr>"; return;
+  }
+  if (!names.length) { el.innerHTML = "<tr><td>—</td></tr>"; return; }
+  let h = headJ(fam, names);
+  for (const [label, key, side] of [["硬限位上限", "hard_q_max", "max"],
+                                    ["硬限位下限", "hard_q_min", "min"],
+                                    ["软限位上限", "soft_q_max", "max"],
+                                    ["软限位下限", "soft_q_min", "min"]]) {
+    h += leafRow(label, names.map((_, i) => `<td>${cellLim(g && g[key], i, side)}</td>`).join(""));
+  }
+  el.innerHTML = h;
+}
+function tcpLimTable(el, T, fe) {   // 末端（tcp）空间限位表
+  el.innerHTML = leafRow("末端系 frame_end", `<td>${fe}</td>`)
+    + leafRow("位置上/下限", `<td class="wrapv">${T.workspace_box
+        ? T.workspace_box.map((r, i) => `${"xyz"[i]}∈[${fmt(r[0], 3)}, ${fmt(r[1], 3)}]`).join(" ")
+        : "—（不限位）"}</td>`)
+    + leafRow("速度上限", `<td>线 v_lin_max=${fmtInf(T.v_lin_max)} 角 v_ang_max=${fmtInf(T.v_ang_max)}</td>`)
+    + leafRow("力/力矩上限", `<td>f_max=${fmtInf(T.f_max)} t_max=${fmtInf(T.t_max)}</td>`);
 }
 function renderLimits(lm) {
-  if (!lm || lm._error) { $("limits").innerHTML = (lm && lm._error) ? "装配失败" : "—"; return; }
-  let h = "";
-  for (const fam of ["arm", "end"]) {
-    const g = lm[fam];
-    if (!g) { h += `${fam} 限位：—（无电机）<br>`; continue; }
-    h += `${fam} 硬限位 q∈${limArr(g.hard_q_min, "min")}~${limArr(g.hard_q_max, "max")} `
-       + `dq_max≤${limArr(g.hard_dq_max, "max")} tau_max≤${limArr(g.hard_tau_max, "max")}<br>`;
-    h += `${fam} 软限位 q∈${limArr(g.soft_q_min, "min")}~${limArr(g.soft_q_max, "max")} `
-       + `dq_max≤${limArr(g.soft_dq_max, "max")} tau_max≤${limArr(g.soft_tau_max, "max")}<br>`;
+  const id = (STATIC && STATIC.ident && !STATIC.ident._error) ? STATIC.ident : null;
+  if (!lm || lm._error) {
+    for (const elId of ["limits-arm", "limits-end", "limits-tcp"]) { $(elId).innerHTML = failRow(lm); }
+    return;
   }
-  const T = lm.tcp;
-  h += T.workspace_box
-     ? "工作空间盒 m（x/y/z）：" + T.workspace_box.map(r => `[${fmt(r[0], 3)}, ${fmt(r[1], 3)}]`).join(" ") + "<br>"
-     : "工作空间盒：—（不限位）<br>";
-  h += `v_lin_max=${fmtInf(T.v_lin_max)} v_ang_max=${fmtInf(T.v_ang_max)} `
-     + `f_max=${fmtInf(T.f_max)} t_max=${fmtInf(T.t_max)}`;
-  $("limits").innerHTML = h;
+  limJointTable($("limits-arm"), "arm", lm.arm, id ? id.joint_names_arm : []);
+  limJointTable($("limits-end"), "end", lm.end, id ? id.joint_names_end : []);
+  tcpLimTable($("limits-tcp"), lm.tcp, id ? id.frame_end : "—");
+}
+function poseTable(el, fam, names, st) {   // 单族特征位形表：行 zero/home/neutral
+  if (fam === "end" && !names.length) {   // end 无电机：整表占位
+    el.innerHTML = "<tr><td>（无电机）</td></tr>"; return;
+  }
+  if (!names.length) { el.innerHTML = "<tr><td>—</td></tr>"; return; }
+  let h = headJ(fam, names);
+  for (const p of ["zero", "home", "neutral"]) {
+    const arr = st[`${p}_${fam}`];
+    h += (arr && arr.length)
+      ? leafRow(p, names.map((_, i) => `<td>${fmt(arr[i])}</td>`).join(""))
+      : leafRow(p, spanOf("—", names.length));   // 空数组行显「—」
+  }
+  el.innerHTML = h;
 }
 function renderPoses(st) {
-  if (!st || st._error) { $("poses").innerHTML = (st && st._error) ? "装配失败" : "—"; return; }
-  let h = "";
-  for (const p of ["zero", "neutral", "home"]) {
-    for (const fam of ["arm", "end"]) {
-      const arr = st[`${p}_${fam}`];
-      if (!arr || !arr.length) continue;
-      h += `${p}_${fam}=[${arr.map(v => fmt(v)).join(", ")}]<br>`;
-    }
+  const id = (STATIC && STATIC.ident && !STATIC.ident._error) ? STATIC.ident : null;
+  if (!st || st._error) {
+    $("poses-arm").innerHTML = failRow(st);
+    $("poses-end").innerHTML = failRow(st);
+    return;
   }
-  $("poses").innerHTML = h || "—";
+  poseTable($("poses-arm"), "arm", id ? id.joint_names_arm : [], st);
+  poseTable($("poses-end"), "end", id ? id.joint_names_end : [], st);
 }
-function renderCtrl(cd) {
-  if (!cd || cd._error) { $("ctrl-defaults").innerHTML = (cd && cd._error) ? "装配失败" : "—"; return; }
-  let h = "";
-  for (const fam of ["arm", "end"]) {
-    const m = cd.mit ? cd.mit[fam] : null;
-    h += `MIT.${fam} kp=${arrOrDash(m && m.kp)} kd=${arrOrDash(m && m.kd)}<br>`;
+function renderCtrl(cd) {   // 控制默认值：拆为 电机默认模式/运动状态机/MIT/POS_VEL 四表；到位容差不展示
+  const id = (STATIC && STATIC.ident && !STATIC.ident._error) ? STATIC.ident : null;
+  const names = id ? id.joint_names_arm : [];
+  if (!cd || cd._error || !names.length) {
+    for (const elId of ["ctrl-mode", "ctrl-fsm", "ctrl-mit", "ctrl-pv"]) {
+      $(elId).innerHTML = (!cd || cd._error) ? failRow(cd) : "<tr><td>—</td></tr>";
+    }
+    return;
   }
-  for (const fam of ["arm", "end"]) {
-    const p = cd.pos_vel ? cd.pos_vel[fam] : null;
-    h += `POS_VEL.${fam} pos_kp=${arrOrDash(p && p.pos_kp)} pos_ki=${arrOrDash(p && p.pos_ki)} `
-       + `vel_kp=${arrOrDash(p && p.vel_kp)} vel_ki=${arrOrDash(p && p.vel_ki)} `
-       + `vlim=${arrOrDash(p && p.vlim)} flim=${arrOrDash(p && p.flim)}<br>`;
-  }
-  const dm = cd.default_mode || {}, bp = cd.backend_params || {}, at = cd.arrival_tol || {};
-  h += `default_mode：arm=${dm.arm || "—"} end=${dm.end || "—"}<br>`;
-  h += `write_settle=${fmt(bp.write_settle, 3)} state_refresh_hz=${fmt(bp.state_refresh_hz, 1)}<br>`;
-  h += `fsm_hz=${fmt(cd.fsm_hz, 1)} monitor_hz=${fmt(cd.monitor_hz, 1)} `
-     + `damping_kd=${arrOrDash(cd.damping_kd)} damping_k_gravity=${arrOrDash(cd.damping_k_gravity)}<br>`;
-  h += `到位容差 arm_q=${arrOrDash(at.arm_q)} end_q=${arrOrDash(at.end_q)} `
-     + `pos=${fmt(at.pos, 4)} rot=${fmt(at.rot, 4)}<br>`;
-  h += `move_wait_timeout=${fmt(cd.move_wait_timeout, 2)}`;
-  $("ctrl-defaults").innerHTML = h;
+  const N = names.length + 1;   // 逐关节表总列数 = 标签列 + 关节列
+  const dm = cd.default_mode || {}, bp = cd.backend_params || {};
+  const mit = cd.mit || {}, pv = cd.pos_vel || {};
+  $("ctrl-mode").innerHTML = leafRow("arm", `<td>${dm.arm || "—"}</td>`)
+    + leafRow("end", `<td>${dm.end || "—"}</td>`);
+  $("ctrl-fsm").innerHTML = headJ("项", names)
+    + leafRow("状态刷新频率", spanOf(fmt(bp.state_refresh_hz, 1), N - 1))
+    + leafRow("运动状态机频率", spanOf(fmt(cd.fsm_hz, 1), N - 1))
+    + leafRow("监视器频率", spanOf(fmt(cd.monitor_hz, 1), N - 1))
+    + leafRow("阻尼系数 kd", cellsOf(cd.damping_kd, names))
+    + leafRow("重力补偿率", cellsOf(cd.damping_k_gravity, names));
+  let h = headJ("项", names);
+  h += leafRow("arm kp", cellsOf(mit.arm && mit.arm.kp, names));
+  h += leafRow("arm kd", cellsOf(mit.arm && mit.arm.kd, names));
+  h += leafRow("end kp", spanOf(arrOrDash(mit.end && mit.end.kp), N - 1));
+  h += leafRow("end kd", spanOf(arrOrDash(mit.end && mit.end.kd), N - 1));
+  $("ctrl-mit").innerHTML = h;
+  const pvKeys = ["pos_kp", "pos_ki", "vel_kp", "vel_ki", "vlim", "flim"];
+  h = headJ("项", names);
+  for (const k of pvKeys) { h += leafRow("arm " + k, cellsOf(pv.arm && pv.arm[k], names)); }
+  for (const k of pvKeys) { h += leafRow("end " + k, spanOf(arrOrDash(pv.end && pv.end[k]), N - 1)); }
+  $("ctrl-pv").innerHTML = h;
 }
 let STATIC = null;          // /static.json 载荷（null = 未就绪，poll 内重试）
 let staticLoading = false;  // in-flight 防护（fetch 挂起时不重复发起）
@@ -668,37 +724,68 @@ async function loadStatic() {
     renderPoses(STATIC.poses);
     renderCtrl(STATIC.ctrl_defaults);
     $("cfg-raw").textContent = (typeof STATIC.cfg_raw === "string") ? STATIC.cfg_raw : "装配失败";
+    fitTables();
   } catch (e) { STATIC = null; }   // 拉取/渲染失败保持未就绪，随轮询重试
   finally { staticLoading = false; }
+}
+// ---- 右栏动态渲染（/state.json 约 5 Hz）----
+function renderBk(s) {   // 运行状态表1：行=族（arm/end），列=连接/使能/状态快照
+  const b = s.backend, nEnd = (s.end && s.end.names) ? s.end.names.length : 0;
+  const famRow = (fam, conn, ena, m) => `<tr><td class="lbl">${fam}</td><td>${tri(conn)}</td>`
+    + `<td>${tri(ena)}</td>`
+    + `<td>${(fam === "end" && nEnd === 0) ? "（无电机）" : snapCell(m)}</td></tr>`;
+  $("bk").innerHTML = "<tr><th></th><th>连接状态</th><th>使能状态</th><th>状态快照</th></tr>"
+    + famRow("arm", b.connected_arm, b.enabled_arm, s.snapshot.arm)
+    + famRow("end", b.connected_end, b.enabled_end, s.snapshot.end);
+}
+function renderFsm(s) {   // 运行状态表2：状态机运行状态/当前/目标/安全事件各一列（两行四列）
+  $("fsm").innerHTML = "<tr><th>状态机运行状态</th><th>当前状态</th><th>目标状态</th><th>安全事件</th></tr>"
+    + `<tr><td>${s.fsm.running
+        ? '<span class="ok">运行中</span>' : '<span class="bad">未运行</span>'}</td>`
+    + `<td><b>${s.fsm.current}</b></td><td><b>${s.fsm.target}</b></td><td><b>${s.event}</b></td></tr>`;
+}
+function renderTcp(s) {   // 末端位姿与速度表：首行末端系；twist 缺失时速度两行显「—」
+  const el = $("tcp");
+  const fe = (STATIC && STATIC.ident && STATIC.ident.frame_end)
+    ? STATIC.ident.frame_end : "—";
+  const feRow = leafRow("末端系 frame_end", `<td>${fe}</td>`);
+  if (!s.tcp) {
+    el.innerHTML = feRow + "<tr><td>—（未读取或求解器未配置）</td></tr>";
+    return;
+  }
+  const tw = s.tcp.twist;
+  el.innerHTML = feRow
+    + leafRow("位置 m", `<td>[${s.tcp.position.map(v => fmt(v, 3)).join(", ")}]</td>`)
+    + leafRow("姿态 q(wxyz)", `<td>[${s.tcp.orientation.map(v => fmt(v, 3)).join(", ")}]</td>`)
+    + leafRow("线速度 m/s", `<td>${tw ? `[${tw.linear.map(v => fmt(v, 3)).join(", ")}]` : "—"}</td>`)
+    + leafRow("角速度 rad/s", `<td>${tw ? `[${tw.angular.map(v => fmt(v, 3)).join(", ")}]` : "—"}</td>`);
+}
+function renderSolvers(s) {   // 当前求解器表（traj/ctrl 附频率；目标帧摘要不渲染）
+  const d = s.solvers;
+  const name = (k) => `<td><b>${d[k] || "（未配置）"}</b></td>`;
+  const withHz = (k, f) => `<td>${(d[k] && d[k] !== "（未配置）")
+    ? `<b>${d[k]}（${fmt(d[f], 1)} Hz）</b>` : "（未配置）"}</td>`;
+  $("solvers").innerHTML = leafRow("fkine", name("fkine"))
+    + leafRow("ikine", name("ikine"))
+    + leafRow("jac", name("jac"))
+    + leafRow("dyn", name("dyn"))
+    + leafRow("traj", withHz("traj", "plan_hz"))
+    + leafRow("ctrl", withHz("ctrl", "ctrl_hz"));
 }
 async function poll() {
   if (STATIC === null) loadStatic();
   try {
     const s = await (await fetch("/state.json")).json();
-    $("fsm").innerHTML = `current=<b>${s.fsm.current}</b> target=<b>${s.fsm.target}</b> `
-                       + `event=<b>${s.event}</b>`;
-    renderSnap(s);
-    $("bk").innerHTML = `connected_arm=${tri(s.backend.connected_arm)} `
-                      + `enabled_arm=${tri(s.backend.enabled_arm)}<br>`
-                      + `connected_end=${tri(s.backend.connected_end)} `
-                      + `enabled_end=${tri(s.backend.enabled_end)}`;
-    const fe = (STATIC && STATIC.ident && STATIC.ident.frame_end)
-      ? STATIC.ident.frame_end : "—";
-    $("tcp-title").textContent = `末端位姿与速度 frame_end=${fe}（位置 m / 四元数 wxyz / 速度）`;
-    $("tcp").innerHTML = s.tcp
-      ? `p=[${s.tcp.position.map(v => fmt(v, 3)).join(", ")}]<br>`
-        + `q(wxyz)=[${s.tcp.orientation.map(v => fmt(v, 3)).join(", ")}]`
-        + (s.tcp.twist
-          ? `<br>v=[${s.tcp.twist.linear.map(v => fmt(v, 3)).join(", ")}] m/s`
-            + `<br>w=[${s.tcp.twist.angular.map(v => fmt(v, 3)).join(", ")}] rad/s`
-          : "")
-      : "—（未读取或求解器未配置）";
-    $("arm-title").textContent = `arm 关节（${(s.arm && s.arm.names) ? s.arm.names.length : 0}）`;
-    $("end-title").textContent = `end 关节（${(s.end && s.end.names) ? s.end.names.length : 0}）`;
-    jointTable($("arm"), s.arm, "（无关节）");
-    jointTable($("end"), s.end, "（无电机）");
-    $("solvers").innerHTML = renderSolvers(s);
+    renderBk(s);
+    renderFsm(s);
+    renderTcp(s);
+    $("arm-title").textContent = `arm 关节状态（${(s.arm && s.arm.names) ? s.arm.names.length : 0}）`;
+    $("end-title").textContent = `end 关节状态（${(s.end && s.end.names) ? s.end.names.length : 0}）`;
+    jointTable($("arm"), "arm", s.arm, "（无关节）");
+    jointTable($("end"), "end", s.end, "（无电机）");
+    renderSolvers(s);
     $("traj").checked = !!s.traj_enabled;
+    fitTables();
   } catch (e) { /* 下轮重试 */ }
 }
 $("traj").addEventListener("change", async () => {
@@ -848,7 +935,7 @@ class _VizWindow:
         app = QApplication([])
         win = QMainWindow()
         win.setWindowTitle(title)
-        win.resize(1440, 820)
+        win.resize(1920, 1080)
         view = QWebEngineView()
         view.load(QUrl(url))
         win.setCentralWidget(view)
@@ -949,6 +1036,8 @@ class JoyArm:
         self._zero_moving: bool = False                  # ZERO 态「移动中」子阶段标志
         self._home_arrived: bool = False                 # HOME 态到位日志去重
         self._fsm_disc_warned: bool = False              # 断连挂起告警去重（重连后复位）
+        self._motion_start_warned: bool = False          # plan/ctrl 启动失败告警去重
+        self._arm_ready_warned: bool = False             # 模式/使能自愈失败告警去重
         self._fsm_periodic: Optional[_PeriodicThread] = None  # FSM 周期线程句柄（fsm_hz）
 
         # ---- plan/ctrl 运动线程 ----
@@ -1069,10 +1158,10 @@ class JoyArm:
         if self._ctrl_solvers:
             self._ctrl_hz = self._ctrl_hz_by_name[self._activated_name_of("ctrl")]
 
-        # 10) FSM / 监视 / 到位容差 / 运行超时参数
+        # 9) FSM / 监视 / 到位容差 / 运行超时参数
         self._parse_fsm_params(jcfg)
 
-        # 11) 初始化完成 info
+        # 10) 初始化完成 info
         self._log_init_info()
 
     # ============================================================
@@ -1546,7 +1635,7 @@ class JoyArm:
             f"fsm_hz={self._fsm_hz}；monitor_hz={self._monitor_hz}；"
             f"damping_kd={_r(self._damping_kd)}；damping_k_gravity={_r(self._damping_k_gravity)}",
         ]
-        logger.info("%s 初始化和自检完毕（仅必要校验，不确保完全无误）！\n%s",
+        logger.info("joyarm.py - _log_init_info：『%s』初始化和自检完毕（仅必要校验，不确保完全无误）！\n%s",
                     self._model, "\n".join(lines))
 
     # ============================================================
@@ -1665,6 +1754,7 @@ class JoyArm:
         """
         self._stop_motion_thread()
         if self._ctrl_periodic is not None or self._plan_periodic is not None:
+            self._warn_motion_start_once("旧 plan/ctrl 线程尚未退出")
             return False                       # 旧线程尚未退出，下拍重试
         started = False
         try:
@@ -1672,6 +1762,7 @@ class JoyArm:
                 planner = self._activated_of("traj")
                 controller = self._activated_of("ctrl")
                 if not planner.plan(self, self._target_trajframe):
+                    self._warn_motion_start_once("plan 首帧未就绪")
                     return False               # 首帧尚未就绪，不提交 MOTION
                 if not self._ensure_arm_ready(controller.MODE, event):
                     return False
@@ -1685,10 +1776,18 @@ class JoyArm:
         finally:
             if not started:
                 self._stop_motion_thread()     # 仅做资源清理，join 时不持运动锁
+        self._motion_start_warned = False
         logger.info("joyarm.py - _start_motion_thread：plan/ctrl 两线程已启动"
                     "（plan_hz=%s，ctrl_hz=%s，控制器 %s）",
                     self._plan_hz, self._ctrl_hz, type(controller).__name__)
         return True
+
+    def _warn_motion_start_once(self, reason: str) -> None:
+        """plan/ctrl 启动失败的单次告警（成功启动即复位；每拍重试期间仅首拍提示）。"""
+        if self._motion_start_warned:
+            return
+        self._motion_start_warned = True
+        logger.warning("joyarm.py - _start_motion_thread：%s，MOTION 管线未建立，每拍重试", reason)
 
     def _stop_motion_thread(self) -> None:
         """撤销下发许可并停 plan/ctrl（先 ctrl 后 plan，join 不持运动锁）。
@@ -1828,8 +1927,8 @@ class JoyArm:
     def _ensure_arm_ready(self, mode: ControlMode, event: SafetyEvent) -> bool:
         """状态内模式/使能自愈（调用方持运动锁）；成功才允许运动下发。
 
-        每拍只读一次模式；不一致才写，先模式后使能。失败交由 FSM 下拍重试，
-        不清故障、不修改安全事件；未知使能不得当作已使能。
+        每拍只读一次模式；不一致才写，先模式后使能。失败交由 FSM 下拍重试
+        （首次失败 warn 一次），不清故障、不修改安全事件；未知使能不得当作已使能。
         """
         self._motion_ready = None
         if not self._arm_action_allowed(event):
@@ -1841,14 +1940,29 @@ class JoyArm:
             return False
         if actual != mode:
             if self._backend.set_mode_arm(mode) != 1:
+                self._warn_arm_ready_once(mode)
                 return False
         if not self._arm_action_allowed(event):
             return False
         if self._backend.is_enabled_arm is not True:
             if self._backend.enable_arm() != 1:
+                self._warn_arm_ready_once(mode)
                 return False
-        return (self._arm_action_allowed(event)
-                and self._backend.is_enabled_arm is True)
+        if not self._arm_action_allowed(event):
+            return False
+        if self._backend.is_enabled_arm is not True:
+            self._warn_arm_ready_once(mode)    # 使能状态未知，不得当作已使能
+            return False
+        self._arm_ready_warned = False
+        return True
+
+    def _warn_arm_ready_once(self, mode: ControlMode) -> None:
+        """模式/使能自愈失败的单次告警（自愈成功即复位；事件中止路径不告警）。"""
+        if self._arm_ready_warned:
+            return
+        self._arm_ready_warned = True
+        logger.warning("joyarm.py - _ensure_arm_ready：模式/使能自愈失败"
+                       "（目标模式 %s），将每拍重试", mode.value)
 
     def _enter_motion_state(self, state: MotionState, event: SafetyEvent) -> bool:
         """进入动作成功才提交状态；失败不清理旧 HOLD/ZERO 缓存，不盲目恢复旧指令。"""
@@ -1879,6 +1993,7 @@ class JoyArm:
                 self._home_arrived = False
             elif state is MotionState.HOLD:
                 self._hold_q = hold_q
+                self._backend.send_position_arm(self._hold_q)  
             elif (state is MotionState.DAMP and self._activated_dyn_solver is None
                     and bool((self._damping_k_gravity > 0).any())):
                 logger.warning("joyarm.py - _enter_motion_state：dynamics 域未配置，"
@@ -1928,7 +2043,7 @@ class JoyArm:
                 tau_ff = np.zeros(self._n_arm)            # 重力补偿前馈 k_gravity·G(q)；缺求解器或快照无效时置零（纯阻尼）
                 dyn = self._activated_dyn_solver
                 q = np.asarray(self._backend.joint_state_arm.q, dtype=float)
-                if dyn is not None and bool(np.isfinite(q).all()):
+                if dyn is not None and q.shape == (self._n_arm,) and bool(np.isfinite(q).all()):
                     tau_ff = self._damping_k_gravity * dyn.gravity(self, q)
                 self._backend.send_mit_arm(q=np.zeros(self._n_arm), kp=np.zeros(self._n_arm), kd=self._damping_kd, tau=tau_ff)
             return True
@@ -2039,7 +2154,8 @@ class JoyArm:
             "arm": self._viz_group(state_arm, self._joint_names_arm),
             "end": self._viz_group(state_end, self._joint_names_end),
             "tcp": None,
-            "fsm": {"current": self._current_motion_state.name,
+            "fsm": {"running": self._fsm_running(),
+                    "current": self._current_motion_state.name,
                     "target": self._target_motion_state.name},
             "event": self._safe_event.name,
             "backend": {
@@ -2828,13 +2944,13 @@ class JoyArm:
         return self._backend.check_error_end()
 
     def clear_error_arm(self) -> bool:
-        """清除 arm 各关节硬件错误（逐关节发清错指令、无读回验证）：FSM 运行中被外部调用时空操作 + warn（拦截时返回 False）。"""
+        """清除 arm 各关节硬件错误（逐关节发清错指令；读回验证由子类内核决定）：FSM 运行中被外部调用时空操作 + warn（拦截时返回 False）。"""
         if not self._fsm_guard("clear_error_arm"):
             return False
         return self._backend.clear_error_arm()
 
     def clear_error_end(self) -> bool:
-        """清除 end 各电机硬件错误（逐电机发清错指令、无读回验证）。"""
+        """清除 end 各电机硬件错误（逐电机发清错指令；读回验证由子类内核决定）。"""
         return self._backend.clear_error_end()
 
     # =============== 关节指令下发 ===============
@@ -3050,11 +3166,12 @@ class JoyArm:
         :param tau: 前馈力矩 `(n_arm,)` N·m（可选）。
         :raises ValueError: `t`/`q` 缺失、维度不符 `(n_arm,)`。
         """
-        q = self._check_target_vector(q, self._n_arm, "q", required=True)
-        dq = self._check_target_vector(dq, self._n_arm, "dq", required=False)
-        ddq = self._check_target_vector(ddq, self._n_arm, "ddq", required=False)
-        tau = self._check_target_vector(tau, self._n_arm, "tau", required=False)
-        self.set_target_trajframe(TrajFrame(time=self._check_target_time(t), q=q, dq=dq, ddq=ddq, tau=tau))
+        entry = "set_target_joint"
+        q = self._check_target_vector(q, self._n_arm, "q", required=True, entry=entry)
+        dq = self._check_target_vector(dq, self._n_arm, "dq", required=False, entry=entry)
+        ddq = self._check_target_vector(ddq, self._n_arm, "ddq", required=False, entry=entry)
+        tau = self._check_target_vector(tau, self._n_arm, "tau", required=False, entry=entry)
+        self.set_target_trajframe(TrajFrame(time=self._check_target_time(t, entry), q=q, dq=dq, ddq=ddq, tau=tau))
 
     def set_target_cart(self, t, pose, twist=None, accel=None, wrench=None) -> None:
         """单帧笛卡尔目标便捷封装（内部组帧后走 :meth:`set_target_trajframe` 同一原子通道）。
@@ -3066,44 +3183,45 @@ class JoyArm:
         :param wrench: 末端力/力矩（可选；:class:`Wrench` 或 `(6,)` `[fx, fy, fz, tx, ty, tz]`）。
         :raises ValueError: 必填缺失、类型/维度不符。
         """
+        entry = "set_target_cart"
         if isinstance(pose, Pose):
             pose_out = copy.deepcopy(pose)
         else:
-            arr = self._check_target_vector(pose, 7, "pose", required=True)
+            arr = self._check_target_vector(pose, 7, "pose", required=True, entry=entry)
             pose_out = Pose(position=np.array(arr[:3], dtype=float), orientation=np.array(arr[3:], dtype=float))
-        twist_out = self._check_target_cart6(twist, Twist, "twist")
-        accel_out = self._check_target_cart6(accel, Accel, "accel")
-        wrench_out = self._check_target_cart6(wrench, Wrench, "wrench")
-        self.set_target_trajframe(TrajFrame(time=self._check_target_time(t), pose=pose_out, twist=twist_out, accel=accel_out, wrench=wrench_out))
+        twist_out = self._check_target_cart6(twist, Twist, "twist", entry=entry)
+        accel_out = self._check_target_cart6(accel, Accel, "accel", entry=entry)
+        wrench_out = self._check_target_cart6(wrench, Wrench, "wrench", entry=entry)
+        self.set_target_trajframe(TrajFrame(time=self._check_target_time(t, entry), pose=pose_out, twist=twist_out, accel=accel_out, wrench=wrench_out))
 
     @staticmethod
-    def _check_target_time(t) -> float:
+    def _check_target_time(t, entry: str) -> float:
         """目标时刻校验（Unix 秒标量，须有限）。"""
         if isinstance(t, bool) or not isinstance(t, (int, float, np.integer, np.floating)):
             raise ValueError(
-                f"joyarm.py - set_target：t 需为 Unix 秒标量，实际 {type(t).__name__}")
+                f"joyarm.py - {entry}：t 需为 Unix 秒标量，实际 {type(t).__name__}")
         out = float(t)
         if not np.isfinite(out):
-            raise ValueError(f"joyarm.py - set_target：t={t!r} 非有限（NaN/inf 拒绝）")
+            raise ValueError(f"joyarm.py - {entry}：t={t!r} 非有限（NaN/inf 拒绝）")
         return out
 
     @staticmethod
-    def _check_target_vector(v, n: int, key: str, required: bool):
+    def _check_target_vector(v, n: int, key: str, required: bool, entry: str):
         """便捷封装的 `(n,)` 向量校验（None 且非必填 → None；否则转 float 数组、验维且须全有限）。"""
         if v is None:
             if required:
-                raise ValueError(f"joyarm.py - set_target：{key} 必填（None）")
+                raise ValueError(f"joyarm.py - {entry}：{key} 必填（None）")
             return None
         arr = np.asarray(v, dtype=float).reshape(-1)
         if arr.shape[0] != n:
             raise ValueError(
-                f"joyarm.py - set_target：{key} 维度 {arr.shape[0]} ≠ 期望 {n}")
+                f"joyarm.py - {entry}：{key} 维度 {arr.shape[0]} ≠ 期望 {n}")
         if not bool(np.all(np.isfinite(arr))):
-            raise ValueError(f"joyarm.py - set_target：{key} 含非有限值（NaN/inf 拒绝）")
+            raise ValueError(f"joyarm.py - {entry}：{key} 含非有限值（NaN/inf 拒绝）")
         return arr
 
     @classmethod
-    def _check_target_cart6(cls, v, cls6, key: str):
+    def _check_target_cart6(cls, v, cls6, key: str, entry: str):
         """便捷封装的笛卡尔 6 维量校验（类型对象深拷贝；`(6,)` 序列转对应数据类，须全有限）。"""
         if v is None:
             return None
@@ -3112,10 +3230,10 @@ class JoyArm:
         arr = np.asarray(v, dtype=float).reshape(-1)
         if arr.shape[0] != 6:
             raise ValueError(
-                f"joyarm.py - set_target：{key} 需为 {cls6.__name__} 或 (6,) 序列，"
+                f"joyarm.py - {entry}：{key} 需为 {cls6.__name__} 或 (6,) 序列，"
                 f"实际长度 {arr.shape[0]}")
         if not bool(np.all(np.isfinite(arr))):
-            raise ValueError(f"joyarm.py - set_target：{key} 含非有限值（NaN/inf 拒绝）")
+            raise ValueError(f"joyarm.py - {entry}：{key} 含非有限值（NaN/inf 拒绝）")
         if cls6 is Wrench:
             return Wrench(force=np.array(arr[:3]), torque=np.array(arr[3:]))
         return cls6(linear=np.array(arr[:3]), angular=np.array(arr[3:]))
@@ -3411,9 +3529,9 @@ class JoyArm:
         """启动运动状态机（非阻塞）。
 
         前置：已连接、反馈新鲜有效、无电机故障、traj/ctrl 已配置。
-        不执行监视规则；运行期安全判定始终由独立监视线程负责。
-        若规划/控制线程尚在运行则先停止，清理 FSM 全部缓存（`_hold_q`、plan/ctrl 线程句柄与轨迹帧缓存；`_safe_event` 置 NORMAL、目标置 MOTION），
-        启动 FSM 线程（固定 `_fsm_hz`）：初始 `current=DISABLE`、按路线表自动迁移 DISABLE → HOME → MOTION。
+        不执行监视规则；运行期安全判定由独立监视线程负责。
+        若规划/控制线程尚在运行则先停止，清理 FSM 全部缓存（`_hold_q`/`_zero_moving`/`_home_arrived` 复位、plan/ctrl 线程句柄、轨迹帧缓存与 `_fsm_shutdown` 清位；`_safe_event` 置 NORMAL、目标置 MOTION），
+        启动 FSM 线程：初始 `current=DISABLE`、按路线表自动迁移 DISABLE → HOME → MOTION。
 
         :raises RuntimeError: 连接/反馈/电机故障前置检查不通过；traj/ctrl 域未配置。
         """

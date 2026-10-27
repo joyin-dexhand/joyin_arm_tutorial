@@ -44,23 +44,22 @@ Backend 子类全方位测试验证（上层视角）  joyarm_core/backend/backe
     source .venv/bin/activate
 
     # 3. 运行本脚本（在 joyarm_code/ 目录下）
-    python joyarm_core/backend/backend_verify.py --help                          # 完整用法
-    python joyarm_core/backend/backend_verify.py --list                          # 全部测试项清单
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=offline         # 00 组（缺省）
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=all             # 全部（不含 38）
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=12              # 单项
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=00,20,read      # 编号/组名混选
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=connect,read    # 组合
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=online \
-        --param=<参数键> --action=open,close                                     # 真机段
+    python joyarm_core/backend/backend_verify.py --help                                  # 完整用法
+    python joyarm_core/backend/backend_verify.py --list                                  # 全部测试项清单
+    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=offline         # 00 组（缺省）
+    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=all             # 全部（不含 38）
+    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=12              # 单项
+    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=00,20,read      # 编号/组名混选
+    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=connect,read    # 组合
+    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=online \
+        --param=<参数键> --action=open,close                                             # 真机段
 
 【命令行参数】
-    --sub     子型简称（如 dm、feetech）：经 REGISTRY 或文件约定导入
-              backend_<型号>.py 并寻找 Backend<型号> 类，默认加载
-              config/joyarm_<型号>.yaml 的 backend 段；缺省时仅 --help/--list 可用
+    --sub     backend 完整注册名（REGISTRY 键 = backend/backend_*.py 文件名去 .py）：经 REGISTRY 或模块名导入并寻找 Backend 子类；
+              默认按 backend.name 自动匹配 config/*.yaml 的 backend 段
     --step    数字=单项编号（如 38）；字符串=组名（init/connect/read/ctrl/motion/
               error/offline/online/all）；逗号分隔可单项与组任意混选；缺省 offline
-    --config  指定 yaml 配置文件（默认 joyarm_core/config/joyarm_<sub>.yaml）
+    --config  指定 yaml 配置文件（缺省按 --sub 自动匹配 config/*.yaml）
     --param   参数读取 / 写入测试（23/37）的参数键（键表由子类定义；不给则 SKIP）
     --action  send_action_end 测试（44）的离散动作名，逗号分隔（默认仅测 home）
     --list    仅列出全部测试项（编号/组/风险/目的），不执行
@@ -1527,22 +1526,22 @@ GROUPS["all"] = GROUPS["offline"] + GROUPS["online"]
 # 子类发现与配置加载
 # ============================================================
 def discover(sub: str) -> type:
-    """解析子类：优先查官方注册表 REGISTRY，再按文件约定导入 backend_<sub> 寻找 Backend 子类。"""
+    """解析子类：优先查官方注册表 REGISTRY，再按模块名导入 joyarm_core.backend.<sub> 寻找 Backend 子类。"""
     from joyarm_core.backend import REGISTRY  # 官方注册路径，键名 = 文件名如 "backend_dm"
-    reg_name = f"backend_{sub}"
-    if reg_name in REGISTRY:
-        return REGISTRY[reg_name]
-    mod_name = f"joyarm_core.backend.backend_{sub}"
+    if sub in REGISTRY:
+        return REGISTRY[sub]
+    mod_name = f"joyarm_core.backend.{sub}"
     try:
         mod = importlib.import_module(mod_name)
     except ImportError:
         avail = sorted(set(p.stem for p in Path(__file__).resolve().parent.glob("backend_*.py"))
                        | set(REGISTRY))
         raise _UsageError(f"找不到 {mod_name}（--sub={sub}）；REGISTRY 与 backend/ 目录现有：{avail or '无'}")
+    short = sub.removeprefix("backend_")  # 类名候选用短名（无 backend_ 前缀则原样）
     cands = {o for o in vars(mod).values()
              if isinstance(o, type) and issubclass(o, Backend) and o is not Backend
              and o.__module__ == mod_name}
-    for cand in (f"Backend{sub.upper()}", f"Backend{sub.capitalize()}", f"Backend{sub}"):
+    for cand in (f"Backend{short.upper()}", f"Backend{short.capitalize()}", f"Backend{short}"):
         cls = getattr(mod, cand, None)
         if cls in cands:
             return cls
@@ -1555,10 +1554,37 @@ def discover(sub: str) -> type:
 def load_cfg(args: argparse.Namespace, sub: str) -> tuple[dict, Path]:
     if args.config:
         path = Path(args.config)
+        if not path.is_file():
+            raise _UsageError(f"配置文件不存在：{path}（--config 可指定其他 yaml）")
     else:
-        path = Path(__file__).resolve().parents[1] / "config" / f"joyarm_{sub}.yaml"
-    if not path.is_file():
-        raise _UsageError(f"配置文件不存在：{path}（--config 可指定其他 yaml）")
+        # 缺省：扫描 config/*.yaml 取唯一命中——三顶层键均 dict、backend.name == sub、
+        # robot_model/<型号>/ 四路径齐全（与 joyarm/__init__.py 的 _model_paths_missing
+        # 同口径；模板 yaml 无 robot_model 目录，自然排除）
+        base_dir = Path(__file__).resolve().parents[1]
+        hits = []
+        for p in sorted((base_dir / "config").glob("*.yaml")):
+            try:
+                data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+            except Exception:
+                continue  # 解析失败 → 不可用
+            if not isinstance(data, dict):
+                continue  # 非 dict（如列表/标量）→ 不可用
+            if not all(isinstance(data.get(k), dict) for k in ("joyarm", "robotics", "backend")):
+                continue  # 三顶层键缺段或写成非 dict → 不可用
+            if data["backend"].get("name") != sub:
+                continue
+            base = base_dir / "robot_model" / p.stem
+            paths = (base, base / "meshes", base / "urdf", base / "urdf" / f"{p.stem}.urdf")
+            if not all(x.exists() for x in paths):
+                continue  # 型号资源四路径不齐全 → 不可用
+            hits.append(p)
+        if not hits:
+            raise _UsageError(f"config/*.yaml 中无 backend.name={sub!r} 且型号资源四路径齐全的配置"
+                              f"（--config 可显式指定 yaml）")
+        if len(hits) > 1:
+            raise _UsageError(f"backend.name={sub!r} 命中多个配置：{[p.name for p in hits]}"
+                              f"（--config 可显式指定其一）")
+        path = hits[0]
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     bcfg = data.get("backend")
     if not isinstance(bcfg, dict):
@@ -1702,14 +1728,14 @@ def print_list():
 
 EPILOG = """\
 示例：
-  python joyarm_core/backend/backend_verify.py --help                       # 本说明
-  python joyarm_core/backend/backend_verify.py --list                       # 全部测试项
-  python joyarm_core/backend/backend_verify.py --sub=dm                     # 00 组（缺省 offline）
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=all          # 全部（不含 38）
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=12           # 单项
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=00,20,read   # 编号/组名混选
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=connect,read # 组合
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=online --param=<键> --action=open,close
+  python joyarm_core/backend/backend_verify.py --help                               # 本说明
+  python joyarm_core/backend/backend_verify.py --list                               # 全部测试项
+  python joyarm_core/backend/backend_verify.py --sub=backend_dm                     # 00 组（缺省 offline）
+  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=all          # 全部（不含 38）
+  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=12           # 单项
+  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=00,20,read   # 编号/组名混选
+  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=connect,read # 组合
+  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=online --param=<键> --action=open,close
 
 风险与确认策略：
   低危：直接执行（初始化 / 连接编排 / 只读）。
@@ -1733,13 +1759,14 @@ def parse_args(argv=None) -> argparse.Namespace:
                      "对任意子类（关节电机/舵机/混合硬件）做分组分项测试"
                      "（测试项编号采用两位数十进制分组）。能力三分法（能力缺失=SKIP）+ 空族自动跳过 + 风险分级确认。"),
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--sub", help="子型简称（如 dm、feetech）：经 REGISTRY 或文件约定导入"
-                                 " backend_<型号>.py 并寻找 Backend<型号> 类，默认加载"
-                                 " config/joyarm_<型号>.yaml 的 backend 段")
+    p.add_argument("--sub", default="backend_dm",
+                   help="backend 完整注册名（REGISTRY 键 = backend/backend_*.py 文件名去 .py；缺省 backend_dm）："
+                        "经 REGISTRY 或模块名导入并寻找 Backend 子类，默认按 backend.name"
+                        "自动匹配 config/*.yaml 的 backend 段")
     p.add_argument("--step", default="offline",
                    help="数字=单项编号（如 38）；字符串=组名（init/connect/read/ctrl/motion/error/"
                         "offline/online/all）；逗号分隔混选；缺省 offline")
-    p.add_argument("--config", help="yaml 配置文件路径（默认 joyarm_core/config/joyarm_<sub>.yaml）")
+    p.add_argument("--config", help="yaml 配置文件路径（缺省按 --sub 的 backend.name 自动匹配 config/*.yaml）")
     p.add_argument("--param", help="参数读取/写入测试（23/37）的参数键（键表由子类定义；缺省相关项 SKIP）")
     p.add_argument("--action", help="send_action_end 测试（44）的离散动作名（逗号分隔；默认仅测 home）")
     p.add_argument("--list", action="store_true", help="仅列出全部测试项（编号/组/风险/目的），不执行")
@@ -1759,7 +1786,7 @@ def main(argv=None) -> int:
         print_list()
         return 0
     if not args.sub:
-        print("用法错误：执行测试须提供 --sub=<型号>（仅 --help/--list 可省略；--list 查看全部测试项）",
+        print("用法错误：--sub 不能为空（backend 注册名如 backend_dm；--list 查看全部测试项）",
               file=sys.stderr)
         return 2
     args.action = [a.strip() for a in (args.action or "").split(",") if a.strip()] or ["home"]
@@ -1773,7 +1800,7 @@ def main(argv=None) -> int:
     s = Session(cls, cfg, args, cfg_path)
     tty = sys.stdin.isatty()
     print("=" * 68)
-    print(f"Backend 子类测试验证：{cls.__name__}（backend_{args.sub}.py）")
+    print(f"Backend 子类测试验证：{cls.__name__}（{args.sub}.py）")
     print(f"配置：{cfg_path}（arm {_n_family_cfg(cfg, 'arm')} 关节 / end {_n_family_cfg(cfg, 'end')} 关节）")
     print(f"交互终端：{'是' if tty else '否'}；--yes={args.yes}；"
           f"高危策略：{'交互 yes（--yes 不放行）' if tty else '非终端自动 SKIP'}")

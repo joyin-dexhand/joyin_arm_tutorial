@@ -6,7 +6,7 @@
 各子类实现步骤详见各子包的 `__init__.py`。
 """
 from .fkine import FkineSolver, PinFkineSolver, MdhFkineSolver
-from .ikine import IkineSolver, PinIkineSolver
+from .ikine import IkineSolver, PinIkineSolver, AnalyticIkineSolver
 from .jacobian import JacobianSolver, PinJacobianSolver
 from .dynamics import DynamicsSolver, PinDynamicsSolver
 from .trajectory import TrajPlanner, SingleJointHoldTrajPlanner, SingleJointCubicTrajPlanner
@@ -18,6 +18,7 @@ __all__ = [
     "MdhFkineSolver",
     "IkineSolver",
     "PinIkineSolver",
+    "AnalyticIkineSolver",
     "JacobianSolver",
     "PinJacobianSolver",
     "DynamicsSolver",

@@ -221,7 +221,7 @@ class Backend(ABC):
 
     # ================= 使能（enable / disable） =================
     def enable_arm(self) -> int:
-        """使能 arm 全部关节电机（仅指令发送无回读验证）
+        """使能 arm 全部关节电机（基类仅发指令；是否读回验证由子类内核决定）
 
         逐关节调用子类实现；执行前 `_is_enabled_arm` 置 `None`，全部成功置 `True`。
 
@@ -230,7 +230,7 @@ class Backend(ABC):
         return self._enable_impl("arm")
 
     def enable_end(self) -> int:
-        """使能 end 全部关节电机（仅指令发送无回读验证）
+        """使能 end 全部关节电机（基类仅发指令；是否读回验证由子类内核决定）
 
         逐关节调用子类实现；执行前 `_is_enabled_end` 置 `None`，全部成功置 `True`。
 
@@ -239,7 +239,7 @@ class Backend(ABC):
         return self._enable_impl("end")
 
     def disable_arm(self) -> int:
-        """失能 arm 全部关节电机（仅指令发送无回读验证）
+        """失能 arm 全部关节电机（基类仅发指令；是否读回验证由子类内核决定）
 
         逐关节调用子类实现；执行前 `_is_enabled_arm` 置 `None`，全部成功置 `False`。
 
@@ -248,7 +248,7 @@ class Backend(ABC):
         return self._disable_impl("arm")
 
     def disable_end(self) -> int:
-        """失能 end 全部关节电机（仅指令发送无回读验证）
+        """失能 end 全部关节电机（基类仅发指令；是否读回验证由子类内核决定）
 
         逐关节调用子类实现；执行前 `_is_enabled_end` 置 `None`，全部成功置 `False`。
 
@@ -329,7 +329,7 @@ class Backend(ABC):
         return 1 if ok else 0
 
     def _disable_impl(self, family: str) -> int:
-        """失能的共用实现（仅指令发送无回读验证）: 置 `None` → 逐关节调用子类实现 → 全部成功置 `False`。"""
+        """失能的共用实现（基类仅发指令；是否读回验证由子类内核决定）: 置 `None` → 逐关节调用子类实现 → 全部成功置 `False`。"""
         if self._skip_empty_family(family, f"disable_{family}"):
             return 1
         if not self._require_connected(family, f"disable_{family}"):
@@ -1104,14 +1104,14 @@ class Backend(ABC):
         return self._check_error_impl("end")
 
     def clear_error_arm(self) -> bool:
-        """清除 arm 各关节硬件错误（仅发清错指令）。
+        """清除 arm 各关节硬件错误（基类仅发指令）。
 
         :return: 成功返回 `True`；任一发送失败（warn 提示）返回 `False`。
         """
         return self._clear_error_impl("arm")
 
     def clear_error_end(self) -> bool:
-        """清除 end 各电机硬件错误（仅发清错指令）。
+        """清除 end 各电机硬件错误（基类仅发指令）。
 
         :return: 成功返回 `True`；任一发送失败（warn 提示）返回 `False`。
         """
@@ -1146,7 +1146,7 @@ class Backend(ABC):
         return True
 
     def _clear_error_impl(self, family: str) -> bool:
-        """清错的共用实现：逐关节发送清错指令（无静置、无读回验证）。"""
+        """清错的共用实现：逐关节发送清错指令（无静置；读回验证由子类内核决定）。"""
         if self._skip_empty_family(family, f"clear_error_{family}"):
             return True
         if not self._require_connected(family, f"clear_error_{family}"):

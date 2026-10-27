@@ -15,3 +15,6 @@ __pycache__/
 joyarm_code/joyarm_ros2_ws/build/
 joyarm_code/joyarm_ros2_ws/install/
 joyarm_code/joyarm_ros2_ws/log/
+
+# 脚本产出的分析图（构建产物，勿提交）
+output/

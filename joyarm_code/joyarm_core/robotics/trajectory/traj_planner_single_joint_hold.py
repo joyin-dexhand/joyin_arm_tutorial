@@ -60,7 +60,7 @@ class SingleJointHoldTrajPlanner(TrajPlanner):
         """采样：恒输出直传目标 q（dq/ddq 为 0）。
 
         :param t: 采样时刻（s，绝对时间，仅回填 `TrajFrame.time`）。
-        :return: 此刻轨迹帧 `TrajFrame`（q 恒为发布的目标，dq/ddq 为 0）。
+        :return: 此刻轨迹帧 `TrajFrame`（q 恒为发布的目标，单位 rad；dq/ddq 为 0，单位 rad/s / rad/s²）。
         """
         if self._target_q is None:
             raise RuntimeError(

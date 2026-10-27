@@ -17,7 +17,7 @@
 ```
     from joyarm_core import joyArm   # 导入创建入口
 
-    arm1 = joyArm("joyarm_<型号>")  # 创建对象
+    arm1 = joyArm("<型号>")  # 创建对象
 ``` 
 """
 

@@ -6,7 +6,7 @@
     └── Backend<型号1>
     └── Backend<...>
 
-每个机械臂型号对应一个单独的硬件后端子类（`backend_<型号>` ↔ `joyarm_<型号>`）；
+每个机械臂型号对应一个单独的硬件后端子类（`backend_<型号>` ↔ `<型号>`）；
 新后端创建流程见 `backend_template.py`文件头 docstring。
 """
 from .backend import Backend

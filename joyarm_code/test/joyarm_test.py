@@ -1,10 +1,12 @@
-"""JoyArm 手动冒烟脚本：默认仅执行导入 + 对象创建初始化，其余操作全量注释备用。
+"""JoyArm 手动冒烟脚本：默认执行 真机连接 + MotionFSM 状态转移测试序列。
 
 【功能概要】
-    默认只做两步：① 导入 joyarm_core 对象创建入口与共享类型；② 创建 joyarm_dm
-    型机械臂对象（离线构造：加载 config / URDF / 求解器装配并自检，不连接硬件、
-    不启动任何线程）。joyarm.py 公开面 7.1~7.11 的其余操作在下方全量列出并注释，
-    按需取消注释使用；连接 / 使能 / 指令 / 设零等真机操作启用前请确认现场安全。
+    主动段默认依次执行：① 导入 joyarm_core 并创建 joyarm_dm 型机械臂对象
+    （离线构造：加载 config / URDF / 求解器装配并自检）；② 连接本体与末端；
+    ③ 启动 MotionFSM，按 event0 选定起始事件逐一验证状态转移（set_event →
+    wait_for_motion_state → 打印 当前态/目标态/事件 三元组；FSM 自动切模式
+    +使能，运动会真实发生）。joyarm.py 公开面 7.1~7.11 的其余操作在下方按需
+    摘录并注释；真机操作启用前请确认现场安全。
     主动段整体置于 with 块内：块退出（含末段 Ctrl+C）自动 close() 安全收尾。
     本文件为手动脚本（非 pytest 用例）：主动代码置于 __main__ 守卫内，被 pytest
     收集时仅空导入、不执行任何动作，与同目录套件（test_*.py）互不干扰。
@@ -15,7 +17,7 @@
     uv sync
     source .venv/bin/activate
 
-    # 运行本脚本（离线构造，不连接硬件）
+    # 运行本脚本（真机测试：连接本体并驱动 FSM 运动，注意现场安全）
     python test/joyarm_test.py
 """
 from __future__ import annotations
@@ -49,63 +51,82 @@ if __name__ == "__main__":
 
         # ---- MotionFSM 真机测试：状态转移路线表验证（FSM 自动切模式+使能，运动注意安全） ----
 
-        event0=SafetyEvent.DISABLE
+        # event0=SafetyEvent.DISABLE
         # event0=SafetyEvent.HOLDING
         # event0=SafetyEvent.HOMING
-        # event0=SafetyEvent.ZEROING
+        event0=SafetyEvent.ZEROING
         # event0=SafetyEvent.DAMPING
         # event0=SafetyEvent.NORMAL
 
-        arm.start_motion_fsm()
-        print("=================================================================")
+        # print("============================= 启动运动状态机 ============================")
+        # time.sleep(10)
+        # arm.start_motion_fsm()
+        # arm.wait_for_motion_state(MotionState.MOTION, timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
 
-        arm.set_event(event0)
-        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        arm.set_event(SafetyEvent.NORMAL)
-        arm.wait_for_motion_state(MotionState.MOTION, timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        print("=================================================================")
 
-        arm.set_event(event0)
-        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        arm.set_event(SafetyEvent.HOMING)
-        arm.wait_for_motion_state(MotionState.HOME, timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        print("=================================================================")
+        # print("========================== To NORMAL(MOTION) ============================")
+        # time.sleep(2)
+        # arm.set_event(event0)
+        # arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        # time.sleep(2)
+        # arm.set_event(SafetyEvent.NORMAL)
+        # arm.wait_for_motion_state(MotionState.MOTION, timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
 
-        arm.set_event(event0)
-        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        arm.set_event(SafetyEvent.HOLDING)
-        arm.wait_for_motion_state(MotionState.HOLD, timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        print("=================================================================")
 
-        arm.set_event(event0)
-        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        arm.set_event(SafetyEvent.ZEROING)
-        arm.wait_for_motion_state(MotionState.ZERO, timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        print("=================================================================")
+        # print("========================== To HOMING(HOME) ============================")
+        # time.sleep(2)
+        # arm.set_event(event0)
+        # arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        # time.sleep(2)
+        # arm.set_event(SafetyEvent.HOMING)
+        # arm.wait_for_motion_state(MotionState.HOME, timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
 
-        arm.set_event(event0)
-        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        arm.set_event(SafetyEvent.DAMPING)
-        arm.wait_for_motion_state(MotionState.DAMP, timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        print("=================================================================")
+        # print("========================== To HOLDING(HOLD) ============================")
+        # time.sleep(2)
+        # arm.set_event(event0)
+        # arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        # time.sleep(2)
+        # arm.set_event(SafetyEvent.HOLDING)
+        # arm.wait_for_motion_state(MotionState.HOLD, timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
 
-        arm.set_event(event0)
-        arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        arm.set_event(SafetyEvent.DISABLE)
-        arm.wait_for_motion_state(MotionState.DISABLE, timeout=5.0)
-        print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
-        print("=================================================================")
+        # print("========================== To ZEROING(ZERO) ============================")
+        # time.sleep(2)
+        # arm.set_event(event0)
+        # arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        # time.sleep(2)
+        # arm.set_event(SafetyEvent.ZEROING)
+        # arm.wait_for_motion_state(MotionState.ZERO, timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+
+        # print("========================== To DAMPING(DAMP) ============================")
+        # time.sleep(2)
+        # arm.set_event(event0)
+        # arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        # time.sleep(2)
+        # arm.set_event(SafetyEvent.DAMPING)
+        # arm.wait_for_motion_state(MotionState.DAMP, timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+
+        # print("========================== To DISABLE(DISABLE) ============================")
+        # time.sleep(2)
+        # arm.set_event(event0)
+        # arm.wait_for_motion_state(STATE_FROM[event0], timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        # time.sleep(2)
+        # arm.set_event(SafetyEvent.DISABLE)
+        # arm.wait_for_motion_state(MotionState.DISABLE, timeout=5.0)
+        # print(arm.get_current_motion_state(), arm.get_target_motion_state(), arm.get_event())
+        # print("=================================================================")
+        # time.sleep(2)
 
         # ----safe_monitor 监视器 ----
         # arm.start_monitor()                            # 启动安全监视（内置硬规则）
@@ -119,6 +140,6 @@ if __name__ == "__main__":
         # arm.stop_monitor()                             # 停止监视
 
         # ---- 运行状态可视化（HTTP 轮询 + 自动弹窗） ----
-        # arm.start_state_viz()                          # 启动（traj_points 缺省 200）
-        # time.sleep(1000)
-        # arm.stop_state_viz()                           # 停止（JOYARM_VIZ_NOWINDOW=1 禁弹窗）
+        arm.start_state_viz()                          # 启动（traj_points 缺省 200）
+        time.sleep(100)
+        arm.stop_state_viz()                           # 停止（JOYARM_VIZ_NOWINDOW=1 禁弹窗）

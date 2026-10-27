@@ -2,11 +2,11 @@
 
 接入新硬件后端的步骤：
     1. 拷贝本文件并重命名为 `backend_<型号>.py`，类名为`Backend<型号>`，全文改名（替换 `BackendTemplate` / logger 名）；
-    2. 若不存在 `config/joyarm_<型号>.yaml`配置文件，则拷贝 `config/joyarm_template.yaml` 重命名为 `config/joyarm_<型号>.yaml`
-    3. 完善`config/joyarm_<型号>.yaml` 的 `backend:` 段的配置；
+    2. 若不存在 `config/<型号>.yaml`配置文件，则拷贝 `config/template.yaml` 重命名为 `config/<型号>.yaml`
+    3. 完善`config/<型号>.yaml` 的 `backend:` 段的配置；
     4. 遵循本文件各方法的注释说明实现 backend 的全部 29 个抽象方法（最小可用子集见下方说明）；
     5. 在 `backend/__init__.py` 顶部导入该子类，并在 `REGISTRY` 注册表加一行注册；
-    6. `joyarm_<型号>.yaml` 的 `backend.name` 填如该子类 backend 的注册名；
+    6. `<型号>.yaml` 的 `backend.name` 填如该子类 backend 的注册名；
     7. 子类实现完毕后更新本文件的注释 docstring（由「子类型号模板和实现约束」风格改为「子类型号的介绍说明」风格，包括文件头 docstring、类 docstring、各方法 docstring）。
 
 架构约束：
@@ -51,7 +51,7 @@ class BackendTemplate(Backend):
 
     ── 线程模型（并发调用方，总线访问务必线程安全）──
     - 应用线程：上层直接调用公开方法（send_* 高频路径在控制线程）；
-    - 基类低频刷新线程（daemon）：周期调用 `_read_joint_mode_*` / `_read_joint_state_*`；
+    - 基类低频刷新线程（daemon）：按新鲜度承诺节拍供给，周期调用 `_read_joint_mode_*` / `_read_joint_state_*`；
     - 因此同一总线会被并发读写：收发同步方案（全双工三件套 / 半双工总线锁）见下方差异总览。
 
     ── 两类硬件的典型差异（总览，具体实施因型号而异）──
@@ -93,9 +93,10 @@ class BackendTemplate(Backend):
         # self._is_connected_arm/end、_is_enabled_arm/end     连接/使能三值缓存（None=未知；同名只读属性对外）
         # self._mode_arm/end、_joint_mode_arm/end           模式缓存（get_mode 读齐且一致时更新 / set_mode 成功时乐观更新）
         # self._default_mode_arm/end                        连接后基类自动设的模式（cfg default_mode）
-        # self._write_settle / _refresh_hz                  指令帧生效等待（秒）/ 低频刷新频率（Hz）（cfg 可覆盖）
+        # self._write_settle / _refresh_hz                  指令帧生效等待（秒）/ 状态新鲜度承诺 Hz
         # 勿动：_refresh_stop/_refresh_thread（基类刷新线程）——
         # 子类接收线程自建停止标志（断连即停），勿复用 _refresh_stop。
+        # 自建总线/接收线程在覆写 close() 中回收（先 super().close() 停刷新，再 join 自建线程、关总线）。
         # 型号自定义键只从 _cfg 顶层与 _jointscfg_*[i] 取，其余键值勿重复解析。
 
         # ---- 子类私有成员示例（按型号删改；约定：全部 _ 前缀，不新增公开成员）----
@@ -230,7 +231,7 @@ class BackendTemplate(Backend):
         - `key` 为参数名，映射到厂商寄存器由子类定义——建议维护模块级常量表 `_PARAM_RIDS_arm: dict[str, int]`（参数名 → 寄存器 RID，如 `"pos_kp"` → 27）；若 arm 与 end 共用同一套寄存器表，统一为 `_PARAM_RIDS`；
           配套 `_READONLY_KEYS`（只读参数集）与 `_UINT_RIDS`（uint32 寄存器集，其余按 float32 解析）两个模块级常量，读写两侧共用（舵机类对应 RAM 表，组织方式相同）；
         - 寄存器值分整型（uint32）与浮点（float32）两类，按厂商手册解析；float32 读回与写入值必有低位差异，读回核对（含容差比较）由上层 JoyArm 负责，子类无需处理；
-        - 请求-应答式协议建议发读帧后按 RID 等应答（Event 同步），失败/超时上抛；超时约 0.1s、重试 2~3 次为宜——本方法会被低频刷新线程间接调用，过长重试会拖慢刷新周期；
+        - 请求-应答式协议建议发读帧后按 RID 等应答（Event 同步），失败/超时上抛；超时约 0.1s、重试 2~3 次为宜（本方法仅由用户显式调用，不走刷新线程）；
         - 半双工舵机在总线锁内完成「发读帧 + 等应答 + 解析」整个事务。
 
         :param i: arm 关节下标（`0 ≤ i < self._n_joints_arm`）。
@@ -247,7 +248,7 @@ class BackendTemplate(Backend):
         - `key` 为参数名，映射到厂商寄存器由子类定义——建议维护模块级常量表 `_PARAM_RIDS_end: dict[str, int]`（参数名 → 寄存器 RID，如 `"pos_kp"` → 27）；若 arm 与 end 共用同一套寄存器表，统一为 `_PARAM_RIDS`；
           配套 `_READONLY_KEYS`（只读参数集）与 `_UINT_RIDS`（uint32 寄存器集，其余按 float32 解析）两个模块级常量，读写两侧共用（舵机类对应 RAM 表，组织方式相同）；
         - 寄存器值分整型（uint32）与浮点（float32）两类，按厂商手册解析；float32 读回与写入值必有低位差异，读回核对（含容差比较）由上层 JoyArm 负责，子类无需处理；
-        - 请求-应答式协议建议发读帧后按 RID 等应答（Event 同步），失败/超时上抛；超时约 0.1s、重试 2~3 次为宜——本方法会被低频刷新线程间接调用，过长重试会拖慢刷新周期；
+        - 请求-应答式协议建议发读帧后按 RID 等应答（Event 同步），失败/超时上抛；超时约 0.1s、重试 2~3 次为宜（本方法仅由用户显式调用，不走刷新线程）；
         - 半双工舵机在总线锁内完成「发读帧 + 等应答 + 解析」整个事务。
 
         :param i: end 电机下标（`0 ≤ i < self._n_joints_end`）。
@@ -297,7 +298,7 @@ class BackendTemplate(Backend):
           含 `t` 键（该电机最近一帧数据到达时刻 Unix 秒，基类取各电机最早值聚合为 `JointState.t`）；
         - **缺键 = 该量硬件/协议不提供**（合法）；**键存在但值为 `None` = 可读但数据获取异常**；
         - `error` 必须归一化为全库约定：`0`=失能、`1`=使能（均正常）、`≥2`=故障码；厂商原始码由本方法负责映射；
-        - 若协议有状态流（接收线程持续更新缓存），本方法可直接返回缓存值（不发总线帧），前提是缓存由接收线程维护且能判断新鲜度——**缓存过期须按数据异常处理**（键值置 `None` 或上抛，不得原样返回陈旧值：基类 `t` 取各电机帧到达时刻最早值，无 `t` 键回退装配时刻）；
+        - 若协议有状态流（接收线程持续更新缓存），本方法可直接返回缓存值（不发总线帧），前提是缓存由接收线程维护且能判断新鲜度；
         - 半双工舵机（轮询式）在总线锁内发读帧等应答、解析后返回（每次调用产生总线流量）；
         - 单温度传感器硬件把温度映射到 `temp_rotor`，`temp_mos` 键缺省即可。
 
@@ -315,7 +316,7 @@ class BackendTemplate(Backend):
           含 `t` 键（该电机最近一帧数据到达时刻 Unix 秒，基类取各电机最早值聚合为 `JointState.t`）；
         - **缺键 = 该量硬件/协议不提供**（合法）；**键存在但值为 `None` = 可读但数据获取异常**；
         - `error` 必须归一化为全库约定：`0`=失能、`1`=使能（均正常）、`≥2`=故障码；厂商原始码由本方法负责映射；
-        - 若协议有状态流（接收线程持续更新缓存），本方法可直接返回缓存值（不发总线帧），前提是缓存由接收线程维护且能判断新鲜度——**缓存过期须按数据异常处理**（键值置 `None` 或上抛，不得原样返回陈旧值：基类 `t` 取各电机帧到达时刻最早值，无 `t` 键回退装配时刻）；
+        - 若协议有状态流（接收线程持续更新缓存），本方法可直接返回缓存值（不发总线帧），前提是缓存由接收线程维护且能判断新鲜度；
         - 半双工舵机（轮询式）在总线锁内发读帧等应答、解析后返回（每次调用产生总线流量）；
         - 单温度传感器硬件把温度映射到 `temp_rotor`，`temp_mos` 键缺省即可。
 
@@ -396,7 +397,7 @@ class BackendTemplate(Backend):
         """把 arm 第 `i` 个关节的当前位置记为零点。
 
         实现要点：
-        - 本方法直接发设零帧；本方法通常会调用 _write_joint_param_arm 方法。
+        - 设零实现二选一：协议有专用设零帧则直接发帧；否则经 `_write_joint_param_arm` 写零位寄存器。
 
         :param i: arm 关节下标（`0 ≤ i < self._n_joints_arm`）。
         :return: 设零成功 `True`；失败返回 `False` 或上抛异常。
@@ -407,7 +408,7 @@ class BackendTemplate(Backend):
         """把 end 第 `i` 个电机的当前位置记为零点。
 
         实现要点：
-        - 本方法直接发设零帧；本方法通常会调用 _write_joint_param_end 方法。
+        - 设零实现二选一：协议有专用设零帧则直接发帧；否则经 `_write_joint_param_end` 写零位寄存器。
 
         :param i: end 电机下标（`0 ≤ i < self._n_joints_end`）。
         :return: 设零成功 `True`；失败返回 `False` 或上抛异常。

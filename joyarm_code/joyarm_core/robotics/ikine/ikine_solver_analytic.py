@@ -323,6 +323,8 @@ class AnalyticIkineSolver(IkineSolver):
         """剔除超出软限位的候选解，返回最接近 q0 的单组解。
 
         先调用 solve_all，再最小化各关节角与 q0 的偏差平方和。
+        
+        :param arm: 机械臂对象。
         :param target: TCP 目标位姿。
         :param frame: 配置的末端帧名称或索引。
         :param q0: (6,) 参考关节角，单位为弧度。

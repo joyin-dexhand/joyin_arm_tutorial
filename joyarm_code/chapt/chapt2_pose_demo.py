@@ -22,7 +22,7 @@
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 2. 创建虚拟环境并同步依赖
-    cd ~/joyarm_code
+    cd <仓库路径>/joyarm_code
     uv sync
     source .venv/bin/activate
     # Linux 缺少 libxcb-cursor.so.0 时执行

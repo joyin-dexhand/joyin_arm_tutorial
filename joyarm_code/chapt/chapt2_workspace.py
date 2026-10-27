@@ -16,7 +16,7 @@ JoyArm 工作空间蒙特卡洛采样与可视化  (第二章 §5)
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 2. 创建虚拟环境并同步依赖
-    cd ~/joyarm_code
+    cd <仓库路径>/joyarm_code
     uv sync
     source .venv/bin/activate
 
@@ -60,7 +60,7 @@ def fk_positions(model, data, fid, Q: np.ndarray) -> np.ndarray:
     """逐组求末端位置：Pinocchio 正运动学（用 JoyArm 加载的 URDF 缩减模型）。
 
     :param model: pin.Model（arm.pin_model，nq = 本体关节数）。
-    :param data: pin.Data（复用同一对象，逐组更新；新 JoyArm 已无 pin_data 属性）。
+    :param data: pin.Data（由调用方自建，复用同一对象逐组更新）。
     :param fid: 末端帧 id（model.getFrameId(config joyarm.frame_end)）。
     :param Q: (N, n) 关节角批量。
     :return: (N, 3) 末端位置（基座系）。

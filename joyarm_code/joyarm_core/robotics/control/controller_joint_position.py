@@ -17,12 +17,12 @@ class JointPositionController(Controller):
 
     MODE = ControlMode.POSITION
 
-    def step(self, arm, target: TrajFrame, jointstate: JointState) -> bool:
+    def step(self, arm, target: TrajFrame, joint_state: JointState) -> bool:
         """跟踪当前轨迹帧的关节位置参考，经 `send_position_arm` 直接下发。
 
         :param arm: 机械臂对象。
-        :param target: 目标轨迹帧（当前帧）。
-        :param jointstate: 当前关节状态。
+        :param target: 目标轨迹帧（当前帧；跟踪其 `q`）。
+        :param joint_state: 当前关节状态。
         :return: 是否已成功计算并下发本拍指令。
         """
         if target.q is None:

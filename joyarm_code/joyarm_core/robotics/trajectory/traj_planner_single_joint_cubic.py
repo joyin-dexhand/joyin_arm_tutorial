@@ -34,7 +34,7 @@ class SingleJointCubicTrajPlanner(TrajPlanner):
     def plan(self, arm, target: List[TrajFrame]) -> bool:
         """规划：单帧关节目标由当前状态解三次多项式（位置+速度四约束）。
 
-        :param arm: 机械臂对象（起点读 `arm.get_state_arm()` 的 q/dq。
+        :param arm: 机械臂对象（起点读 `arm.get_state_arm()` 的 q/dq）。
         :param target: 目标帧，单点或序列——仅取单帧的 `q/dq`（`dq` 为终点速度、缺省则取 0）。
         :return: 是否完成规划（无效目标回退恒定 q_home 亦返回 `True`）。
         :raises ValueError: q 有效但目标帧 `time` 为 `None`。

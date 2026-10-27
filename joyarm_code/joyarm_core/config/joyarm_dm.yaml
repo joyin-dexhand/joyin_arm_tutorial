@@ -48,7 +48,7 @@ joyarm:
     dq_max: 6.0 # rad/s
     tau_max: 1.0 # N·m
 
-  # end_frame 系三维位置空间限位
+  # frame_end 系三维位置空间限位
   tcp_limits:                                                                               # ！ 待标定
     workspace_box: [[-0.2, 0.7], [-0.6, 0.6], [0.05, 0.8]] # 3 行 [min, max]，对应 x/y/z (m)
     v_lin_max: 1.0 # m/s
@@ -67,8 +67,8 @@ joyarm:
   # 运动状态机（MotionFSM）
   MotionFSM:
     fsm_hz: 50.0 # 主循环频率 Hz
-    damping_kd: [3.0, 5.0, 5.0, 5.0, 4.0, 3.0] # 阻尼模式逐关节 kd
-    damping_k_gravity: [0.7, 0.7, 0.7, 0.8, 0.7, 0.7] # 阻尼模式逐关节重力补偿率（[0,1]）
+    damping_kd: [3.0, 3.2, 3.5, 3.5, 3.2, 3.0] # 阻尼模式逐关节 kd （[0,5]），需要小于3.5，否则可能出现高频振动
+    damping_k_gravity: [0.6, 0.6, 0.7, 0.8, 0.7, 0.7] # 阻尼模式逐关节重力补偿率（[0,1]）
     monitor_hz: 50.0 # 运动过程监测频率
 
   # 到位判断容差阈值
@@ -106,7 +106,7 @@ robotics:
 # 电机硬件层（backend）：arm与end的硬件通讯
 # ===================================================================
 backend:
-  name: backend_dm # backend 类（backend/__init__.py REGISTRY 中的注册名），与 joyarm_<型号> 对应
+  name: backend_dm # backend 子类（backend/__init__.py REGISTRY 中的注册名），与 <型号> 对应
   state_refresh_hz: 20.0 # 低频状态刷新频率（Hz，默认 20）
   write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
   rx_hz: 1000.0 # RX 收取线程节拍（Hz，串口阻塞读超时=1/rx_hz；backend_dm 专用）

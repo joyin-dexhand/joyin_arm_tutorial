@@ -46,6 +46,8 @@ def _fkine_mdh(mdh: np.ndarray, q: np.ndarray) -> np.ndarray:
     return T_06
 
 class MdhFkineSolver(FkineSolver):
+    """MDH 参数正运动学（仅支持末端帧 `frame_end_tcp`）。"""
+
     def solve(self, arm, q: np.ndarray, frame) -> Pose:
         """正运动学求解：frame_end_tcp 相对于基座的位姿。"""
         model = arm.pin_model

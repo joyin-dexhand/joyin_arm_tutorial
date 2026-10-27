@@ -29,6 +29,7 @@ from .types import (
     ControlMode,
     MotionState,
     SafetyEvent,
+    STATE_FROM,
 )
 from .transforms import (
     rot_x,
@@ -74,6 +75,7 @@ __all__ = [
     "ControlMode",
     "MotionState",
     "SafetyEvent",
+    "STATE_FROM",
     # transforms
     "rot_x",
     "rot_y",
