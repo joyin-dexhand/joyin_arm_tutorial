@@ -8,7 +8,7 @@ joyarm_code/
 ├── joyarm_ros2_ws/  # ROS2 工作空间（规划，未创建）
 ├── chapt/           # 章节教学示例脚本（一次性演示）
 ├── test/            # 测试套件
-├── quickstart/      # 快速上手（待补）
+├── quickstart/      # 快速上手示例脚本
 └── pyproject.toml   # 工程配置与依赖
 ```
 
@@ -67,6 +67,8 @@ arm.set_target_joint(time.time() + 3.0, arm.home_arm)  # 关节目标：3 秒后
 arm.stop_motion_fsm()                # 停止状态机（阻塞安全停机：回零失能；更高危事件时直接失能）
 arm.close()                          # 安全退出（失能 + 断开；亦可用 with 语句）
 ```
+
+完整例程见 `quickstart/` 目录（共 7 个，覆盖 JoyArm 全部公开接口），逐个说明见教程使用篇「快速上手」章。
 
 ## 5. 运行教学章节示例
 

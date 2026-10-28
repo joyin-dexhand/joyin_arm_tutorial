@@ -6,10 +6,56 @@
 - 初始化与自检（定义与赋值两阶段 + cfg 全套自检 + pin 锁末端缩减模型 + 完成后 info）；
 - 硬件后端委托面（arm/end 两组薄委托 + FSM 运行中的外部指令互斥与 ctrl 线程豁免）；
 - 求解器六域成员 /方法 热切换 / 目标帧通道 + plan/ctrl 两线程 + 数学门面；
-- 运动状态机 MotionFSM（六状态 + 路线表 + start/stop + 销毁安全退出）；
+- 运动状态机 MotionFSM（六状态 + 路线表 + start/stop + 销毁安全退出；状态、转移与安全事件见下方四表）；
 - 安全事件 SafetyEvent 与 safe_monitor 监视器（硬规则 + 自定义规则）；
 - 运行状态可视化（HTTP 轮询：单页面监控网页 + 单一只读 daemon 线程）。
 
+MotionFSM 状态定义表（各态进入/维持先经模式/使能自愈 `_ensure_arm_ready`：每拍只读一次模式、
+不一致才写、先模式后使能，失败下拍重试不改事件；进入动作前后复查事件与停机标志，失败不提交
+状态——保留旧态必要缓存、下拍重试；DAMP 进入拍不发阻尼帧，首帧由下拍维持发出）：
+
+| 状态 | 状态概述 | 进入操作 | 保持时的操作 | 退出时的操作 |
+|:--:|:--|:--|:--|:--|
+| `DISABLE` | 失能停机 | `disable_arm`→`clear_error_arm`→再 `disable_arm`（末次成功才提交） | 每拍失能（确知已失能静默不发帧） | — |
+| `ZERO` | 零位失能 | 自愈 POSITION/使能 → 发零位位置指令（`_zero_moving=True`） | 每拍重发零位；到位→失能并转失能维持 | 清 `_zero_moving`（迁移成功后） |
+| `HOME` | 空闲保持 | 自愈 POSITION/使能，清到位标志（`_home_arrived=False`） | 每拍重发 home 位形并刷新到位标志（转出门槛） | — |
+| `MOTION` | 正常运动 | 启动 plan/ctrl 两线程（模式随控制器 `MODE` 类属性） | 两线程逐拍规划+控制下发；FSM 检测线程死亡即重建 | 撤销下发许可→停 plan/ctrl 线程（确认退出才提交） |
+| `HOLD` | 原位锁定 | 读新鲜 q → 自愈 POSITION/使能 → 同拍发锁定位置首帧（存 `_hold_q`） | 每拍重发锁定位置 | 清 `_hold_q`（迁移成功后） |
+| `DAMP` | 阻尼防护 | 自愈 MIT/使能；dyn 未配置且 `damping_k_gravity`>0 时 warn 退化纯阻尼 | 每拍 MIT `q=0/kp=0/kd=damping_kd/tau=damping_k_gravity·G(q)`（快照无效 tau 置零） | — |
+
+状态转移表（第一列为起点、第一行为终点、主体为下一跳路线；`HOME` 为中枢——非邻接转移经
+HOME 中转、保护性目标直达；主体 `—` = 起终点同态，该拍直接维持不走表；`HOME→ZERO/MOTION`
+须 home 到位（`_home_arrived` 且新鲜反馈在 home 位形），否则留 HOME 每拍复核）：
+
+| 起点＼终点 | `DISABLE` | `ZERO` | `HOME` | `MOTION` | `HOLD` | `DAMP` |
+|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `DISABLE` | — | `HOME` | `HOME` | `HOME` | `HOLD` | `DAMP` |
+| `ZERO` | `DISABLE` | — | `HOME` | `HOME` | `HOLD` | `DAMP` |
+| `HOME` | `DISABLE` | `ZERO` | — | `MOTION` | `HOLD` | `DAMP` |
+| `MOTION` | `DISABLE` | `HOME` | `HOME` | — | `HOLD` | `DAMP` |
+| `HOLD` | `DISABLE` | `HOME` | `HOME` | `HOME` | — | `DAMP` |
+| `DAMP` | `DISABLE` | `HOME` | `HOME` | `HOME` | `HOLD` | — |
+
+安全事件与运动状态映射表（模块级 `STATE_FROM`，定义于 `utils/types.py`；`set_event` 持事件锁
+原子赋值事件 + 目标状态，FSM 每拍按转移表向目标迁移；监视器硬规则：任一关节 error≥2 →
+`DAMPING`，断连或连续 0.1s 无新鲜快照 → `DISABLE`）：
+
+| SafetyEvent | `NORMAL` | `HOLDING` | `HOMING` | `ZEROING` | `DAMPING` | `DISABLE` |
+|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| 目标 MotionState | `MOTION` | `HOLD` | `HOME` | `ZERO` | `DAMP` | `DISABLE` |
+
+安全事件危险性等级表（模块级 `_EVENT_DANGER`，危险程度递增；监视器同拍多命中取最高且仅升
+不降——命中高于当前事件才 `set_event`；`stop_motion_fsm` 当前事件高于 `ZEROING` 时免回零直接
+失能，等待中升档或失连立即转 `DISABLE`）：
+
+| SafetyEvent | `NORMAL` | `HOLDING` | `HOMING` | `ZEROING` | `DAMPING` | `DISABLE` |
+|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| 危险性等级 | 0（最低） | 1 | 2 | 3 | 4 | 5（最高） |
+
+生命周期：`start_motion_fsm` 复位全部缓存后以 `current=DISABLE / event=NORMAL / target=MOTION`
+启动，按转移表自动 `DISABLE → HOME → MOTION`；`stop_motion_fsm` 阻塞安全停机（≤ZEROING 置
+ZEROING 经 HOME 回零失能、超时 `move_wait_timeout` 强制推进；更高危直接失能），最终收尾禁止
+自愈与下发 → 停 FSM/plan/ctrl 线程 → 最后失能。
 """
 from __future__ import annotations
 
@@ -562,7 +608,7 @@ function fmtClock(t) {   // Unix 秒 → 本地 HH:MM:SS.mmm（仅 time.time() �
   const d = new Date(t * 1000), p = (x, n = 2) => String(x).padStart(n, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
 }
-function jointTable(el, fam, g, emptyText) {   // 关节状态表：行=数据项、列=关节（#/name 并入关节名表头）
+function jointTable(el, fam, g, emptyText) {   // 关节状态表：行=数据项、列=关节（表头 = 首列族名 + 逐关节名）
   if (!g || !g.names || !g.names.length) { el.innerHTML = `<tr><td>${emptyText}</td></tr>`; return; }
   const row = (label, cell) => leafRow(label, g.names.map((n, i) => cell(i)).join(""));
   let h = headJ(fam, g.names);
@@ -680,7 +726,7 @@ function renderPoses(st) {
   poseTable($("poses-arm"), "arm", id ? id.joint_names_arm : [], st);
   poseTable($("poses-end"), "end", id ? id.joint_names_end : [], st);
 }
-function renderCtrl(cd) {   // 控制默认值：拆为 电机默认模式/运动状态机/MIT/POS_VEL 四表；到位容差不展示
+function renderCtrl(cd) {   // 控制默认值：拆为 电机默认模式/运动状态机/MIT/POS_VEL 四表
   const id = (STATIC && STATIC.ident && !STATIC.ident._error) ? STATIC.ident : null;
   const names = id ? id.joint_names_arm : [];
   if (!cd || cd._error || !names.length) {
@@ -2960,8 +3006,8 @@ class JoyArm:
         :param q: 位置目标 `(n_arm,)` rad，必填。
         :param dq: 速度前馈 `(n_arm,)` rad/s；缺省 `zeros(n_arm)`。
         :param tau: 力矩前馈 `(n_arm,)` N·m；缺省 `zeros(n_arm)`。
-        :param kp: 位置增益 `(n_arm,)`；缺省取 `_kp_mit_default_arm`。
-        :param kd: 速度增益 `(n_arm,)`；缺省取 `_kd_mit_default_arm`。
+        :param kp: 位置增益 `(n_arm,)`；缺省由 backend 取 cfg `backend.arm.joints[].MIT.kp`。
+        :param kd: 速度增益 `(n_arm,)`；缺省由 backend 取 cfg `backend.arm.joints[].MIT.kd`。
         """
         if not self._fsm_guard("send_mit_arm"):
             return
@@ -2973,8 +3019,8 @@ class JoyArm:
         :param q: 位置目标 `(n_end,)` rad，必填。
         :param dq: 速度前馈 `(n_end,)` rad/s；缺省 `zeros(n_end)`。
         :param tau: 力矩前馈 `(n_end,)` N·m；缺省 `zeros(n_end)`。
-        :param kp: 位置增益 `(n_end,)`；缺省取 `_kp_mit_default_end`。
-        :param kd: 速度增益 `(n_end,)`；缺省取 `_kd_mit_default_end`。
+        :param kp: 位置增益 `(n_end,)`；缺省由 backend 取 cfg `backend.end.joints[].MIT.kp`。
+        :param kd: 速度增益 `(n_end,)`；缺省由 backend 取 cfg `backend.end.joints[].MIT.kd`。
         """
         self._backend.send_mit_end(q, dq, tau, kp, kd)
 

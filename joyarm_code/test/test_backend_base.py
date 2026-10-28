@@ -1,10 +1,10 @@
 """Backend 基类测试：上层公开调用 + 单 joint 内核调用面（Dummy 全内核模拟）。
 
 覆盖：cfg 预解析（限位/发送默认/POS_VEL 增益/baud/运行参数鲁棒回退）、三值状态标志、族内同步读取、
-写入无静置读回（验证上移 JoyArm）、set_mode 写入即返 + 乐观更新模式缓存（门禁立即放行，一致性经 get_mode 读回纠正）、
+写入无静置读回（读回验证见 backend/backend_verify.py）、set_mode 写入即返 + 乐观更新模式缓存（门禁立即放行，一致性经 get_mode 读回纠正）、
 三模式发送流水线（维度/一维性→空值/裁剪→连接/模式门禁→逐 joint 内核）、
 状态数据异常拦截（空值/非有限值/非标量）、错误码获取/检查/清错（读快照不发帧、无失能门禁）、set_zero 无失能门禁、
-空族跳过、低频保活线程（mode 已知不重读）、断连编排、刷新 0.8 阈值与 abled 推导、定时器销毁双路径
+空族跳过、低频保活线程（mode 已知不重读）、断连编排、刷新半拍（0.5×tick）陈旧度阈值与 abled 推导、定时器销毁双路径
 （close() 显式 / 随对象销毁自动）。
 
 注意：test_04 起的多数用例共享模块级主 Dummy `b` 的演化状态（与被移植的冒烟脚本一致），
@@ -456,7 +456,7 @@ def test_10_read_param(b):
     del b.fail_at["read_joint_param_arm"]
 
 
-# ---- T9 write_param（写入全组即成功：无静置、无读回验证——验证上移 JoyArm） ----
+# ---- T9 write_param（写入全组即成功：无静置、无读回验证——读回验证见 backend/backend_verify.py） ----
 def test_11_write_param(b):
     cap.msgs.clear()
     assert b.write_param_arm("pos_kp", [1, 2, 3, 4, 5, 6]) == 1

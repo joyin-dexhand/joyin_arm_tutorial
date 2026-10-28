@@ -25,7 +25,7 @@
 1. 空 cfg `{}` 即可构造成功（基类 `__init__` 对缺段/缺键全部容错，构造不做任何总线 I/O）；
 2. `connect_*` 成功后 `is_connected_*` 为 `True`；无 MIT 的型号在 yaml 配 `default_mode: position` 后连接无 warn；
 3. `get_state_*` 返回 `JointState`：硬件提供的字段为 `(n,)` 数组、硬件不提供的字段为 `None`，`t` 为各电机数据帧到达时刻的最早值；
-4. `set_mode_*` 成功后 `mode_*` 即为所设模式（乐观更新缓存，发送门禁立即放行）；`get_mode_*` 能读回同一模式（读回以硬件真值纠正缓存）；
+4. `set_mode_*` 成功后 `_mode_*` 即为所设模式（乐观更新缓存，发送门禁立即放行）；`get_mode_*` 能读回同一模式（读回以硬件真值纠正缓存）；
 5. 发送越限指令被基类就近裁剪并 warn（内核收到的入参必在硬限位内，子类无需自检）；
 6. `read_param_*` 返回逐关节**标量** list（子类返回非标量会被基类拦截、整组作废返 `None`）；
 7. `disconnect_*` 后重连可恢复（断连清空模式缓存，重连自动设默认模式并乐观回填）。
@@ -40,7 +40,7 @@ from .backend import Backend
 
 __all__ = ["BackendTemplate"]
 
-logger = logging.getLogger("joyarm_core.backend_<型号>")  # 改型号时同步改名（如 ...backend_**）
+logger = logging.getLogger("joyarm_core.backend_<型号>")  # 改型号时同步改名
 
 
 class BackendTemplate(Backend):

@@ -1,12 +1,13 @@
-"""JoyArm 手动冒烟脚本：默认执行 真机连接 + MotionFSM 状态转移测试序列。
+"""JoyArm 手动冒烟脚本：默认执行 真机连接 + 状态可视化冒烟（MotionFSM 转移序列按需启用）。
 
 【功能概要】
     主动段默认依次执行：① 导入 joyarm_core 并创建 joyarm_dm 型机械臂对象
     （离线构造：加载 config / URDF / 求解器装配并自检）；② 连接本体与末端；
-    ③ 启动 MotionFSM，按 event0 选定起始事件逐一验证状态转移（set_event →
-    wait_for_motion_state → 打印 当前态/目标态/事件 三元组；FSM 自动切模式
-    +使能，运动会真实发生）。joyarm.py 公开面 7.1~7.11 的其余操作在下方按需
-    摘录并注释；真机操作启用前请确认现场安全。
+    ③ 启动状态可视化（start_state_viz，默认自动弹监控窗；JOYARM_VIZ_NOWINDOW=1
+    禁弹窗）。④（按需启用，当前默认注释）启动 MotionFSM，按 event0 选定起始事件
+    逐一验证状态转移（set_event → wait_for_motion_state → 打印 当前态/目标态/事件
+    三元组；FSM 自动切模式+使能，运动会真实发生）。joyarm.py 公开面 7.1~7.11 的
+    其余操作在下方按需摘录并注释；真机操作启用前请确认现场安全。
     主动段整体置于 with 块内：块退出（含末段 Ctrl+C）自动 close() 安全收尾。
     本文件为手动脚本（非 pytest 用例）：主动代码置于 __main__ 守卫内，被 pytest
     收集时仅空导入、不执行任何动作，与同目录套件（test_*.py）互不干扰。
@@ -17,7 +18,7 @@
     uv sync
     source .venv/bin/activate
 
-    # 运行本脚本（真机测试：连接本体并驱动 FSM 运动，注意现场安全）
+    # 运行本脚本（真机测试：连接本体并弹监控窗；FSM 段启用后驱动真实运动，注意现场安全）
     python test/joyarm_test.py
 """
 from __future__ import annotations

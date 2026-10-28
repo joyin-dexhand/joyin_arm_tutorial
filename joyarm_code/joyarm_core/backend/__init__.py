@@ -21,7 +21,7 @@ def get_backend(name: str) -> type:
     """按注册名解析后端类（config `backend.name` 选型入口）。
 
     :param name: 注册名（如 `"backend_dm"`）。
-    :return: 后端类（调用时传 yaml `backend:` 段字典，`name` 已弹出）。
+    :return: 后端类（构造传 yaml `backend:` 段字典值）。
     :raises ValueError: 注册名未知时抛出，并列出全部可选项。
     """
     if name not in REGISTRY:

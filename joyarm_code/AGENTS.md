@@ -51,16 +51,15 @@ joyarm_code/
 │   │   └── __init__.py              #     REGISTRY（backend_dm）+ get_backend(name) 选型
 │   ├── joyarm/                      #   设备模型层（主类 + FSM + 监视器 + 可视化 + 对象创建入口）
 │   │   ├── joyarm.py                #     JoyArm 主类：初始化自检/硬件委托面/六域两线程/数学门面/MotionFSM/safe_monitor/状态可视化
-│   │   ├── __init__.py              #     JoyArmFactory / joyArm / listArm / load_config（对象创建入口）
-│   │   └── joyarm_verify.py         #     JoyArm 层分级验收 CLI（缺省离线 Dummy 全自动；--real 真机分级确认；独立工具，不入门面）
+│   │   └── __init__.py              #     JoyArmFactory / joyArm / listArm / load_config（对象创建入口）
 │   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
 │   └── config/                      #   per-model YAML（joyarm/robotics/backend 三段）
 │       ├── joyarm_dm.yaml           #     正式型号配置
 │       └── template.yaml            #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 listArm）
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性；基础设施优先复用 joyarm_core，章节算法可自行实现）
-├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；test_robotics.py：robotics 六域；test_joyarm.py：JoyArm FSM 离线回归；test_model_naming.py：型号名约定离线回归；joyarm_test.py：手动冒烟脚本）
-├── quickstart/                      # 快速上手示例（占位待补；CLI/GUI 入口规划见 §2.3）
+├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；test_robotics.py：robotics 六域；test_joyarm.py：JoyArm FSM 离线回归；joyarm_test.py：手动冒烟脚本）
+├── quickstart/                      # 快速上手示例脚本（7 个；CLI/GUI 入口规划见 §2.3）
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
 ├── README.md                        # 用户向入口
 └── AGENTS.md                        # 本文件
@@ -119,7 +118,7 @@ backend: {name: backend_dm, 可选运行键 state_refresh_hz/write_settle（默�
 
 ### 2.3 库边界
 
-SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）；CLI/GUI → `quickstart/`（占位）；教学脚本 → `chapt/`。
+SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）；快速上手示例脚本 → `quickstart/`；教学脚本 → `chapt/`。
 
 ## 3. 模块与 API 速查（随代码进度实时更新）
 
@@ -145,6 +144,13 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `joyarm/__init__.py` | `JoyArmFactory`/`joyArm`/`listArm`/`load_config`（对象创建入口，四步校验失败语义见约束4；`listArm` 三条件过滤与失败消息共用实现） | — | ✅ |
 | `joyarm/joyarm.py` 内 `_VizWindow` | 监控页原生窗口封装类（JoyArm 成员 `_viz_window`：init 占位 None、start 时创建赋值、stop 终止；`launch()` 经 `python -c` 拉起子进程跑 `child_main()`——`QMainWindow`+`QWebEngineView` 内嵌 Chromium 加载三栏页，内置早夭看护（主动停止标志防误告警、stop 超时 kill 兜底）；零数据逻辑，数据仍来自 HTTP 服务；关窗即退出子进程） | — | ✅ |
 | `config/joyarm_dm.yaml` | 型号 YAML 三段（结构与限位语义见 §1.3） | — | ✅ |
+| `quickstart/01_offline_model.py` | 离线模型与数学：无需硬件的模型信息浏览 + 正逆运动学/雅可比/动力学求解与六域求解器切换 | 使用篇 | ✅ |
+| `quickstart/02_connect_read.py` | 连接与状态读取：连接、使能与状态读取（两种状态口径、故障码与电机参数读取） | 使用篇 | ✅ |
+| `quickstart/03_direct_command.py` | 直接指令与夹爪：FSM 未运行时的直接指令（位置/速度/MIT 三模式与末端夹爪动作） | 使用篇 | ✅ |
+| `quickstart/04_fsm_motion.py` | FSM 关节与笛卡尔运动：状态机闭环运动（关节/笛卡尔目标、TrajFrame 通道与安全事件切换） | 使用篇 | ✅ |
+| `quickstart/05_monitor_viz.py` | 监视器与可视化：自定义安全监视规则与三栏实时可视化面板 | 使用篇 | ✅ |
+| `quickstart/06_teach_replay.py` | 拖动示教与回放：阻尼态拖动示教录制轨迹并逐路点回放 | 使用篇 | ✅ |
+| `quickstart/07_pick_demo.py` | 综合抓取：逆解 + FSM 运动 + 夹爪的完整抓取—放置闭环 | 使用篇 | ✅ |
 
 ### 3.2 组装与数据流
 
@@ -199,7 +205,7 @@ JoyArm.start_motion_fsm()（前置已连接、反馈新鲜有效、无电机故�
 # 安全事件与监视器（事件→目标状态映射：NORMAL→MOTION…DISABLE 危险度最高；FSM 每拍消费，实际响应延迟还受总线 I/O 与线程调度影响）
 JoyArm.set_event(SafetyEvent) · get_event() · start_monitor() / stop_monitor() · set_monitor_rules(rules)    # 监视器独立 daemon 线程（monitor_hz）：硬规则（error≥2→DAMPING；断连或连续 0.1s 无新鲜快照→DISABLE，快照过期过滤判 None）与自定义规则命中合并、统一取危险度最高、事件锁保证比较与升档发布原子化；rule(state_arm, state_end, motion, event) → SafetyEvent|None ✅
 # 运行状态可视化（HTTP 轮询、零新增依赖、纯被动快照零总线帧、与 FSM/规划控制线程正交）
-JoyArm.start_state_viz(traj_points=200) / stop_state_viz()    # 单页面三栏监控网页（中间 1:1、两侧 1:3 内部纵滚），start 后默认自动弹出 PySide6 QtWebEngine 原生窗口（joyarm.py 内 `_VizWindow` 子进程加载同页、JoyArm 成员 `_viz_window` 持有，stop 随手关窗；`JOYARM_VIZ_NOWINDOW=1`/无显示器/启动失败降级仅打 URL 日志）：左静态（/static.json，start 时装配一次、页面加载拉取一次：标识与关节/限位（硬+软逐关节+tcp_limits）/特征位形/控制默认值（仅跨型号通用键）/cfg 原文折叠五组）+ 中 3D（iframe 嵌 meshcat（初始化失败降级占位）；arm+end 联动的可视化专属缩减 pin 模型（数学用 _pin_model 不动），display q 按关节名映射快照拼装、无效保持上一帧、构建失败降级 arm-only）+ 右动态（JS ~5Hz fetch /state.json：运行态/快照时刻与新鲜度标注/arm+end 关节表/末端位姿速度/求解器激活与目标帧摘要；控制模式无被动来源不展示）；单一只读 daemon 线程（绝不下发指令）；meshcat 刷新带 zmq 超时看门狗（连续失败降级仅 HTML）、stop 回收 meshcat-server 子进程；轨迹显示可选（需 MOTION 态，开关在中栏 3D 角部）✅
+JoyArm.start_state_viz(traj_points=200) / stop_state_viz()    # 单页面三栏监控网页（中间 1:1、两侧 1:2 内部纵滚），start 后默认自动弹出 PySide6 QtWebEngine 原生窗口（joyarm.py 内 `_VizWindow` 子进程加载同页、JoyArm 成员 `_viz_window` 持有，stop 随手关窗；`JOYARM_VIZ_NOWINDOW=1`/无显示器/启动失败降级仅打 URL 日志）：左静态（/static.json，start 时装配一次、页面加载拉取一次，六组：标识（型号/frame_end/URDF）/关节与限位（arm、end 两表：行=硬限位上/下限、软限位上/下限）/末端与限位/特征位形（arm、end 两表 zero/home/neutral）/控制默认值（h2 下四子表：电机默认模式、运动状态机、MIT 模式默认值、POS_VEL 电机内部增益；arrival_tol/write_settle/move_wait_timeout 载荷仍带不渲染）/cfg 原文折叠）+ 中 3D（iframe 嵌 meshcat（初始化失败降级占位）；arm+end 联动的可视化专属缩减 pin 模型（数学用 _pin_model 不动），display q 按关节名映射快照拼装、无效保持上一帧、构建失败降级 arm-only）+ 右动态（JS ~5Hz fetch /state.json：运行状态两表（表1 行=arm/end×列=连接/使能/状态快照；表2 状态机运行状态（fsm.running）/当前/目标/安全事件）、末端位姿与速度（首行末端系 frame_end）、arm/end 关节状态（行=数据项 q/dq/tau/T_mos/T_rot/err、表头=关节名）、当前求解器（traj/ctrl 附频率；目标帧摘要不渲染））；全部单元格居中、fitTables() 表超栏宽整体等比缩字号（兼容任意 n_arm+n_end）；单一只读 daemon 线程（绝不下发指令）；meshcat 刷新带 zmq 超时看门狗（连续失败降级仅 HTML）、stop 回收 meshcat-server 子进程；轨迹显示可选（需 MOTION 态，开关在中栏 3D 角部）✅
 # 销毁（支持 with 上下文）
 JoyArm.close()    # stop_motion_fsm → stop_monitor → stop_state_viz → disable_arm/end → disconnect_arm/end → backend.close（各步异常转 warn 不阻断收尾；arm 断连时仍停线程清缓存；with 异常退出先置 DISABLE，不回零；close 后需新建对象再连接）✅
 ```

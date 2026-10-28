@@ -56,7 +56,7 @@ class Backend(ABC):
         # 成员变量定义（先赋初值，具体值经下方初始化过程自 cfg 解析）
         # ============================================================
         self._cfg = cfg                                       # config 的 backend 段
-        self._name = ""                                       # backend 名（cfg.name）
+        self._name = ""                                       # backend 注册名（cfg.name）
         self._channel_arm = None                              # arm 总线通道（cfg.arm.channel）
         self._channel_end = None                              # end 总线通道（cfg.end.channel）
         self._baud_arm = None                                 # arm 总线波特率（cfg.arm.baud_rate）
@@ -154,7 +154,7 @@ class Backend(ABC):
                                            error=np.full(self._n_joints_end, -1))
         self._joint_mode_arm = [None] * self._n_joints_arm
         self._joint_mode_end = [None] * self._n_joints_end
-        # 提取发送默认值与 POS_VEL 增益为 (n,) 成员：缺配置的关节以 NaN 占位并 warn；
+        # 提取发送默认值与 POS_VEL 增益为 (n,) 成员：键缺/非法的关节 NaN 占位并 warn（整体缺省静默 NaN）；
         self._kp_mit_default_arm = self._extract_joint_values("arm", "MIT", "kp")
         self._kd_mit_default_arm = self._extract_joint_values("arm", "MIT", "kd")
         self._vlim_default_arm = self._extract_joint_values("arm", "POS_VEL", "vlim")
@@ -478,7 +478,8 @@ class Backend(ABC):
     def _get_mode_impl(self, family: str) -> Union[ControlMode, None]:
         """读模式的共用实现：先全部读齐再整体赋值。
 
-        全组一致时更新 `_mode_{family}`并返回该模式；不一致或读取失败返回 `None`（不赋值、不更新成员）。
+        全组一致时更新 `_mode_{family}`并返回该模式；不一致或读取失败返回 `None`
+        （不一致时逐关节缓存 `_joint_mode_{family}` 仍写入实读值，读取失败则完全不更新）。
         """
         if self._skip_empty_family(family, f"get_mode_{family}"):
             return None
@@ -619,7 +620,9 @@ class Backend(ABC):
                 logger.warning("backend.py - 低频状态刷新：单拍异常（下周期重试）：%s", e)
 
     def _refresh_tick(self, tick: float) -> None:
-        """单拍刷新：整族读状态，并按 `error` 码同步使能缓存。"""
+        """单拍刷新：快照龄超半拍（0.5×tick）的族整族读状态并按 `error` 码同步使能缓存；
+           逐关节模式缓存含 None 时先补 `get_mode_*`。
+        """
         for family in ("arm", "end"):
             if self._n(family) == 0 or not getattr(self, f"_is_connected_{family}"):
                 continue
@@ -721,7 +724,7 @@ class Backend(ABC):
     def set_mode_arm(self, mode: ControlMode = ControlMode.MIT) -> int:
         """arm 逐关节设置控制模式。
 
-        写入成功后乐观更新模式缓存（`mode_arm` 即为所设模式，发送门禁立即放行）；
+        写入成功后乐观更新模式缓存（`_mode_arm` 即为所设模式，发送门禁立即放行）；
         缓存与硬件的一致性经 `get_mode_arm` 读回核实。
 
         :param mode: 目标控制模式，默认 :class:`ControlMode.MIT`（默认模式）。
@@ -732,7 +735,7 @@ class Backend(ABC):
     def set_mode_end(self, mode: ControlMode = ControlMode.MIT) -> int:
         """end 逐电机设置控制模式。
 
-        写入成功后乐观更新模式缓存（`mode_end` 即为所设模式，发送门禁立即放行）；
+        写入成功后乐观更新模式缓存（`_mode_end` 即为所设模式，发送门禁立即放行）；
         缓存与硬件的一致性经 `get_mode_end` 读回核实。
 
         :param mode: 目标控制模式，默认 :class:`ControlMode.MIT`（默认模式）。

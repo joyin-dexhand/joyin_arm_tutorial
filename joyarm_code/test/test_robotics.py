@@ -20,8 +20,8 @@
   远超工作空间目标 `success=False`；
 - jacobian：Pin 雅可比与 pinocchio 原生 getFrameJacobian（LOCAL_WORLD_ALIGNED）逐位一致、
   阻尼伪逆 `J·J*≈I`（满秩；λ=0 退化最小范数伪逆）；
-- dynamics-F0：`PinDynamicsSolver.mass_matrix` 的 crba 拆行写法与修复前单行原式输出
-  逐位一致（纯格式整理不改行为），对称化照常生效；
+- dynamics-F0：`PinDynamicsSolver.mass_matrix` 输出与 pin.crba 原式逐位一致
+  （含上三角对称化，纯整理不改行为）；
 - single_joint_hold 直传保持（2026-10-12）：有效 q 恒输出（其余字段忽略）、q 空/维度
   不符/多帧/空目标回退 q_home、发布为拷贝不受外部原地修改；
 - single_joint_cubic 三次多项式（2026-10-12 新增）：起终点位置+速度四约束边界、
@@ -81,7 +81,7 @@ class StubArm:
 # dynamics 域（bug 修复回归）
 # ============================================================
 
-# ---- dynamics-F0：crba 拆行写法与修复前单行原式输出逐位一致（纯格式不改行为） ----
+# ---- dynamics-F0：mass_matrix 输出与 pin.crba 原式逐位一致（纯整理不改行为） ----
 def test_dynamics_F0_mass_matrix_split_line_bitwise():
     arm = _arm()
     model = arm.pin_model
@@ -89,11 +89,11 @@ def test_dynamics_F0_mass_matrix_split_line_bitwise():
     rng = np.random.default_rng(42)
     for i in range(5):
         q = rng.uniform(model.lowerPositionLimit, model.upperPositionLimit)
-        M_mod = solver.mass_matrix(arm, q)          # 修复后的拆行实现
+        M_mod = solver.mass_matrix(arm, q)          # 现行实现
         M_ref = np.array(pin.crba(model, pin.Data(model),
-                                  np.asarray(q, dtype=float)), dtype=float)  # 修复前原式
-        M_ref = np.triu(M_ref) + np.triu(M_ref, 1).T                # + 原对称化
-        assert M_mod.tobytes() == M_ref.tobytes(), f"q[{i}] 拆行改写改变输出"
+                                  np.asarray(q, dtype=float)), dtype=float)  # 原式参照
+        M_ref = np.triu(M_ref) + np.triu(M_ref, 1).T                # + 上三角对称化
+        assert M_mod.tobytes() == M_ref.tobytes(), f"q[{i}] 实现整理改变输出"
     assert np.allclose(M_mod, M_mod.T), "对称化失效"
 
 
