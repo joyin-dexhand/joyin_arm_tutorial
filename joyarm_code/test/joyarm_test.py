@@ -1,7 +1,7 @@
 """JoyArm 手动冒烟脚本：默认执行 真机连接 + 状态可视化冒烟（MotionFSM 转移序列按需启用）。
 
 【功能概要】
-    主动段默认依次执行：① 导入 joyarm_core 并创建 joyarm_dm 型机械臂对象
+    主动段默认依次执行：① 导入 joyarm_core 并创建 rebot_arm_b601_dm 型机械臂对象
     （离线构造：加载 config / URDF / 求解器装配并自检）；② 连接本体与末端；
     ③ 启动状态可视化（start_state_viz，默认自动弹监控窗；JOYARM_VIZ_NOWINDOW=1
     禁弹窗）。④（按需启用，当前默认注释）启动 MotionFSM，按 event0 选定起始事件
@@ -39,9 +39,9 @@ from joyarm_core import (
 
 if __name__ == "__main__":
 
-    with joyArm("joyarm_dm") as arm:                     # 创建对象（离线构造；任一自检失败抛携带原因的异常）；with 退出自动收尾
+    with joyArm("rebot_arm_b601_dm") as arm:                     # 创建对象（离线构造；任一自检失败抛携带原因的异常）；with 退出自动收尾
 
-        print(f"『joyarm_dm』创建成功：arm {arm.n_arm} 关节 / end {arm.n_end} 电机")
+        print(f"『rebot_arm_b601_dm』创建成功：arm {arm.n_arm} 关节 / end {arm.n_end} 电机")
 
         # ---- 硬件后端委托面（真机操作居多，启用前确认安全） ----
         arm.connect_arm()                                # 连接本体（channel/protocol 缺省取 cfg）

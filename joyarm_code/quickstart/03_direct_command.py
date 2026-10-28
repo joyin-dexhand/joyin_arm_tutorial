@@ -28,7 +28,7 @@
     uv sync
     source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下，需已连接 joyarm_dm 真机并上电）
+    # 3. 运行本脚本（在 joyarm_code/ 目录下，需已连接 rebot_arm_b601_dm 真机并上电）
     python quickstart/03_direct_command.py
 
     预期输出：各阶段中文提示；本体第 2、3 关节小幅抬起后点动，夹爪开合、
@@ -47,7 +47,7 @@ from joyarm_core import joyArm, ControlMode  # noqa: E402
 
 
 def main() -> None:
-    with joyArm("joyarm_dm") as arm:                        # with 退出自动安全收尾
+    with joyArm("rebot_arm_b601_dm") as arm:                        # with 退出自动安全收尾
         # ① 连接并使能：本体（arm）与夹爪（end）两条总线
         arm.connect_arm()                                   # 连接本体总线（通道取配置缺省值）
         arm.connect_end()                                   # 连接夹爪总线

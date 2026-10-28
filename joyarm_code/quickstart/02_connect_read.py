@@ -3,7 +3,7 @@
 连接与状态读取  (快速上手 例程 02)
 ==============================================================================
 【功能概要】
-    真机例程：连接 JoyArm 机械臂（型号 joyarm_dm），完整走一遍"只读为主"的基础流程：
+    真机例程：连接 JoyArm 机械臂（型号 rebot_arm_b601_dm），完整走一遍"只读为主"的基础流程：
       1. 连接本体 arm / 末端 end 电机总线，查询连接状态
       2. 使能 / 失能电机，观察使能状态的三态取值（True / False / None）
       3. 两种口径读关节状态：get_state_arm（读时刷新）与 joint_state_arm（被动快照）
@@ -65,7 +65,7 @@ def print_state(tag: str, s) -> None:
 def main() -> None:
     """真机流程：连接 → 使能 → 状态读取 → 模式/故障检查 → 参数读取 → 失能收尾。"""
     # ---- ① 连接：with 创建机械臂对象（退出自动安全收尾），连接本体与末端总线 ----
-    with joyArm("joyarm_dm") as arm:
+    with joyArm("rebot_arm_b601_dm") as arm:
         ok = arm.connect_arm()                # 连接本体电机总线（成功返回 True）
         print(f"connect_arm 返回：{ok}；is_connected_arm：{arm.is_connected_arm}")
         ok = arm.connect_end()                # 连接末端（夹爪）电机总线

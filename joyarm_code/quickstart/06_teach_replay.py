@@ -51,7 +51,7 @@ REPLAY_AHEAD = 0.15   # 路点目标到达时刻提前量（秒；仅 cubic 规�
 
 def main() -> None:
     """拖动示教与回放主流程（真机，三处回车确认门）。"""
-    with joyArm("joyarm_dm") as arm:  # with 退出时自动安全收尾（close）
+    with joyArm("rebot_arm_b601_dm") as arm:  # with 退出时自动安全收尾（close）
         arm.connect_arm()  # 连接 arm 电机总线（成功后自动设 cfg 默认模式）
         input("确认机械臂工作半径内无人员与障碍物后，回车开始首次运动（先自动回 home）：")
         arm.start_motion_fsm()  # 启动运动状态机：DISABLE → HOME → MOTION 自动迁移

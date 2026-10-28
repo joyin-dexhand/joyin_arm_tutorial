@@ -20,11 +20,11 @@ test_59 起为第十四轮基类审阅新增（未连接门禁全覆盖 / 内核
 test_69 为模板冒烟新增（BackendTemplate 空 cfg 可实例化 = 29 桩满足抽象方法强制；29 桩全量按约定格式抛
 NotImplementedError，桩消息前缀自动取 cfg name → `_name`（空回退模板文件名）+ 基类内核集漂移守护；
 函数内导入模板，模板问题不拖垮整文件收集）。
-test_70 为 backend_dm 重建新增（无硬件协议层冒烟：注册恢复、空 cfg 构造、yaml cfg 电机表/帧前缀、
+test_70 为 backend_rebot_arm_b601_dm 重建新增（无硬件协议层冒烟：注册恢复、空 cfg 构造、yaml cfg 电机表/帧前缀、
 MIT 位域打包位级校验、反馈帧解码含双温度与残尾拼接、参数/指令事务自环验证、非阻塞状态读三态；
-函数内导入 backend_dm，硬件依赖问题不拖垮整文件收集）。
-test_71 为 backend_dm 审阅轮新增（总线生命周期：RX 存活判定/僵尸重建/无主清扫，防真机重连失败与泄漏）。
-test_72 为 backend_dm 末端离散动作新增（open/home/close/position：自动切 POSITION+增益序列、cfg vlim/flim
+函数内导入 backend_rebot_arm_b601_dm，硬件依赖问题不拖垮整文件收集）。
+test_71 为 backend_rebot_arm_b601_dm 审阅轮新增（总线生命周期：RX 存活判定/僵尸重建/无主清扫，防真机重连失败与泄漏）。
+test_72 为 backend_rebot_arm_b601_dm 末端离散动作新增（open/home/close/position：自动切 POSITION+增益序列、cfg vlim/flim
 默认、按需位置透传与越限裁硬限位、未知动作/缺参/切模式失败异常路径）。
 """
 import copy
@@ -220,7 +220,7 @@ class DummyBackend(Backend):
 
 @pytest.fixture(scope="module")
 def cfg():
-    with open(ROOT / "joyarm_core" / "config" / "joyarm_dm.yaml", encoding="utf-8") as f:
+    with open(ROOT / "joyarm_core" / "config" / "rebot_arm_b601_dm.yaml", encoding="utf-8") as f:
         out = yaml.safe_load(f)["backend"]
     # 默认模式相关断言与 yaml 当前值解耦（单测控制变量；专门用例自改副本不受影响）
     out["arm"]["default_mode"] = "mit"
@@ -239,7 +239,7 @@ def b(cfg):
 # ---- T1 初始化（真实 yaml） ----
 def test_01_init(b, cfg):
     arm_j = cfg["arm"]["joints"]
-    assert b.name == "backend_dm"
+    assert b.name == "backend_rebot_arm_b601_dm"
     assert b._channel_arm == "/dev/ttyACM0" and b._protocol_arm == "serial_can"
     assert b._baud_arm == 921600 and b._baud_end == 921600
     assert b._joint_motor_id_arm == [j["motor_id"] for j in arm_j] and b._joint_motor_id_end == [0x07]
@@ -261,7 +261,7 @@ def test_01_init(b, cfg):
     assert b._joint_mode_arm == [None] * 6
     assert b._joint_mode_end == [None]
     # cfg 属性只读视图（MappingProxyType 实时视图：顶层防增删，嵌套层勿深层改动）
-    assert b.cfg == b._cfg and b.cfg["name"] == "backend_dm"
+    assert b.cfg == b._cfg and b.cfg["name"] == "backend_rebot_arm_b601_dm"
     # 发送默认值与 POS_VEL 增益成员自 cfg 提取
     assert np.allclose(b._kp_mit_default_arm, [j["MIT"]["kp"] for j in arm_j])
     assert np.allclose(b._kd_mit_default_arm, [j["MIT"]["kd"] for j in arm_j])
@@ -1075,7 +1075,7 @@ def test_38_end_disconnect(e):
 
 # ---- T19 属性与空段边界 ----
 def test_40_properties(b, cfg):
-    assert b.name == "backend_dm" and b.n_joints_arm == 6 and b.n_joints_end == 1
+    assert b.name == "backend_rebot_arm_b601_dm" and b.n_joints_arm == 6 and b.n_joints_end == 1
     assert b.n_joints_arm == b._n_joints_arm and b.n_joints_end == b._n_joints_end
     assert b._joint_state_arm is b._joint_state_arm and b._joint_state_end is b._joint_state_end
     endj = cfg["end"]["joints"][0]
@@ -1713,29 +1713,29 @@ def test_69_template_smoke():
         t2._refresh_stop.set()
 
 
-# ---- backend_dm 冒烟：无硬件校验协议层（组帧/解码/分发/事务自环）与注册（函数内导入，硬件问题不拖垮收集） ----
-def test_70_backend_dm(cfg):
+# ---- backend_rebot_arm_b601_dm 冒烟：无硬件校验协议层（组帧/解码/分发/事务自环）与注册（函数内导入，硬件问题不拖垮收集） ----
+def test_70_backend_rebot_arm_b601_dm(cfg):
     import struct as _struct
 
     from joyarm_core.backend import REGISTRY, get_backend
-    from joyarm_core.backend.backend_dm import (
+    from joyarm_core.backend.backend_rebot_arm_b601_dm import (
         _CODE_MODE, _DMMotor, _DMBus, _MODEL_LIMITS, _MODE_CODE, _PARAM_RIDS,
-        BackendDM, _f2u, _pack_mit, _pack_pos, _pack_vel, _u2can_prefix)
+        BackendRebotArmB601DM, _f2u, _pack_mit, _pack_pos, _pack_vel, _u2can_prefix)
 
     # 1) 注册表恢复
-    assert REGISTRY.get("backend_dm") is BackendDM and get_backend("backend_dm") is BackendDM
+    assert REGISTRY.get("backend_rebot_arm_b601_dm") is BackendRebotArmB601DM and get_backend("backend_rebot_arm_b601_dm") is BackendRebotArmB601DM
 
     # 2) 空 cfg 可构造（无总线 I/O）
-    b = BackendDM({})
+    b = BackendRebotArmB601DM({})
     try:
         assert b.n_joints_arm == 0 and b.n_joints_end == 0
     finally:
         b._refresh_stop.set()
 
     # 3) yaml cfg 构造：电机表 / 型号量程 / U2CAN 帧前缀（CAN id 小端嵌 13-14、DLC=8 嵌 18）
-    d = BackendDM(cfg)
+    d = BackendRebotArmB601DM(cfg)
     try:
-        assert d.name == "backend_dm" and d.n_joints_arm == 6 and d.n_joints_end == 1
+        assert d.name == "backend_rebot_arm_b601_dm" and d.n_joints_arm == 6 and d.n_joints_end == 1
         m0, m3 = d._motors_arm[0], d._motors_arm[3]
         assert (m0.slave_id, m0.master_id) == (0x01, 0x11)
         assert (m0.pmax, m0.vmax, m0.tmax) == _MODEL_LIMITS["4340p"]
@@ -1889,9 +1889,9 @@ def test_70_backend_dm(cfg):
     assert {"pos_kp", "pos_ki", "vel_kp", "vel_ki"} <= set(_PARAM_RIDS)
 
 
-# ---- backend_dm 总线生命周期：RX 存活判定 / 僵尸重建 / 无主清扫（审阅轮新增，防真机重连失败与资源泄漏） ----
-def test_71_backend_dm_bus_lifecycle():
-    from joyarm_core.backend.backend_dm import _DMBus, BackendDM
+# ---- backend_rebot_arm_b601_dm 总线生命周期：RX 存活判定 / 僵尸重建 / 无主清扫（审阅轮新增，防真机重连失败与资源泄漏） ----
+def test_71_backend_rebot_arm_b601_dm_bus_lifecycle():
+    from joyarm_core.backend.backend_rebot_arm_b601_dm import _DMBus, BackendRebotArmB601DM
 
     # 未 open 的总线不可用（串口/RX 均无）；close 幂等
     bus = _DMBus("/dev/null", 921600, 1000.0)
@@ -1899,7 +1899,7 @@ def test_71_backend_dm_bus_lifecycle():
     bus.close()
     assert bus.is_open is False
 
-    d = BackendDM({})
+    d = BackendRebotArmB601DM({})
     try:
         # 连接中途失败遗留的孤儿总线：断连时被清扫（不泄漏 RX 线程/串口）
         orphan = _DMBus("/dev/null", 921600, 1000.0)
@@ -1926,13 +1926,13 @@ def test_71_backend_dm_bus_lifecycle():
         d._refresh_stop.set()
 
 
-# ---- backend_dm 末端离散动作：open/home/close/position（自动切 POSITION + cfg vlim/flim 默认 + 基类限位管道） ----
-def test_72_backend_dm_action_end(cfg):
+# ---- backend_rebot_arm_b601_dm 末端离散动作：open/home/close/position（自动切 POSITION + cfg vlim/flim 默认 + 基类限位管道） ----
+def test_72_backend_rebot_arm_b601_dm_action_end(cfg):
     import struct as _struct
 
-    from joyarm_core.backend.backend_dm import _END_ACTION_POS, _DMBus, BackendDM, _pack_pos
+    from joyarm_core.backend.backend_rebot_arm_b601_dm import _END_ACTION_POS, _DMBus, BackendRebotArmB601DM, _pack_pos
 
-    d = BackendDM(cfg)
+    d = BackendRebotArmB601DM(cfg)
     try:
         me = d._motors_end[0]
         defaults = cfg["end"]["joints"][0]["POS_VEL"]
@@ -2020,7 +2020,7 @@ def test_73_joint_state_property(e):
 @pytest.mark.parametrize('low', [0x33, 0x55])
 @pytest.mark.parametrize('error', [0, 1, 8])
 def test_dm_status_position_byte_does_not_impersonate_parameter(low, error):
-    from joyarm_core.backend.backend_dm import _DMBus, _DMMotor
+    from joyarm_core.backend.backend_rebot_arm_b601_dm import _DMBus, _DMMotor
     bus = _DMBus('/dev/null', 921600, 1000)
     motor = _DMMotor(1, 0x11, 12.5, 30, 10)
     bus.register([motor])
@@ -2033,7 +2033,7 @@ def test_dm_status_position_byte_does_not_impersonate_parameter(low, error):
 
 def test_dm_read_reply_cannot_ack_write():
     import struct
-    from joyarm_core.backend.backend_dm import _DMBus, _DMMotor
+    from joyarm_core.backend.backend_rebot_arm_b601_dm import _DMBus, _DMMotor
     bus = _DMBus('/dev/null', 921600, 1000)
     motor = _DMMotor(1, 0x11, 12.5, 30, 10)
     bus.register([motor])
@@ -2043,8 +2043,8 @@ def test_dm_read_reply_cannot_ack_write():
 
 
 def test_dm_expired_feedback_requests_refresh_but_does_not_publish(cfg):
-    from joyarm_core.backend.backend_dm import BackendDM, _DMBus
-    d = BackendDM(cfg)
+    from joyarm_core.backend.backend_rebot_arm_b601_dm import BackendRebotArmB601DM, _DMBus
+    d = BackendRebotArmB601DM(cfg)
     d.close()
     motor = d._motors_arm[0]
     bus = _DMBus('/dev/null', 921600, 1000)

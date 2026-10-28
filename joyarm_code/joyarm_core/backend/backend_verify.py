@@ -46,12 +46,12 @@ Backend 子类全方位测试验证（上层视角）  joyarm_core/backend/backe
     # 3. 运行本脚本（在 joyarm_code/ 目录下）
     python joyarm_core/backend/backend_verify.py --help                                  # 完整用法
     python joyarm_core/backend/backend_verify.py --list                                  # 全部测试项清单
-    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=offline         # 00 组（缺省）
-    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=all             # 全部（不含 38）
-    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=12              # 单项
-    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=00,20,read      # 编号/组名混选
-    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=connect,read    # 组合
-    python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=online \
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=offline         # 00 组（缺省）
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=all             # 全部（不含 38）
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=12              # 单项
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=00,20,read      # 编号/组名混选
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=connect,read    # 组合
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=online \
         --param=<参数键> --action=open,close                                             # 真机段
 
 【命令行参数】
@@ -1527,7 +1527,7 @@ GROUPS["all"] = GROUPS["offline"] + GROUPS["online"]
 # ============================================================
 def discover(sub: str) -> type:
     """解析子类：优先查官方注册表 REGISTRY，再按模块名导入 joyarm_core.backend.<sub> 寻找 Backend 子类。"""
-    from joyarm_core.backend import REGISTRY  # 官方注册路径，键名 = 文件名如 "backend_dm"
+    from joyarm_core.backend import REGISTRY  # 官方注册路径，键名 = 文件名
     if sub in REGISTRY:
         return REGISTRY[sub]
     mod_name = f"joyarm_core.backend.{sub}"
@@ -1730,12 +1730,12 @@ EPILOG = """\
 示例：
   python joyarm_core/backend/backend_verify.py --help                               # 本说明
   python joyarm_core/backend/backend_verify.py --list                               # 全部测试项
-  python joyarm_core/backend/backend_verify.py --sub=backend_dm                     # 00 组（缺省 offline）
-  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=all          # 全部（不含 38）
-  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=12           # 单项
-  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=00,20,read   # 编号/组名混选
-  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=connect,read # 组合
-  python joyarm_core/backend/backend_verify.py --sub=backend_dm --step=online --param=<键> --action=open,close
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm                     # 00 组（缺省 offline）
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=all          # 全部（不含 38）
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=12           # 单项
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=00,20,read   # 编号/组名混选
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=connect,read # 组合
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=online --param=<键> --action=open,close
 
 风险与确认策略：
   低危：直接执行（初始化 / 连接编排 / 只读）。
@@ -1759,8 +1759,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                      "对任意子类（关节电机/舵机/混合硬件）做分组分项测试"
                      "（测试项编号采用两位数十进制分组）。能力三分法（能力缺失=SKIP）+ 空族自动跳过 + 风险分级确认。"),
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--sub", default="backend_dm",
-                   help="backend 完整注册名（REGISTRY 键 = backend/backend_*.py 文件名去 .py；缺省 backend_dm）："
+    p.add_argument("--sub", required=True,
+                   help="backend 完整注册名（REGISTRY 键 = backend/backend_*.py 文件名去 .py；必填）："
                         "经 REGISTRY 或模块名导入并寻找 Backend 子类，默认按 backend.name"
                         "自动匹配 config/*.yaml 的 backend 段")
     p.add_argument("--step", default="offline",
@@ -1786,7 +1786,7 @@ def main(argv=None) -> int:
         print_list()
         return 0
     if not args.sub:
-        print("用法错误：--sub 不能为空（backend 注册名如 backend_dm；--list 查看全部测试项）",
+        print("用法错误：--sub 不能为空（backend 注册名；--list 查看全部测试项）",
               file=sys.stderr)
         return 2
     args.action = [a.strip() for a in (args.action or "").split(",") if a.strip()] or ["home"]

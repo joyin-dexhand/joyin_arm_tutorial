@@ -82,7 +82,7 @@ robotics:
 # 通信层（backend）：arm 与 end 的硬件通讯（以 DM 实现为参照）
 # -------------------------------------------------------------------
 backend:
-  name: backend_dm # backend 子类（backend/__init__.py REGISTRY 中的注册名），与 <型号> 对应
+  name: backend_<型号> # backend 子类（backend/__init__.py REGISTRY 中的注册名），与 <型号> 对应
 
   # 可选运行参数（缺省或非正数时沿用默认并 warn）
   state_refresh_hz: 20.0 # 状态新鲜度承诺（Hz，默认 20）
@@ -90,7 +90,7 @@ backend:
   rx_hz: 1000.0 # RX 收取线程节拍（Hz，串口阻塞读超时=1/rx_hz）
   arm: # arm 段
     channel: /dev/ttyACM0 # 串口设备；end 与 arm 相同则共享单总线（一个 RX 线程 + 一把 TX 锁）
-    protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
+    protocol: serial_can # 总线类型
     baud_rate: 921600 # 通讯波特率
     default_mode: mit # 连接成功后自动设置的控制模式（mit/position/velocity）
     joints:
@@ -117,7 +117,7 @@ backend:
 
   end: # end 段（执行器电机组，可多电机如灵巧手）
     channel: /dev/ttyACM0 # 与 arm 相同 → 共享总线；不同 → 独立总线（互不干扰）
-    protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
+    protocol: serial_can # 总线类型
     baud_rate: 921600
     default_mode: mit # 连接成功后自动设置的控制模式（mit/position/velocity）
     joints:

@@ -79,8 +79,8 @@ def main() -> None:
     # 显示 joyarm_core 的 info 日志（含监控页与 meshcat 浏览器地址）
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    with joyArm("joyarm_dm") as arm:        # 创建整机对象；with 退出自动安全收尾
-        print(f"『joyarm_dm』创建成功：本体 {arm.n_arm} 关节")
+    with joyArm("rebot_arm_b601_dm") as arm:        # 创建整机对象；with 退出自动安全收尾
+        print(f"『rebot_arm_b601_dm』创建成功：本体 {arm.n_arm} 关节")
 
         arm.connect_arm()                   # 连接本体总线（channel/protocol 缺省取 cfg）
 

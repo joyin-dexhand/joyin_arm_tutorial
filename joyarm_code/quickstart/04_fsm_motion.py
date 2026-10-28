@@ -28,7 +28,7 @@ FSM关节与笛卡尔运动  (快速上手 例程 04)
     uv sync
     source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下，需连接 joyarm_dm 真机）
+    # 3. 运行本脚本（在 joyarm_code/ 目录下，需连接 rebot_arm_b601_dm 真机）
     python quickstart/04_fsm_motion.py
 
     预期输出：依次打印 FSM 状态迁移结果、三段运动的到位判断与安全事件切换；
@@ -59,13 +59,13 @@ def wait_q_arrival(arm, q_goal, tol_q: float = 0.05, timeout: float = 3.0) -> bo
 
 
 def main() -> None:
-    with joyArm("joyarm_dm") as arm:                       # with 退出自动安全收尾
+    with joyArm("rebot_arm_b601_dm") as arm:                       # with 退出自动安全收尾
         # ---- ① 启动：连接 → 确认门 → FSM 启动并等待 MOTION ----
         if arm.connect_arm() is not True:                  # FSM 仅涉 arm 侧，可不连 end
             print("arm 总线连接失败，请检查电源与总线后重试")
             return
         q_home = arm.home_arm                              # home 位形：本例小幅运动的基准
-        print(f"已连接 joyarm_dm（{arm.n_arm} 关节），home = {np.round(q_home, 3)} rad")
+        print(f"已连接 rebot_arm_b601_dm（{arm.n_arm} 关节），home = {np.round(q_home, 3)} rad")
 
         # 切换三次多项式规划器：按到达时刻 t 插值（0.15 rad / 2 s，峰值速度约 0.14 rad/s）
         arm.set_traj_solver("single_joint_cubic_traj_planner")

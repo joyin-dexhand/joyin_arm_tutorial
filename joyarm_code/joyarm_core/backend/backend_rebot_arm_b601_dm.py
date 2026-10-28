@@ -1,4 +1,4 @@
-"""`BackendDM` —— DM（达妙）机械臂硬件后端：7 电机经 U2CAN 串口转 CAN 桥接入。
+"""`BackendRebotArmB601DM` —— DM（达妙）机械臂硬件后端：7 电机经 U2CAN 串口转 CAN 桥接入。
 
 型号说明（协议实现自包含，参照 `u2can/DM_CAN.py` 厂商库重写、不导入）：
 
@@ -36,9 +36,9 @@ import serial
 from ..utils.types import ControlMode
 from .backend import Backend
 
-__all__ = ["BackendDM"]
+__all__ = ["BackendRebotArmB601DM"]
 
-logger = logging.getLogger("joyarm_core.backend_dm")
+logger = logging.getLogger("joyarm_core.backend_rebot_arm_b601_dm")
 
 # ---------------- DM 协议常量 ----------------
 _CMD_ENABLE, _CMD_DISABLE, _CMD_ZERO, _CMD_CLEAR = 0xFC, 0xFD, 0xFE, 0xFB  # 使能/失能/设零/清错帧（FF×7+cmd → SlaveID）
@@ -285,7 +285,7 @@ class _DMBus:
                     chunk += ser.read(n)
             except Exception:
                 if not self._rx_stop.is_set():
-                    logger.warning("backend_dm.py - RX 收取线程：串口读取异常退出（channel=%s，重连可恢复）",
+                    logger.warning("backend_rebot_arm_b601_dm.py - RX 收取线程：串口读取异常退出（channel=%s，重连可恢复）",
                                    self._channel)
                 break
             if chunk:
@@ -334,7 +334,7 @@ class _DMBus:
             motor.state_event.set()
 
 
-class BackendDM(Backend):
+class BackendRebotArmB601DM(Backend):
     """DM 整机后端（型号说明见模块 docstring；arm 6 电机 + end 1 电机同协议，end 常为夹爪）。"""
 
     def __init__(self, cfg: dict) -> None:
@@ -346,7 +346,7 @@ class BackendDM(Backend):
         super().__init__(cfg)
         rx_hz = self._pos_float(self._cfg, "rx_hz", _RX_HZ_DEFAULT)
         if rx_hz > _RX_HZ_MAX:
-            logger.warning("backend_dm.py - BackendDM.__init__：rx_hz=%s 过高（上限 %s Hz），已按上限执行",
+            logger.warning("backend_rebot_arm_b601_dm.py - BackendRebotArmB601DM.__init__：rx_hz=%s 过高（上限 %s Hz），已按上限执行",
                            rx_hz, _RX_HZ_MAX)
             rx_hz = _RX_HZ_MAX
         self._rx_hz = rx_hz
@@ -374,17 +374,17 @@ class BackendDM(Backend):
             try:
                 pmax, vmax, tmax = _MODEL_LIMITS[str(model).lower()]
             except KeyError:
-                raise ValueError(f"backend_dm.py - BackendDM.__init__：joint『{jn}』型号 {model!r} "
+                raise ValueError(f"backend_rebot_arm_b601_dm.py - BackendRebotArmB601DM.__init__：joint『{jn}』型号 {model!r} "
                                  f"不在 DM 型号量程表（可用：{sorted(_MODEL_LIMITS)}）")
             sid = getattr(self, f"_joint_motor_id_{family}")[i]
             mid = getattr(self, f"_joint_feedback_id_{family}")[i]
             if not isinstance(sid, int) or not isinstance(mid, int) or mid == 0:
-                raise ValueError(f"backend_dm.py - BackendDM.__init__：joint『{jn}』motor_id/feedback_id "
+                raise ValueError(f"backend_rebot_arm_b601_dm.py - BackendRebotArmB601DM.__init__：joint『{jn}』motor_id/feedback_id "
                                  f"须为 int 且 feedback_id 非 0（得到 {sid!r} / {mid!r}）")
             motors.append(_DMMotor(sid, mid, pmax, vmax, tmax))
         ids = [k for m in motors for k in (m.slave_id, m.master_id)]
         if len(set(ids)) != len(ids):
-            raise ValueError(f"backend_dm.py - BackendDM.__init__：{family} 组电机 motor_id/feedback_id 存在重复（配置错误）")
+            raise ValueError(f"backend_rebot_arm_b601_dm.py - BackendRebotArmB601DM.__init__：{family} 组电机 motor_id/feedback_id 存在重复（配置错误）")
         return motors
 
     def _connect_family(self, family: str, channel) -> bool:

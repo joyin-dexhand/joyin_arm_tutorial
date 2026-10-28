@@ -66,7 +66,7 @@ def main():
     print("JoyArm 快速上手 07 —— 综合抓取（真机例程）")
     print("=" * 62)
 
-    with joyArm("joyarm_dm") as arm:           # with 退出自动安全收尾（停机/失能/断连）
+    with joyArm("rebot_arm_b601_dm") as arm:           # with 退出自动安全收尾（停机/失能/断连）
         # ① 准备：连接本体与末端 → 切限速规划器 → 确认门 → 启动 FSM → 等待 MOTION → 张开夹爪
         if arm.connect_arm() is not True:      # 连接本体电机总线（backend 失败仅 warn 不抛错，须检查返回值）
             raise RuntimeError("arm 总线连接失败，请检查电源与总线后重试")

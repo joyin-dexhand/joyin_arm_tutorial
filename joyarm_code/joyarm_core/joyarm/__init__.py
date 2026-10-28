@@ -112,7 +112,7 @@ class JoyArmFactory:
     def create(self, name: str) -> JoyArm:
         """创建指定型号的 JoyArm 实例（四步固定顺序校验）。
 
-        :param name: 型号名（如 "joyarm_dm"）—— = config 文件名（URDF 目录`robot_model/<型号>/` 同名）。
+        :param name: 型号名（= config 文件名 = URDF 目录`robot_model/<型号>/` 名）。
         :return: 初始化自检通过的 JoyArm 实例；四步全过 `logger.info`『创建成功』。
         :raises ValueError: ①config 缺失/解析失败、②backend 名不在 REGISTRY、③robot_model 四路径缺失、④JoyArm 构造自检失败。
         """

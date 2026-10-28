@@ -77,8 +77,8 @@ def main() -> None:
     args = parse_args()
 
     try:
-        arm = joyArm("joyarm_dm")
-    except Exception as e:   # 工厂校验失败抛异常（不再返回 None），原因已在异常消息里
+        arm = joyArm("rebot_arm_b601_dm")
+    except Exception as e:   # 工厂校验失败抛异常
         raise SystemExit(f"JoyArm 创建失败：{e}")
     print(f"模型就绪：{arm}\n")
 
@@ -89,8 +89,7 @@ def main() -> None:
 
     # 硬限位内均匀采样（与库一致的口径：rand_q_arm 即委托 rand_within_limits；
     # 此处直接带 size/rng 一次采 N 组，保证 --seed 可复现）
-    Q = rand_within_limits(arm.joint_limits_hard_arm, size=args.n,
-                           rng=np.random.default_rng(args.seed))
+    Q = rand_within_limits(arm.joint_limits_hard_arm, size=args.n, rng=np.random.default_rng(args.seed))
     print(f"硬限位内采样 {args.n} 组关节角，每批 {args.batch} 组……")
 
     vis = None

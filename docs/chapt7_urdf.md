@@ -456,7 +456,7 @@ CAD 根据零件几何、材料密度或指定质量属性计算这些数据。�
 
 下面的本体节点统一写作 `link_base`、`link1`～`link6`、`joint1`～`joint6`，末端使用 `link_end`、`link_end1`、`link_end_finger1/2`，工具参考系使用 `frame_end_tcp` 和 `frame_end_fingertip`。配置时保持节点名称一致。
 
-配套模型 `joyarm_dm.urdf` 中部分节点使用了不同的实名，与本教程命名的对照如下：
+配套模型 `rebot_arm_b601_dm.urdf` 中部分节点使用了不同的实名，与本教程命名的对照如下：
 
 | 教程命名 | 模型实名 |
 |:---:|:---:|
@@ -755,7 +755,7 @@ $$
 \theta_{\mathrm{rad}}=\theta_{\mathrm{deg}}\frac{\pi}{180}
 $$
 
-以下参数读取自配套模型 `joyarm_code/joyarm_core/robot_model/joyarm_dm/urdf/joyarm_dm.urdf`，关节名按模型实名书写（与教程命名的对照见第 5.1.1 节），检查时按对应关节逐项核对：
+以下参数读取自配套模型 `joyarm_code/joyarm_core/robot_model/rebot_arm_b601_dm/urdf/rebot_arm_b601_dm.urdf`，关节名按模型实名书写（与教程命名的对照见第 5.1.1 节），检查时按对应关节逐项核对：
 
 | 关节 | 类型 | 位置范围（lower～upper） | 速度上限（velocity） | 力／力矩上限（effort） |
 |:---:|:---:|:---:|:---:|:---:|
@@ -797,9 +797,9 @@ $$
 导出目录应包含 URDF 和对应网格，例如：
 
 ```text
-JoyArm_dm_v1_1_mdh_description/
+rebot_arm_b601_dm/
 ├── urdf/
-│   └── JoyArm_dm_v1_1_mdh.urdf
+│   └── rebot_arm_b601_dm.urdf
 └── meshes/
     ├── link_base.STL
     ├── link1.STL

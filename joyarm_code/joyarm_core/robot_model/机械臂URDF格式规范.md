@@ -1,6 +1,6 @@
 # 机械臂 URDF 格式规范
 
-> **适用范围**：`joyarm_core/robot_model/` 所有型号机械臂的 URDF；参考实现为[`joyarm_dm/`](./joyarm_dm/)。
+> **适用范围**：`joyarm_core/robot_model/` 所有型号机械臂的 URDF。
 
 ## 1. 总原则
 

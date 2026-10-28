@@ -23,7 +23,7 @@ joyarm:
 
   # 硬限位：在 backend 段配置（arm/end joints 各关节条目的 q_min/q_max/dq_max/tau_max 四键，
   #        数值须与 URDF limit 标定一致）；backend 下发指令按硬限位裁剪。
-  #        下列速查表已与 joyarm_dm.urdf 的 <limit> 逐项核对一致（2026-09-17），
+  #        下列速查表已与 rebot_arm_b601_dm.urdf 的 <limit> 逐项核对一致（2026-09-17），
   #    软限位取值参考此表并整体内缩：
   #
   # |    关节    | q_min (rad) | q_max (rad) | dq_max (rad/s) | tau_max (N·m) |
@@ -106,13 +106,13 @@ robotics:
 # 电机硬件层（backend）：arm与end的硬件通讯
 # ===================================================================
 backend:
-  name: backend_dm # backend 子类（backend/__init__.py REGISTRY 中的注册名），与 <型号> 对应
+  name: backend_rebot_arm_b601_dm # backend 子类（backend/__init__.py REGISTRY 中的注册名），与 <型号> 对应
   state_refresh_hz: 20.0 # 状态新鲜程度承诺（Hz，默认 20；刷新线程按 4 倍频供给）
   write_settle: 0.1  # 指令帧生效等待（秒；连接后默认模式帧 / 断连前失能帧等）
-  rx_hz: 1000.0 # RX 收取线程节拍（Hz，串口阻塞读超时=1/rx_hz；backend_dm 专用）
+  rx_hz: 1000.0 # RX 收取线程节拍（Hz，串口阻塞读超时=1/rx_hz；backend_rebot_arm_b601_dm 专用）
   arm: # arm本体后端（joints 条目四键限位 = 硬限位，数值须与 URDF limit 标定保持一致）
     channel: /dev/ttyACM0
-    protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
+    protocol: serial_can # 信息性标识，当前总线类型由 backend_rebot_arm_b601_dm 直接指定
     baud_rate: 921600
     default_mode: position # 连接成功后自动设置的控制模式（mit/position/velocity）
     joints:
@@ -232,7 +232,7 @@ backend:
 
   end: # 末端后端
     channel: /dev/ttyACM0 # 若与arm相同，则共享arm的channel
-    protocol: serial_can # 信息性标识，当前总线类型由 backend_dm 直接指定
+    protocol: serial_can # 信息性标识，当前总线类型由 backend_rebot_arm_b601_dm 直接指定
     baud_rate: 921600
     default_mode: position # 连接成功后自动设置的控制模式（mit/position/velocity）
     joints:

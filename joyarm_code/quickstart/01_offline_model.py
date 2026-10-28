@@ -4,7 +4,7 @@
 ==============================================================================
 【功能概要】
     无需连接硬件，纯控制台体验 JoyArm 的离线数字模型与数学能力：
-      1. listArm 查可用型号 → joyArm("joyarm_dm") 离线创建机械臂对象
+      1. listArm 查可用型号 → joyArm("rebot_arm_b601_dm") 离线创建机械臂对象
       2. 模型信息：关节数 / 关节名 / 软硬限位 / zero-neutral-home 位形 / 末端限位 / 频率
       3. 正运动学、雅可比（含阻尼伪逆）、动力学（惯量 / 科氏 / 重力 / 逆动力学）
       4. 逆运动学：数值法单解（IKResult）与解析法全解（solve_ikine_all）
@@ -43,7 +43,7 @@ def main() -> None:
     print("=" * 70)
     print("① 创建 JoyArm（离线加载 URDF 数字模型，不连接任何硬件）")
     print(f"listArm() 返回：{listArm()}")        # listArm 自身也会打印一行可用型号
-    arm = joyArm("joyarm_dm")                    # 离线创建：装配模型与算法，不触硬件
+    arm = joyArm("rebot_arm_b601_dm")                    # 离线创建：装配模型与算法，不触硬件
     print(f"print(arm) 展示 __repr__：\n   {arm}")
 
     print("=" * 70)

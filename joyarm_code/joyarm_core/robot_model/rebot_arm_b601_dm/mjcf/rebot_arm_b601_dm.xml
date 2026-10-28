@@ -1,4 +1,4 @@
-<mujoco model="joyarm_dm">
+<mujoco model="rebot_arm_b601_dm">
   <compiler angle="radian"/>
 
   <asset>

@@ -1,12 +1,12 @@
 """robotics 六域离线回归（fkine / ikine / jacobian / dynamics / trajectory / control；无硬件）。
 
 覆盖：每个测试对应一次 bug 修复或域契约核对（片段由各修复员提交、本文件整编合并），
-防止修复行为回归；求解器调用只消费离线构造的 `joyArm("joyarm_dm")`（不连机，URDF/pin
+防止修复行为回归；求解器调用只消费离线构造的 `joyArm("rebot_arm_b601_dm")`（不连机，URDF/pin
 模型与算法层）或鸭子 `StubArm`，对照独立参考式（pinocchio 原生算法等）逐位/数值校验，
 真机行为一概不触。
 
 组织方式（参照 test/test_backend_base.py 的头部说明与用例组织）：
-- `_arm()`：模块级缓存离线 joyArm("joyarm_dm")（JoyArm 构造后默认未连接，backend 不上总线；
+- `_arm()`：模块级缓存离线 joyArm("rebot_arm_b601_dm")（JoyArm 构造后默认未连接，backend 不上总线；
   构造失败抛携带原因的异常，不返回 None），`pin_model` 等只读成员跨用例共享，避免重复构造；
 - `StubArm`：traj/control 域用鸭子 stub（ctrl_hz / home_arm / joint_limits_hard_arm /
   get_state_arm / send_position_arm，与 JoyArm 公开属性同名），可按需改 `_st.q/dq` 模拟当前状态，
@@ -48,13 +48,13 @@ _ARM = None
 
 
 def _arm():
-    """离线 joyArm("joyarm_dm")：仅算法层使用（pin_model 等只读成员），跨用例共享单例。"""
+    """离线 joyArm("rebot_arm_b601_dm")：仅算法层使用（pin_model 等只读成员），跨用例共享单例。"""
     global _ARM
     if _ARM is None:
         try:
-            _ARM = joyArm("joyarm_dm")      # 失败抛携带原因的异常（不返回 None）
+            _ARM = joyArm("rebot_arm_b601_dm")      # 失败抛携带原因的异常（不返回 None）
         except Exception:
-            print("离线构造 joyArm('joyarm_dm') 失败，异常如下：")
+            print("离线构造 joyArm('rebot_arm_b601_dm') 失败，异常如下：")
             raise
     return _ARM
 
