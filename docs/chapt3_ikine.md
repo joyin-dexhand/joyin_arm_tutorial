@@ -264,7 +264,7 @@ $$
 2\times 2\times 2 = 8
 $$
 
-组候选解。各分支可能因目标不可达、超出关节限位或回代误差过大而被剔除，因此有效解通常少于 8 组。工程上需要把候选解逐一代入正运动学校验，再按关节行程、限位余量和奇异性等条件选择最终解（见 [第 6 节](#6-joyarm)）。
+组候选解。各分支可能因目标不可达、超出关节限位或回代误差过大而被剔除，因此有效解通常少于 8 组。工程上需要把候选解逐一代入正运动学校验，再按关节行程、限位余量和奇异性等条件选择最终解（见 [第 6 节](#6-pinocchio-joyarm)）。
 
 
 ## 4 连续三轴平行的 6R 机械臂解析解法
@@ -515,56 +515,71 @@ $$
 
 实际使用以 `PinIkineSolver` 为主，其实现位于 `joyarm_code/joyarm_core/robotics/ikine/ikine_solver_pin.py`。使用者只需要给出目标位姿、目标帧和初值 $\bm q_0$，必要时再设置 `tol`、`iters`；求解器内部完成正运动学、雅可比、LM 迭代和随机重启，并返回 `IKResult(success, q, err, n_iter)`。解析解对应同目录的 `AnalyticIkineSolver`；`solve` 返回距离 $\bm q_0$ 最近的一组解，`solve_all` 返回全部有效候选解。
 
-## 6 本章实践：JoyArm 逆运动学求解与校验
+## 6 本章实践：使用 Pinocchio 实现 JoyArm 逆运动学
 
-本节用配套脚本完成一次离线逆运动学实验：先构造可达的目标位姿，再调用 Pin 数值求解器，最后通过正运动学回代检查结果。整个过程无需连接机械臂。
+本实践把第 5 节介绍的数值逆解流程写成一个标准求解器。目标位姿、连续初值、正运动学回代、参考结果和三维显示均已给出，实践重点只有一个：继承 `IkineSolver`，在子类的 `solve()` 中使用 Pinocchio 完成 JoyArm 数值逆解。整个实验离线运行，无需连接机械臂。
 
-### 6.1 求解与校验思路
+### 6.1 实践任务与接口
 
-先在关节限位内选择参考关节角 $\bm q_{\mathrm{ref}}$，通过正运动学构造目标位姿 $\bm T_{\mathrm d}$。这样得到的目标一定可达，可以避免把“目标不可达”误认为“求解器出错”。
+对应脚本位于 `joyarm_code/chapt/chapt3/chapt3_ikine_exercise.py`，使用说明见脚本头部注释。脚本已经定义 `PracticePinIkineSolver` 子类，并在 `solve()` 中标出实践实现区。
 
-随后从初值 $\bm q_0$ 开始求逆解，得到 $\bm q_{\mathrm{IK}}$，再通过正运动学计算回代位姿 $\bm T_{\mathrm{check}}$。位置误差和姿态误差分别为
+| 已提供内容 | 需要完成的内容 |
+|:---:|:---:|
+| `IkineSolver` 基类和 `solve()` 接口 | 创建 Pinocchio 计算数据并读取目标帧 |
+| JoyArm 模型、三个相邻目标位姿 | 计算当前位姿和六维位姿误差 |
+| 连续目标求解流程 | 调用 Pinocchio 获取雅可比并计算关节修正量 |
+| 回代校验和库内参考结果 | 限制步长、更新关节角并判断收敛 |
+| 结果表格和 MeshCat 路径播放 | 返回统一的 `IKResult` |
+
+`solve()` 的输入包含目标位姿、目标帧、初始关节角、收敛阈值和最大迭代次数；输出统一为 `IKResult`。求解成功时，`success=True`，并在 `q`、`err` 和 `n_iter` 中分别记录关节角、末端残差和迭代次数。达到最大迭代次数仍未收敛时，应返回迭代过程中的最优结果，并令 `success=False`。
+
+### 6.2 使用 Pinocchio 完成迭代
+
+首先从 `arm.pin_model` 取得 Pinocchio 模型，为本次求解创建私有的 `pin.Data`，并把目标帧名转换为帧编号。每轮迭代调用 `pin.forwardKinematics()` 和 `pin.updateFramePlacement()` 得到当前末端位姿，再计算六维误差：
 
 $$
-\varepsilon_p
+\bm e
 =
-\|\bm p_{\mathrm d}-\bm p_{\mathrm{check}}\|_2,
-\qquad
-\varepsilon_R
-=
-\left\|
-\log_3\!\bigl(
-\bm R_{\mathrm d}\bm R_{\mathrm{check}}^{\top}
-\bigr)
-\right\|_2
+\begin{bmatrix}
+\bm p_{\mathrm d}-\bm p\\
+\log_3\!\left(\bm R_{\mathrm d}\bm R^T\right)
+\end{bmatrix}
 $$
 
-$\bm q_{\mathrm{IK}}$ 不一定等于 $\bm q_{\mathrm{ref}}$，因为不同关节角可能对应同一末端位姿。判断逆解是否正确，应比较目标位姿与回代位姿，而不是直接比较两组关节角。
+当位置误差范数与姿态误差范数之和小于 `tol` 时，认为求解收敛。尚未收敛时，调用 `pin.computeFrameJacobian()` 获取当前雅可比，并用第 5 节给出的阻尼修正关系计算关节增量：
 
-### 6.2 运行示例
+$$
+\Delta\bm q
+=
+\bm J^T
+\left(
+\bm J\bm J^T+\lambda^2\bm I
+\right)^{-1}
+\bm e
+$$
 
-脚本中的 Pin 数值逆解按下面三步完成：
+随后限制 $\|\Delta\bm q\|$，避免单步修正过大；通过 `pin.integrate()` 更新关节角，并把结果裁剪到 JoyArm 的硬限位内。新的关节角进入下一轮迭代。
 
-| 步骤 | 操作 | 观察结果 |
-|:---:|:---:|:---:|
-| 1 | `arm.fkine(q_ref, frame)` 构造目标 | 目标位置与姿态 |
-| 2 | `arm.ikine(target, frame, q0)` 求解 | 成功状态、关节角、残差和迭代次数 |
-| 3 | `arm.fkine(q_ik, frame)` 回代 | 位置误差和姿态误差 |
+> 📌 **与第四章的边界**：本实践把 `pin.computeFrameJacobian()` 当作库接口使用，不要求推导或手工构造雅可比矩阵。雅可比各列的物理意义、计算方法和奇异性分析将在[第四章](chapt4_jacobian.md)展开。
 
-首次运行先同步依赖，然后执行脚本：
+本实践只实现单起点和固定阻尼。库内 `PinIkineSolver` 还包含自适应阻尼与失败重启，用于作为工程实现对照，不属于本次实践任务。
+
+### 6.3 运行与校验
+
+进入代码库并运行无界面实验：
 
 ```bash
 cd joyarm_code
 uv sync
-uv run python chapt/chapt3_ikine_demo.py
+uv run python chapt/chapt3/chapt3_ikine_exercise.py --headless
 ```
 
-脚本会依次打印目标位姿、三组不同初值的数值逆解结果，以及每组成功解的回代误差。数值实验结束后，脚本还会切换到解析求解器，枚举同一目标的候选解并逐组回代。
+程序依次求解三个相邻目标。第一个目标使用给定的起始关节角，后续目标使用上一目标的解作为初值。终端分别输出实践求解器与库内参考求解器的结果，包括关节角、限位状态、位置误差和姿态误差。
 
-### 6.3 可以观察什么
+去掉 `--headless` 后，MeshCat 会先播放实践求解器路径，再播放参考求解器路径：
 
-- **初值对数值解的影响**：比较三组初值的成功状态、迭代次数和最终关节角。初值越靠近目标解，通常收敛越快；不同初值也可能收敛到不同解支。
-- **同一目标的多组解**：观察解析求解器返回的候选关节角。只要各组解的回代位姿都接近目标，它们就是同一目标的不同构型。
-- **回代误差与关节角差异**：即使 $\bm q_{\mathrm{IK}}$ 与 $\bm q_{\mathrm{ref}}$ 相差较大，只要 $\varepsilon_p$ 和 $\varepsilon_R$ 足够小，逆解仍然有效。
+```bash
+uv run python chapt/chapt3/chapt3_ikine_exercise.py
+```
 
-连续运动还需要保持解分支一致，避免相邻目标点之间发生关节角跳变。最常用的做法是把上一时刻的关节角作为下一时刻数值求解的初值。
+判断实现是否正确时，应检查所有目标是否求解成功、关节角是否位于限位内，以及正运动学回代后的末端误差是否满足阈值。实践求得的关节角不必与参考解完全相同，因为同一末端位姿可能对应多组逆解。
