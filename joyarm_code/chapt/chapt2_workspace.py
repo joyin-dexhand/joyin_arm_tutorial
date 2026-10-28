@@ -16,7 +16,7 @@ JoyArm 工作空间蒙特卡洛采样与可视化  (第二章 §5)
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 2. 创建虚拟环境并同步依赖
-    cd ~/joyarm_code
+    cd <仓库路径>/joyarm_code
     uv sync
     source .venv/bin/activate
 
@@ -42,7 +42,7 @@ import numpy as np
 import pinocchio as pin
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装时也可直接运行
-from joyarm_core import joyArm  # noqa: E402
+from joyarm_core import joyArm, rand_within_limits  # noqa: E402
 
 POINT_SIZE = 0.003   # MeshCat 点大小（m）
 
@@ -56,9 +56,15 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def fk_positions(arm, Q: np.ndarray) -> np.ndarray:
-    """逐组求末端位置：Pinocchio 正运动学（用 JoyArm 加载的 URDF 模型）。"""
-    model, data, fid = arm.pin_model, arm.pin_data, arm.ee_frame_id
+def fk_positions(model, data, fid, Q: np.ndarray) -> np.ndarray:
+    """逐组求末端位置：Pinocchio 正运动学（用 JoyArm 加载的 URDF 缩减模型）。
+
+    :param model: pin.Model（arm.pin_model，nq = 本体关节数）。
+    :param data: pin.Data（由调用方自建，复用同一对象逐组更新）。
+    :param fid: 末端帧 id（model.getFrameId(config joyarm.frame_end)）。
+    :param Q: (N, n) 关节角批量。
+    :return: (N, 3) 末端位置（基座系）。
+    """
     out = np.empty((len(Q), 3))
     for i, q in enumerate(Q):
         pin.forwardKinematics(model, data, q)
@@ -70,12 +76,20 @@ def fk_positions(arm, Q: np.ndarray) -> np.ndarray:
 def main() -> None:
     args = parse_args()
 
-    arm = joyArm("joyarm_dm")
-    if arm is None:
-        raise SystemExit("JoyArm 创建失败：请在 joyarm_code/ 下安装依赖（uv sync）")
+    try:
+        arm = joyArm("rebot_arm_b601_dm")
+    except Exception as e:   # 工厂校验失败抛异常
+        raise SystemExit(f"JoyArm 创建失败：{e}")
     print(f"模型就绪：{arm}\n")
 
-    Q = arm.rand_q_arm(args.n, rng=np.random.default_rng(args.seed))
+    # Pinocchio 模型与末端帧：data 自建复用、帧名读 config（joyarm.frame_end）
+    model = arm.pin_model
+    data = model.createData()
+    fid = model.getFrameId(arm.get_config()["joyarm"]["frame_end"])
+
+    # 硬限位内均匀采样（与库一致的口径：rand_q_arm 即委托 rand_within_limits；
+    # 此处直接带 size/rng 一次采 N 组，保证 --seed 可复现）
+    Q = rand_within_limits(arm.joint_limits_hard_arm, size=args.n, rng=np.random.default_rng(args.seed))
     print(f"硬限位内采样 {args.n} 组关节角，每批 {args.batch} 组……")
 
     vis = None
@@ -88,7 +102,7 @@ def main() -> None:
     positions = np.empty((0, 3))
     t0 = time.time()
     for start in range(0, args.n, args.batch):
-        positions = np.vstack([positions, fk_positions(arm, Q[start:start + args.batch])])
+        positions = np.vstack([positions, fk_positions(model, data, fid, Q[start:start + args.batch])])
         if vis is not None:
             r = np.linalg.norm(positions, axis=1)            # 点色 = 到基座距离
             colors = (cmap((r - r.min()) / max(np.ptp(r), 1e-9))[..., :3] * 255).astype(np.uint8)

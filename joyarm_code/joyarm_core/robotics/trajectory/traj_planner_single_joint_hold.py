@@ -1,8 +1,8 @@
 """SingleJointHoldTrajPlanner —— 到单点关节目标的直传轨迹规划
 
 1. target 仅取关节角 `q`（其余字段忽略），plan 将其原子发布为恒定目标，sample 恒输出该 `q`（dq/ddq 为 0）；
-2. `q` 为空或维度与`arm_home` 不符视为无效，回退发布 q_home；
-3. 运动限速由控制器和关节电机内部进行实现（若控制器和关节电机均无限速，运动将失控！）。
+2. `q` 为空或维度与`home_arm` 不符视为无效，回退发布 q_home；
+3. 限速由关节电机内部 与 backend 裁剪承担（若无限速，关节运动可能失控！）。
 """
 from __future__ import annotations
 
@@ -29,14 +29,14 @@ class SingleJointHoldTrajPlanner(TrajPlanner):
     def plan(self, arm, target: List[TrajFrame]) -> bool:
         """规划：直传——目标仅取单帧 `q`，有效则恒定发布该 q，无效回退 q_home。
 
-        :param arm: 机械臂对象（仅用 `arm_home` 定维与回退，不读当前状态）。
+        :param arm: 机械臂对象（仅用 `home_arm` 定维与回退，不读当前状态）。
         :param target: 目标帧，单点或序列——仅取单帧的 `q`（time/dq/ddq 等其余字段忽略）；q 为空或维度不符视为无效。
-        :return: 恒为 ``True``（直传无需当前状态，无离线失败路径）。
+        :return: 恒为 `True`（直传无需当前状态，无离线失败路径）。
 
         **实现**：q 有效则拷贝后原子发布为恒定目标；空目标、多帧（不支持多帧，仅支持单帧且 q 有效，同一多帧目标只告警一次）、q 空或维度不符一律回退 q_home。
         """
         targets = [target] if isinstance(target, TrajFrame) else list(target or [])
-        q_home = np.asarray(arm.arm_home, dtype=float).reshape(-1)
+        q_home = np.asarray(arm.home_arm, dtype=float).reshape(-1)
         q: Optional[np.ndarray] = None
         if len(targets) == 1 and targets[0].q is not None:
             tq = np.asarray(targets[0].q, dtype=float).reshape(-1)
@@ -48,7 +48,7 @@ class SingleJointHoldTrajPlanner(TrajPlanner):
                     "traj_planner_single_joint_hold.py - SingleJointHoldTrajPlanner."
                     "plan：目标帧数 "
                     f"{len(targets)} > 1，不支持多帧（仅支持单帧且 q 有效），"
-                    "已回退 q_home；请每次只写一帧目标（set_target_traj 单帧）")
+                    "已回退 q_home；请每次只写一帧目标（set_target_trajframe 单帧）")
                 self._multi_warned = True
         else:
             self._multi_warned = False      # 单帧/空目标规划后复位告警去重
@@ -59,8 +59,8 @@ class SingleJointHoldTrajPlanner(TrajPlanner):
     def sample(self, t: float) -> TrajFrame:
         """采样：恒输出直传目标 q（dq/ddq 为 0）。
 
-        :param t: 采样时刻（s，绝对时间，仅回填 ``TrajFrame.time``）。
-        :return: 此刻轨迹帧 `TrajFrame`（q 恒为发布的目标，dq/ddq 为 0）。
+        :param t: 采样时刻（s，绝对时间，仅回填 `TrajFrame.time`）。
+        :return: 此刻轨迹帧 `TrajFrame`（q 恒为发布的目标，单位 rad；dq/ddq 为 0，单位 rad/s / rad/s²）。
         """
         if self._target_q is None:
             raise RuntimeError(

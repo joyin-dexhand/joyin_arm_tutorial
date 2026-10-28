@@ -1,4 +1,5 @@
-# 第七章 构型结构设计与 URDF 导出“评价第七章文档内容
+# 第七章 构型结构设计与 URDF 导出
+
 > 📌 **概述**：本章介绍机械臂构型、结构与关节电机的设计考虑，再说明 CAD 装配信息如何对应 URDF 中的连杆、关节和坐标关系。最后在 SolidWorks 中建立参考几何体，完成模型导出与检查，为后续正逆运动学计算和仿真准备一致的模型。
 
 机械臂可用于搬运、装配、检测以及工具操作。不同应用对运动范围、末端姿态、负载和精度的要求不同，但设计时都需要解决两个基本问题：机械结构能否满足使用要求，以及如何把结构信息交给计算与控制程序。
@@ -360,7 +361,7 @@ link_base
   <child link="link3" />
   <origin xyz="0.264 0 0" rpy="3.141592653589793 0 -2.9226" />
   <axis xyz="0 0 1" />
-  <limit lower="-3.14" upper="0" effort="27" velocity="5" />
+  <limit lower="-3.14" upper="0" effort="30" velocity="5" />
 </joint>
 ```
 
@@ -454,6 +455,19 @@ CAD 根据零件几何、材料密度或指定质量属性计算这些数据。�
 准备完整的机械臂与夹爪总装、子装配体和零件文件，保留相互引用的目录关系。打开总装后检查缺失引用和错误配合，重建并另存导出副本。确认夹爪固定本体、驱动齿轮、两侧手指及齿条齐全，旋转与导轨配合正确。
 
 下面的本体节点统一写作 `link_base`、`link1`～`link6`、`joint1`～`joint6`，末端使用 `link_end`、`link_end1`、`link_end_finger1/2`，工具参考系使用 `frame_end_tcp` 和 `frame_end_fingertip`。配置时保持节点名称一致。
+
+配套模型 `rebot_arm_b601_dm.urdf` 中部分节点使用了不同的实名，与本教程命名的对照如下：
+
+| 教程命名 | 模型实名 |
+|:---:|:---:|
+| `link_base` | `link0` |
+| `link_end` | `link_end0` |
+| `joint_end` | `joint_end0` |
+| `link_end_finger1` | `link_end_fingerright` |
+| `link_end_finger2` | `link_end_fingerleft` |
+| `joint_end_pris1` / `joint_end_pris2` | `joint_end_fingerright` / `joint_end_fingerleft` |
+
+其余节点（`link1`～`link6`、`joint1`～`joint6`、`link_end1`、`joint_end1`、`frame_end_tcp`、`frame_end_fingertip`）两侧同名。第 5.5.2 节运动树与第 5.6 节参数表按模型实名书写，便于与导出结果逐项核对。
 
 运行后续程序前，确认加载的模型路径、末端参考系名称和关节顺序与导出结果一致。
 
@@ -697,12 +711,14 @@ TCP 对应夹持物体时的约定中心。保持夹爪闭合零位，按有效�
 | 5. 添加夹持中心参考系 | 插件中跳过该空参考节点；导出后按第 5.6 节“导出后补充工具参考系”手动添加。 | ![在导出的 URDF 中添加夹持中心参考系](images/chapt7_urdf/urdf_config_frame_end_tcp.png) |
 | 6. 添加闭合指尖参考系 | 插件中跳过该空参考节点；导出后按第 5.6 节“导出后补充工具参考系”手动添加。 | ![在导出的 URDF 中添加闭合指尖参考系](images/chapt7_urdf/urdf_config_frame_end_fingertip.png) |
 
+夹爪分支的运动树如下，节点按配套模型实名书写（与教程命名的对照见第 5.1.1 节）：
+
 ```text
 link6
-└── joint_end (fixed) → link_end
+└── joint_end0 (fixed) → link_end0
     ├── joint_end1 (revolute，电机7) → link_end1
-    ├── joint_end_pris1 (prismatic，mimic joint_end1) → link_end_finger1
-    ├── joint_end_pris2 (prismatic，mimic joint_end1) → link_end_finger2
+    ├── joint_end_fingerright (prismatic，mimic joint_end1) → link_end_fingerright
+    ├── joint_end_fingerleft (prismatic，mimic joint_end1) → link_end_fingerleft
     ├── joint_frame_end_tcp (fixed) → frame_end_tcp
     └── joint_frame_end_fingertip (fixed) → frame_end_fingertip
 ```
@@ -739,23 +755,23 @@ $$
 \theta_{\mathrm{rad}}=\theta_{\mathrm{deg}}\frac{\pi}{180}
 $$
 
-以下参数读取自配套模型 `joyarm_code/joyarm_core/robot_model/joyarm_dm/urdf/joyarm_dm.urdf`，检查时按对应关节逐项核对：
+以下参数读取自配套模型 `joyarm_code/joyarm_core/robot_model/rebot_arm_b601_dm/urdf/rebot_arm_b601_dm.urdf`，关节名按模型实名书写（与教程命名的对照见第 5.1.1 节），检查时按对应关节逐项核对：
 
 | 关节 | 类型 | 位置范围（lower～upper） | 速度上限（velocity） | 力／力矩上限（effort） |
 |:---:|:---:|:---:|:---:|:---:|
-| `joint1` | `revolute` | -2.8～2.8 rad | 5 rad/s | 27 N·m |
-| `joint2` | `revolute` | -3.14～0 rad | 5 rad/s | 27 N·m |
-| `joint3` | `revolute` | -3.14～0 rad | 5 rad/s | 27 N·m |
-| `joint4` | `revolute` | -1.57～1.57 rad | 20 rad/s | 7 N·m |
-| `joint5` | `revolute` | -1.57～1.57 rad | 20 rad/s | 7 N·m |
-| `joint6` | `revolute` | -3.14～3.14 rad | 20 rad/s | 7 N·m |
-| `joint_end1` | `revolute` | -5.49～0 rad | 20 rad/s | 7 N·m |
-| `joint_end_pris1` | `prismatic` | -0.04625～0 m | 0.08 m/s | 7 N |
-| `joint_end_pris2` | `prismatic` | -0.04625～0 m | 0.08 m/s | 7 N |
+| `joint1` | `revolute` | -2.8～2.8 rad | 5 rad/s | 30 N·m |
+| `joint2` | `revolute` | -3.14～0 rad | 5 rad/s | 30 N·m |
+| `joint3` | `revolute` | -3.14～0 rad | 5 rad/s | 30 N·m |
+| `joint4` | `revolute` | -1.57～1.57 rad | 8 rad/s | 9 N·m |
+| `joint5` | `revolute` | -1.57～1.57 rad | 8 rad/s | 9 N·m |
+| `joint6` | `revolute` | -3.14～3.14 rad | 8 rad/s | 9 N·m |
+| `joint_end1` | `revolute` | -5.49～0 rad | 8 rad/s | 1.5 N·m |
+| `joint_end_fingerright` | `prismatic` | -0.04625～0 m | 0.06736 m/s | 178.15 N |
+| `joint_end_fingerleft` | `prismatic` | -0.04625～0 m | 0.06736 m/s | 178.15 N |
 
-`joint_end`、`joint_frame_end_tcp` 和 `joint_frame_end_fingertip` 为固定关节，不设置运动限位。
+`joint_end0`、`joint_frame_end_tcp` 和 `joint_frame_end_fingertip` 为固定关节，不设置运动限位。
 
-夹爪关节按各自方向检查：`joint_end1` 为 `revolute`，本地轴沿 X，角度范围为 `-5.49`～`0` rad；两侧手指为 `prismatic`，位移范围均为 `-0.04625`～`0` m，本地轴分别沿正 Y、负 Y。另确认夹爪安装关节 `joint_end` 为 `fixed`，父节点为 `link6`、子节点为 `link_end`，零位变换正确。
+夹爪关节按各自方向检查：`joint_end1` 为 `revolute`，本地轴沿 X，角度范围为 `-5.49`～`0` rad；两侧手指为 `prismatic`，位移范围均为 `-0.04625`～`0` m，本地轴分别沿正 Y、负 Y。另确认夹爪安装关节 `joint_end0` 为 `fixed`，父节点为 `link6`、子节点为 `link_end0`，零位变换正确。
 
 **2. 检查两侧手指的 mimic 设置**
 
@@ -781,9 +797,9 @@ $$
 导出目录应包含 URDF 和对应网格，例如：
 
 ```text
-JoyArm_dm_v1_1_mdh_description/
+rebot_arm_b601_dm/
 ├── urdf/
-│   └── JoyArm_dm_v1_1_mdh.urdf
+│   └── rebot_arm_b601_dm.urdf
 └── meshes/
     ├── link_base.STL
     ├── link1.STL

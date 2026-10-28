@@ -1,4 +1,4 @@
-"""``joyarm_core`` —— JoyArm 机械臂核心代码库。
+"""`joyarm_core` —— JoyArm 机械臂核心代码库。
 
 代码库分层结构：
 
@@ -17,7 +17,7 @@
 ```
     from joyarm_core import joyArm   # 导入创建入口
 
-    arm1 = joyArm("joyarm_<型号>")  # 创建对象
+    arm1 = joyArm("<型号>")  # 创建对象
 ``` 
 """
 
@@ -32,6 +32,7 @@ from .utils.types import (
     JointState,
     Wrench,
     Twist,
+    Accel,
     Pose,
     TrajFrame,
     JointLimits,
@@ -39,6 +40,9 @@ from .utils.types import (
     IKResult,
     ComplianceParams,
     ControlMode,
+    MotionState,
+    SafetyEvent,
+    STATE_FROM,
 )
 from .utils.transforms import (
     rot_x,
@@ -90,7 +94,7 @@ from .backend import (
 
 # ---- JoyArm 类 + 对象创建入口 ----
 from .joyarm.joyarm import JoyArm
-from .joyarm import JoyArmFactory, joyArm
+from .joyarm import JoyArmFactory, joyArm, listArm
 
 __all__ = [
     # 版本
@@ -101,6 +105,7 @@ __all__ = [
     "JointState",
     "Wrench",
     "Twist",
+    "Accel",
     "Pose",
     "TrajFrame",
     "JointLimits",
@@ -108,6 +113,9 @@ __all__ = [
     "IKResult",
     "ComplianceParams",
     "ControlMode",
+    "MotionState",
+    "SafetyEvent",
+    "STATE_FROM",
     # 共享工具：数学 / 接口
     "rot_x",
     "rot_y",
@@ -142,6 +150,7 @@ __all__ = [
     "JoyArm",
     "JoyArmFactory",
     "joyArm",
+    "listArm",
     # 求解器接口
     "FkineSolver",
     "IkineSolver",

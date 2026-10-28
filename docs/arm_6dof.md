@@ -17,7 +17,7 @@
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"。
   · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/xxx.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm_core/：joyarm（JoyArm 单类）/ fkine / ikine / control / teleop。
+  · 可复用核心库 joyarm_code/joyarm_core/：joyarm（JoyArm 单类）+ robotics 六域（fkine / ikine / jacobian / dynamics / trajectory / control）。
   · 图示：配图放 docs/images/arm_6dof/，未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 未知数值用 *待补充*；跨章引用用相对链接 [第N章](chapterN_M.md)。
@@ -65,6 +65,6 @@
 <!-- ✍️ 本节写作要点：
   · 目标：操作层面的"记录→回放"两步流程（示教模式录轨迹 → 回放复现）。
   · 用一张"数据记录→回放"流程表（步骤|操作|目的）。
-  · 引用 joyarm_core/apps/teleop.py；原理与更多示教方式见第十二章。
+  · 示教应用为规划功能（第十二章落地，届时位于 joyarm_ros2_ws），当前无可引用模块；原理与更多示教方式见第十二章。
   · 收尾可加 > 💡：示教复现是最快的"编程"方式。
 -->

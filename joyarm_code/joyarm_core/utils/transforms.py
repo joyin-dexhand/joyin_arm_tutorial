@@ -5,10 +5,10 @@
 约定：
 ----------------
 
-- **``R``**：``(3,3)`` numpy 数组，右手坐标系。
-- **RPY**：``rpy = (r, p, y)`` 传入（roll/pitch/yaw），弧度；按 ``R = Rz(y)·Ry(p)·Rx(r)`` 计算。
-- **四元数**：``(w, x, y, z)`` 顺序，实部在前，单位四元数。
-- **``T``** ：``(4,4)`` 齐次矩阵。
+- **`R`**：`(3,3)` numpy 数组，右手坐标系。
+- **RPY**：`rpy = (r, p, y)` 传入（roll/pitch/yaw），弧度；按 `R = Rz(y)·Ry(p)·Rx(r)` 计算。
+- **四元数**：`(w, x, y, z)` 顺序，实部在前，单位四元数。
+- **`T`** ：`(4,4)` 齐次矩阵。
 
 """
 
@@ -53,19 +53,19 @@ __all__ = [
 # 基本旋转矩阵
 # ============================================================
 def rot_x(angle: float) -> np.ndarray:
-    """绕 X 轴旋转 ``angle`` 弧度的 ``(3,3)`` 旋转矩阵。"""
+    """绕 X 轴旋转 `angle` 弧度的 `(3,3)` 旋转矩阵。"""
     c, s = np.cos(angle), np.sin(angle)
     return np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
 
 
 def rot_y(angle: float) -> np.ndarray:
-    """绕 Y 轴旋转 ``angle`` 弧度的 ``(3,3)`` 旋转矩阵。"""
+    """绕 Y 轴旋转 `angle` 弧度的 `(3,3)` 旋转矩阵。"""
     c, s = np.cos(angle), np.sin(angle)
     return np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]])
 
 
 def rot_z(angle: float) -> np.ndarray:
-    """绕 Z 轴旋转 ``angle`` 弧度的 ``(3,3)`` 旋转矩阵。"""
+    """绕 Z 轴旋转 `angle` 弧度的 `(3,3)` 旋转矩阵。"""
     c, s = np.cos(angle), np.sin(angle)
     return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
@@ -76,10 +76,10 @@ def rot_z(angle: float) -> np.ndarray:
 def rpy_to_R(rpy) -> np.ndarray:
     """RPY 角 → 旋转矩阵。
 
-    按 ``R = Rz(y)·Ry(p)·Rx(r)`` 计算（外旋固定角 X-Y-Z，即 RPY 约定）。
+    按 `R = Rz(y)·Ry(p)·Rx(r)` 计算（外旋固定角 X-Y-Z，即 RPY 约定）。
 
-    :param rpy: ``(3,)`` 数组 ``(roll, pitch, yaw)``，弧度。
-    :return: ``(3,3)`` 旋转矩阵。
+    :param rpy: `(3,)` 数组 `(roll, pitch, yaw)`，弧度。
+    :return: `(3,3)` 旋转矩阵。
     """
     rpy = np.asarray(rpy, dtype=float).reshape(3)
     r, p, y = rpy
@@ -88,12 +88,12 @@ def rpy_to_R(rpy) -> np.ndarray:
 
 
 def R_to_rpy(R) -> np.ndarray:
-    """旋转矩阵 → RPY 角 ``(roll, pitch, yaw)``，弧度。
+    """旋转矩阵 → RPY 角 `(roll, pitch, yaw)`，弧度。
 
-    当 ``pitch`` 接近 ±90° 时进入万向锁奇异，仅 roll 与 yaw 之和有效。
+    当 `pitch` 接近 ±90° 时进入万向锁奇异，仅 roll 与 yaw 之和有效。
 
-    :param R: ``(3,3)`` 旋转矩阵。
-    :return: ``(3,)`` 数组 ``(r, p, y)``。
+    :param R: `(3,3)` 旋转矩阵。
+    :return: `(3,)` 数组 `(r, p, y)`。
     """
     R = np.asarray(R, dtype=float)
     # 由 R[2,0] 反算 pitch：sin(p) = -R[2,0]，clip 防浮点误差越界
@@ -120,9 +120,9 @@ def R_to_rpy(R) -> np.ndarray:
 def axis_angle_to_R(k, theta: float) -> np.ndarray:
     """轴角 → 旋转矩阵（Rodrigues 公式）。
 
-    :param k: ``(3,)`` 旋转轴（无需单位化，内部归一化）。
+    :param k: `(3,)` 旋转轴（无需单位化，内部归一化）。
     :param theta: 旋转角，弧度。
-    :return: ``(3,3)`` 旋转矩阵。
+    :return: `(3,3)` 旋转矩阵。
     """
     k = _normalize(k)
     return rodrigues(k, theta)
@@ -131,10 +131,10 @@ def axis_angle_to_R(k, theta: float) -> np.ndarray:
 def rodrigues(k, theta=None) -> np.ndarray:
     """Rodrigues 公式：轴角 → 旋转矩阵。
 
-    :param k: ``(3,)`` 旋转轴。若 ``theta`` 为 ``None``，``k`` 视为
+    :param k: `(3,)` 旋转轴。若 `theta` 为 `None`，`k` 视为
               旋转向量（方向为轴、模长为角），内部拆解。
-    :param theta: 旋转角，弧度；为 ``None`` 时从 ``k`` 的模长取。
-    :return: ``(3,3)`` 旋转矩阵。
+    :param theta: 旋转角，弧度；为 `None` 时从 `k` 的模长取。
+    :return: `(3,3)` 旋转矩阵。
     """
     k = np.asarray(k, dtype=float).reshape(3)
     if theta is None:
@@ -157,8 +157,8 @@ def rodrigues(k, theta=None) -> np.ndarray:
 def R_to_axis_angle(R) -> tuple[np.ndarray, float]:
     """旋转矩阵 → 轴角。
 
-    :param R: ``(3,3)`` 旋转矩阵。
-    :return: ``(k, theta)``，``k`` 为 ``(3,)`` 单位轴，``theta`` 为弧度。
+    :param R: `(3,3)` 旋转矩阵。
+    :return: `(k, theta)`，`k` 为 `(3,)` 单位轴，`theta` 为弧度。
     """
     R = np.asarray(R, dtype=float)
     # 迹公式：cos(θ) = (trace(R) - 1) / 2；clip 防浮点误差超出 [-1,1]
@@ -198,9 +198,9 @@ def R_to_axis_angle(R) -> tuple[np.ndarray, float]:
 # 四元数 ↔ 旋转矩阵 / 轴角 / RPY
 # ============================================================
 def quat_to_R(q) -> np.ndarray:
-    """四元数 ``(w,x,y,z)`` → ``(3,3)`` 旋转矩阵。
+    """四元数 `(w,x,y,z)` → `(3,3)` 旋转矩阵。
 
-    :param q: ``(4,)`` 四元数，实部在前。无需单位化，内部归一化。
+    :param q: `(4,)` 四元数，实部在前。无需单位化，内部归一化。
     """
     q = quat_norm(q)                          # 先单位化（旋转只用单位四元数）
     w, x, y, z = q
@@ -215,7 +215,7 @@ def quat_to_R(q) -> np.ndarray:
 
 
 def R_to_quat(R) -> np.ndarray:
-    """旋转矩阵 → 四元数 ``(w,x,y,z)``（实部在前，单位四元数）。
+    """旋转矩阵 → 四元数 `(w,x,y,z)`（实部在前，单位四元数）。
 
     采用稳定的 Shepperd 分支方法，避免 sqrt 数值问题。
     """
@@ -252,9 +252,9 @@ def R_to_quat(R) -> np.ndarray:
 
 
 def axis_angle_to_quat(k, theta: float) -> np.ndarray:
-    """轴角 → 四元数 ``(w,x,y,z)``。
+    """轴角 → 四元数 `(w,x,y,z)`。
 
-    :param k: ``(3,)`` 旋转轴（内部归一化）。
+    :param k: `(3,)` 旋转轴（内部归一化）。
     :param theta: 旋转角，弧度。
     """
     k = _normalize(k)                         # 单位化旋转轴
@@ -265,7 +265,7 @@ def axis_angle_to_quat(k, theta: float) -> np.ndarray:
 
 
 def quat_to_axis_angle(q) -> tuple[np.ndarray, float]:
-    """四元数 → 轴角 ``(k, theta)``，``theta ∈ [0, π]``。"""
+    """四元数 → 轴角 `(k, theta)`，`theta ∈ [0, π]`。"""
     q = quat_norm(q)
     # 单位四元数 q 与 -q 表示同一旋转；为使 θ 落在 [0,π]，w<0 时取 -q（走短弧）
     if q[0] < 0.0:
@@ -280,7 +280,7 @@ def quat_to_axis_angle(q) -> tuple[np.ndarray, float]:
 
 
 def rpy_to_quat(rpy) -> np.ndarray:
-    """RPY 角 ``(r,p,y)`` → 四元数 ``(w,x,y,z)``。"""
+    """RPY 角 `(r,p,y)` → 四元数 `(w,x,y,z)`。"""
     rpy = np.asarray(rpy, dtype=float).reshape(3)
     r, p, y = rpy
     # 各角的半角 sin/cos（四元数恒以半角形式出现）
@@ -296,12 +296,12 @@ def rpy_to_quat(rpy) -> np.ndarray:
 
 
 def quat_to_rpy(q) -> np.ndarray:
-    """四元数 ``(w,x,y,z)`` → RPY 角 ``(r,p,y)``，弧度。"""
+    """四元数 `(w,x,y,z)` → RPY 角 `(r,p,y)`，弧度。"""
     return R_to_rpy(quat_to_R(q))
 
 
 def quat_mul(q1, q2) -> np.ndarray:
-    """四元数乘法（Hamilton 积），返回单位四元数 ``(w,x,y,z)``。"""
+    """四元数乘法（Hamilton 积），返回单位四元数 `(w,x,y,z)`。"""
     w1, x1, y1, z1 = quat_norm(q1)
     w2, x2, y2, z2 = quat_norm(q2)
     # Hamilton 四元数乘法公式（注意虚部交叉项的符号规则）
@@ -319,7 +319,7 @@ def quat_conj(q) -> np.ndarray:
 
 
 def quat_norm(q) -> np.ndarray:
-    """四元数归一化 → 单位四元数 ``(w,x,y,z)``。"""
+    """四元数归一化 → 单位四元数 `(w,x,y,z)`。"""
     q = np.asarray(q, dtype=float).reshape(4)
     n = np.linalg.norm(q)
     if n < 1e-12:                             # 零四元数无法归一，返回单位四元数（零旋转）
@@ -331,11 +331,11 @@ def quat_norm(q) -> np.ndarray:
 # 齐次变换矩阵
 # ============================================================
 def Rp_to_T(R=None, p=None) -> np.ndarray:
-    """由旋转 ``R`` 与平移 ``p`` 组装 ``(4,4)`` 齐次变换矩阵。
+    """由旋转 `R` 与平移 `p` 组装 `(4,4)` 齐次变换矩阵。
 
-    :param R: ``(3,3)`` 旋转矩阵，缺省为单位阵。
-    :param p: ``(3,)`` 平移向量，缺省为零向量。
-    :return: ``(4,4)`` 齐次变换矩阵。
+    :param R: `(3,3)` 旋转矩阵，缺省为单位阵。
+    :param p: `(3,)` 平移向量，缺省为零向量。
+    :return: `(4,4)` 齐次变换矩阵。
     """
     T = np.eye(4)
     if R is not None:
@@ -346,9 +346,9 @@ def Rp_to_T(R=None, p=None) -> np.ndarray:
 
 
 def T_to_Rp(T) -> tuple[np.ndarray, np.ndarray]:
-    """拆解 ``(4,4)`` 齐次变换矩阵 → ``(R, p)``。
+    """拆解 `(4,4)` 齐次变换矩阵 → `(R, p)`。
 
-    :return: ``(R(3,3), p(3,))``。
+    :return: `(R(3,3), p(3,))`。
     """
     T = np.asarray(T, dtype=float)
     # copy() 防止返回的切片被外部意外修改
@@ -358,7 +358,7 @@ def T_to_Rp(T) -> tuple[np.ndarray, np.ndarray]:
 def T_inv(T) -> np.ndarray:
     """齐次变换矩阵的逆（利用旋转正交性，避免通用 4×4 求逆）。
 
-    对 ``T = [R p; 0 1]``，逆为 ``[Rᵀ  -Rᵀp; 0 1]``。
+    对 `T = [R p; 0 1]`，逆为 `[Rᵀ  -Rᵀp; 0 1]`。
     """
     R, p = T_to_Rp(T)
     R_inv = R.T
@@ -366,12 +366,12 @@ def T_inv(T) -> np.ndarray:
 
 
 def T_mul(T1, T2) -> np.ndarray:
-    """两个 ``(4,4)`` 齐次变换矩阵相乘。"""
+    """两个 `(4,4)` 齐次变换矩阵相乘。"""
     return np.asarray(T1, dtype=float) @ np.asarray(T2, dtype=float)
 
 
 def adT(T) -> np.ndarray:
-    """齐次变换 ``T`` 的 6×6 伴随矩阵 ``Ad_T``。
+    """齐次变换 `T` 的 6×6 伴随矩阵 `Ad_T`。
 
     用于旋量/六维力在不同坐标系间的变换：
 
@@ -380,10 +380,10 @@ def adT(T) -> np.ndarray:
         \\mathrm{Ad}_T = \\begin{bmatrix} R & \\hat{p} R \\\\
                                           0 & R \\end{bmatrix}
 
-    其中 :math:`\\hat{p}` 为 ``p`` 的反对称矩阵。
+    其中 :math:`\\hat{p}` 为 `p` 的反对称矩阵。
 
-    :param T: ``(4,4)`` 齐次变换矩阵。
-    :return: ``(6,6)`` 伴随矩阵。
+    :param T: `(4,4)` 齐次变换矩阵。
+    :return: `(6,6)` 伴随矩阵。
     """
     R, p = T_to_Rp(T)
     # p 的反对称矩阵 p̂（3x3），用于把叉积 p× 写成矩阵乘法
@@ -402,10 +402,10 @@ def adT(T) -> np.ndarray:
 def slerp(q0, q1, s: float) -> np.ndarray:
     """球面线性插值两个四元数。
 
-    :param q0: ``(4,)`` 起始四元数 ``(w,x,y,z)``，无需单位化，内部归一化。
-    :param q1: ``(4,)`` 终止四元数 ``(w,x,y,z)``，无需单位化，内部归一化。
-    :param s: 插值参数，``[0,1]``；``0`` 返回 ``q0``，``1`` 返回 ``q1``。
-    :return: ``(4,)`` 插值后的单位四元数。
+    :param q0: `(4,)` 起始四元数 `(w,x,y,z)`，无需单位化，内部归一化。
+    :param q1: `(4,)` 终止四元数 `(w,x,y,z)`，无需单位化，内部归一化。
+    :param s: 插值参数，`[0,1]`；`0` 返回 `q0`，`1` 返回 `q1`。
+    :return: `(4,)` 插值后的单位四元数。
     """
     q0 = quat_norm(q0)
     q1 = quat_norm(q1)

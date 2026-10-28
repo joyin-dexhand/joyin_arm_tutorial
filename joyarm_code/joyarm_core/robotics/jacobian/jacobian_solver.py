@@ -30,7 +30,7 @@ class JacobianSolver(ABC):
 
         :param arm: 机械臂对象。
         :param q: `(n,)` 关节角，弧度。
-        :param frame: 目标帧名（``str``）。
+        :param frame: 目标帧名（`str`）。
         :return: `(6,n)` 基座参考系下的雅可比矩阵 `J(q)`。
         """
 
@@ -40,8 +40,8 @@ class JacobianSolver(ABC):
 
         :param arm: 机械臂对象。
         :param q: `(n,)` 关节角，弧度。
-        :param frame: 目标帧名（``str``）。
-        :param damping: 阻尼系数 `λ`，默认 ``1e-3``。
+        :param frame: 目标帧名（`str`）。
+        :param damping: 阻尼系数 `λ`，默认 `1e-3`。
         :return: `(n,6)` 基座参考系下的广义逆 `J* = Jᵀ(JJᵀ + λ²I)⁻¹`。
 
         **λ→0** 退化为最小范数伪逆 `J⁺`；`σ=0` 且 `λ=0` 时该方向完全不可控，系数取 0。

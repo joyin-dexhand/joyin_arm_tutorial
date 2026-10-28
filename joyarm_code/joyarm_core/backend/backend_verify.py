@@ -5,11 +5,11 @@ Backend 子类全方位测试验证（上层视角）  joyarm_core/backend/backe
 【功能概要】
     从上层视角（只调 Backend 基类公开方法与属性，不触碰子类私有层、与型号实现
     细节无关）对**任意** backend 子类（关节电机 / 舵机 / 混合硬件 / 无 end 型号）
-    做分组分项测试验证（verify_backend.py 的迭代版，编号改为两位数十进制分组）：
+    做分组分项测试验证（测试项编号采用两位数十进制分组）：
       00 组  初始化验证：构造、属性初值、限位解析（离线，全低危）；
       10 组  连接编排：arm/end 六种连断次序 + 重复连断 + 断开重联（全低危）；
-      20 组  只读验证：单次状态获取、10s 实时刷新监视、模式获取、参数读取、
-             错误码读取 / 检查（全低危）；
+      20 组  只读验证：单次状态获取、实时刷新监视（10 拍错相）、模式获取、
+             参数读取、错误码读取 / 检查（全低危）；
       30 组  控制验证：三模式设置（低危）、非法模式门禁（低危）、使能 / 失能
              与重复调用、写参数（高危）、设置零点（极高危，仅显式单项 + 每族
              二次确认）；
@@ -44,23 +44,22 @@ Backend 子类全方位测试验证（上层视角）  joyarm_core/backend/backe
     source .venv/bin/activate
 
     # 3. 运行本脚本（在 joyarm_code/ 目录下）
-    python joyarm_core/backend/backend_verify.py --help                          # 完整用法
-    python joyarm_core/backend/backend_verify.py --list                          # 全部测试项清单
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=offline         # 00 组（缺省）
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=all             # 全部（不含 38）
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=12              # 单项
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=00,20,read      # 编号/组名混选
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=connect,read    # 组合
-    python joyarm_core/backend/backend_verify.py --sub=dm --step=online \
-        --param=<参数键> --action=open,close                                     # 真机段
+    python joyarm_core/backend/backend_verify.py --help                                  # 完整用法
+    python joyarm_core/backend/backend_verify.py --list                                  # 全部测试项清单
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=offline         # 00 组（缺省）
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=all             # 全部（不含 38）
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=12              # 单项
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=00,20,read      # 编号/组名混选
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=connect,read    # 组合
+    python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=online \
+        --param=<参数键> --action=open,close                                             # 真机段
 
 【命令行参数】
-    --sub     子型简称（如 dm、feetech）：经 REGISTRY 或文件约定导入
-              backend_<型号>.py 并寻找 Backend<型号> 类，默认加载
-              config/joyarm_<型号>.yaml 的 backend 段；缺省时仅 --help/--list 可用
+    --sub     backend 完整注册名（REGISTRY 键 = backend/backend_*.py 文件名去 .py）：经 REGISTRY 或模块名导入并寻找 Backend 子类；
+              默认按 backend.name 自动匹配 config/*.yaml 的 backend 段
     --step    数字=单项编号（如 38）；字符串=组名（init/connect/read/ctrl/motion/
               error/offline/online/all）；逗号分隔可单项与组任意混选；缺省 offline
-    --config  指定 yaml 配置文件（默认 joyarm_core/config/joyarm_<sub>.yaml）
+    --config  指定 yaml 配置文件（缺省按 --sub 自动匹配 config/*.yaml）
     --param   参数读取 / 写入测试（23/37）的参数键（键表由子类定义；不给则 SKIP）
     --action  send_action_end 测试（44）的离散动作名，逗号分隔（默认仅测 home）
     --list    仅列出全部测试项（编号/组/风险/目的），不执行
@@ -89,7 +88,7 @@ import yaml
 from joyarm_core.backend import Backend
 from joyarm_core.utils.types import ControlMode
 
-# ---------------- 安全常量（真机测试的小幅参数，子型中立；幅度=verify_backend 的一半） ----------------
+# ---------------- 安全常量（真机测试的小幅参数，子型中立） ----------------
 POS_AMP = 0.025       # 位置测试目标偏移 rad（原 0.05 减半）
 VEL_TEST = 0.1        # 速度测试目标 rad/s（原 0.2 减半）
 VEL_DUR = 0.5         # 速度测试持续时间 s
@@ -99,7 +98,8 @@ SAFE_VLIM = 0.5       # 位置测试限速 rad/s
 SAFE_FLIM = 0.5       # 位置测试归一化力矩电流上限（0~1）
 LIMIT_MARGIN = 0.01   # 目标距硬限位的安全余量 rad
 SETTLE = 0.5          # 发送后观测等待 s
-WATCH_SECS = 10       # item 21 实时刷新监视时长（固定 10s，无 CLI 参数）
+WATCH_TICKS = 10      # item 21 实时刷新监视拍数（无 CLI 参数）
+SAMPLE_IV = 0.17      # item 21 采样间隔 s：与常见承诺周期（10/20/50Hz）均非整数倍，防采样相位锁定（整倍会恒显同一帧龄读数，掩盖真实锯齿）
 ZERO_TOL = 0.05       # item 38 设零后回读关节位置归零容差 rad
 
 # 子类未实现内核的桩消息标记（backend_template.py 桩约定，基类转 warn 后保留原文）
@@ -312,7 +312,7 @@ def _plan_prefill(s: Session, needs: list) -> list[tuple[str, str]]:
     plans: list[tuple[str, str]] = []
     planned_conn: set = set()
     planned_mode: dict = {}
-    planned_abled: set = set()
+    planned_enabled: set = set()
     b = s.b  # 可能尚未构造（视为全部前置缺失）
     for nd in needs:
         kind = nd[0]
@@ -327,7 +327,7 @@ def _plan_prefill(s: Session, needs: list) -> list[tuple[str, str]]:
                     planned_conn.add(fam)
             elif kind == "mode":
                 mode = nd[2]
-                mode_cur = getattr(b, f"mode_{fam}", None) if b is not None else None
+                mode_cur = getattr(b, f"_mode_{fam}", None) if b is not None else None
                 if mode_cur != mode and planned_mode.get(fam) != mode:
                     if not conn:
                         plans.append((f"connect_{fam}", "低"))
@@ -335,11 +335,11 @@ def _plan_prefill(s: Session, needs: list) -> list[tuple[str, str]]:
                     plans.append((f"set_mode_{fam}({mode.name})", "低"))
                     planned_mode[fam] = mode
             elif kind == "enabled":
-                abled = ((getattr(b, f"is_abled_{fam}", None) if b is not None else None) is True
-                         or fam in planned_abled)
-                if not abled:
+                enabled = ((getattr(b, f"is_enabled_{fam}", None) if b is not None else None) is True
+                         or fam in planned_enabled)
+                if not enabled:
                     plans.append((f"enable_{fam}", "高"))
-                    planned_abled.add(fam)
+                    planned_enabled.add(fam)
     return plans
 
 
@@ -371,7 +371,7 @@ def _prefill(s: Session, needs: list) -> tuple[str, list[str], str]:
                     return "fail", actions, f"connect_{fam} 未成功（连接为必实现核心能力，详见上方 warn）"
             elif kind == "mode":
                 mode = nd[2]
-                if getattr(b, f"mode_{fam}") == mode:
+                if getattr(b, f"_mode_{fam}") == mode:
                     continue
                 if getattr(b, f"is_connected_{fam}") is not True:  # 防御：先保连接
                     getattr(b, f"connect_{fam}")()
@@ -384,7 +384,7 @@ def _prefill(s: Session, needs: list) -> tuple[str, list[str], str]:
                     return "skip", actions, (f"{fam} 族所需模式 {mode.name} 不可用"
                                              f"（set_mode 返回 0——型号能力缺失或硬件拒绝，非缺陷；详见上方 warn）")
             elif kind == "enabled":
-                if getattr(b, f"is_abled_{fam}") is True:
+                if getattr(b, f"is_enabled_{fam}") is True:
                     continue
                 if getattr(b, f"is_connected_{fam}") is not True:
                     return "fail", actions, "连接缺失"
@@ -499,14 +499,18 @@ def _it04(s: Session):
         for fam in ("arm", "end"):
             if getattr(b, f"n_joints_{fam}") != _n_family_cfg(s.cfg, fam):
                 fails.append(f"{fam} 关节数 {getattr(b, f'n_joints_{fam}')} ≠ cfg {_n_family_cfg(s.cfg, fam)}")
-            for attr in (f"is_connected_{fam}", f"is_abled_{fam}", f"mode_{fam}"):
+            for attr in (f"is_connected_{fam}", f"is_enabled_{fam}"):
                 if getattr(b, attr) is not None:
                     fails.append(f"{attr} 初值非 None")
+            if hasattr(b, f"mode_{fam}"):
+                fails.append(f"mode_{fam} 直读属性应不存在（契约：模式经 get_mode_{fam} 读时刷新）")
+            if getattr(b, f"get_mode_{fam}")() is not None:
+                fails.append(f"get_mode_{fam}() 未连接初值应 None（跳过 warn 不达总线）")
         exp_name = str(s.cfg.get("name", ""))
         if b.name != exp_name:
             fails.append(f"name={b.name!r} ≠ cfg {exp_name!r}")
         ev = (f"name={b.name!r}，arm={b.n_joints_arm} 关节，end={b.n_joints_end} 关节，"
-              f"is_connected*/is_abled*/mode* 初值均为 None")
+              f"is_connected*/is_enabled* 初值 None；无 mode_* 直读属性；未连接 get_mode_* 返 None")
         return ("FAIL" if fails else "PASS"), ev + (f"；异常：{fails}" if fails else "")
     finally:
         b.close()
@@ -562,24 +566,25 @@ def _it06(s: Session):
 
 # ---------------- 10 组（真机：连接编排） ----------------
 def _snap(b: Backend, fam: str) -> tuple:
-    """族三值状态快照（连接/模式/使能），用于对侧族隔离断言对比。"""
-    return (getattr(b, f"is_connected_{fam}"), getattr(b, f"mode_{fam}"),
-            getattr(b, f"is_abled_{fam}"))
+    """族三值状态快照（连接/模式/使能；模式取私有乐观缓存 _mode_*），用于对侧族隔离断言对比。"""
+    return (getattr(b, f"is_connected_{fam}"), getattr(b, f"_mode_{fam}"),
+            getattr(b, f"is_enabled_{fam}"))
 
 
 def _reset_disconnected(b: Backend) -> list[str]:
-    """把会话实例复位到全断开态（仅在已使能/已连接时动作），返回已执行动作。
+    """把会话实例复位到全断开态（仅在确知已使能/已连接时动作），返回已执行动作。
 
     连接编排项必须自全断开态出发；上电/上电可能残留使能，先失能再断连（安全方向）。
+    仅 is_connected 确知 True 才断连：None（从未连接/连接中间态）下调用会在断连内核的内部预失能处撞连接门禁，产生「未连接或状态未知」warn——对从未连接的族是纯噪声，易被误读为缺陷。
     """
     acts = []
     for fam in ("arm", "end"):
         if getattr(b, f"n_joints_{fam}") == 0:
             continue
-        if getattr(b, f"is_abled_{fam}") is True:
+        if getattr(b, f"is_enabled_{fam}") is True:
             getattr(b, f"disable_{fam}")()
             acts.append(f"disable_{fam}")
-        if getattr(b, f"is_connected_{fam}") is not False:
+        if getattr(b, f"is_connected_{fam}") is True:
             getattr(b, f"disconnect_{fam}")()
             acts.append(f"disconnect_{fam}")
     return acts
@@ -590,7 +595,7 @@ def _check_connected(b: Backend, fam: str) -> tuple[str, bool]:
     if conn is not True:
         return f"is_connected={conn}（连接失败——核心能力）", False
     exp = _cfg_default_mode(b, fam)
-    mode = getattr(b, f"mode_{fam}")
+    mode = getattr(b, f"_mode_{fam}")
     if mode != exp:
         return f"已连接但 mode={_mode_name(mode)} ≠ cfg 默认 {exp.name}（默认模式未回填）", False
     return f"is_connected=True，mode={exp.name}", True
@@ -598,10 +603,10 @@ def _check_connected(b: Backend, fam: str) -> tuple[str, bool]:
 
 def _check_disconnected(b: Backend, fam: str) -> tuple[str, bool]:
     conn = getattr(b, f"is_connected_{fam}")
-    mode = getattr(b, f"mode_{fam}")
-    abled = getattr(b, f"is_abled_{fam}")
-    ok = conn is False and mode is None and abled is None
-    return f"is_connected={conn}，mode={mode}，is_abled={abled}（缓存清空）", ok
+    mode = getattr(b, f"_mode_{fam}")
+    enabled = getattr(b, f"is_enabled_{fam}")
+    ok = conn is False and mode is None and enabled is None
+    return f"is_connected={conn}，mode={mode}，is_enabled={enabled}（缓存清空）", ok
 
 
 def _seq_item(seq: list):
@@ -655,7 +660,7 @@ def _it16(s: Session):
         getattr(b, f"connect_{fam}")()
         getattr(b, f"connect_{fam}")()  # 重复连接
         conn2 = getattr(b, f"is_connected_{fam}")
-        mode2 = getattr(b, f"mode_{fam}")
+        mode2 = getattr(b, f"_mode_{fam}")
         getattr(b, f"disconnect_{fam}")()
         getattr(b, f"disconnect_{fam}")()  # 重复断开
         ev3, ok = _check_disconnected(b, fam)
@@ -748,22 +753,23 @@ def _it20(s: Session):
 
 
 def _it21(s: Session):
-    """实时状态刷新监视（固定 10s，无参数）：连接后每秒读**被动快照**（不主动
-    get_state），打印 arm/end 全部关节量表格——测试点正是基类低频刷新线程在无
-    主动读取时持续更新快照；Ctrl+C 可提前结束（按已采样判定）。"""
+    """实时状态刷新监视（10 拍错相采样，无参数）：连接后按间隔读**被动快照**（不主动
+    get_state），打印 arm/end 全部关节量表格——测试点正是基类低频刷新线程在无主动读取时
+    持续更新快照；采样间隔与承诺周期非整数倍，防相位锁定恒显同一读数、漏看真实帧龄锯齿；
+    Ctrl+C 可提前结束（按已采样判定）。"""
     b = s.backend()
     fams = _both_fams(s)
-    secs = WATCH_SECS
+    ticks = WATCH_TICKS
     names = {fam: [j.get("name", f"joint{i}")
                    for i, j in enumerate((s.cfg.get(fam) or {}).get("joints") or [])]
              for fam in fams}
     header = (f"{'族.关节':<14}{'q(rad)':>10}{'dq(rad/s)':>11}{'tau(N·m)':>10}"
               f"{'T_mos(℃)':>10}{'T_rot(℃)':>10}{'error':>7}{'快照龄(ms)':>10}")
     ages: dict[str, list[float]] = {fam: [] for fam in fams}
-    print(f"── 实时状态刷新监视（固定 {secs}s，每秒采样被动快照 joint_state_*；Ctrl+C 提前结束）")
+    print(f"── 实时状态刷新监视（{ticks} 拍 × {SAMPLE_IV}s 错相采样被动快照 joint_state_*；Ctrl+C 提前结束）")
     try:
-        for sec in range(1, secs + 1):
-            print(f"── {sec}/{secs}s " + "─" * 52)
+        for k in range(1, ticks + 1):
+            print(f"── {k}/{ticks} 拍 " + "─" * 52)
             print(header)
             now = time.time()
             for fam in fams:
@@ -782,8 +788,8 @@ def _it21(s: Session):
                     cells.append(age_ms)
                     print(f"{cells[0]:<14}{cells[1]:>10}{cells[2]:>11}{cells[3]:>10}"
                           f"{cells[4]:>10}{cells[5]:>10}{cells[6]:>7}{cells[7]:>10}")
-            if sec < secs:
-                time.sleep(1.0)
+            if k < ticks:
+                time.sleep(SAMPLE_IV)
     except KeyboardInterrupt:
         print("（用户中断监视，按已采样判定）")
     results = []
@@ -803,7 +809,7 @@ def _it21(s: Session):
 
 def _it22(s: Session):
     """控制模式获取（双族）：输出逐 joint 模式与族模式（get_mode 返回值），并校验
-    成员变量 mode_* 及逐 joint 缓存与之一致。"""
+    私有缓存 _mode_*/_joint_mode_* 与之一致（无公开 mode_* 直读属性）。"""
     b = s.backend()
     results = []
     for fam in _both_fams(s):
@@ -811,17 +817,17 @@ def _it22(s: Session):
         ret = getattr(b, f"get_mode_{fam}")()
         # 测试基建：逐 joint 模式无公开访问器，读私有缓存 _joint_mode_* 仅作结果展示
         jm = list(getattr(b, f"_joint_mode_{fam}"))
-        cache = getattr(b, f"mode_{fam}")
+        cache = getattr(b, f"_mode_{fam}")
         jm_disp = "[" + "、".join(_mode_name(m) for m in jm) + "]"
         if isinstance(ret, ControlMode):
             ok = cache == ret and bool(jm) and all(m == ret for m in jm)
             ev = (f"单joint={jm_disp}；族模式 get_mode 返回={ret.name}；"
-                  f"mode_{fam}={_mode_name(cache)}（一致={'OK' if ok else '矛盾'}）")
+                  f"_mode_{fam}={_mode_name(cache)}（一致={'OK' if ok else '矛盾'}）")
             results.append((fam, "PASS" if ok else "FAIL", ev))
         else:
             results.append((fam, "SKIP",
                             f"单joint={jm_disp}；族模式 get_mode 返回 None（读失败、各 joint 模式"
-                            f"不一致或无回读能力——见上方 warn；mode_{fam}={_mode_name(cache)}）"))
+                            f"不一致或无回读能力——见上方 warn；_mode_{fam}={_mode_name(cache)}）"))
     return _aggregate(results)
 
 
@@ -905,7 +911,7 @@ def _modes_item(fam: str):
             before = getattr(b, f"get_mode_{fam}")()  # 先读
             i0 = _mark()
             ret = getattr(b, f"set_mode_{fam}")(mode)  # 再设
-            cache = getattr(b, f"mode_{fam}")
+            cache = getattr(b, f"_mode_{fam}")
             after = getattr(b, f"get_mode_{fam}")()  # 再读
             if ret == 1:
                 any_ok = True
@@ -952,29 +958,29 @@ def _it32(s: Session):
 
 
 def _power_item(fam: str):
-    """使能和失能：读 is_abled → enable → 回读 → disable → 回读（返回值均应为 1）。"""
+    """使能和失能：读 is_enabled → enable → 回读 → disable → 回读（返回值均应为 1）。"""
     def fn(s: Session):
         b = s.backend()
         i0 = _mark()
-        pre = getattr(b, f"is_abled_{fam}")  # 读
+        pre = getattr(b, f"is_enabled_{fam}")  # 读
         r_en = getattr(b, f"enable_{fam}")()  # 使能
-        abled_en = getattr(b, f"is_abled_{fam}")  # 回读
+        enabled_en = getattr(b, f"is_enabled_{fam}")  # 回读
         r_dis = getattr(b, f"disable_{fam}")()  # 失能
-        abled_dis = getattr(b, f"is_abled_{fam}")  # 回读
+        enabled_dis = getattr(b, f"is_enabled_{fam}")  # 回读
         fails = []
         if r_en != 1:
             fails.append(f"enable 返回 {r_en}（核心能力失败；warn：{_recent(_since(i0))}）")
-        if abled_en is not True:
-            fails.append(f"使能后 is_abled={abled_en}（应 True）")
+        if enabled_en is not True:
+            fails.append(f"使能后 is_enabled={enabled_en}（应 True）")
         if r_dis != 1:
             fails.append(f"disable 返回 {r_dis}")
-        if abled_dis is not False:
-            fails.append(f"失能后 is_abled={abled_dis}（应 False）")
-        ev = (f"1.读 is_abled_{fam}={pre}（执行前）\n"
+        if enabled_dis is not False:
+            fails.append(f"失能后 is_enabled={enabled_dis}（应 False）")
+        ev = (f"1.读 is_enabled_{fam}={pre}（执行前）\n"
               f"2.使能 enable_{fam}() 返回 {r_en}\n"
-              f"3.回读 is_abled_{fam}={abled_en}\n"
+              f"3.回读 is_enabled_{fam}={enabled_en}\n"
               f"4.失能 disable_{fam}() 返回 {r_dis}\n"
-              f"5.回读 is_abled_{fam}={abled_dis}\n"
+              f"5.回读 is_enabled_{fam}={enabled_dis}\n"
               f"——五步{'全部符合' if not fails else '存在不符'}")
         return ("FAIL" if fails else "PASS"), ev + (f"；异常：{fails}" if fails else "")
     return fn
@@ -988,10 +994,10 @@ def _it35(s: Session):
         i0 = _mark()
         try:
             r1, r2 = getattr(b, f"enable_{fam}")(), getattr(b, f"enable_{fam}")()
-            abled = getattr(b, f"is_abled_{fam}")
+            enabled = getattr(b, f"is_enabled_{fam}")
             rd = getattr(b, f"disable_{fam}")()  # 收尾复位安全态（不参与判定）
-            ok = r1 == 1 and isinstance(r2, int) and abled is True
-            ev = f"enable×2→({r1},{r2})，终态 is_abled={abled}；收尾 disable→{rd}"
+            ok = r1 == 1 and isinstance(r2, int) and enabled is True
+            ev = f"enable×2→({r1},{r2})，终态 is_enabled={enabled}；收尾 disable→{rd}"
             results.append((fam, "PASS" if ok else "FAIL",
                             ev + ("" if ok else f"；warn：{_recent(_since(i0), 1)}")))
         except Exception as e:
@@ -1007,9 +1013,9 @@ def _it36(s: Session):
         i0 = _mark()
         try:
             r1, r2 = getattr(b, f"disable_{fam}")(), getattr(b, f"disable_{fam}")()
-            abled = getattr(b, f"is_abled_{fam}")
-            ok = r1 == 1 and r2 == 1 and abled is False
-            ev = f"disable×2→({r1},{r2})，终态 is_abled={abled}"
+            enabled = getattr(b, f"is_enabled_{fam}")
+            ok = r1 == 1 and r2 == 1 and enabled is False
+            ev = f"disable×2→({r1},{r2})，终态 is_enabled={enabled}"
             results.append((fam, "PASS" if ok else "FAIL",
                             ev + ("" if ok else f"；warn：{_recent(_since(i0), 1)}")))
         except Exception as e:
@@ -1130,7 +1136,7 @@ def _it41(s: Session):
             continue
         n = getattr(b, f"n_joints_{fam}")
         i0 = _mark()
-        getattr(b, f"send_mit_{fam}")(np.zeros(n), q0, np.zeros(n),
+        getattr(b, f"send_mit_{fam}")(q0, np.zeros(n), np.zeros(n),
                                       np.full(n, SAFE_KP), np.full(n, SAFE_KD))
         verdict = _classify_send(_since(i0))
         time.sleep(SETTLE)
@@ -1254,13 +1260,13 @@ def _it50(s: Session):
         fails: list[str] = []
         # 1. 使能
         r_en = getattr(b, f"enable_{fam}")()
-        abled = getattr(b, f"is_abled_{fam}")
-        if r_en != 1 or abled is not True:
+        enabled = getattr(b, f"is_enabled_{fam}")
+        if r_en != 1 or enabled is not True:
             results.append((fam, "FAIL",
-                            f"1.使能 enable_{fam}() 返回 {r_en}，is_abled={abled}"
+                            f"1.使能 enable_{fam}() 返回 {r_en}，is_enabled={enabled}"
                             f"（核心能力失败）；warn：{_recent(_since(i0))}"))
             continue
-        lines.append(f"1.使能 enable_{fam}() 返回 {r_en}，is_abled_{fam}={abled}")
+        lines.append(f"1.使能 enable_{fam}() 返回 {r_en}，is_enabled_{fam}={enabled}")
         # 2. 读错误码
         time.sleep(0.2)  # 等使能生效与快照刷新（get_error 读槽不发帧）
         e1 = getattr(b, f"get_error_{fam}")()
@@ -1376,7 +1382,7 @@ _item(2, "空 cfg 构造容错", "init", "低", None,
 _item(3, "运行参数非法回退", "init", "低", None,
       "验证 state_refresh_hz 等运行参数非法（非正数）时回退默认并 warn", [], _it03)
 _item(4, "只读属性初值", "init", "低", None,
-      "验证关节数/name 与 cfg 一致，is_connected*/is_abled*/mode* 初值均为 None（三值未知）", [], _it04)
+      "验证关节数/name 与 cfg 一致，is_connected*/is_enabled* 初值 None；无 mode_* 直读属性（契约：模式经 get_mode_* 读时刷新）且未连接 get_mode_* 返 None", [], _it04)
 _item(5, "硬限位解析核对", "init", "低", None,
       "验证 joint_limits_* 的 q_min/q_max/dq_max/tau_max 与 cfg 各关节四键一致（发送裁剪的唯一依据）", [], _it05)
 _item(6, "joint_state 初值", "init", "低", None,
@@ -1418,13 +1424,13 @@ _item(20, "单次状态获取", "read", "低", None,
       "（在场字段 (n,) 且有限、t>0 且更新）+ 成员变量 joint_state_* 更新"
       "（与返回值同引用、旧引用冻结）",
       [("connected", "both")], _it20)
-_item(21, "实时状态刷新监视（10s）", "read", "低", None,
-      "验证连接后基类低频刷新线程持续更新快照：固定 10s 每秒打印 arm/end 全部关节量表"
-      "（被动快照，无 CLI 参数；全程快照龄 <500ms 判 PASS）",
+_item(21, "实时状态刷新监视（10 拍错相）", "read", "低", None,
+      "验证连接后基类低频刷新线程持续更新快照：10 错相采样打印 arm/end 全部关节量表"
+      "（被动快照，无 CLI 参数；间隔与承诺周期非整数倍防相位锁定；全程快照龄 <500ms 判 PASS）",
       [("connected", "both")], _it21)
 _item(22, "控制模式获取", "read", "低", None,
-      "双族输出逐 joint 模式 + 族模式（get_mode 返回值），并校验成员变量 mode_* 及逐 joint "
-      "缓存一致（读失败/各 joint 不一致/无回读能力 SKIP）",
+      "双族输出逐 joint 模式 + 族模式（get_mode 返回值），并校验私有缓存 _mode_*/_joint_mode_* "
+      "一致（读失败/各 joint 不一致/无回读能力 SKIP）",
       [("connected", "both")], _it22)
 _item(23, "参数读取", "read", "低", None,
       "双族验证参数读取返回逐关节标量 list（须 --param 指定子类定义的键；不可用则 SKIP）",
@@ -1448,7 +1454,7 @@ _item(32, "set_mode 非法/未定义模式门禁", "ctrl", "低", None,
       "（返回 0 + warn，不达内核）",
       [("connected", "both")], _it32)
 _item(33, "arm 使能和失能", "ctrl", "高", "arm",
-      "验证读 is_abled→enable（返回 1、回读 True）→disable（返回 1、回读 False）（电机上力）",
+      "验证读 is_enabled→enable（返回 1、回读 True）→disable（返回 1、回读 False）（电机上力）",
       [("connected", "arm")], _power_item("arm"))
 _item(34, "end 使能和失能", "ctrl", "高", "end",
       "末端族使能/失能契约（与 33 对称）",
@@ -1520,22 +1526,22 @@ GROUPS["all"] = GROUPS["offline"] + GROUPS["online"]
 # 子类发现与配置加载
 # ============================================================
 def discover(sub: str) -> type:
-    """解析子类：优先查官方注册表 REGISTRY，再按文件约定导入 backend_<sub> 寻找 Backend 子类。"""
-    from joyarm_core.backend import REGISTRY  # 官方注册路径，键名 = 文件名如 "backend_dm"
-    reg_name = f"backend_{sub}"
-    if reg_name in REGISTRY:
-        return REGISTRY[reg_name]
-    mod_name = f"joyarm_core.backend.backend_{sub}"
+    """解析子类：优先查官方注册表 REGISTRY，再按模块名导入 joyarm_core.backend.<sub> 寻找 Backend 子类。"""
+    from joyarm_core.backend import REGISTRY  # 官方注册路径，键名 = 文件名
+    if sub in REGISTRY:
+        return REGISTRY[sub]
+    mod_name = f"joyarm_core.backend.{sub}"
     try:
         mod = importlib.import_module(mod_name)
     except ImportError:
         avail = sorted(set(p.stem for p in Path(__file__).resolve().parent.glob("backend_*.py"))
                        | set(REGISTRY))
         raise _UsageError(f"找不到 {mod_name}（--sub={sub}）；REGISTRY 与 backend/ 目录现有：{avail or '无'}")
+    short = sub.removeprefix("backend_")  # 类名候选用短名（无 backend_ 前缀则原样）
     cands = {o for o in vars(mod).values()
              if isinstance(o, type) and issubclass(o, Backend) and o is not Backend
              and o.__module__ == mod_name}
-    for cand in (f"Backend{sub.upper()}", f"Backend{sub.capitalize()}", f"Backend{sub}"):
+    for cand in (f"Backend{short.upper()}", f"Backend{short.capitalize()}", f"Backend{short}"):
         cls = getattr(mod, cand, None)
         if cls in cands:
             return cls
@@ -1548,10 +1554,37 @@ def discover(sub: str) -> type:
 def load_cfg(args: argparse.Namespace, sub: str) -> tuple[dict, Path]:
     if args.config:
         path = Path(args.config)
+        if not path.is_file():
+            raise _UsageError(f"配置文件不存在：{path}（--config 可指定其他 yaml）")
     else:
-        path = Path(__file__).resolve().parents[1] / "config" / f"joyarm_{sub}.yaml"
-    if not path.is_file():
-        raise _UsageError(f"配置文件不存在：{path}（--config 可指定其他 yaml）")
+        # 缺省：扫描 config/*.yaml 取唯一命中——三顶层键均 dict、backend.name == sub、
+        # robot_model/<型号>/ 四路径齐全（与 joyarm/__init__.py 的 _model_paths_missing
+        # 同口径；模板 yaml 无 robot_model 目录，自然排除）
+        base_dir = Path(__file__).resolve().parents[1]
+        hits = []
+        for p in sorted((base_dir / "config").glob("*.yaml")):
+            try:
+                data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+            except Exception:
+                continue  # 解析失败 → 不可用
+            if not isinstance(data, dict):
+                continue  # 非 dict（如列表/标量）→ 不可用
+            if not all(isinstance(data.get(k), dict) for k in ("joyarm", "robotics", "backend")):
+                continue  # 三顶层键缺段或写成非 dict → 不可用
+            if data["backend"].get("name") != sub:
+                continue
+            base = base_dir / "robot_model" / p.stem
+            paths = (base, base / "meshes", base / "urdf", base / "urdf" / f"{p.stem}.urdf")
+            if not all(x.exists() for x in paths):
+                continue  # 型号资源四路径不齐全 → 不可用
+            hits.append(p)
+        if not hits:
+            raise _UsageError(f"config/*.yaml 中无 backend.name={sub!r} 且型号资源四路径齐全的配置"
+                              f"（--config 可显式指定 yaml）")
+        if len(hits) > 1:
+            raise _UsageError(f"backend.name={sub!r} 命中多个配置：{[p.name for p in hits]}"
+                              f"（--config 可显式指定其一）")
+        path = hits[0]
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     bcfg = data.get("backend")
     if not isinstance(bcfg, dict):
@@ -1662,14 +1695,22 @@ def run_item(it: dict, s: Session) -> tuple[str, str]:
 
 
 def _cleanup(s: Session):
-    """任何退出路径的兜底收尾：尽力失能 → 断连 → close（全程不抛）。"""
+    """任何退出路径的兜底收尾：已连接族断连（断连内核内部先尽力失能）→ close（全程不抛）。
+
+    仅 is_connected 确知 True 的族才断连：未连接/状态未知（None/False）的族调用 disable/disconnect 只会在连接门禁处产生「未连接或状态未知」warn——离线项收尾的纯噪声，易被误读为缺陷（门禁本就拦截、一个总线帧都不会多发，跳过即无副作用）。
+    """
     if s.b is None:
         return
-    for call in (s.b.disable_arm, s.b.disable_end, s.b.disconnect_arm, s.b.disconnect_end, s.b.close):
+    for fam in ("arm", "end"):
         try:
-            call()
+            if getattr(s.b, f"is_connected_{fam}") is True:
+                getattr(s.b, f"disconnect_{fam}")()
         except Exception:
             pass
+    try:
+        s.b.close()
+    except Exception:
+        pass
 
 
 def print_list():
@@ -1687,16 +1728,16 @@ def print_list():
 
 EPILOG = """\
 示例：
-  python joyarm_core/backend/backend_verify.py --help                       # 本说明
-  python joyarm_core/backend/backend_verify.py --list                       # 全部测试项
-  python joyarm_core/backend/backend_verify.py --sub=dm                     # 00 组（缺省 offline）
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=all          # 全部（不含 38）
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=12           # 单项
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=00,20,read   # 编号/组名混选
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=connect,read # 组合
-  python joyarm_core/backend/backend_verify.py --sub=dm --step=online --param=<键> --action=open,close
+  python joyarm_core/backend/backend_verify.py --help                               # 本说明
+  python joyarm_core/backend/backend_verify.py --list                               # 全部测试项
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm                     # 00 组（缺省 offline）
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=all          # 全部（不含 38）
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=12           # 单项
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=00,20,read   # 编号/组名混选
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=connect,read # 组合
+  python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=online --param=<键> --action=open,close
 
-风险与确认策略（与 verify_backend.py 相同）：
+风险与确认策略：
   低危：直接执行（初始化 / 连接编排 / 只读）。
   中危：交互回车确认（--yes 或非终端环境直接执行；本清单暂无中危项，机制保留）。
   高危：强制交互输入 yes（--yes 不放行；非终端自动 SKIP——agent 无法全自动执行高危项）。
@@ -1715,16 +1756,17 @@ def parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="backend_verify.py",
         description=("Backend 子类全方位测试验证（上层视角）：只调 Backend 基类公开 API，"
-                     "对任意子类（关节电机/舵机/混合硬件）做分组分项测试（verify_backend.py 迭代版，"
-                     "两位数十进制分组）。能力三分法（能力缺失=SKIP）+ 空族自动跳过 + 风险分级确认。"),
+                     "对任意子类（关节电机/舵机/混合硬件）做分组分项测试"
+                     "（测试项编号采用两位数十进制分组）。能力三分法（能力缺失=SKIP）+ 空族自动跳过 + 风险分级确认。"),
         epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--sub", help="子型简称（如 dm、feetech）：经 REGISTRY 或文件约定导入"
-                                 " backend_<型号>.py 并寻找 Backend<型号> 类，默认加载"
-                                 " config/joyarm_<型号>.yaml 的 backend 段")
+    p.add_argument("--sub", required=True,
+                   help="backend 完整注册名（REGISTRY 键 = backend/backend_*.py 文件名去 .py；必填）："
+                        "经 REGISTRY 或模块名导入并寻找 Backend 子类，默认按 backend.name"
+                        "自动匹配 config/*.yaml 的 backend 段")
     p.add_argument("--step", default="offline",
                    help="数字=单项编号（如 38）；字符串=组名（init/connect/read/ctrl/motion/error/"
                         "offline/online/all）；逗号分隔混选；缺省 offline")
-    p.add_argument("--config", help="yaml 配置文件路径（默认 joyarm_core/config/joyarm_<sub>.yaml）")
+    p.add_argument("--config", help="yaml 配置文件路径（缺省按 --sub 的 backend.name 自动匹配 config/*.yaml）")
     p.add_argument("--param", help="参数读取/写入测试（23/37）的参数键（键表由子类定义；缺省相关项 SKIP）")
     p.add_argument("--action", help="send_action_end 测试（44）的离散动作名（逗号分隔；默认仅测 home）")
     p.add_argument("--list", action="store_true", help="仅列出全部测试项（编号/组/风险/目的），不执行")
@@ -1744,7 +1786,7 @@ def main(argv=None) -> int:
         print_list()
         return 0
     if not args.sub:
-        print("用法错误：执行测试须提供 --sub=<型号>（仅 --help/--list 可省略；--list 查看全部测试项）",
+        print("用法错误：--sub 不能为空（backend 注册名；--list 查看全部测试项）",
               file=sys.stderr)
         return 2
     args.action = [a.strip() for a in (args.action or "").split(",") if a.strip()] or ["home"]
@@ -1758,7 +1800,7 @@ def main(argv=None) -> int:
     s = Session(cls, cfg, args, cfg_path)
     tty = sys.stdin.isatty()
     print("=" * 68)
-    print(f"Backend 子类测试验证：{cls.__name__}（backend_{args.sub}.py）")
+    print(f"Backend 子类测试验证：{cls.__name__}（{args.sub}.py）")
     print(f"配置：{cfg_path}（arm {_n_family_cfg(cfg, 'arm')} 关节 / end {_n_family_cfg(cfg, 'end')} 关节）")
     print(f"交互终端：{'是' if tty else '否'}；--yes={args.yes}；"
           f"高危策略：{'交互 yes（--yes 不放行）' if tty else '非终端自动 SKIP'}")
