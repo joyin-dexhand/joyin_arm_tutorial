@@ -1,61 +1,128 @@
 """`JoyArm` —— 机械臂（config 驱动的整机对象）
 
-按 `config/<型号>.yaml` 把 `backend`、`robotics` 与 `robot_model`组合成整机对象，对外提供统一调用入口。
-一级功能块包括：
+按 `config/<型号>.yaml` 把 `backend`、`robotics` 与 `robot_model` 组合成整机对象，对外提供统一调用入口。
 
-- 初始化与自检（定义与赋值两阶段 + cfg 全套自检 + pin 锁末端缩减模型 + 完成后 info）；
-- 硬件后端委托面（arm/end 两组薄委托 + FSM 运行中的外部指令互斥与 ctrl 线程豁免）；
-- 求解器六域成员 /方法 热切换 / 目标帧通道 + plan/ctrl 两线程 + 数学门面；
-- 运动状态机 MotionFSM（六状态 + 路线表 + start/stop + 销毁安全退出；状态、转移与安全事件见下方四表）；
-- 安全事件 SafetyEvent 与 safe_monitor 监视器（硬规则 + 自定义规则）；
-- 运行状态可视化（HTTP 轮询：单页面监控网页 + 单一只读 daemon 线程）。
+`JoyArm` 类一级功能块：
 
-MotionFSM 状态定义表（各态进入/维持先经模式/使能自愈 `_ensure_arm_ready`：每拍只读一次模式、
-不一致才写、先模式后使能，失败下拍重试不改事件；进入动作前后复查事件与停机标志，失败不提交
-状态——保留旧态必要缓存、下拍重试；DAMP 进入拍不发阻尼帧，首帧由下拍维持发出）：
+- 一 初始化：两阶段（成员声明 → 按顺序赋值）；
+- 二 初始化助手：cfg 自检 / cfg↔URDF 比对 / pin 锁末端缩减模型 / 特征位形 / 限位解析；
+- 三 robotics 六域成员管理（cfg 驱动字典化构建 + 查询 / 激活 / 热切换）；
+- 四 plan/ctrl 两线程（逐拍规划与控制下发 + FSM 外部指令互斥与 ctrl 线程豁免）；
+- 五 MotionFSM（线程体 / 单拍循环 / 状态进出与维持——状态、转移与安全事件见下表）；
+- 六 safe_monitor 与状态可视化线程体（只读采集判定 + 被动快照装配）；
+- 七 公开接口区 7.1~7.11：配置与只读属性 / 关节查询采样 / 硬件后端委托面 / robotics 六域管理 /
+      目标帧通道 / 数学门面 / 到位判断 / FSM 启停与安全事件 / 监视器 / 状态可视化 / 销毁安全退出。
 
-| 状态 | 状态概述 | 进入操作 | 保持时的操作 | 退出时的操作 |
-|:--:|:--|:--|:--|:--|
-| `DISABLE` | 失能停机 | `disable_arm`→`clear_error_arm`→再 `disable_arm`（末次成功才提交） | 每拍失能（确知已失能静默不发帧） | — |
-| `ZERO` | 零位失能 | 自愈 POSITION/使能 → 发零位位置指令（`_zero_moving=True`） | 每拍重发零位；到位→失能并转失能维持 | 清 `_zero_moving`（迁移成功后） |
-| `HOME` | 空闲保持 | 自愈 POSITION/使能，清到位标志（`_home_arrived=False`） | 每拍重发 home 位形并刷新到位标志（转出门槛） | — |
-| `MOTION` | 正常运动 | 启动 plan/ctrl 两线程（模式随控制器 `MODE` 类属性） | 两线程逐拍规划+控制下发；FSM 检测线程死亡即重建 | 撤销下发许可→停 plan/ctrl 线程（确认退出才提交） |
-| `HOLD` | 原位锁定 | 读新鲜 q → 自愈 POSITION/使能 → 同拍发锁定位置首帧（存 `_hold_q`） | 每拍重发锁定位置 | 清 `_hold_q`（迁移成功后） |
-| `DAMP` | 阻尼防护 | 自愈 MIT/使能；dyn 未配置且 `damping_k_gravity`>0 时 warn 退化纯阻尼 | 每拍 MIT `q=0/kp=0/kd=damping_kd/tau=damping_k_gravity·G(q)`（快照无效 tau 置零） | — |
+MotionFSM 状态表：
 
-状态转移表（第一列为起点、第一行为终点、主体为下一跳路线；`HOME` 为中枢——非邻接转移经
-HOME 中转、保护性目标直达；主体 `—` = 起终点同态，该拍直接维持不走表；`HOME→ZERO/MOTION`
-须 home 到位（`_home_arrived` 且新鲜反馈在 home 位形），否则留 HOME 每拍复核）：
+=======  ========  ==================================================  ============================================  =====================================
+状态      状态概述    进入操作                                              保持操作                                        退出操作
+=======  ========  ==================================================  ============================================  =====================================
+DISABLE  失能停机   disable→清错→再 disable                              每拍失能；确知已失能则静默不发帧                     —
+ZERO     零位失能   自愈 POSITION/使能→发零位指令                          每拍重发零位；到位后失能并转失能维持                 清 _zero_moving（状态迁移成功后）
+HOME     中转状态   自愈 POSITION/使能；清到位标志                          每拍重发 home 位形并刷新到位标志（转出门槛）         —
+MOTION   正常运控   启动 plan/ctrl 两线程（模式随控制器 MODE）               两线程逐拍“规划”+“控制”下发；线程死亡则重建          撤除下发许可→停两线程（确认退出后才提交）
+HOLD     原位锁定   读新鲜状态 q→自愈→同拍发锁定位置帧                       每拍重发锁定的位置                                清 _hold_q（状态迁移成功后）
+DAMP     阻尼防护   自愈 MIT/使能；dyn 缺失且 k_gravity>0 时 warn 纯阻尼    每拍 MIT q=dq=kp=0/kd/tau=k_gravity·G(q)        —
+=======  ========  ==================================================  ============================================  =====================================
 
-| 起点＼终点 | `DISABLE` | `ZERO` | `HOME` | `MOTION` | `HOLD` | `DAMP` |
-|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| `DISABLE` | — | `HOME` | `HOME` | `HOME` | `HOLD` | `DAMP` |
-| `ZERO` | `DISABLE` | — | `HOME` | `HOME` | `HOLD` | `DAMP` |
-| `HOME` | `DISABLE` | `ZERO` | — | `MOTION` | `HOLD` | `DAMP` |
-| `MOTION` | `DISABLE` | `HOME` | `HOME` | — | `HOLD` | `DAMP` |
-| `HOLD` | `DISABLE` | `HOME` | `HOME` | `HOME` | — | `DAMP` |
-| `DAMP` | `DISABLE` | `HOME` | `HOME` | `HOME` | `HOLD` | — |
 
-安全事件与运动状态映射表（模块级 `STATE_FROM`，定义于 `utils/types.py`；`set_event` 持事件锁
-原子赋值事件 + 目标状态，FSM 每拍按转移表向目标迁移；监视器硬规则：任一关节 error≥2 →
-`DAMPING`，断连或连续 0.1s 无新鲜快照 → `DISABLE`）：
+状态转移表（非邻接转移经 HOME 中转；`HOME→ZERO/MOTION` 须 HOME 到位后再转移至 ZERO/MOTION）：
 
-| SafetyEvent | `NORMAL` | `HOLDING` | `HOMING` | `ZEROING` | `DAMPING` | `DISABLE` |
-|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| 目标 MotionState | `MOTION` | `HOLD` | `HOME` | `ZERO` | `DAMP` | `DISABLE` |
+==========  =======  ====  ====  ======  ====  ====
+起点＼终点    DISABLE  ZERO  HOME  MOTION  HOLD  DAMP
+==========  =======  ====  ====  ======  ====  ====
+DISABLE     —        HOME  HOME  HOME    HOLD  DAMP
+ZERO        DISABLE  —     HOME  HOME    HOLD  DAMP
+HOME        DISABLE  ZERO  —     MOTION  HOLD  DAMP
+MOTION      DISABLE  HOME  HOME  —       HOLD  DAMP
+HOLD        DISABLE  HOME  HOME  HOME    —     DAMP
+DAMP        DISABLE  HOME  HOME  HOME    HOLD  —
+==========  =======  ====  ====  ======  ====  ====
 
-安全事件危险性等级表（模块级 `_EVENT_DANGER`，危险程度递增；监视器同拍多命中取最高且仅升
-不降——命中高于当前事件才 `set_event`；`stop_motion_fsm` 当前事件高于 `ZEROING` 时免回零直接
-失能，等待中升档或失连立即转 `DISABLE`）：
 
-| SafetyEvent | `NORMAL` | `HOLDING` | `HOMING` | `ZEROING` | `DAMPING` | `DISABLE` |
-|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| 危险性等级 | 0（最低） | 1 | 2 | 3 | 4 | 5（最高） |
+安全事件与运动状态映射表：
 
-生命周期：`start_motion_fsm` 复位全部缓存后以 `current=DISABLE / event=NORMAL / target=MOTION`
-启动，按转移表自动 `DISABLE → HOME → MOTION`；`stop_motion_fsm` 阻塞安全停机（≤ZEROING 置
-ZEROING 经 HOME 回零失能、超时 `move_wait_timeout` 强制推进；更高危直接失能），最终收尾禁止
-自愈与下发 → 停 FSM/plan/ctrl 线程 → 最后失能。
+=================  ======  =======  ======  =======  =======  =======
+SafetyEvent 期望值  NORMAL  HOLDING  HOMING  ZEROING  DAMPING  DISABLE
+=================  ======  =======  ======  =======  =======  =======
+MotionState 目标值  MOTION  HOLD     HOME    ZERO     DAMP     DISABLE
+=================  ======  =======  ======  =======  =======  =======
+
+
+SafetyEvent 危险性等级表（监视器多命中时取危险性最高的值且仅升不降）：
+
+===========  =========  =======  ======  =======  =======  =========
+SafetyEvent  NORMAL     HOLDING  HOMING  ZEROING  DAMPING  DISABLE
+===========  =========  =======  ======  =======  =======  =========
+危险性等级     0（最低危）  1        2       3        4        5（最高危）
+===========  =========  =======  ======  =======  =======  =========
+
+
+运动状态机起停：
+    `start_motion_fsm` 复位全部缓存后以 `current=DISABLE / event=NORMAL / target=MOTION` / event=NORMAL 启动，按转移表 `DISABLE → HOME → MOTION`；
+    `stop_motion_fsm` 阻塞安全停机（若当前危险等级≤ZEROING 置 ZEROING 回零失能；若更高危则直接失能），最终收尾禁止自愈与下发 → 停 FSM/plan/ctrl 线程 → 最后失能。
+
+JoyArm 全部公开功能列表（函数名、功能概述、使用条件；按公开接口区分节 7.1~7.11 排序，
+`*_arm`/`*_end` 成对方法合一行，`<域>` ∈ {fkine, ikine, jac, dyn, traj, ctrl}；参数按
+Python 签名风格标注缺省值（带 `=缺省` 者调用可省略）；「——」= 无前置条件、任意时刻可调；
+数学门面显式传参即离线可用，`q`/`dq` 缺省取被动快照、无有效快照抛 RuntimeError；FSM 运行
+中外部线程调 arm 侧指令类方法（enable/disable/set_mode/set_zero/clear_error/send_*_arm）
+空操作 + warn（ctrl 线程豁免；end 侧与参数读写、状态读取不受互斥））：
+
+================================================================================================  ===========================================================  =======================================
+函数名                                                                                             功能概述                                                       使用条件
+================================================================================================  ===========================================================  =======================================
+get_config()                                                                                      返回 cfg 深拷贝快照（数据读取口）                                 ——
+pin_model · n_arm · n_end（@property）                                                             pin 锁末端缩减模型（nq=n_arm）与关节数                            ——
+joint_limits_hard/soft_arm/end · tcp_limits · zero_/neutral_/home_arm/end（@property）             硬/软/tcp 限位与特征位形只读数组（冻结零拷贝）                      ——
+is_connected_arm/end · is_enabled_arm/end · joint_state_arm/end · plan_hz · ctrl_hz（@property）   连接/使能三值标志、被动快照槽、起搏频率                             ——
+get_joint_names_arm/end(joint="all")                                                              关节名查询（"all" 或 1 基序号）                                  ——
+rand_q_arm/end(joint_limits=None)                                                                 关节位置均匀随机采样（缺省软限位内）                                ——
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+connect_arm/end(channel=None, protocol=None)                                                      连接总线并自动设默认模式                                         未连接
+disconnect_arm/end()                                                                              断连（清模式缓存、发失能帧）                                      已连接
+enable_arm/end() · disable_arm/end()                                                              整组使能 / 失能                                                已连接
+get_mode_arm/end() · set_mode_arm/end(mode=ControlMode.MIT)                                       模式读时刷新 / 设模式（乐观缓存）                                 已连接
+get_state_arm/end()                                                                               读 JointState（读时刷新，t=最早帧时刻）                           已连接
+set_zero_arm/end()                                                                                设位置零点                                                     已连接
+read_param_arm/end(key) · write_param_arm/end(key, values)                                        参数整组读（标量列表）/ 写                                       已连接
+get/check/clear_error_arm/end()                                                                   错误码读 / 检 / 清                                             已连接
+send_mit_arm/end(q, dq=None, tau=None, kp=None, kd=None)                                          MIT 指令整组下发                                               已连接 + MIT 模式
+send_position_arm/end(q, vlim=None, flim=None)                                                    位置指令整组下发                                                已连接 + POSITION
+send_vel_arm/end(dq)                                                                              速度指令整组下发                                                已连接 + VELOCITY
+set_action_end(action, **kw)                                                                      末端离散动作（如open/home/close）                               已连接（end 侧不受 FSM 互斥）
+is_in_q_arm/end(q, tol_q=None)                                                                    关节到位判断（读被动快照）                                        ——
+is_in_pose_arm(pose, tol_pos=None, tol_rot=None, frame=None)                                      末端位姿到位判断                                                fkine 已配置
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+get_<域>_solvers()                                                                                域内已注册求解器名列表                                            ——
+set_<域>_solver(name)                                                                             热切换激活（traj 先试规划成功才替换）                              ——
+get_activated_<域>_solver()                                                                       当前激活求解器名                                                ——
+set_target_trajframe(target)                                                                      写目标帧/序列（deepcopy 后原子替换）                              ——
+get_target_trajframe()                                                                            读目标帧（深拷贝）                                              ——
+set_target_joint(t, q, dq=None, ddq=None, tau=None)                                               单帧关节目标便捷封装（走 set_target_trajframe 通道）              ——
+set_target_cart(t, pose, twist=None, accel=None, wrench=None)                                     单帧笛卡尔目标便捷封装（走 set_target_trajframe 通道）             ——
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+solve_fkine(q=None, frame=None) → Pose                                                            正运动学（frame 缺省末端帧、0=基座系）                            fkine 已配置
+solve_ikine(pose, frame=None, q0=None, **kw) → IKResult                                           逆运动学单解                                                   ikine 已配置
+solve_ikine_all(pose, frame=None, **kw)                                                           逆解全解（仅解析法，数值法转 RuntimeError）                       解析 ikine 已配置
+get_jac(q=None, frame=None) · get_jac_pinv_damped(q=None, frame=None, damping=1e-3)               雅可比 / 阻尼伪逆                                              jac 已配置
+solve_idyn(q=None, dq=None, ddq=None)                                                             逆动力学关节力矩                                                dyn 已配置
+get_mass_matrix(q=None) · get_coriolis(q=None, dq=None) · get_gravity(q=None)                     质量矩阵 / 科氏 / 重力                                          dyn 已配置
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+start_motion_fsm()                                                                                启动 FSM（非阻塞，自动 DISABLE→HOME→MOTION）                     已连接+新鲜反馈+无故障+traj/ctrl 已配置
+stop_motion_fsm()                                                                                 阻塞安全停机（危险等级≤ZEROING 回零失能；更高危直接失能）             已连接
+get_current/get_target_motion_state()                                                             读当前 / 目标运动状态                                           ——
+wait_for_motion_state(fsm_state, timeout=5.0)                                                     只读轮询等待到达（到达 1 / 超时 0）                               ——（FSM 未运行返 0+warn）
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+set_event(event) · get_event()                                                                    置 / 读安全事件（set_event 同步设置 target_motion_state）        ——
+start_monitor() · stop_monitor()                                                                  启停独立监视线程                                                ——
+set_monitor_rules(rules)                                                                          绑定自定义监视规则（单条或列表）                                   ——
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+start_state_viz(traj_points=200) · stop_state_viz()                                               启停状态可视化（默认自动弹原生窗口）                                ——（不要求连接）
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+close()                                                                                           销毁安全退出（支持 with；幂等）                                   ——
+================================================================================================  ===========================================================  =======================================
 """
 from __future__ import annotations
 
@@ -2473,7 +2540,7 @@ class JoyArm:
 
         :param cfg: `get_config()` 深拷贝（`_viz_static_payload` 传入）。
         :return: `{mit, pos_vel, default_mode, backend_params, fsm_hz, monitor_hz,
-            damping_kd, damping_k_gravity, arrival_tol, move_wait_timeout}` 分组 dict（纯 JSON 值）。
+            damping_kd, damping_k_gravity}` 分组 dict（纯 JSON 值）。
         """
         def _joint_gain(fam: str, seg: str, keys: tuple) -> dict:
             """walk cfg `backend.<fam>.joints[].<seg>.<keys>` → 逐关节数组。
@@ -2506,20 +2573,12 @@ class JoyArm:
             "default_mode": {"arm": _default_mode("arm"),
                              "end": _default_mode("end")},
             "backend_params": {
-                "write_settle": _json_round(bcfg_pub.get("write_settle")),
                 "state_refresh_hz": _json_round(bcfg_pub.get("state_refresh_hz")),
             },
             "fsm_hz": _json_round(self._fsm_hz),
             "monitor_hz": _json_round(self._monitor_hz),
             "damping_kd": _json_arr(self._damping_kd),
             "damping_k_gravity": _json_arr(self._damping_k_gravity),
-            "arrival_tol": {
-                "arm_q": _json_arr(self._arrival_tol_q_arm),
-                "end_q": _json_arr(self._arrival_tol_q_end),
-                "pos": _json_round(self._arrival_tol_pos),
-                "rot": _json_round(self._arrival_tol_rot),
-            },
-            "move_wait_timeout": _json_round(self._move_wait_timeout),
         }
 
     def _viz_cfg_raw(self, cfg) -> str:
