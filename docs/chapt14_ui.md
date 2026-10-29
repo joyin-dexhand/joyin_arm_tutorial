@@ -5,7 +5,7 @@
 <!-- ✍️ 写作指引（HTML 注释，不会渲染到线上；完稿后可保留或删除）
 
 【本章定位】应用篇·集成章，讲机械臂"对外"的人机/环境交互接口，为 [第十五章](chapt15_project.md) 综合项目提供输入输出手段。
-【参考模板】各节统一用"方案对比表 + 接入示例"风格（参考 quickstart.md / chapt1_intro.md 的对比表）。
+【参考模板】各节统一用"方案对比表 + 接入示例"风格（参考 quick_start.md / chapt1_intro.md 的对比表）。
 【固定骨架】
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
@@ -22,7 +22,7 @@
   · 跨章引用用相对链接（如 [第十二章](chapt12_teleop.md) 体感/VR、[第十五章](chapt15_project.md) 综合项目）。
   · 未知参数/型号用 *待补充*。
   · 不写"本章小结"——第 3 行概述已替代它。
-【本章可引用的脚本/库】chapt14_ui_demo.py（待建）、joyarm_core/apps/vision.py（规划）、viz.py（待建，建议 quickstart/ 或 joyarm_core/apps/）、joyarm/joyarm.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）。
+【本章可引用的脚本/库】chapt14_ui_demo.py（待建）、joyarm_core/apps/vision.py（规划）、viz.py（待建，建议 quick_start/ 或 joyarm_core/apps/）、joyarm/joyarm.py、joyarm_ros2_ws/src/joyarm_node（joyarm_node 包）。
 -->
 
 ## 1 UI界面
@@ -30,7 +30,7 @@
 <!-- ✍️ 本节写作要点：
   · 目标：讲清机械臂控制/监控的图形界面设计——布局、关键控件、状态显示与指令下发。
   · 给"界面布局示意"（图占位）+ "关键功能表"（功能|交互方式|对应后端|说明）。
-  · 引用 viz.py（待建，建议 quickstart/ 或 joyarm_core/apps/），用脚本引用句式。
+  · 引用 viz.py（待建，建议 quick_start/ 或 joyarm_core/apps/），用脚本引用句式。
   · 收尾 > 💡：好的 UI 把复杂能力封装成一两个按钮，降低使用门槛。
 -->
 

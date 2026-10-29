@@ -7,7 +7,7 @@
     └── Backend<...>
 
 每个机械臂型号对应一个单独的硬件后端子类（`backend_<型号>` ↔ `<型号>`）；
-新后端创建流程见 `backend_template.py`文件头 docstring。
+新后端创建流程见 `quick_start/23_backend_creator/backend_template.py`文件头 docstring。
 """
 from .backend import Backend
 from .backend_rebot_arm_b601_dm import BackendRebotArmB601DM

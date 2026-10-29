@@ -46,7 +46,7 @@ extra_javascript:
 nav:
   - 首页: index.md
   - 使用篇:
-      - 快速上手: quickstart.md
+      - 快速上手: quick_start.md
       - 关节电机: motor.md
       - 机械臂整臂: arm.md
       - 末端执行器: end.md

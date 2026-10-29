@@ -45,7 +45,6 @@ joyarm_code/
 │   │   ├── backend.py               #     Backend（整机 ABC：三段式——公开薄委托/族通用 impl/29 个抽象内核：24 单 joint + 4 总线级 + 1 整组动作）✅
 │   │   ├── backend_rebot_arm_b601_dm.py            #     BackendRebotArmB601DM（DM 整机 7 电机，U2CAN 串口转 CAN 桥；RX 收取线程+全操作内核验证）✅
 │   │   ├── backend_rebot_arm_b601_dm_mujoco.py     #     BackendRebotArmB601DMMujoco（DM 机械臂 MuJoCo 仿真后端桩；文件待创建）🟡
-│   │   ├── backend_template.py      #     BackendTemplate（子类实现模板：复制为实现，不入 REGISTRY）✅
 │   │   ├── backend_verify.py        #     Backend 子类真机验收 CLI（上层视角 00~50 六组分项；独立工具，不入门面）
 │   │   ├── u2can/                   #     厂商 DM 参考库（协议参照用，不依赖不导入）
 │   │   └── __init__.py              #     REGISTRY（backend_rebot_arm_b601_dm）+ get_backend(name) 选型
@@ -54,12 +53,12 @@ joyarm_code/
 │   │   └── __init__.py              #     JoyArmFactory / joyArm / listArm / load_config（对象创建入口）
 │   ├── robot_model/                 #   URDF + meshes 资产（运行期加载；robot=纯资产，加载逻辑在 JoyArm）
 │   └── config/                      #   per-model YAML（joyarm/robotics/backend 三段）
-│       ├── rebot_arm_b601_dm.yaml           #     正式型号配置
-│       └── template.yaml            #     型号配置模板（复制为 <型号>.yaml 填写；本文件不入 listArm）
+│       └── rebot_arm_b601_dm.yaml           #     正式型号配置
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性；基础设施优先复用 joyarm_core，章节算法可自行实现）
 ├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；test_robotics.py：robotics 六域；test_joyarm.py：JoyArm FSM 离线回归；joyarm_test.py：手动冒烟脚本）
-├── quickstart/                      # 快速上手示例脚本（7 个；CLI/GUI 入口规划见 §2.3）
+├── quick_start/                     # 快速上手（01~09 例程 + 11~16 求解器测试 + 21~24 新型号创建指南；CLI/GUI 入口规划见 §2.3）
+│   └── 21~24_*_creator/             #   新型号创建四步子目录（21 config 模板 template.yaml、22 URDF 规范 机械臂URDF格式规范.md、23 后端模板 backend_template.py、24 整机装配；各含 README + *_check.py 自检脚本）
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
 ├── README.md                        # 用户向入口
 └── AGENTS.md                        # 本文件
@@ -118,7 +117,7 @@ backend: {name: backend_rebot_arm_b601_dm, 可选运行键 state_refresh_hz/writ
 
 ### 2.3 库边界
 
-SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）；快速上手示例脚本 → `quickstart/`；教学脚本 → `chapt/`。
+SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）；快速上手示例脚本 → `quick_start/`；教学脚本 → `chapt/`。
 
 ## 3. 模块与 API 速查（随代码进度实时更新）
 
@@ -132,7 +131,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个抽象内核：24 单 joint + 4 总线级 + 1 整组动作）；三模式发送（cfg `default_mode` 可配、缺省 MIT，connect 自动 best-effort 设定）；动态数据读取：`get_mode_*`/`get_state_*` **读时刷新**；`joint_state_*` 只读快照 @property（被动直读槽位、不触发读帧，供监视器/可视化等无需实时者）；`is_connected_*`/`is_enabled_*` 三值标志 @property；无 `mode_*` 直读属性；`send_mit_*` 签名 `(q, dq=None, tau=None, kp=None, kd=None)`（`q` 必填；`dq`/`tau` 缺省置 `zeros(n)` 不广播；`kp`/`kd` 缺省取 cfg MIT 增益成员；三指令校验全在 `*_impl`、公开接口零校验）；cfg 预解析硬限位/发送默认/POS_VEL 四增益（切 POSITION/VELOCITY 随写寄存器）/baud/协议标识三键/两运行键（state_refresh_hz、write_settle）；`cfg` @property 返 MappingProxyType 只读视图、`joint_limits_*` 数组 writeable=False 零拷贝；成员变量全私有化；运行期 warn/info 直接输出 | Ch2 | ✅ |
 | `backend/backend_rebot_arm_b601_dm.py` | `BackendRebotArmB601DM`（DM 7 电机经 U2CAN 串口转 CAN 桥，模块私有 `_DMMotor`/`_DMBus`：RX 收取线程纯收取默认 1000Hz（cfg `rx_hz`，上限 5000）、状态快照单一 tuple 原子换入、状态读非阻塞（新鲜直返/陈旧发 0xCC 即返当前快照、t 如实带旧帧时刻不上抛，新鲜度由上层按 t 判定）；模式寄存器 RID10 MIT/VEL/Torque_Pos=1/3/4（POSITION 走 0x300+id pos_force 帧）、切 POSITION/VELOCITY 随写 4 增益（RID25-28，NaN 跳过）；反馈帧含双温度（data[6]=T_MOS、data[7]=T_Rotor）；全操作内核验证+重试（参数 0x55 回显核对/0x33 应答、使能/失能/设零/清错 0xFC/FD/FE/FB 新状态帧核对 err，应答按电机+RID+时刻配对防洗白）；僵尸总线重连先关再重建、断连清扫无主总线；组帧/解码与厂商库比特级一致；无 save；末端离散动作 open/home/close/position（-5.0/-3.0/0.0 rad/kwarg `position` 透传：自动切 POSITION 随写增益 + cfg vlim/flim 发送默认 + 位置经基类管道裁硬限位） | Ch6/13 | ✅ |
 | `backend/backend_rebot_arm_b601_dm_mujoco.py` | `BackendRebotArmB601DMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_rebot_arm_b601_dm` 同型号配套；文件待创建，实现后 REGISTRY 注册 `backend_rebot_arm_b601_dm_mujoco`） | — | 🟡 |
-| `backend/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError，桩消息前缀自动取 `self._name`（cfg `backend.name` 注册名，未传回退占位前缀 `backend_<型号>.py`，复制后无需手改）+ 逐方法实现指引注释 + 统一 `:param:/:return:/:raises:` 契约块（类型/单位/范围/维度与基类已做校验）+ 全量私有成员台账（直接消费 / 按需借用 / 勿动分档）+ 最小可用子集说明：必实现 14（连接/断连/使能/失能/读状态/读模式/设模式 ×2 族）、按需 15（参数读写/设零/三模式发送/离散动作/清错），不支持的能力保留桩由基类转 warn 降级；复制为 `backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入；含 DM 类关节电机/Feetech 类舵机双家族差异指引（覆盖混合硬件 arm 电机 + end 舵机、无 end 型号适配）、联调自检清单与「实现后 docstring 改写为型号介绍说明」指引（七步接入），受 test_69 冒烟保护：29 桩全量消息格式校验（含前缀随 name 自动切换）+ 基类内核集漂移守护 | — | ✅ |
+| `quick_start/23_backend_creator/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError，桩消息前缀自动取 `self._name`（cfg `backend.name` 注册名，未传回退占位前缀 `backend_<型号>.py`，复制后无需手改）+ 逐方法实现指引注释 + 统一 `:param:/:return:/:raises:` 契约块（类型/单位/范围/维度与基类已做校验）+ 全量私有成员台账（直接消费 / 按需借用 / 勿动分档）+ 最小可用子集说明：必实现 14（连接/断连/使能/失能/读状态/读模式/设模式 ×2 族）、按需 15（参数读写/设零/三模式发送/离散动作/清错），不支持的能力保留桩由基类转 warn 降级；复制为 `backend/backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入；含 DM 类关节电机/Feetech 类舵机双家族差异指引（覆盖混合硬件 arm 电机 + end 舵机、无 end 型号适配）、联调自检清单与「实现后 docstring 改写为型号介绍说明」指引（七步接入），受 test_69 冒烟保护：29 桩全量消息格式校验（含前缀随 name 自动切换）+ 基类内核集漂移守护 | — | ✅ |
 | `backend/backend_verify.py` | Backend 子类真机验收 CLI（上层视角只调基类公开面；00~50 六组分项 = 初始化/连接/只读/控制/运动/清错，PASS/SKIP/FAIL 三分 + 高危交互确认；`--param`/`--action` 适配子类） | — | ✅ |
 | `robotics/fkine/` | `FkineSolver(ABC)`（solve 单内核）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御；每算新建私有 pin.Data）✅ + `MdhFkineSolver`（fkine_solver_mdh.py：MDH 白盒 FK——config `arm_mdh` 逐关节连乘 + `T_linkn_endtcp` 右乘，仅末端帧；与 URDF 标定一致至 1e-13，解析 IK 复用其计算函数）✅ | Ch2 | ✅ |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 / solve_all 全解默认 `NotImplementedError`）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅ + `AnalyticIkineSolver`（ikine_solver_analytic.py：2/3/4 轴平行、5/6 轴相交构型解析解——枚举肩/肘/腕分支 ≤8 组候选、MDH FK 回代剔伪解去重、±2π 限位内归位；solve 软限位剔除后取距 q0 最近，solve_all 不剔越限且 frame 可缺省=末端帧；首次求解缓存 MDH/TCP 逆变换，按 arm 身份复用、配置变更须重建实例）✅ | Ch3 | ✅ |
@@ -144,13 +143,9 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `joyarm/__init__.py` | `JoyArmFactory`/`joyArm`/`listArm`/`load_config`（对象创建入口，四步校验失败语义见约束4；`listArm` 三条件过滤与失败消息共用实现） | — | ✅ |
 | `joyarm/joyarm.py` 内 `_VizWindow` | 监控页原生窗口封装类（JoyArm 成员 `_viz_window`：init 占位 None、start 时创建赋值、stop 终止；`launch()` 经 `python -c` 拉起子进程跑 `child_main()`——`QMainWindow`+`QWebEngineView` 内嵌 Chromium 加载三栏页，内置早夭看护（主动停止标志防误告警、stop 超时 kill 兜底）；零数据逻辑，数据仍来自 HTTP 服务；关窗即退出子进程） | — | ✅ |
 | `config/rebot_arm_b601_dm.yaml` | 型号 YAML 三段（结构与限位语义见 §1.3） | — | ✅ |
-| `quickstart/01_offline_model.py` | 离线模型与数学：无需硬件的模型信息浏览 + 正逆运动学/雅可比/动力学求解与六域求解器切换 | 使用篇 | ✅ |
-| `quickstart/02_connect_read.py` | 连接与状态读取：连接、使能与状态读取（两种状态口径、故障码与电机参数读取） | 使用篇 | ✅ |
-| `quickstart/03_direct_command.py` | 直接指令与夹爪：FSM 未运行时的直接指令（位置/速度/MIT 三模式与末端夹爪动作） | 使用篇 | ✅ |
-| `quickstart/04_fsm_motion.py` | FSM 关节与笛卡尔运动：状态机闭环运动（关节/笛卡尔目标、TrajFrame 通道与安全事件切换） | 使用篇 | ✅ |
-| `quickstart/05_monitor_viz.py` | 监视器与可视化：自定义安全监视规则与三栏实时可视化面板 | 使用篇 | ✅ |
-| `quickstart/06_teach_replay.py` | 拖动示教与回放：阻尼态拖动示教录制轨迹并逐路点回放 | 使用篇 | ✅ |
-| `quickstart/07_pick_demo.py` | 综合抓取：逆解 + FSM 运动 + 夹爪的完整抓取—放置闭环 | 使用篇 | ✅ |
+| `quick_start/01~09_*.py` | 快速上手例程 9 个：01 对象创建 · 02 连接与状态读取 · 03 标零与参数 · 04 直通电机指令 · 05 离线计算与求解器 · 06 FSM 运动 · 07 安全监视 · 08 拖动示教回放 · 09 综合抓取 | 使用篇 | ✅ |
+| `quick_start/11~16_*_test.py` | 求解器测试 6 个：11 fkine · 12 ikine · 13 jacobian · 14 dynamics · 15 trajectory · 16 control | 使用篇 | ✅ |
+| `quick_start/21~24_*/` | 新型号创建四步子目录（各含 README + 检查脚本）：21 config 模板（template.yaml + 完整性检查）· 22 URDF（机械臂URDF格式规范.md + 资产检查）· 23 backend（backend_template.py 模板 + 接入自检）· 24 整机集成四步校验 | 使用篇 | ✅ |
 
 ### 3.2 组装与数据流
 
@@ -225,7 +220,7 @@ Controller：step(arm, target, jointstate) → bool（当前帧+JointState，算
 ```python
 Backend(ABC, cfg) ✅   # 公开面：connect_*/disconnect_*（连接成功自动 best-effort 设 cfg default_mode，缺省 MIT）、enable/disable（逐 joint 内核编排、返 1/0）、get_mode（一致返模式并更新缓存，不一致/失败 None）、get_state（JointState 纯物理量含 t）、read/write_param（写入无静置；读回验证由子类内核决定——DM 参数 0x55 回显核对）、set_zero、set_mode（默认 MIT；成功后乐观更新模式缓存、门禁立即放行，一致性经 get_mode 读回纠正）、get/check/clear_error（读状态快照 error 码 list → 判 0/1 正常 → 发清错指令；读回验证由子类内核决定——DM 清错后核 err<2）、send_action_end、close（显式停刷新线程）；@property：cfg（MappingProxyType 只读视图）/ name / n_joints_*/ is_connected_*/ is_enabled_*/ joint_limits_*（只读，数组 writeable=False 零拷贝返本体）/ joint_state_*（只读快照槽位本体，被动直读不触发读帧）——无 mode_* 直读属性；限位裁剪唯一执行点（语义见 §1.3）
 send_mit_{arm,end}(q, dq=None, tau=None, kp=None, kd=None) · send_position_{arm,end}(q, vlim=None, flim=None) · send_vel_{arm,end}(dq)   # 三模式整组下发（公开薄委托+缺省直接解析：q 必填 (n,)；dq/tau 缺省 zeros(n) 不广播；kp/kd 缺省取 _kp/_kd_mit_default_*、vlim/flim 缺省取 _vlim/_flim_default_* 成员；校验全在 *_impl：①维度→②空值/越限裁剪→③连接/模式门禁→④逐 joint 内核）
-get_backend(name) · REGISTRY     # config backend.name 选型（REGISTRY 现有 backend_rebot_arm_b601_dm；新型号接入 = 复制 backend_template.py 七步接入）✅
+get_backend(name) · REGISTRY     # config backend.name 选型（REGISTRY 现有 backend_rebot_arm_b601_dm；新型号接入 = 复制 quick_start/23_backend_creator/backend_template.py 七步接入）✅
 clamp_to_limits(targets, limits) · limits_from_joint_cfgs(joint_cfgs) · soft_limits_from_cfg(cfg, n) · tcp_limits_from_cfg(tl) · rand_within_limits(limits)   # ✅
 transforms.py（23 函数，清单见 §3.1）✅ · types.py 枚举+数据类（见 §3.1）✅
 ```

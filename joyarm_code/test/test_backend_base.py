@@ -1674,7 +1674,13 @@ def test_68_disconnect_despite_disable_failure(cfg):
 
 # ---- 模板冒烟：BackendTemplate 空 cfg 可实例化（29 桩满足抽象方法强制）、29 桩全量按约定格式上抛 ----
 def test_69_template_smoke():
-    from joyarm_core.backend.backend_template import BackendTemplate  # 函数内导入，模板问题不拖垮整文件收集
+    import importlib.util
+
+    _tpl_path = Path(__file__).resolve().parents[1] / "quick_start" / "23_backend_creator" / "backend_template.py"
+    _spec = importlib.util.spec_from_file_location("backend_template", _tpl_path)
+    _mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)  # 模板已迁出 joyarm_core，按路径加载，模板问题不拖垮整文件收集
+    BackendTemplate = _mod.BackendTemplate
 
     # 29 个抽象内核的示例入参（与 backend.py 抽象方法签名一一对应）
     kernel_args = {

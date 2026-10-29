@@ -20,7 +20,7 @@ JoyArm 是一套结合实机的协作机械臂学习教程，按 **使用、基�
 
 本教程文档：[JoyArm 机械臂教程](https://joyin-dexhand.github.io/joyin_arm_tutorial/)
 
-CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
+CAD结构件及完整BOM表：[使用篇：快速上手](quick_start.md)
 
 控制代码：*仓库链接*
 
@@ -43,7 +43,7 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
       <td rowspan="4" align="center"><strong>使用篇</strong></td>
       <td align="center">快速上手</td>
       <td align="center">从拆箱验收、组装上电到运行实例例程的完整上手流程</td>
-      <td align="center"><a href="quickstart">快速上手</a></td>
+      <td align="center"><a href="quick_start">快速上手</a></td>
     </tr>
     <tr>
       <td align="center">电机</td>

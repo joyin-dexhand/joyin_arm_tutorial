@@ -2,8 +2,8 @@
 
 接入新硬件后端的步骤：
     1. 拷贝本文件并重命名为 `backend_<型号>.py`，类名为`Backend<型号>`，全文改名（替换 `BackendTemplate` / logger 名）；
-    2. 若不存在 `config/<型号>.yaml`配置文件，则拷贝 `config/template.yaml` 重命名为 `config/<型号>.yaml`
-    3. 完善`config/<型号>.yaml` 的 `backend:` 段的配置；
+    2. 若不存在 `joyarm_core/config/<型号>.yaml`配置文件，则拷贝 `../21_config_creator/template.yaml`（相对本文件夹）重命名为 `joyarm_core/config/<型号>.yaml`
+    3. 完善`joyarm_core/config/<型号>.yaml` 的 `backend:` 段的配置；
     4. 遵循本文件各方法的注释说明实现 backend 的全部 29 个抽象方法（最小可用子集见下方说明）；
     5. 在 `backend/__init__.py` 顶部导入该子类，并在 `REGISTRY` 注册表加一行注册；
     6. `<型号>.yaml` 的 `backend.name` 填如该子类 backend 的注册名；
@@ -35,8 +35,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from ..utils.types import ControlMode
-from .backend import Backend
+from joyarm_core.utils.types import ControlMode
+from joyarm_core.backend.backend import Backend
 
 __all__ = ["BackendTemplate"]
 

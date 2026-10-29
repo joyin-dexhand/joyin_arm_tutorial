@@ -13,7 +13,7 @@
 - 发送指令前自动做模式检查、维度/空值检查与越限裁剪（就近裁剪 + 告警）；
 - 状态码统一约定： `0`=失能、`1`=使能（均正常）、`≥2`=故障（子类负责映射厂商原始码）。
 
-子类：实现全部 `@abstractmethod`。详见`backend_template.py`的说明。
+子类：实现全部 `@abstractmethod`。详见`quick_start/23_backend_creator/backend_template.py`的说明。
 """
 
 from __future__ import annotations

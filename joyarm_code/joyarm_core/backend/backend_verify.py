@@ -102,7 +102,7 @@ WATCH_TICKS = 10      # item 21 实时刷新监视拍数（无 CLI 参数）
 SAMPLE_IV = 0.17      # item 21 采样间隔 s：与常见承诺周期（10/20/50Hz）均非整数倍，防采样相位锁定（整倍会恒显同一帧龄读数，掩盖真实锯齿）
 ZERO_TOL = 0.05       # item 38 设零后回读关节位置归零容差 rad
 
-# 子类未实现内核的桩消息标记（backend_template.py 桩约定，基类转 warn 后保留原文）
+# 子类未实现内核的桩消息标记（backend_template.py 桩约定；基类转 warn 后保留原文）
 CAP_MISSING = "功能缺失"
 CAP_MISSING2 = "未实现"
 
