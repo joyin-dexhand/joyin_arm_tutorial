@@ -6,7 +6,6 @@ JoyArm 是一套结合实机的协作机械臂学习教程，按 **使用、基�
 
 [演示动图或视频]()
 
----
 
 ## 特点与定位
 
@@ -16,7 +15,6 @@ JoyArm 是一套结合实机的协作机械臂学习教程，按 **使用、基�
 | **实践** | 贴近真实任务，步骤可复现 | 脱离实机的纸上项目 | 想做出能用的机械臂的开发者 |
 | **体系** | 从单关节到整机，全栈贯通 | 只讲单点的碎片教程 | 想系统性掌握的学习者 |
 
----
 
 ## 项目指引
 
@@ -26,7 +24,6 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
 
 控制代码：*仓库链接*
 
----
 
 ## 篇章速览
 
@@ -45,23 +42,23 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
     <tr>
       <td rowspan="4" align="center"><strong>使用篇</strong></td>
       <td align="center">快速上手</td>
-      <td align="center">让机械臂快速动起来的操作流程</td>
+      <td align="center">从拆箱验收、组装上电到运行实例例程的完整上手流程</td>
       <td align="center"><a href="quickstart">快速上手</a></td>
     </tr>
     <tr>
-      <td align="center">关节电机</td>
+      <td align="center">电机</td>
       <td align="center">通过 Python/C++ 程序控制单关节电机</td>
-      <td align="center"><a href="joint_motor">关节电机</a></td>
+      <td align="center"><a href="motor">电机</a></td>
     </tr>
     <tr>
-      <td align="center">六轴整臂</td>
-      <td align="center">整臂上电、关节与位置控制、示教复现</td>
-      <td align="center"><a href="arm_6dof">六轴整臂</a></td>
+      <td align="center">整臂</td>
+      <td align="center">整机硬件参数、上电标定、关节与末端控制</td>
+      <td align="center"><a href="arm">整臂</a></td>
     </tr>
     <tr>
-      <td align="center">两指夹爪</td>
-      <td align="center">夹爪接线、位置与力度控制（仅操作）</td>
-      <td align="center"><a href="gripper">两指夹爪</a></td>
+      <td align="center">末端执行器</td>
+      <td align="center">各类末端执行器（以两指夹爪为主）的接线与控制</td>
+      <td align="center"><a href="end">末端执行器</a></td>
     </tr>
     <tr>
       <td rowspan="6" align="center"><strong>基础篇</strong></td>
@@ -144,7 +141,6 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
   </tbody>
 </table>
 
----
 
 ## 主要参考的资料和项目
 
@@ -163,10 +159,7 @@ CAD结构件及完整BOM表：[使用篇：快速上手](quickstart.md)
 | Panthera-HT_SDK | Panthera-HT 六轴机械臂官方 C++/Python SDK，支持位置/速度/力矩控制、运动学/动力学建模与主从遥操作 | https://github.com/HighTorque-Robotics/Panthera-HT_SDK |
 | Dummy-Robot | 稚晖君（peng-zhihui）的超迷你六轴机械臂机器人项目，固件核心为运动学姿态解算，已完整开源 | https://github.com/peng-zhihui/Dummy-Robot |
 
----
 
 ## 开源许可证
 
 Apache-2.0
-
----

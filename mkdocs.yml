@@ -47,9 +47,9 @@ nav:
   - 首页: index.md
   - 使用篇:
       - 快速上手: quickstart.md
-      - 关节电机: joint_motor.md
-      - 六轴整臂: arm_6dof.md
-      - 两指夹爪: gripper.md
+      - 关节电机: motor.md
+      - 机械臂整臂: arm.md
+      - 末端执行器: end.md
   - 基础篇:
       - 第一章 机器人与机械臂初识: chapt1_intro.md
       - 第二章 空间位姿与位置正运动学: chapt2_fkine.md

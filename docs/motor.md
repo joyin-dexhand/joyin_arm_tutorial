@@ -1,4 +1,4 @@
-# 关节电机
+# 电机
 
 > 📌 **本章定位**：介绍如何通过 Python、C++ 程序控制单关节电机。
 
@@ -34,5 +34,3 @@ cd joyin_arm_tutorial/joyarm_code
 uv sync   # 创建 .venv + 按 uv.lock 安装全部依赖 + 可编辑安装 joyarm_core
 source .venv/bin/activate
 ```
-
-
