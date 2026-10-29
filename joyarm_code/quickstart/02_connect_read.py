@@ -79,7 +79,7 @@ def main() -> None:
         print(f"enable_end 返回：{ret}；使能后 is_enabled_end：{arm.is_enabled_end}")
 
         # ---- ③ 状态两种口径：get_state_arm 主动发读帧取最新值（要实时数据时用）；
-        #      joint_state_arm 只读后台刷新线程的最近快照、不占用总线（高频轮询时用）----
+        #      joint_state_arm 只读后台刷新线程的最近快照、不占用总线----
         s = arm.get_state_arm()
         print_state("get_state_arm（读时刷新）", s)
         print_state("joint_state_arm（被动快照）", arm.joint_state_arm)

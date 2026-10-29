@@ -93,10 +93,6 @@ is_in_pose_arm(pose, tol_pos=None, tol_rot=None, frame=None)                    
 get_<域>_solvers()                                                                                域内已注册求解器名列表                                            ——
 set_<域>_solver(name)                                                                             热切换激活（traj 先试规划成功才替换）                              ——
 get_activated_<域>_solver()                                                                       当前激活求解器名                                                ——
-set_target_trajframe(target)                                                                      写目标帧/序列（deepcopy 后原子替换）                              ——
-get_target_trajframe()                                                                            读目标帧（深拷贝）                                              ——
-set_target_joint(t, q, dq=None, ddq=None, tau=None)                                               单帧关节目标便捷封装（走 set_target_trajframe 通道）              ——
-set_target_cart(t, pose, twist=None, accel=None, wrench=None)                                     单帧笛卡尔目标便捷封装（走 set_target_trajframe 通道）             ——
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 solve_fkine(q=None, frame=None) → Pose                                                            正运动学（frame 缺省末端帧、0=基座系）                            fkine 已配置
 solve_ikine(pose, frame=None, q0=None, **kw) → IKResult                                           逆运动学单解                                                   ikine 已配置
@@ -109,10 +105,14 @@ start_motion_fsm()                                                              
 stop_motion_fsm()                                                                                 阻塞安全停机（危险等级≤ZEROING 回零失能；更高危直接失能）             已连接
 get_current/get_target_motion_state()                                                             读当前 / 目标运动状态                                           ——
 wait_for_motion_state(fsm_state, timeout=5.0)                                                     只读轮询等待到达（到达 1 / 超时 0）                               ——（FSM 未运行返 0+warn）
+get_target_trajframe()                                                                            读目标帧（深拷贝）                                              ——
+set_target_trajframe(target)                                                                      写目标帧/序列（deepcopy 后原子替换）                              ——
+set_target_joint(t, q, dq=None, ddq=None, tau=None)                                               单帧关节目标便捷封装（走 set_target_trajframe 通道）              ——
+set_target_cart(t, pose, twist=None, accel=None, wrench=None)                                     单帧笛卡尔目标便捷封装（走 set_target_trajframe 通道）             ——
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 set_event(event) · get_event()                                                                    置 / 读安全事件（set_event 同步设置 target_motion_state）        ——
-start_monitor() · stop_monitor()                                                                  启停独立监视线程                                                ——
 set_monitor_rules(rules)                                                                          绑定自定义监视规则（单条或列表）                                   ——
+start_monitor() · stop_monitor()                                                                  启停独立监视线程                                                ——
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 start_state_viz(traj_points=200) · stop_state_viz()                                               启停状态可视化（默认自动弹原生窗口）                                ——（不要求连接）
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

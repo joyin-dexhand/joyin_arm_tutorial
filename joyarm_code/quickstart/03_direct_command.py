@@ -58,10 +58,7 @@ def main() -> None:
 
         # ② 位置模式：以当前位形为基准，仅第 2、3 关节各 +0.15 rad
         arm.set_mode_arm(ControlMode.POSITION)              # 切位置模式（自动随写位置环增益）
-        q_goal = arm.joint_state_arm.q.copy()               # 基准取当前位形快照（copy 再修改），
-                                                            # 其余关节目标=当前值保持不动，避免整机向 home 归位
-        q_goal[1] += 0.15                                   # 第 2 关节 +0.15 rad
-        q_goal[2] += 0.15                                   # 第 3 关节 +0.15 rad
+        q_goal = arm.zero_arm
         print(f"位置模式：目标关节角 q_goal = {np.round(q_goal, 3)} rad")
         arm.send_position_arm(q_goal)                       # 整组下发目标关节角（越限自动裁剪）
         t0, ok = time.time(), False
@@ -75,8 +72,8 @@ def main() -> None:
         # ③ 速度模式：仅第 2 关节以 0.3 rad/s 点动 1 秒
         arm.set_mode_arm(ControlMode.VELOCITY)              # 切速度模式
         dq = np.zeros(arm.n_arm)                            # n_arm = 本体关节数
-        dq[1] = 0.3                                         # 第 2 关节 +0.3 rad/s，其余为零
-        print("速度模式：第 2 关节 0.3 rad/s 运行 1 秒")
+        dq[0] = 0.3                                         # 第 2 关节 +0.3 rad/s，其余为零
+        print("速度模式：第 1 关节 0.3 rad/s 运行 1 秒")
         arm.send_vel_arm(dq)                                # 整组下发目标速度
         time.sleep(1.0)
         arm.send_vel_arm(np.zeros(arm.n_arm))               # 先发零速停止，再切其他模式

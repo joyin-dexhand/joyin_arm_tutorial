@@ -112,7 +112,8 @@ cd ~
 git clone url # 拉取 joyarm_code 代码库至本地（强烈建议放在主文件夹根目录）
 cd joyarm_code
 curl -LsSf https://astral.sh/uv/install.sh | sh # 若电脑未安装 uv 则先安装 uv，已安装则跳过
-uv sync                    # 创建 .venv 并按 uv.lock 安装全部依赖
+uv sync                    # 创建环境并安装全部依赖
+source .venv/bin/activate  # 激活环境
 ```
 
 > ⚠️ 真机例程运行前，请务必先阅读 §1 操作安全须知。
@@ -123,13 +124,13 @@ uv sync                    # 创建 .venv 并按 uv.lock 安装全部依赖
 
 | 例程 | 运行条件 | 启动命令 | 说明 |
 |:---:|:---:|:---:|:---:|
-| 01 离线模型与数学 | 离线 | `uv run python quickstart/01_offline_model.py` | 无需硬件：模型信息浏览 + 正逆运动学/雅可比/动力学求解与六域求解器切换 |
-| 02 连接与状态读取 | 真机 | `uv run python quickstart/02_connect_read.py` | 连接、使能与状态读取：两种状态口径、故障码与电机参数读取 |
-| 03 直接指令与夹爪 | 真机 | `uv run python quickstart/03_direct_command.py` | FSM 未运行时的直接指令：位置/速度/MIT 三模式与末端夹爪动作 |
-| 04 FSM关节与笛卡尔运动 | 真机 | `uv run python quickstart/04_fsm_motion.py` | 状态机闭环运动：关节/笛卡尔目标、TrajFrame 通道与安全事件切换 |
-| 05 监视器与可视化 | 真机 | `uv run python quickstart/05_monitor_viz.py` | 自定义安全监视规则与三栏实时可视化面板 |
-| 06 拖动示教与回放 | 真机 | `uv run python quickstart/06_teach_replay.py` | 阻尼态拖动示教录制轨迹并逐路点回放 |
-| 07 综合抓取 | 真机 | `uv run python quickstart/07_pick_demo.py` | 逆解 + FSM 运动 + 夹爪的完整抓取—放置闭环 |
+| 01 离线模型与数学 | 离线 | `python quickstart/01_offline_model.py` | 无需硬件：模型信息浏览 + 正逆运动学/雅可比/动力学求解与六域求解器切换 |
+| 02 连接与状态读取 | 真机 | `python quickstart/02_connect_read.py` | 连接、使能与状态读取：两种状态口径、故障码与电机参数读取 |
+| 03 直接指令与夹爪 | 真机 | `python quickstart/03_direct_command.py` | FSM 未运行时的直接指令：位置/速度/MIT 三模式与末端夹爪动作 |
+| 04 FSM关节与笛卡尔运动 | 真机 | `python quickstart/04_fsm_motion.py` | 状态机闭环运动：关节/笛卡尔目标、TrajFrame 通道与安全事件切换 |
+| 05 监视器与可视化 | 真机 | `python quickstart/05_monitor_viz.py` | 自定义安全监视规则与三栏实时可视化面板 |
+| 06 拖动示教与回放 | 真机 | `python quickstart/06_teach_replay.py` | 阻尼态拖动示教录制轨迹并逐路点回放 |
+| 07 综合抓取 | 真机 | `python quickstart/07_pick_demo.py` | 逆解 + FSM 运动 + 夹爪的完整抓取—放置闭环 |
 
 ## 8 完整资料汇总
 
