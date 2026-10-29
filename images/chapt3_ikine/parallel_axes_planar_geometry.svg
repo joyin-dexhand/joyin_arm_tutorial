@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="820"
+   height="480"
+   viewBox="0 0 820 480"
+   role="img"
+   aria-labelledby="title desc"
+   version="1.1"
+   id="svg1074"
+   sodipodi:docname="parallel_axes_planar_geometry.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1076"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.9666667"
+     inkscape:cx="172.88136"
+     inkscape:cy="195.25424"
+     inkscape:window-width="2494"
+     inkscape:window-height="1531"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1074" />
+  <title
+     id="title">连续三轴平行构型的平面几何关系</title>
+  <desc
+     id="desc">肩部、肘部与腕部参考点构成平面二连杆三角形，并标出 q2、q3、q4 和末段朝向 phi。</desc>
+  <defs
+     id="defs1010">
+    <marker
+       id="arrow-blue"
+       markerWidth="9"
+       markerHeight="9"
+       refX="8"
+       refY="4.5"
+       orient="auto">
+      <path
+         d="M0,0 L9,4.5 L0,9 Z"
+         fill="#2878b5"
+         id="path1002" />
+    </marker>
+    <marker
+       id="arrow-orange"
+       markerWidth="9"
+       markerHeight="9"
+       refX="8"
+       refY="4.5"
+       orient="auto">
+      <path
+         d="M0,0 L9,4.5 L0,9 Z"
+         fill="#e28b24"
+         id="path1005" />
+    </marker>
+    <style
+       id="style1008">
+      text { font-family: &quot;Noto Sans CJK SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill: #25313c; }
+      .axis { stroke: #82909c; stroke-width: 2; marker-end: url(#arrow-blue); }
+      .guide { stroke: #aeb8c0; stroke-width: 1.8; stroke-dasharray: 7 6; }
+      .link { stroke: #2878b5; stroke-width: 11; stroke-linecap: round; }
+      .angle { fill: none; stroke: #e28b24; stroke-width: 3; marker-end: url(#arrow-orange); }
+      .joint { fill: #fff; stroke: #25313c; stroke-width: 3; }
+    </style>
+  </defs>
+  <rect
+     width="820"
+     height="480"
+     fill="#ffffff"
+     id="rect1012" />
+  <polyline
+     id="arc-q1-3"
+     points="190.0,360.0 190.0,359.1 190.0,358.3 189.9,357.4 189.9,356.5 189.8,355.6 189.7,354.8 189.6,353.9 189.5,353.0 189.4,352.2 189.2,351.3 189.1,350.5 188.9,349.6 188.7,348.8 188.5,347.9 188.3,347.1 188.1,346.2 187.8,345.4 187.6,344.5 187.3,343.7 187.0,342.9 186.7,342.1 186.4,341.3 186.0,340.5 185.7,339.7 185.3,338.9 184.9,338.1 184.6,337.3 184.1,336.5 183.7,335.8 183.3,335.0"
+     fill="none"
+     stroke="#c79a4a"
+     stroke-width="2"
+     transform="matrix(1.5849906,0,0,0.88789386,145.82258,-128.21548)" />
+  <polyline
+     id="arc-q1"
+     points="190.0,360.0 190.0,359.1 190.0,358.3 189.9,357.4 189.9,356.5 189.8,355.6 189.7,354.8 189.6,353.9 189.5,353.0 189.4,352.2 189.2,351.3 189.1,350.5 188.9,349.6 188.7,348.8 188.5,347.9 188.3,347.1 188.1,346.2 187.8,345.4 187.6,344.5 187.3,343.7 187.0,342.9 186.7,342.1 186.4,341.3 186.0,340.5 185.7,339.7 185.3,338.9 184.9,338.1 184.6,337.3 184.1,336.5 183.7,335.8 183.3,335.0"
+     fill="none"
+     stroke="#c79a4a"
+     stroke-width="2"
+     transform="matrix(1.5004679,0,0,1.6168895,-77.371407,-192.66883)" />
+  <!-- 坐标轴与目标坐标投影 -->
+  <line
+     class="axis"
+     x1="135"
+     y1="390"
+     x2="735"
+     y2="390"
+     id="line1014" />
+  <line
+     class="axis"
+     x1="135"
+     y1="390"
+     x2="135"
+     y2="55"
+     id="line1016" />
+  <text
+     x="744"
+     y="397"
+     font-size="22"
+     id="text1018">x</text>
+  <text
+     x="124"
+     y="43"
+     font-size="22"
+     id="text1020">z</text>
+  <!-- 肩部 O2、肘部 O3、目标 O5 -->
+  <line
+     class="link"
+     x1="135"
+     y1="390"
+     x2="390"
+     y2="205"
+     id="line1022" />
+  <line
+     class="link"
+     x1="390"
+     y1="205"
+     x2="650"
+     y2="120"
+     id="line1024" />
+  <line
+     class="guide"
+     x1="390"
+     y1="205"
+     x2="474"
+     y2="144"
+     id="line1026" />
+  <line
+     class="guide"
+     x1="650"
+     y1="120"
+     x2="650"
+     y2="390"
+     id="line1028" />
+  <line
+     class="guide"
+     x1="135"
+     y1="120"
+     x2="650"
+     y2="120"
+     id="line1030" />
+  <circle
+     class="joint"
+     cx="135"
+     cy="390"
+     r="10"
+     id="circle1032" />
+  <circle
+     class="joint"
+     cx="390"
+     cy="205"
+     r="10"
+     id="circle1034" />
+  <circle
+     cx="650"
+     cy="120"
+     r="12"
+     fill="#42a85f"
+     stroke="#25313c"
+     stroke-width="3"
+     id="circle1036" />
+  <text
+     x="82"
+     y="423"
+     font-size="20"
+     id="text1038">肩部 O₂</text>
+  <text
+     x="331.46155"
+     y="183.42816"
+     font-size="20px"
+     id="text1040">肘部 O₃</text>
+  <text
+     x="510"
+     y="82"
+     font-size="20"
+     id="text1042">腕部参考点 O₅</text>
+  <text
+     x="665"
+     y="158"
+     font-size="18"
+     id="text1044">目标 (x, z)</text>
+  <!-- 连杆长度 -->
+  <text
+     x="245"
+     y="278"
+     font-size="22"
+     fill="#2878b5"
+     id="text1046">l₁</text>
+  <text
+     x="510"
+     y="145"
+     font-size="22"
+     fill="#2878b5"
+     id="text1048">l₂</text>
+  <text
+     x="643"
+     y="416"
+     font-size="19"
+     id="text1050">x</text>
+  <text
+     x="105"
+     y="126"
+     font-size="19"
+     id="text1052">z</text>
+  <!-- q2 与 q3 角弧 -->
+  <text
+     x="209.76337"
+     y="364.29898"
+     font-size="21px"
+     fill="#e28b24"
+     id="text1056">q₂</text>
+  <text
+     x="445"
+     y="178"
+     font-size="21"
+     fill="#e28b24"
+     id="text1060">q₃</text>
+  <!-- 末段合成朝向 phi 与 q4 补角 -->
+  <line
+     x1="650"
+     y1="120"
+     x2="755"
+     y2="76"
+     stroke="#e28b24"
+     stroke-width="5"
+     marker-end="url(#arrow-orange)"
+     id="line1062" />
+  <text
+     x="707.30481"
+     y="114.69439"
+     font-size="22px"
+     fill="#e28b24"
+     id="text1064">φ</text>
+  <line
+     x1="650"
+     y1="120"
+     x2="735"
+     y2="120"
+     class="guide"
+     id="line1066" />
+  <text
+     x="650"
+     y="194"
+     font-size="19"
+     fill="#e28b24"
+     id="text1070">q₄ 补足朝向</text>
+  <text
+     x="250"
+     y="455"
+     font-size="20"
+     id="text1072">先用三角形求 q₂、q₃，再由 φ 确定 q₄</text>
+  <polyline
+     id="arc-q1-6"
+     points="190.0,360.0 190.0,359.1 190.0,358.3 189.9,357.4 189.9,356.5 189.8,355.6 189.7,354.8 189.6,353.9 189.5,353.0 189.4,352.2 189.2,351.3 189.1,350.5 188.9,349.6 188.7,348.8 188.5,347.9 188.3,347.1 188.1,346.2 187.8,345.4 187.6,344.5 187.3,343.7 187.0,342.9 186.7,342.1 186.4,341.3 186.0,340.5 185.7,339.7 185.3,338.9 184.9,338.1 184.6,337.3 184.1,336.5 183.7,335.8 183.3,335.0"
+     fill="none"
+     stroke="#c79a4a"
+     stroke-width="2"
+     transform="matrix(1.0095849,0,0,0.83852436,512.86296,-179.94806)" />
+</svg>
