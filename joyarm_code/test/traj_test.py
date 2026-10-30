@@ -1,6 +1,6 @@
 """
 ==============================================================================
-trajectory 轨迹规划测试分析  (快速上手 例程 15)
+trajectory 轨迹规划测试分析  (test 离线测试)
 ==============================================================================
 【功能概要】
     面向 robotics 六域之一的 trajectory 轨迹规划域做离线测试分析（无需硬件，数秒跑完）：
@@ -9,8 +9,8 @@ trajectory 轨迹规划测试分析  (快速上手 例程 15)
          多帧告警去重、未规划先采样抛错；
       3. 测试 single_joint_cubic_traj_planner（三次多项式）：[t0,t0+T] 均匀采样序列表、四边界
          约束校验、超末保持、过期目标恒定发布、多帧告警、未规划采样抛错；
-      4. 同一目标下双规划器采样序列并排对比，说明 hold 忽略目标时刻 t——这正是 06 例程
-         演示回放前切 cubic 的原因；
+      4. 同一目标下双规划器采样序列并排对比，说明 hold 忽略目标时刻 t——这正是
+         quick_start/06_fsm_motion.py 演示回放前切 cubic 的原因；
       5. 末尾打印分析结论表（两规划器行为逐项对照 + 断言统计；None 一律显「—」）。
 
 【原理简介】
@@ -22,8 +22,8 @@ trajectory 轨迹规划测试分析  (快速上手 例程 15)
       q(τ)=c0+c1τ+c2τ²+c3τ³，其中 T=目标时刻−规划时刻、采样时 τ 钳位 [0,T]（超出保持末端
       状态），目标已过期则不规划多项式、直接恒定发布目标；
     - TrajFrame 为纯数据轨迹帧：time + 末端 pose/twist/accel/wrench + 关节 q/dq/ddq/tau 共
-      九个可选字段，本例程只填 time/q/dq 三个（完整字段表见运行输出①）。
-    cubic 的规划起点取自 arm.get_state_arm()；离线未连接的真机该接口返回 None，故本例程用
+      九个可选字段，本测试脚本只填 time/q/dq 三个（完整字段表见运行输出①）。
+    cubic 的规划起点取自 arm.get_state_arm()；离线未连接的真机该接口返回 None，故本测试脚本用
     接口同名的鸭子替身 StubArm 提供确定性起点（与 test/test_robotics.py 的做法一致）。
 
 【环境与运行】
@@ -37,7 +37,7 @@ trajectory 轨迹规划测试分析  (快速上手 例程 15)
     source .venv/bin/activate
 
     # 3. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需连接机械臂硬件）
-    python quick_start/15_traj_test.py
+    python test/traj_test.py
 
 【预期输出】
     ①~⑤ 五节控制台信息：轨迹域注册表与 TrajFrame 字段表、两规划器逐项测试（含三次多项式
@@ -190,7 +190,7 @@ def main() -> None:
 
     # ================= ① 测试环境 =================
     section("① 测试环境：trajectory 域注册表、TrajFrame 结构与鸭子替身 StubArm")
-    arm = joyArm("rebot_arm_b601_dm")                            # 离线创建机械臂（不连硬件，同例程 01）
+    arm = joyArm("rebot_arm_b601_dm")                            # 离线创建机械臂（不连硬件，同 quick_start/01_model_create.py）
     print(f"   traj 域已加载规划器：{arm.get_traj_solvers()}")    # cfg 中 trajectory 列表的注册名
     print(f"   traj 域默认激活：{arm.get_activated_traj_solver()}（cfg 列表首位 = 默认激活）")
     n = arm.n_arm                                                # 本体自由度（本型号为 6）
@@ -211,7 +211,7 @@ def main() -> None:
                  ["dq", "ndarray (n,)", "关节速度参考（rad/s）"],     # 字段 7：dq
                  ["ddq", "ndarray (n,)", "关节加速度参考（rad/s²）"], # 字段 8：ddq
                  ["tau", "ndarray (n,)", "前馈力矩参考（N·m）"]])     # 字段 9：tau
-    print("   本例程只填 time/q/dq 三个关节域字段：hold 忽略 time/dq，cubic 三者都用（见②③）。")   # 本例用法
+    print("   本测试脚本只填 time/q/dq 三个关节域字段：hold 忽略 time/dq，cubic 三者都用（见②③）。")   # 本脚本用法
     sub("1.3 鸭子替身 StubArm：给 cubic 提供确定的规划起点")   # 小节标题
     print("   hold 的 plan 只读 arm.home_arm；cubic 的 plan 另调 arm.get_state_arm() 取起点 (q,dq)。")   # 两规划器差异
     print(f"   离线未连接的真机 get_state_arm() = {fmt(arm.get_state_arm())}（无快照，cubic 取不到起点），")   # 离线真机行为
@@ -385,10 +385,10 @@ def main() -> None:
           hold_const and np.allclose(fc.q, q_goal) and np.allclose(fc.dq, dq1))
     print("   - hold 的 plan 只取单帧 q：目标到达时刻 t（与 dq）不参与计算，采样一步到位、dq 恒 0；")   # hold 行为一
     print("   - cubic 的 plan 以 T = t − 规划时刻 解三次多项式：采样沿 [0,T] 平滑过渡，τ=T 精确到达。")   # cubic 行为
-    print("   - 例程 06 的回放以 10 Hz 逐点下发 set_target_joint(t=当前时刻+0.15, q=路点)：")   # 与例程 06 的关联
+    print("   - quick_start/06_fsm_motion.py 的回放以 10 Hz 逐点下发 set_target_joint(t=当前时刻+0.15, q=路点)：")   # 与 06 例程的关联
     print("     默认激活 hold 时 t 被忽略，回放退化为位置直传流（速度仅由电机 vlim 兜底）；")   # hold 回放行为
     print("     切到 single_joint_cubic_traj_planner 后 T 才生效、路点按到达时刻逐段三次平滑——")   # cubic 回放行为
-    print("     这正是 06 例程演示回放前将 traj 域切到 cubic 规划器的原因。")   # 关联结论
+    print("     这正是 quick_start/06_fsm_motion.py 演示回放前将 traj 域切到 cubic 规划器的原因。")   # 关联结论
 
     # ================= ⑤ 分析结论 =================
     section("⑤ 分析结论")                                       # 大节标题
@@ -407,7 +407,7 @@ def main() -> None:
     print('   真机切换方法：arm.set_traj_solver("single_joint_cubic_traj_planner")'   # 切换命令
           "（新规划器 plan 成功后才替换激活）。")
     arm.close()                                                  # 显式安全收尾（幂等；离线仅停线程清缓存）
-    print("离线例程运行完毕（收尾时「arm 未连接……豁免跳过」类日志为正常提示）")
+    print("离线测试运行完毕（收尾时「arm 未连接……豁免跳过」类日志为正常提示）")
 
 
 if __name__ == "__main__":

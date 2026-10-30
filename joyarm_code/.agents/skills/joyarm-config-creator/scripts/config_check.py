@@ -1,6 +1,6 @@
 """
 ==============================================================================
-型号配置文件完整性检查  (快速上手 例程 21)
+型号配置文件完整性检查  (joyarm-config-creator skill 例程)
 ==============================================================================
 【功能概要】
     1. 基础校验 config/<型号>.yaml：文件存在、YAML 可解析为非空字典、顶层
@@ -26,7 +26,7 @@
     ① 装 uv：curl -LsSf https://astral.sh/uv/install.sh | sh
       （Windows 用 irm https://astral.sh/uv/install.ps1 | iex）
     ② cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
-    ③ python quick_start/21_config_creator/21_config_check.py --model rebot_arm_b601_dm
+    ③ python .agents/skills/joyarm-config-creator/scripts/config_check.py --model rebot_arm_b601_dm
       （离线脚本，无需硬件；--model 缺省 rebot_arm_b601_dm）
 
 【预期输出】
@@ -45,7 +45,7 @@ from pathlib import Path                                         # 配置与 URD
 import numpy as np                                               # 限位数组的维度与区间比较
 import yaml                                                      # 型号配置文件解析
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))    # 未安装 joyarm_core 时也可直接运行（指向 joyarm_code/）
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))    # 未安装 joyarm_core 时也可直接运行（指向 joyarm_code/：scripts→joyarm-config-creator→skills→.agents 共 4 级）
 from joyarm_core import (                                        # noqa: E402  核心库公开接口
     joyArm,                                                      # 工厂入口：终极离线构造校验
     listArm,                                                     # 列出当前可用型号（① 节展示）
@@ -60,7 +60,7 @@ from joyarm_core.robotics.dynamics import REGISTRY as _DYN_REGISTRY      # noqa:
 from joyarm_core.robotics.trajectory import REGISTRY as _TRAJ_REGISTRY   # noqa: E402  trajectory 域注册表
 from joyarm_core.robotics.control import REGISTRY as _CTRL_REGISTRY      # noqa: E402  control 域注册表
 
-_CODE_ROOT = Path(__file__).resolve().parents[2]                 # joyarm_code/ 根（config、robot_model 的上级；本脚本再下两级）
+_CODE_ROOT = Path(__file__).resolve().parents[4]                 # joyarm_code/ 根（config、robot_model 的上级；本脚本再下四级）
 _URDF_LIMIT_TOL = 1e-4                                           # cfg↔URDF 限位核对容差（与库 joyarm.py 同值）
 _ACTIVE_JOINT_TYPES = ("revolute", "continuous", "prismatic")    # URDF 活动关节类型（fixed 不可登记，库同口径）
 _DOMAINS = [                                                     # robotics 六域：cfg 段键 → 对应 REGISTRY
@@ -141,7 +141,7 @@ def _basic_rows(cfg_path: Path) -> tuple:
                      str(cfg_path.relative_to(_CODE_ROOT))))     # 说明显示仓库内相对路径（简短易读）
     else:
         rows.append(("B1", "配置文件存在", False,                # B1 失败行：附起步指引
-                     f"不存在：{cfg_path}（新型号先复制本文件夹 template.yaml 起步）"))
+                     f"不存在：{cfg_path}（新型号先复制 assets/template.yaml 起步）"))
         return rows, None                                        # 文件不存在 → 后续无从校验
     try:
         with open(cfg_path, encoding="utf-8") as fh:             # 按 utf-8 读取（与库 load_config 一致）
@@ -274,7 +274,7 @@ def _urdf_table(urdf_path: Path) -> tuple:
         v = None if lim is None else lim.get(key)                # 无 <limit> 元素或无该属性 → None
         return None if v is None else float(v)                   # 缺值不参与比对（库同口径）
 
-    if not urdf_path.is_file():                                  # URDF 文件缺失（22 单元 robot_model 未就绪）
+    if not urdf_path.is_file():                                  # URDF 文件缺失（joyarm-urdf-creator 的 robot_model 未就绪）
         return None, f"URDF 文件不存在：{urdf_path}"
     try:
         root = ET.parse(str(urdf_path)).getroot()                # 解析 XML 取 <robot> 根元素
@@ -440,7 +440,7 @@ def _hard_rows(cfg: dict, urdf_path: Path) -> list:
     rows.append(("H13", "backend.name 在 REGISTRY", in_reg,      # H13 行：注册名在册
                  f"{bname}（可用：{sorted(_BACKEND_REGISTRY)}）" if in_reg   # 通过说明：注册名 + 可用清单
                  else f"{bname if bname is not None else '—'} 不在 REGISTRY"   # 失败说明：实际名
-                      f"（可用：{sorted(_BACKEND_REGISTRY)}；须先完成 23 单元 backend 注册）"))   # 修复指引
+                      f"（可用：{sorted(_BACKEND_REGISTRY)}；须先用 joyarm-backend-creator 完成 backend 注册）"))   # 修复指引
 
     # ---- H14：关节名与 URDF 驱动关节一致 ----
     table, urdf_err = _urdf_table(urdf_path)                     # URDF 关节表（或错误消息）

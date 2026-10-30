@@ -1,11 +1,11 @@
 """
 ==============================================================================
-硬件后端接入自检  (快速上手 例程 23)
+硬件后端接入自检  (joyarm-backend-creator skill)
 ==============================================================================
 【功能概要】
     1. 第一级：核对 --backend 指定的注册名可从 joyarm_core.backend 的 REGISTRY
        取到、对应类是 Backend 子类，并做空 cfg 与型号 yaml 两种离线构造自检；
-    2. 第二级：用 importlib 按路径加载同文件夹的 backend_template.py，核对
+    2. 第二级：用 importlib 按路径加载本 skill assets/ 下的 backend_template.py，核对
        29 个抽象方法桩齐全、逐桩调用按约定抛 NotImplementedError、
        核对表与 Backend.__abstractmethods__ 集合完全对齐；
     3. 全程离线（构造不做任何总线 I/O），两级各输出 PASS/FAIL 表并给出总结。
@@ -18,7 +18,8 @@
     TypeError）；backend_template.py 把 29 个方法全部定义成 NotImplementedError
     桩——既满足抽象方法强制，又让未实现的能力经基类转 warn 优雅降级。本脚本
     不接硬件：第一级验证「注册 + 继承 + 离线构造」链路，第二级验证模板桩的
-    完备性，是 21~23 三步创建流程（配置 → 模型 → 后端）的离线自检工具。
+    完备性，是 config → urdf → backend 三步创建流程（joyarm-config-creator →
+    joyarm-urdf-creator → joyarm-backend-creator）的离线自检工具。
 
 【环境与运行】
     # 1. 安装 uv（仅首次）
@@ -31,8 +32,8 @@
     source .venv/bin/activate
 
     # 3. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需硬件）
-    python quick_start/23_backend_creator/23_backend_check.py
-    python quick_start/23_backend_creator/23_backend_check.py --backend backend_<型号>  # 检查其他注册名
+    python .agents/skills/joyarm-backend-creator/scripts/backend_check.py
+    python .agents/skills/joyarm-backend-creator/scripts/backend_check.py --backend backend_<型号>  # 检查其他注册名
 
 【预期输出】
     第一级 / 第二级各一张「检查项 | 结果 | 证据」表（29 桩按五个分组展开），
@@ -47,7 +48,7 @@ import sys                             # sys.path 注入与进程退出码
 import unicodedata                     # 判定全角字符宽度（表格列对齐用）
 from pathlib import Path               # 路径定位（模板文件 / 型号 yaml）
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # joyarm_code 入 path，未安装 joyarm_core 也可运行
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))  # joyarm_code 入 path（scripts→backend-creator→skills→.agents→joyarm_code 共 4 级），未安装 joyarm_core 也可运行
 
 import yaml                            # noqa: E402  解析型号 yaml 的 backend 段（path 注入后导入）
 
@@ -55,9 +56,8 @@ from joyarm_core.backend import REGISTRY, Backend  # noqa: E402  # 后端注册�
 from joyarm_core.utils.types import ControlMode    # noqa: E402  # 控制模式枚举（设模式桩的示例入参用）
 
 # ---- 路径常量（第二级检查对象与型号配置目录） ----
-DIR_HERE = Path(__file__).resolve().parent                        # 本文件夹 quick_start/23_backend_creator
-TEMPLATE_PATH = DIR_HERE / "backend_template.py"                  # Backend 子类实现模板
-JOYARM_CODE = DIR_HERE.parent.parent                              # 代码库根 joyarm_code
+TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "assets" / "backend_template.py"   # Backend 子类实现模板（本 skill 的 assets/ 下）
+JOYARM_CODE = Path(__file__).resolve().parents[4]                 # 代码库根 joyarm_code（scripts→backend-creator→skills→.agents→joyarm_code 共 4 级）
 CONFIG_DIR = JOYARM_CODE / "joyarm_core" / "config"               # 型号 yaml 配置目录
 
 # ---- 结果三态标记（与 backend_verify.py 的能力三分法一致） ----
@@ -167,9 +167,9 @@ def check_registered(name: str) -> list:
     # ---- ④ 离线构造自检二：型号 yaml 的 backend 段（存在才检查；未建 yaml 只 SKIP 不判负） ----
     model = name.removeprefix("backend_")                    # 注册名去前缀 = 型号名（config/<型号>.yaml）
     cfg_path = CONFIG_DIR / f"{model}.yaml"                  # 型号 yaml 路径
-    if not cfg_path.is_file():                               # yaml 尚未创建（21 步未完成）
+    if not cfg_path.is_file():                               # yaml 尚未创建（joyarm-config-creator 步未完成）
         rows.append((f"型号 yaml『{cfg_path.name}』backend 段构造", SKIP,   # SKIP 行：前置未就绪
-                     "未找到型号 yaml（先完成 21_config_creator）"))
+                     "未找到型号 yaml（先完成 joyarm-config-creator）"))
         return rows                                          # 无 yaml 可测，提前返回
     try:
         with open(cfg_path, encoding="utf-8") as f:          # 读取型号 yaml
@@ -280,13 +280,13 @@ def check_template() -> tuple:
 def main() -> None:
     """脚本入口：解析参数 → 两级检查 → 表格化输出 → 总结与退出码。"""
     parser = argparse.ArgumentParser(                        # 命令行参数定义（中文帮助）
-        description="硬件后端接入离线自检（例程 23）：第一级核对 REGISTRY 注册名可导入/是 Backend 子类/离线构造；"   # 描述一
+        description="硬件后端接入离线自检（joyarm-backend-creator）：第一级核对 REGISTRY 注册名可导入/是 Backend 子类/离线构造；"   # 描述一
                     "第二级核对 backend_template.py 的 29 个抽象方法桩")   # 描述二
     parser.add_argument("--backend", default="backend_rebot_arm_b601_dm", metavar="注册名",   # --backend 参数定义
                         help="backend 注册名（REGISTRY 键 = backend_<型号>.py 去扩展名）；缺省 backend_rebot_arm_b601_dm")   # 参数帮助
     args = parser.parse_args()                               # 解析命令行参数
     print("=" * 78)                                          # 大节：脚本标题
-    print(f"硬件后端接入自检（例程 23）    目标注册名：{args.backend}")   # 标题行 1：目标注册名
+    print(f"硬件后端接入自检（joyarm-backend-creator）    目标注册名：{args.backend}")   # 标题行 1：目标注册名
     print(f"模板文件：{TEMPLATE_PATH.relative_to(JOYARM_CODE)}    （离线脚本，无需硬件）")   # 标题行 2：模板路径
     print("=" * 78)                                          # 大节：标题下边框
     # ---- 第一级：已注册后端 ----

@@ -1676,7 +1676,7 @@ def test_68_disconnect_despite_disable_failure(cfg):
 def test_69_template_smoke():
     import importlib.util
 
-    _tpl_path = Path(__file__).resolve().parents[1] / "quick_start" / "23_backend_creator" / "backend_template.py"
+    _tpl_path = Path(__file__).resolve().parents[1] / ".agents" / "skills" / "joyarm-backend-creator" / "assets" / "backend_template.py"
     _spec = importlib.util.spec_from_file_location("backend_template", _tpl_path)
     _mod = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(_mod)  # 模板已迁出 joyarm_core，按路径加载，模板问题不拖垮整文件收集

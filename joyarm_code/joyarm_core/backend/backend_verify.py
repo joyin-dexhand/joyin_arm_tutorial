@@ -1558,8 +1558,7 @@ def load_cfg(args: argparse.Namespace, sub: str) -> tuple[dict, Path]:
             raise _UsageError(f"配置文件不存在：{path}（--config 可指定其他 yaml）")
     else:
         # 缺省：扫描 config/*.yaml 取唯一命中——三顶层键均 dict、backend.name == sub、
-        # robot_model/<型号>/ 四路径齐全（与 joyarm/__init__.py 的 _model_paths_missing
-        # 同口径；模板 yaml 无 robot_model 目录，自然排除）
+        # robot_model/<型号>/ 四路径齐全（与 joyarm/__init__.py 的 _model_paths_missing 同口径）
         base_dir = Path(__file__).resolve().parents[1]
         hits = []
         for p in sorted((base_dir / "config").glob("*.yaml")):

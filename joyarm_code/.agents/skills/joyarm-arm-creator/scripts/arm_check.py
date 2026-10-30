@@ -1,6 +1,6 @@
 """
 ==============================================================================
-整机集成四步校验  (快速上手 例程 24)
+整机集成四步校验  (joyarm-arm-creator skill)
 ==============================================================================
 【功能概要】
     1. 以 --model 指定型号（缺省 rebot_arm_b601_dm，当前唯一可用型号）做整机体检；
@@ -8,16 +8,18 @@
     3. 第②步 backend：cfg 的 backend.name 命中 backend/__init__.py 的 REGISTRY 注册表；
     4. 第③步 robot_model：四路径按序存在（<型号>/、meshes/、urdf/、<型号>.urdf）；
     5. 第④步构造：joyArm(<型号>) 离线构造自检（不触碰任何硬件）并打印整机核心信息；
-    6. 末尾汇总四步 PASS/FAIL 表：任一 FAIL 给出回 21/22/23 对应篇的修正指引，
-       全 PASS 则打印验收阶梯建议（离线 01、05 → 真机 02→04→06 → 真机冒烟）。
+    6. 末尾汇总四步 PASS/FAIL 表：任一 FAIL 给出回 config/urdf/backend 对应
+       creator skill 的修正指引，全 PASS 则打印验收阶梯建议（离线 01、05 →
+       真机 02→04→06 → 真机冒烟）。
 
 【原理简介】
-    新型号 = 四件套：config yaml（21 篇）+ robot_model 模型资产（22 篇）+ backend
-    硬件后端（23 篇）+ 注册与整机自检（本篇）。joyArm 工厂创建对象前按固定顺序做
+    新型号 = 四件套：config yaml（joyarm-config-creator）+ robot_model 模型资产
+    （joyarm-urdf-creator）+ backend 硬件后端（joyarm-backend-creator）+ 注册
+    与整机自检（本 skill）。joyArm 工厂创建对象前按固定顺序做
     四步校验（见 joyarm_core/joyarm/__init__.py 文件头）：① config 存在且可解析 →
     ② backend 注册名命中 REGISTRY → ③ robot_model 四路径齐全 → ④ JoyArm 构造自检
     （cfg → pin 模型 → 限位 → backend → 求解器依序装配，任一步失败抛携带原因的异常）。
-    本脚本把这四步拆开逐项体检：哪一步 FAIL 就回哪篇修正，不必对着工厂一整串
+    本脚本把这四步拆开逐项体检：哪一步 FAIL 就回哪个 skill 修正，不必对着工厂一整串
     报错逐行猜原因；第④步全离线，只装配数字模型与算法，不连接任何硬件。
 
 【环境与运行】
@@ -27,10 +29,10 @@
     ② 创建虚拟环境并同步依赖
        cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
     ③ 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需硬件）
-       python quick_start/24_arm_creator/24_arm_check.py --model rebot_arm_b601_dm
+       python .agents/skills/joyarm-arm-creator/scripts/arm_check.py --model rebot_arm_b601_dm
 
 【预期输出】四步校验逐项 PASS/FAIL 与汇总表；全 PASS 打印验收阶梯建议并以退出码 0
-    结束；任一 FAIL 打印对应回退篇指引并以退出码 1 结束（收尾「未连接……豁免跳过」
+    结束；任一 FAIL 打印对应回退 skill 指引并以退出码 1 结束（收尾「未连接……豁免跳过」
     类日志属正常提示，非报错）。
 ==============================================================================
 """
@@ -39,7 +41,7 @@ from pathlib import Path                        # 组装库内资源路径与脚
 import sys                                      # 注入模块搜索路径 + 控制退出码
 import argparse                                 # 解析 --model 命令行参数
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装 joyarm_core 时也可直接运行本脚本
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))  # joyarm_code 根入 path（scripts→skill→skills→.agents→joyarm_code 共 4 级），未安装 joyarm_core 时也可直接运行本脚本
 import joyarm_core                              # noqa: E402  库包本体：以其所在位置定位 config / robot_model
 from joyarm_core import joyArm, listArm         # noqa: E402  工厂创建入口（第④步）与可用型号列举
 from joyarm_core.joyarm import load_config      # noqa: E402  第①步复用的配置读取（与工厂第①步同一实现）
@@ -80,7 +82,7 @@ def step1_config(model: str):
         cfg = load_config(model)                              # 库函数：文件缺失/语法错/空文件均抛 ValueError
     except ValueError as e:
         print(f"[FAIL] {e}")                                  # 失败：直接打印库给出的具体原因
-        print("      回退指引：回 ../21_config_creator 篇——拷贝 template.yaml 为")
+        print("      回退指引：回 ../joyarm-config-creator skill——拷贝 template.yaml 为")
         print("      config/<型号>.yaml 并逐段填写后重跑本脚本")
         return None                                           # 失败返回 None，第②步将跳过
     print(f"[PASS] 解析成功：顶层段键 {sorted(cfg)}")         # 成功：展示顶层段键（joyarm/robotics/backend）
@@ -107,8 +109,8 @@ def step2_backend(cfg) -> bool:
         print(f"[PASS] 注册名命中 REGISTRY（对应后端类 {REGISTRY[name].__name__}）")   # 命中分支
         return True                                           # 命中即通过
     print("[FAIL] 注册名未命中 REGISTRY")                      # 未命中分支
-    print("      回退指引：yaml 的 backend.name 填写回 ../21_config_creator 篇核对；")   # 指引一：yaml 填写
-    print("      backend_<型号>.py 的导入与 REGISTRY 注册回 ../23_backend_creator 篇补齐")   # 指引二：子类注册
+    print("      回退指引：yaml 的 backend.name 填写回 ../joyarm-config-creator skill 核对；")   # 指引一：yaml 填写
+    print("      backend_<型号>.py 的导入与 REGISTRY 注册回 ../joyarm-backend-creator skill 补齐")   # 指引二：子类注册
     return False
 
 
@@ -136,7 +138,7 @@ def step3_robot_model(model: str) -> bool:
         print("[PASS] 四路径齐全（URDF + meshes 模型资产就位）")   # 全存在分支
         return True
     print("[FAIL] 上表 ✗ 项缺失")                             # 有缺失分支
-    print("      回退指引：回 ../22_urdf_creator 篇——按 URDF 格式规范把 urdf/<型号>.urdf")   # 指引一：放置 URDF
+    print("      回退指引：回 ../joyarm-urdf-creator skill——按 URDF 格式规范把 urdf/<型号>.urdf")   # 指引一：放置 URDF
     print("      与 meshes/*.STL 放入 robot_model/<型号>/ 后重跑本脚本")   # 指引二：放置 mesh
     return False
 
@@ -163,22 +165,22 @@ def step4_construct(model: str) -> bool:
             print(f"      home 位形 home_arm (rad)：{arm.home_arm}")                    # 归位关节角（ndarray 直接打印）
     except Exception as e:                                    # 工厂四步任一失败均汇集到此处
         print(f"[FAIL] {e}")                                  # 打印携带原因的完整报错（含可用型号列表）
-        print("      回退指引：按报错前缀定位——config 数值/结构问题回 ../21_config_creator 篇，")   # 指引一：config
-        print("      URDF 内容不合规回 ../22_urdf_creator 篇，backend 实例化问题回 ../23_backend_creator 篇")   # 指引二/三
+        print("      回退指引：按报错前缀定位——config 数值/结构问题回 ../joyarm-config-creator skill，")   # 指引一：config
+        print("      URDF 内容不合规回 ../joyarm-urdf-creator skill，backend 实例化问题回 ../joyarm-backend-creator skill")   # 指引二/三
         return False
     return True                                               # with 正常退出 = 构造 + 收尾全部成功
 
 
 def print_summary(results: dict) -> None:
-    """打印四步校验汇总表（步骤 / 检查项 / 结果 / 不通过时回退篇）。"""
+    """打印四步校验汇总表（步骤 / 检查项 / 结果 / 不通过时回退 skill）。"""
     print("=" * 78)                                           # 大节分隔线
     print("四步校验汇总")
     print("=" * 78)
-    rows = [                                                  # (步骤, 检查项, 结果键, 回退篇)
-        ("① config", "config/<型号>.yaml 存在且解析为非空 dict", "s1", "../21_config_creator"),   # 第①步行
-        ("② backend", "backend.name 命中 REGISTRY", "s2", "../23_backend_creator"),   # 第②步行
-        ("③ robot_model", "四路径按序存在", "s3", "../22_urdf_creator"),   # 第③步行
-        ("④ 构造自检", "joyArm(<型号>) 离线构造成功", "s4", "按报错定位回 21/22"),   # 第④步行
+    rows = [                                                  # (步骤, 检查项, 结果键, 回退 skill)
+        ("① config", "config/<型号>.yaml 存在且解析为非空 dict", "s1", "../joyarm-config-creator"),   # 第①步行
+        ("② backend", "backend.name 命中 REGISTRY", "s2", "../joyarm-backend-creator"),   # 第②步行
+        ("③ robot_model", "四路径按序存在", "s3", "../joyarm-urdf-creator"),   # 第③步行
+        ("④ 构造自检", "joyArm(<型号>) 离线构造成功", "s4", "按报错定位回 config/urdf skill"),   # 第④步行
     ]
     print(f"  {disp_pad('步骤', 16)}{disp_pad('检查项', 42)}"
           f"{disp_pad('结果', 6)}不通过时回退")             # 表头（列宽与数据行一致）
@@ -193,15 +195,15 @@ def print_ladder(all_pass: bool, model: str) -> None:
     print("验收阶梯 · 下一步建议")
     print("=" * 78)
     if not all_pass:                                          # 有 FAIL：先修正再验收，不走阶梯
-        print("  ● 存在 FAIL 项：先按汇总表的回退篇指引修正对应件，再重跑本脚本确认全 PASS：")   # FAIL 提示
-        print(f"      python quick_start/24_arm_creator/24_arm_check.py --model {model}")   # 重跑命令
+        print("  ● 存在 FAIL 项：先按汇总表的回退 skill 指引修正对应件，再重跑本脚本确认全 PASS：")   # FAIL 提示
+        print(f"      python .agents/skills/joyarm-arm-creator/scripts/arm_check.py --model {model}")   # 重跑命令
         return                                                # 提示完毕
     print("  ● 四步全部 PASS：整机装配成功，按以下阶梯继续验收（均在 joyarm_code/ 目录下执行）：")   # 阶梯标题
     for i, (hw, script, topic) in enumerate(LADDER, start=1):  # 逐级打印：离线在前、真机在后
         print(f"      {i}. [{hw}] python {disp_pad(script, 36)}← {topic}")   # 单级：硬件标记 + 命令 + 说明
     print("  ● 阶梯各级不通过时：离线两级回本脚本四步校验定位缺件；")   # 回退指引一
-    print("      真机级多为 backend 联调或 config 参数问题，分别回 ../23_backend_creator、")   # 回退指引二
-    print("      ../21_config_creator 篇修正后重试。")         # 回退指引三
+    print("      真机级多为 backend 联调或 config 参数问题，分别回 ../joyarm-backend-creator、")   # 回退指引二
+    print("      ../joyarm-config-creator skill 修正后重试。")   # 回退指引三
 
 
 def main() -> None:

@@ -1,8 +1,13 @@
-# 23 硬件后端创建（backend_creator）
+---
+name: joyarm-backend-creator
+description: "为 JoyArm 机械臂新型号开发或接入硬件后端 backend_<型号>.py 时使用：拷贝模板实现 Backend 基类 29 个抽象方法（必实现 14 + 按需 15）、在 REGISTRY 注册并经 yaml backend.name 选型，再用离线桩冒烟（backend_check.py）与真机六分组验收（backend_verify.py）检查接入结果；亦适用于对照 DM 关节电机 / Feetech 舵机双家族差异选取实现方案、排查后端注册链路不通或离线构造失败等问题。"
+---
 
-> 📌 **概述**：本单元是机械臂新型号创建全流程（21 配置 → 22 模型 → **23 后端** → [24 整机](../24_arm_creator/)）的第三步——为型号编写硬件后端子类 `joyarm_core/backend/backend_<型号>.py`，把厂商总线协议接入 `Backend` 抽象基类的统一接口。本文给出七步接入流程、DM 关节电机与 Feetech 舵机双家族差异总览，以及「本文件夹离线桩冒烟 → 真机六分组验收」的测试阶梯。**第一个子类的参考实现**：`joyarm_core/backend/backend_rebot_arm_b601_dm.py`（DM 族完整实现，逐方法对照模板阅读）。
+# joyarm-backend-creator：硬件后端创建
 
-## 1. 总述：backend 在框架中的位置
+为机械臂新型号编写硬件后端子类 `joyarm_core/backend/backend_<型号>.py`，把厂商总线协议接入 `Backend` 抽象基类的统一接口。本 skill 是新型号创建全流程（[joyarm-config-creator](../joyarm-config-creator/) → [joyarm-urdf-creator](../joyarm-urdf-creator/) → **本 skill** → [joyarm-arm-creator](../joyarm-arm-creator/)）的第三步；**第一个子类的参考实现**：`joyarm_core/backend/backend_rebot_arm_b601_dm.py`（DM 族完整实现，逐方法对照模板阅读）。
+
+## 1. 架构位置与选型链路
 
 JoyArm 自上而下分三层，上层只面向抽象基类编程，型号差异全部收敛在子类：
 
@@ -10,40 +15,30 @@ JoyArm 自上而下分三层，上层只面向抽象基类编程，型号差异�
 |:---:|:---:|:---:|
 | 编排层 | `joyarm_core/joyarm/joyarm.py` | 面向用户的整机功能（状态机、安全监视、求解器调度……） |
 | 抽象基类 | `joyarm_core/backend/backend.py` | 校验/裁剪/模式门禁/状态刷新等全部通用编排 |
-| 型号子类 | `joyarm_core/backend/backend_<型号>.py` | 只做单关节/单总线的厂商协议操作（本单元产物） |
+| 型号子类 | `joyarm_core/backend/backend_<型号>.py` | 只做单关节/单总线的厂商协议操作（本 skill 产物） |
 
 选型链路：型号子类在 `joyarm_core/backend/__init__.py` 的 `REGISTRY` 注册表登记 → 型号 yaml 的 `backend.name` 键填注册名 → 创建 `joyArm("<型号>")` 时按 yaml 自动装配对应子类。注册名 = 子类文件名去 `.py`（如 `backend_rebot_arm_b601_dm` ↔ 类 `BackendRebotArmB601DM`）。
 
-本文件夹三件套：
-
-| 文件 | 作用 |
-|:---:|:---:|
-| `backend_template.py` | Backend 子类实现模板：29 个抽象方法的桩 + 逐方法实现约束（迁自 `joyarm_core/backend/`，已改为绝对导入） |
-| `23_backend_check.py` | 离线自检脚本：注册链路 + 模板 29 桩两级检查（无需硬件） |
-| `README.md` | 本文：七步接入流程 + 双家族差异 + 测试阶梯 |
-
-子类三条架构约束（详见模板文件头）：**不得新增公开方法/属性**（上层只面向基类）；**不在子类重复基类已做的操作**（校验/裁剪/门禁由基类负责）；失败**上抛异常或返回 `False`/`None`** 即可（基类统一转 warn 优雅降级）。
+子类三条架构约束（详见 [assets/backend_template.py](assets/backend_template.py) 文件头）：**不得新增公开方法/属性**（上层只面向基类）；**不在子类重复基类已做的操作**（校验/裁剪/门禁由基类负责）；失败**上抛异常或返回 `False`/`None`** 即可（基类统一转 warn 优雅降级）。
 
 ## 2. 七步接入新硬件后端
 
-以下七步与 `backend_template.py` 文件头 docstring 的步骤一一对应；以新型号 `<型号>`（如 `my_arm_v1`）为例。
+以新型号 `<型号>`（如 `my_arm_v1`）为例；命令均在 `joyarm_code/` 目录下执行，七步与 [assets/backend_template.py](assets/backend_template.py) 文件头 docstring 一一对应。
 
 ### 2.1 第 1 步：拷贝模板、改名
 
-以下命令在 `joyarm_code/` 目录下执行（源路径 `quick_start/23_backend_creator/...` 才成立）：
-
 ```bash
-cp quick_start/23_backend_creator/backend_template.py joyarm_core/backend/backend_<型号>.py
+cp .agents/skills/joyarm-backend-creator/assets/backend_template.py joyarm_core/backend/backend_<型号>.py
 ```
 
-随后全文改名：类名 `BackendTemplate` → `Backend<型号>`（驼峰，如 `BackendMyArmV1`）；模块级 `logger` 名同步替换——模板中仅**一处**定义（约第 43 行 `logger = logging.getLogger("joyarm_core.backend_<型号>")`），全局搜索原字符串 `joyarm_core.backend_<型号>` 并替换为 `joyarm_core.backend_<你的型号>` 即可。
+随后全文改名：类名 `BackendTemplate` → `Backend<型号>`（驼峰，如 `BackendMyArmV1`）；模块级 `logger` 名同步替换——模板中仅**一处**定义（`logger = logging.getLogger("joyarm_core.backend_<型号>")`），全局搜索原字符串 `joyarm_core.backend_<型号>` 并替换为 `joyarm_core.backend_<你的型号>` 即可。
 
 ### 2.2 第 2 步：复制 config 模板
 
-若 `joyarm_core/config/<型号>.yaml` 尚不存在，从 21 单元复制配置模板并重命名：
+若 `joyarm_core/config/<型号>.yaml` 尚不存在，从 joyarm-config-creator skill 复制配置模板（[../joyarm-config-creator/assets/template.yaml](../joyarm-config-creator/assets/template.yaml)，相对本 skill）并重命名：
 
 ```bash
-cp quick_start/21_config_creator/template.yaml joyarm_core/config/<型号>.yaml
+cp .agents/skills/joyarm-config-creator/assets/template.yaml joyarm_core/config/<型号>.yaml
 ```
 
 ### 2.3 第 3 步：完善 backend 段
@@ -57,7 +52,7 @@ cp quick_start/21_config_creator/template.yaml joyarm_core/config/<型号>.yaml
 | `channel` / `protocol` / `baud_rate` | `arm`、`end` 段 | 总线通道（串口设备名）/ 总线类型标识 / 波特率；end 与 arm 同 channel 则共享单总线 |
 | `default_mode` | `arm`、`end` 段 | 连接成功后自动设置的控制模式（`mit`/`position`/`velocity`；无 MIT 的型号配 `position`） |
 | `name` / `motor_id` / `feedback_id` / `model` | `joints[]` | 关节名 / 电机总线地址 / 应答帧标识 / 电机型号（子类按型号查量程表） |
-| `q_min` / `q_max` / `dq_max` / `tau_max` | `joints[]` | 硬限位四键——**数值须与 URDF limit 标定一致**（22 单元产物），发送越限由基类按此裁剪 |
+| `q_min` / `q_max` / `dq_max` / `tau_max` | `joints[]` | 硬限位四键——**数值须与 URDF limit 标定一致**（joyarm-urdf-creator 产物），发送越限由基类按此裁剪 |
 | `MIT.kp` / `MIT.kd` | `joints[]` | MIT 指令未传 kp/kd 时的发送默认 |
 | `POS_VEL.pos_kp` 等 / `vlim` / `flim` | `joints[]` | 位置/速度模式的电机寄存器闭环增益（设模式时子类直取写入）/ 指令限速 / 归一化力矩电流上限 0~1 |
 
@@ -65,7 +60,7 @@ cp quick_start/21_config_creator/template.yaml joyarm_core/config/<型号>.yaml
 
 ### 2.4 第 4 步：实现 29 个抽象方法
 
-Python 的 abc 机制要求 29 个 `@abstractmethod` 内核**全部被定义**才允许实例化；**必实现 14 个**是任何电机/舵机型号的可用底线，**按需实现 15 个**未实现时保留模板的 `NotImplementedError` 桩（= 能力缺失经基类转 warn 优雅降级）。逐方法的实现要点、参数与返回约定见 `backend_template.py` 各方法 docstring（第一~五部分）。
+Python 的 abc 机制要求 29 个 `@abstractmethod` 内核**全部被定义**才允许实例化；**必实现 14 个**是任何电机/舵机型号的可用底线，**按需实现 15 个**未实现时保留模板的 `NotImplementedError` 桩（= 能力缺失经基类转 warn 优雅降级）。逐方法的实现要点、参数与返回约定见 [assets/backend_template.py](assets/backend_template.py) 各方法 docstring（第一~五部分）。
 
 **必实现 14 个**：
 
@@ -111,7 +106,7 @@ REGISTRY = {
 
 ## 3. DM / Feetech 双家族差异总览
 
-两类典型硬件的实现取舍（总览引自 `backend_template.py` 类 docstring，具体实施因型号而异）：
+两类典型硬件的实现取舍（总览引自 [assets/backend_template.py](assets/backend_template.py) 类 docstring，具体实施因型号而异）：
 
 | 维度 | DM 关节电机族（达妙，如 rebot_arm_b601_dm） | Feetech 舵机族 |
 |:---:|:---:|:---:|
@@ -127,17 +122,17 @@ REGISTRY = {
 
 | 阶梯 | 工具 | 环境 | 覆盖 | 通过判据 |
 |:---:|:---:|:---:|:---:|:---:|
-| 一、离线桩冒烟 | 本文件夹 `23_backend_check.py` | 无硬件 | 注册链路（可导入/继承/离线构造）+ 模板 29 桩齐全与消息格式 | 退出码 0 |
+| 一、离线桩冒烟 | 本 skill [scripts/backend_check.py](scripts/backend_check.py) | 无硬件 | 注册链路（可导入/继承/离线构造）+ 模板 29 桩齐全与消息格式 | 退出码 0 |
 | 二、真机验收 | `joyarm_core/backend/backend_verify.py` | 真机 | 六分组：00 初始化 / 10 连接 / 20 只读 / 30 控制 / 40 运动发送 / 50 清错 | 全 PASS/SKIP 退出码 0 |
 
-### 4.1 第一阶：离线桩冒烟（本文件夹）
+### 4.1 第一阶：离线桩冒烟（本 skill）
 
 ```bash
 # 在 joyarm_code/ 目录下（离线脚本，无需硬件）
-python quick_start/23_backend_creator/23_backend_check.py --backend backend_<型号>
+python .agents/skills/joyarm-backend-creator/scripts/backend_check.py --backend backend_<型号>
 ```
 
-两级检查分工明确：**第一级**的对象是 `--backend` 指定的**你自己新建的注册名**（核对可从 `REGISTRY` 取到、对应类是 `Backend` 子类、空 cfg 与型号 yaml `backend:` 段均可离线构造）；**第二级**的对象始终是本文件夹的模板 `backend_template.py`（核对 29 个抽象方法桩齐全、逐桩调用按约定抛 `NotImplementedError`、核对表与 `Backend.__abstractmethods__` 集合完全对齐，与 `--backend` 参数无关）。你自己子类的方法完整性不靠第二级把关——由 abc 机制在实例化时强制（缺一个抽象方法即 `TypeError`，见 2.4），真机行为由 4.2 的 `backend_verify.py` 验收。任一 FAIL 退出码 1。
+两级检查分工明确：**第一级**的对象是 `--backend` 指定的**你自己新建的注册名**（核对可从 `REGISTRY` 取到、对应类是 `Backend` 子类、空 cfg 与型号 yaml `backend:` 段均可离线构造）；**第二级**的对象始终是本 skill 的模板 `backend_template.py`（核对 29 个抽象方法桩齐全、逐桩调用按约定抛 `NotImplementedError`、核对表与 `Backend.__abstractmethods__` 集合完全对齐，与 `--backend` 参数无关）。你自己子类的方法完整性不靠第二级把关——由 abc 机制在实例化时强制（缺一个抽象方法即 `TypeError`，见 2.4），真机行为由 4.2 的 `backend_verify.py` 验收。任一 FAIL 退出码 1。
 
 ### 4.2 第二阶：真机验收（backend_verify.py 六分组）
 

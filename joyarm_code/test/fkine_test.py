@@ -1,6 +1,6 @@
 """
 ==============================================================================
-fkine 正运动学测试分析  (快速上手 例程 11)
+fkine 正运动学测试分析  (test 离线测试)
 ==============================================================================
 【功能概要】
     无需硬件，离线测试分析 FkineSolver 基类的两个实现：
@@ -24,7 +24,7 @@ fkine 正运动学测试分析  (快速上手 例程 11)
     ① 安装 uv（仅首次）：curl -LsSf https://astral.sh/uv/install.sh | sh
       （Windows PowerShell：irm https://astral.sh/uv/install.ps1 | iex）
     ② cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
-    ③ python quick_start/11_fkine_test.py（离线脚本，无需硬件）
+    ③ python test/fkine_test.py（离线脚本，无需硬件）
 
 【预期输出】
     ①~⑦ 七节控制台信息：两实现位置差在 1e-12 m 量级（数值一致），末尾打印分析
@@ -234,8 +234,8 @@ def main() -> None:
     d_facade = section_frames(arm, arm.home_arm, frame_end)  # 跑帧对比与两种用法演示
 
     print("=" * 78)  # 大节分隔线
-    print("⑤ 往返准备：FK(q)→pose 的思路留给例程 12（ikine_test）")  # 大节标题
-    print("   本例的『q → 末端位姿』采样即逆运动学的目标位姿来源：例程 12 将做 pose → q̂ 往返验证")  # 承上启下一句话
+    print("⑤ 往返准备：FK(q)→pose 的思路留给 test/ikine_test.py")  # 大节标题
+    print("   本例的『q → 末端位姿』采样即逆运动学的目标位姿来源：test/ikine_test.py 将做 pose → q̂ 往返验证")  # 承上启下一句话
 
     print("=" * 78)  # 大节分隔线
     print("⑥ 异常路径：未知帧名 / mdh 非末端帧")  # 大节标题
@@ -251,7 +251,7 @@ def main() -> None:
         ("mdh 支持帧", f"仅末端帧 {frame_end}（依赖 cfg arm_mdh 教学数据）"),   # mdh 帧限制
         ("门面 vs 直接求解", f"位置差 {d_facade:.1e} m（鸭子 arm 结果一致）"),   # 两种用法一致性
         ("异常路径", "未知帧名 / mdh 非末端帧均按预期抛 ValueError"),   # 异常路径结论
-        ("下一步（例程 12）", "用本例 FK(q)→pose 的位姿作 ikine 目标做往返验证"),   # 承接例程 12
+        ("下一步（test/ikine_test.py）", "用本例 FK(q)→pose 的位姿作 ikine 目标做往返验证"),   # 承接 ikine 测试
     ]
     print(_pad("项目", 22) + "结论")  # 结论表表头
     print("-" * 78)  # 表头下分隔线
@@ -260,7 +260,7 @@ def main() -> None:
 
     print("=" * 78)  # 大节分隔线
     arm.close()  # 安全收尾（幂等；未连接时仅停线程清缓存并打提示日志）
-    print("离线例程 11 运行完毕（收尾「未连接……豁免跳过」类日志为正常提示）")  # 结束语
+    print("离线测试运行完毕（收尾「未连接……豁免跳过」类日志为正常提示）")  # 结束语
 
 
 if __name__ == "__main__":  # 直接运行本文件时执行主流程

@@ -1,9 +1,9 @@
 """
 ==============================================================================
-控制律测试分析（Controller / JointPositionController）  (快速上手 例程 16)
+控制律测试分析（Controller / JointPositionController）  (test 离线测试)
 ==============================================================================
 【功能概要】
-    离线例程（无需硬件），对 robotics 六域之一的 control（控制律）做测试分析：
+    离线测试脚本（无需硬件），对 robotics 六域之一的 control（控制律）做测试分析：
       1. 契约测试：step() 收有效轨迹帧（含 q）→ 返回 True 且经 send_position_arm
          下发，StubArm 捕获下发序列并打印；
       2. 异常路径：缺 q 帧、q 含 NaN 帧两条路径均抛 ValueError 且零下发；
@@ -28,8 +28,8 @@
     # 2. 创建虚拟环境并同步依赖
     cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
 
-    # 3. 运行本脚本（离线例程，无需连接机械臂硬件）
-    python quick_start/16_ctrl_test.py
+    # 3. 运行本脚本（离线测试脚本，无需连接机械臂硬件）
+    python test/ctrl_test.py
 
 【预期输出】
     ①~④ 四节——契约与 MODE 说明、三条契约用例、闭环仿真对比表
@@ -264,7 +264,7 @@ def run_closed_loop() -> dict:
 # ④ 分析结论表
 # ============================================================
 def print_conclusion(contract: dict, loop: dict, mode_ok: bool) -> None:
-    """④ 汇总打印本例程的分析结论表（契约 / MODE / 闭环）。"""
+    """④ 汇总打印本测试的分析结论表（契约 / MODE / 闭环）。"""
     print("=" * 78)                                         # 大节分隔线
     print("④ 分析结论")
     rows = [                                                # 五行结论：三条契约 + MODE + 闭环
@@ -289,7 +289,7 @@ def main() -> None:
     loop = run_closed_loop()                                # ③ 闭环仿真（结果供 ④）
     print_conclusion(contract, loop, mode_ok)               # ④ 分析结论表
     print("=" * 78)                                         # 收尾分隔线
-    print("离线例程运行完毕（control 域：契约测试 / MODE 机制 / 闭环仿真 / 结论）")
+    print("离线测试运行完毕（control 域：契约测试 / MODE 机制 / 闭环仿真 / 结论）")
 
 
 if __name__ == "__main__":                                  # 直接运行本文件时进入主流程

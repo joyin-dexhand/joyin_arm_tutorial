@@ -3,7 +3,7 @@
 对象创建与初始化  (快速上手 例程 01)
 ==============================================================================
 【功能概要】
-    1. 扫描 joyarm_core/config/*.yaml（防御性排除 template.yaml）列出全部可用型号，
+    1. 扫描 joyarm_core/config/*.yaml 列出全部可用型号，
        并打印「可用型号」的三条判断规则；
     2. 交互输入型号创建对象：无效输入重列可用型号与规则后再问、输入 q 退出；也支持
        命令行参数直连：python quick_start/01_model_create.py [型号名]（无效参数打印
@@ -82,11 +82,9 @@ def model_is_available(name: str) -> bool:
 
 
 def scan_available_models() -> list:
-    """扫描 `config/*.yaml`（防御性排除 template.yaml），返回可用型号名列表。"""
+    """扫描 `config/*.yaml`，返回可用型号名列表。"""
     models = []                                       # 收集通过三条规则的型号名
     for f in sorted(_CONFIG_DIR.glob("*.yaml")):      # 按文件名排序，输出顺序稳定
-        if f.stem == "template":                      # 模板已迁至 quick_start/21_config_creator/，防御性排除
-            continue
         if model_is_available(f.stem):                # 三条规则逐条检查
             models.append(f.stem)
     return models

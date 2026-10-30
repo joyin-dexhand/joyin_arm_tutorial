@@ -121,19 +121,7 @@ source .venv/bin/activate  # 激活环境
 
 ### 7.2 全部例程一览表
 
-全部快速上手的示例程序均位于仓库 `joyarm_code/quick_start/` 目录，运行命令时需位于 `joyarm_code/` 目录下；所有例程的功能介绍和运行方式均位于对应代码文件头部的注释文档中。
-
-例程分三组，定位各不相同，新手按 **01 → 09 →（11~16 按需）** 的顺序体验即可，21~24 仅在「接入新型号」时才需要：
-
-| 分组 | 编号 | 定位与建议 | 前置 |
-|:---:|:---:|:---|:---|
-| A · 功能体验 | 01~09 | 从零跑通对象创建、真机连接、直通指令、FSM 运动、监视器、示教与抓取——快速上手主线，从 01 开始逐条体验 | 无（离线例程 01/05 可直接跑；真机例程需已组装上电的机械臂） |
-| B · 算法域测试 | 11~16 | fkine/ikine/jacobian/dynamics/trajectory/control 六域离线测试分析，供学习各算法域行为时按需选读 | 建议先跑完 01、05 |
-| C · 新型号接入 | 21~24 | config/URDF/backend/整机四件套创建与自检，仅接入新型号时使用 | 先完成 01；创建流程详见各文件夹 README（见下表说明列） |
-
-**编号说明**：编号 10、17~20 为预留档位（防止日后插入新例程时全表重排），并非缺文件；表中省略即不存在对应脚本。
-
-**占位符约定**：`[ ]` 方括号 = 可选参数（如 01 行 `[型号名]` 可省略，省略时进入交互选择）；`< >` 尖括号 = 须替换的占位符（如 `<型号>` 需换成实际型号名）。21/22/24 的 `--model` 与 23 的 `--backend` 均有缺省值（21/22/24 缺省 `rebot_arm_b601_dm`，23 缺省 `backend_rebot_arm_b601_dm`），检查现有型号时可直接省略参数。
+快速上手的示例程序位于 `joyarm_code/quick_start/`；运行命令时均需位于 `joyarm_code/` 目录下；所有例程的功能介绍和运行方式均位于对应代码文件头部的注释文档中。
 
 | 例程 | 运行条件 | 启动命令 | 说明 |
 |:---:|:---:|:---:|:---:|
@@ -146,19 +134,6 @@ source .venv/bin/activate  # 激活环境
 | 07 安全监视器 | 真机 | `python quick_start/07_monitor.py` | 单脚本即可运行：先例程内自动启动 FSM，再挂接自定义超速规则触发 DAMP 阻尼防护，演示处理原因与恢复流程（无需另开终端先跑 06） |
 | 08 示教与轨迹复现 | 真机 | `python quick_start/08_teach_replay.py` | 发送 DAMPING 事件切入阻尼态拖动示教，50 Hz 录制关节轨迹，抽帧作路点逐点下发复现 |
 | 09 综合抓取演示 | 真机 | `python quick_start/09_pick_demo.py` | solve_fkine / solve_ikine 构造上方点与抓取点，FSM 托管运动 + 夹爪开闭，完成抓取—放置闭环 |
-| 11 fkine 正运动学测试分析 | 离线 | `python quick_start/11_fkine_test.py` | Pin 与 MDH 两种正运动学实现对随机位形求末端位姿并对比位置/姿态差，含帧选择与异常路径 |
-| 12 ikine 逆运动学测试分析 | 离线 | `python quick_start/12_ikine_test.py` | 数值法 FK→IK 往返误差与参数敏感性、解析法全解与软限位有效解统计，两法解集交叉验证 |
-| 13 jacobian 雅可比测试分析 | 离线 | `python quick_start/13_jac_test.py` | 解析雅可比与中心差分数值雅可比逐元素对比，奇异值/条件数/可操作度分析与阻尼伪逆三档验证 |
-| 14 dynamics 动力学测试分析 | 离线 | `python quick_start/14_dyn_test.py` | 质量矩阵对称正定性验证、RNEA 与 M·ddq+C·dq+G 分项和一致性、静止特例重力项与多位形重力矩对比 |
-| 15 trajectory 轨迹规划测试分析 | 离线 | `python quick_start/15_traj_test.py` | 直传保持与三次多项式两规划器测试：采样序列、边界约束、无效目标回退与双规划器并排对比 |
-| 16 control 控制器测试分析 | 离线 | `python quick_start/16_ctrl_test.py` | 位置控制器契约与异常路径测试、MODE 机制说明，cubic 规划 + 位置控制 + StubArm 离线闭环小仿真 |
-| 21 型号配置文件创建（config_creator） | 离线 | `python quick_start/21_config_creator/21_config_check.py --model <型号>` | 型号配置文件完整性检查：三段结构、限位/关节名等硬性约束逐条校验与 joyArm 离线构造终极自检，PASS/FAIL 汇总。「创建」流程见 [21_config_creator/README.md](https://github.com/joyin-dexhand/joyin_arm_tutorial/tree/main/joyarm_code/quick_start/21_config_creator) |
-| 22 URDF 模型资产创建（urdf_creator） | 离线 | `python quick_start/22_urdf_creator/22_urdf_check.py --model <型号>` | URDF 模型资产检查：文件存在、pinocchio 可加载、关节四限位完整、mesh 路径与末端帧等七项检查。「创建」流程见 [22_urdf_creator/README.md](https://github.com/joyin-dexhand/joyin_arm_tutorial/tree/main/joyarm_code/quick_start/22_urdf_creator) |
-| 23 硬件后端创建（backend_creator） | 离线 | `python quick_start/23_backend_creator/23_backend_check.py --backend backend_<型号>` | 硬件后端接入自检：注册名命中 REGISTRY 且可离线构造，模板 29 个抽象方法桩齐全与核对表对齐。「创建」流程见 [23_backend_creator/README.md](https://github.com/joyin-dexhand/joyin_arm_tutorial/tree/main/joyarm_code/quick_start/23_backend_creator) |
-| 24 整机集成创建（arm_creator） | 离线 | `python quick_start/24_arm_creator/24_arm_check.py --model <型号>` | 整机集成四步校验：config → backend → robot_model → 构造逐项体检，FAIL 给出回对应篇修正指引。「创建」流程与验收阶梯见 [24_arm_creator/README.md](https://github.com/joyin-dexhand/joyin_arm_tutorial/tree/main/joyarm_code/quick_start/24_arm_creator) |
-
-> 21~24 四条只列出了**检查脚本**的运行命令；新型号的完整创建步骤（复制模板、填写要点、逐件联调）在对应文件夹的 `README.md` 中，按 21 → 22 → 23 → 24 顺序推进。
-> 另有整机真机冒烟脚本 `test/joyarm_test.py`（连接 + 状态可视化，FSM 段默认注释）：它属于 `test/` 回归脚本而非 quick_start 例程，由 [24_arm_creator/README.md](https://github.com/joyin-dexhand/joyin_arm_tutorial/tree/main/joyarm_code/quick_start/24_arm_creator) 的验收阶梯引入。
 
 ## 8 完整资料汇总
 

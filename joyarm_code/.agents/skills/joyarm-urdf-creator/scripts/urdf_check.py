@@ -1,6 +1,6 @@
 """
 ==============================================================================
-URDF 模型资产检查  (快速上手 例程 22)
+URDF 模型资产检查  (joyarm-urdf-creator skill)
 ==============================================================================
 【功能概要】
     离线检查某型号机械臂的 robot_model 模型资产是否满足 joyarm_core 接入要求：
@@ -18,7 +18,7 @@ URDF 模型资产检查  (快速上手 例程 22)
     `robot_model/<型号>/urdf/<型号>.urdf` 固定路径加载它，交给 pinocchio 构建
     运动学/动力学模型；URDF 以相对路径（../meshes/*.STL）引用外观网格，因此
     urdf/ 与 meshes/ 必须整体存放、一并迁移。本脚本不构造 JoyArm 整机（那是
-    24 单元的事），而是在"资产层"按接入方 joyarm.py 的同一口径逐项检查：
+    joyarm-arm-creator 的事），而是在"资产层"按接入方 joyarm.py 的同一口径逐项检查：
     XML 层用 ElementTree 读取 <robot>/<joint>/<mesh> 标签；模型层先建全量
     pin 模型，再锁定非 config.arm 名单的活动关节构建缩减模型，比对关节名与
     自由度——与 JoyArm._build_pin_model 的做法完全一致。
@@ -27,7 +27,7 @@ URDF 模型资产检查  (快速上手 例程 22)
     ① 安装 uv（仅首次）：curl -LsSf https://astral.sh/uv/install.sh | sh
        （Windows PowerShell：irm https://astral.sh/uv/install.ps1 | iex）
     ② cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
-    ③ python quick_start/22_urdf_creator/22_urdf_check.py --model <型号>
+    ③ python .agents/skills/joyarm-urdf-creator/scripts/urdf_check.py --model <型号>
        （离线脚本，无需硬件；--model 缺省 rebot_arm_b601_dm）
 
 【预期输出】
@@ -43,11 +43,11 @@ from pathlib import Path                                           # 路径拼�
 
 import pinocchio as pin                                            # URDF → 运动学/动力学模型（与 joyarm_core 同一入口）
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))       # 仓库未安装时也可直接运行（parents[2] = joyarm_code/）
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))       # 仓库未安装时也可直接运行（parents[4] = joyarm_code/）
 from joyarm_core.joyarm import load_config                         # noqa: E402 读取 config/<型号>.yaml（joyarm_core 公开入口）
 
 # ---------------- 常量（校验口径与 joyarm.py 保持一致） ----------------
-_JOYARM_CODE_DIR = Path(__file__).resolve().parents[2]             # joyarm_code/ 根目录（本脚本向上三级）
+_JOYARM_CODE_DIR = Path(__file__).resolve().parents[4]             # joyarm_code/ 根目录（scripts→skill→skills→.agents→joyarm_code）
 _ROBOT_MODEL_DIR = _JOYARM_CODE_DIR / "joyarm_core" / "robot_model"  # 全部型号模型资产的根目录
 _ACTIVE_JOINT_TYPES = ("revolute", "continuous", "prismatic")      # 活动关节类型（同 joyarm.py _ACTIVE_JOINT_TYPES）
 _LIMIT_KEYS = ("lower", "upper", "effort", "velocity")             # <limit> 四限位键（同 URDF 规范第 4 节）

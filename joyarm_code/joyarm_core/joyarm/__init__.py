@@ -24,9 +24,9 @@ listArm：列出当前可用的机械臂型号（三条件过滤，与工厂失�
 
 **新型号接入步骤**：
 
-    1. 完善配置文件：拷贝 `quick_start/21_config_creator/template.yaml` 为 `<型号>.yaml` 并完成型号的配置填写；
+    1. 完善配置文件：拷贝 `.agents/skills/joyarm-config-creator/assets/template.yaml` 为 `<型号>.yaml` 并完成型号的配置填写；
     2. 放置模型资产：按照本库约定，将导出或修复后的机械臂URDF和Mesh资产放入到`robot_model/<型号>/` ；
-    3. 连接硬件后端：拷贝 `quick_start/23_backend_creator/backend_template.py` 为 `backend/backend_<型号>.py`，并实现子类(详见`quick_start/23_backend_creator/backend_template.py`)。
+    3. 连接硬件后端：拷贝 `.agents/skills/joyarm-backend-creator/assets/backend_template.py` 为 `backend/backend_<型号>.py`，并实现子类(详见`.agents/skills/joyarm-backend-creator/assets/backend_template.py`)。
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def _available_models() -> list:
 
     1. `config/<name>.yaml` 存在、非空 dict、含 `joyarm` / `robotics` / `backend` 三顶层键；
     2. `backend.name` ∈ `backend/__init__.py` 的 `REGISTRY` 键；
-    3. 四路径齐全（`_model_paths_missing` 为空）—— 模板 yaml 无 robot_model 目录，自然排除。
+    3. 四路径齐全（`_model_paths_missing` 为空）。
     """
     out = []
     try:

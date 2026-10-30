@@ -2,7 +2,7 @@
 
 接入新硬件后端的步骤：
     1. 拷贝本文件并重命名为 `backend_<型号>.py`，类名为`Backend<型号>`，全文改名（替换 `BackendTemplate` / logger 名）；
-    2. 若不存在 `joyarm_core/config/<型号>.yaml`配置文件，则拷贝 `../21_config_creator/template.yaml`（相对本文件夹）重命名为 `joyarm_core/config/<型号>.yaml`
+    2. 若不存在 `joyarm_core/config/<型号>.yaml`配置文件，则拷贝 `../../joyarm-config-creator/assets/template.yaml`（相对本文件，属 joyarm-config-creator skill 的配置模板）重命名为 `joyarm_core/config/<型号>.yaml`
     3. 完善`joyarm_core/config/<型号>.yaml` 的 `backend:` 段的配置；
     4. 遵循本文件各方法的注释说明实现 backend 的全部 29 个抽象方法（最小可用子集见下方说明）；
     5. 在 `backend/__init__.py` 顶部导入该子类，并在 `REGISTRY` 注册表加一行注册；

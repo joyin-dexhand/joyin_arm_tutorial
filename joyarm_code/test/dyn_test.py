@@ -1,9 +1,9 @@
 """
 ==============================================================================
-dynamics 动力学测试分析  (快速上手 例程 14)
+dynamics 动力学测试分析  (test 离线测试)
 ==============================================================================
 【功能概要】
-    离线例程（无需硬件）：围绕 DynamicsSolver 基类的四个接口，测试分析动力学求解器：
+    离线测试脚本（无需硬件）：围绕 DynamicsSolver 基类的四个接口，测试分析动力学求解器：
       1. 质量矩阵 M(q)：在 ≥5 组随机位形上验证对称性（max|M−Mᵀ|）与正定性（λ_min > 0）
       2. RNEA 分解一致性：solve_idyn(q,dq,ddq) 与 M·ddq + C·dq + G 分项和的最大误差表
       3. 静止特例：dq=ddq=0 时逆动力学退化为重力项（idyn == G），附重力符号口径说明
@@ -31,7 +31,7 @@ dynamics 动力学测试分析  (快速上手 例程 14)
     source .venv/bin/activate
 
     # 3. 运行本脚本（离线脚本，无需连接机械臂硬件）
-    python quick_start/14_dyn_test.py
+    python test/dyn_test.py
 
 【预期输出】
     ①~⑥ 六节分析：M 对称/正定表、RNEA 分解误差表、静止特例表、重力对比表、结论表；
@@ -79,7 +79,7 @@ def print_table(headers: list, rows: list) -> None:
 
 
 def section_setup(arm) -> None:
-    """① 打印模型与 dynamics 域求解器信息：确认本例程测试的是哪一个求解器实现。"""
+    """① 打印模型与 dynamics 域求解器信息：确认本脚本测试的是哪一个求解器实现。"""
     print("=" * 78)                                        # 大节分隔线
     print("① 模型与 dynamics 域求解器（离线创建，不连接硬件）")   # 大节标题
     print(f"   关节数 n_arm = {arm.n_arm}；关节名（顺序 = q 向量顺序）：{arm.get_joint_names_arm('all')}")   # 关节数与关节名
