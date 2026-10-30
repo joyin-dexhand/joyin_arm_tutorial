@@ -44,12 +44,12 @@ import time                                                 # 提供规划器所
 import numpy as np                                          # 数值计算（向量运算 / NaN 判定）
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入 sys.path
-from joyarm_core import (                                   # noqa: E402  路径注入后再导入核心库
+from joyarm_core import (                                   # 路径注入后再导入核心库
     Controller,                                             # 控制律基类（ABC，仅引用其 MODE 缺省值）
     JointPositionController,                                # 默认实现：关节位置控制器（被测对象）
     SingleJointCubicTrajPlanner,                            # cubic 三次多项式规划器（闭环仿真用）
 )
-from joyarm_core.utils.types import (                       # noqa: E402  共享数据类型与枚举
+from joyarm_core.utils.types import (                       # 共享数据类型与枚举
     ControlMode,                                            # 电机控制模式枚举 MIT / POSITION / VELOCITY
     JointLimits,                                            # 关节限位声明（StubArm 的同名属性）
     JointState,                                             # 关节状态快照（StubArm 内部持有）

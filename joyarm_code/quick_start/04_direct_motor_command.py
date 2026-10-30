@@ -9,18 +9,18 @@
          get_error / check_error，任一侧有故障码时经确认后 clear_error
       3. 位置模式：send_position_arm 回零位形 + is_in_q_arm 轮询到位
       4. 速度模式：send_vel_arm / send_vel_end 单自由度点动后发零速停止
-      5. MIT 模式：send_mit_arm / send_mit_end 五元组 (q, dq, tau, kp, kd) 低增益安全示例
+      5. MIT 模式：send_mit_arm / send_mit_end 五个参数 (q, dq, tau, kp, kd) 低增益安全示例
       6. 夹爪：get_mode_end / set_mode_end 模式切换、set_action_end 离散动作、
          send_position_end 连续位置指令 + is_in_q_end 到位判断
-      7. 说明 FSM 互斥：FSM 运行时 arm 侧直通指令被拦截（warn + 空操作）
+      7. 说明 FSM 互斥：FSM 运行时 arm 侧直通指令会被拦下（打一条 warn 警告，不真的执行）
 
 【原理简介】
-    JoyArm 底层电机有三类控制模式（ControlMode 枚举）：MIT 模式一次下发五元组
+    JoyArm 底层电机有三类控制模式（ControlMode 枚举）：MIT 模式一次下发五个参数
     (q, dq, tau, kp, kd)，电机端执行 tau + kp*(q - q_cur) + kd*(dq - dq_cur)；
-    位置 / 速度模式只发单一目标，闭环增益寄存器在切模式时由 backend 自动随写。
+    位置 / 速度模式只发单一目标，闭环增益参数在切模式时由 backend 自动写入电机。
     直通指令绕过轨迹规划与 FSM、由用户线程直接写电机：响应即时但无安全过渡，
     只适合小幅、低速、空载的点动验证；FSM 运行时电机由其控制线程独占，arm 侧
-    指令被 _fsm_guard 互斥拦截（warn + 空操作），end 侧无控制线程、不受限。
+    指令会被 _fsm_guard 拦下（warn 提示 + 不执行），end 侧无控制线程、不受限。
 
 【安全须知】
     - 运行前清空机械臂工作半径内的人员与障碍物，确认本体与夹爪运动路径无遮挡
@@ -56,7 +56,7 @@ import numpy as np                                         # 数值计算：构�
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入搜索路径，未安装库也可运行
 # JoyArm 创建入口与控制模式枚举（枚举定义在 joyarm_core/utils/types.py，顶层 re-export）
-from joyarm_core import joyArm, ControlMode  # noqa: E402
+from joyarm_core import joyArm, ControlMode
 
 
 # ============================================================
@@ -102,13 +102,13 @@ def sub(title: str) -> None:
 
 
 def status_arm(arm) -> str:
-    """格式化 arm 侧关键状态：使能 + 模式（读时刷新）+ 关节位置（被动快照）。"""
+    """格式化 arm 侧关键状态：使能 + 模式（主动读）+ 关节位置（读后台缓存）。"""
     return (f"使能={tri(arm.is_enabled_arm)}，模式={mode_str(arm.get_mode_arm())}，"
             f"q={vec_str(arm.joint_state_arm.q)} rad")     # 三项关键状态拼一行
 
 
 def status_end(arm) -> str:
-    """格式化 end 侧关键状态：使能 + 模式（读时刷新）+ 电机位置（被动快照）。"""
+    """格式化 end 侧关键状态：使能 + 模式（主动读）+ 电机位置（读后台缓存）。"""
     return (f"使能={tri(arm.is_enabled_end)}，模式={mode_str(arm.get_mode_end())}，"
             f"q={vec_str(arm.joint_state_end.q)} rad")     # 与 status_arm 同构，对应夹爪
 
@@ -116,7 +116,7 @@ def status_end(arm) -> str:
 def wait_arrival(judge, q, tol_q: float, timeout: float = 3.0, hz: float = 20.0):
     """按固定频率轮询到位判断，直至到位或超时。
 
-    :param judge: 到位判断函数（arm.is_in_q_arm / arm.is_in_q_end，均读被动快照）。
+    :param judge: 到位判断函数（arm.is_in_q_arm / arm.is_in_q_end，均读后台缓存）。
     :param q: 目标关节角 / 电机角（rad）。
     :param tol_q: 到位容差（rad）。
     :param timeout: 最长轮询时长（秒）。
@@ -153,7 +153,7 @@ def run_demo(arm) -> None:
 
     sub("三类控制模式（ControlMode 枚举）与对应整组下发指令")  # 小节：模式速查表
     print("模式       枚举值       整组下发指令           下发内容")  # 表头（前三列纯 ASCII 保证对齐）
-    print("MIT        mit          send_mit_arm           五元组 (q, dq, tau, kp, kd)")  # MIT 行
+    print("MIT        mit          send_mit_arm           五个参数 (q, dq, tau, kp, kd)")  # MIT 行
     print("POSITION   position     send_position_arm      目标关节角 q")  # 位置模式行
     print("VELOCITY   velocity     send_vel_arm           目标关节速度 dq")  # 速度模式行
     print("切 POSITION / VELOCITY 时 backend 自动随写 POS_VEL 四增益寄存器；MIT 增益随指令帧下发。")  # 增益来源说明
@@ -171,10 +171,10 @@ def run_demo(arm) -> None:
         print("检测到故障码（≥2）：请先排查并消除原因（过压 / 过流 / 过温 / 通信等），")  # 提示排查故障根因
         print("切勿盲目清错后继续运行——故障未消除会立即再次触发。")  # 强调清错前提
         input(">>> 确认故障原因已排除、工作区安全后，按回车执行 clear_error……")  # 清错前人工确认
-        if not arm.check_error_arm():                     # arm 侧有故障码：clear_error_arm（受 FSM 互斥，本例程未启 FSM）
+        if not arm.check_error_arm():                     # arm 侧有故障码：clear_error_arm（FSM 运行时会被拦下，本例程未启 FSM）
             ret = arm.clear_error_arm()                   # 逐关节发清错帧并核对；清错后关节自动失能属正常
             print(f"clear_error_arm 返回：{ret}（True=全部清除成功）")  # 清错结果
-        if not arm.check_error_end():                     # end 侧有故障码：clear_error_end 对称清除（end 不受互斥）
+        if not arm.check_error_end():                     # end 侧有故障码：clear_error_end 对称清除（end 不受此限制）
             ret_end = arm.clear_error_end()               # 逐电机发清错帧并核对；清错后电机自动失能属正常
             print(f"clear_error_end 返回：{ret_end}（True=全部清除成功）")  # end 清错结果
         print(f"清错后需重新使能：enable_arm 返回 {arm.enable_arm()}，enable_end 返回 {arm.enable_end()}")  # 清错失能后重新使能
@@ -211,7 +211,7 @@ def run_demo(arm) -> None:
     print(f"点动后 arm：{status_arm(arm)}（第 1 关节应比点动前多约 0.3 rad）")  # 点动效果核对
 
     # ---- ⑤ MIT 模式 ----
-    sec("⑤ MIT 模式：send_mit_arm 五元组 (q, dq, tau, kp, kd) 低增益示例")
+    sec("⑤ MIT 模式：send_mit_arm 五个参数 (q, dq, tau, kp, kd) 低增益示例")
     ret = arm.set_mode_arm(ControlMode.MIT)               # 切 MIT 模式
     print(f"set_mode_arm(MIT) 返回：{ret}")               # 切模式结果
     print(f"保持前 arm：{status_arm(arm)}")               # 保持前基线
@@ -221,7 +221,7 @@ def run_demo(arm) -> None:
     tau_ff = np.zeros(n)                                  # 力矩前馈 0：不主动给力矩
     kp = np.full(n, 20.0)                                 # 位置增益 20（配置缺省 120，取低值降低刚度）
     kd = np.full(n, 0.5)                                  # 速度增益 0.5（配置缺省 5.0，低增益软保持）
-    print(f"五元组：q=当前位形，dq={vec_str(dq_ff)}，tau={vec_str(tau_ff)}，kp=20.0，kd=0.5")  # 五元组内容
+    print(f"五个参数：q=当前位形，dq={vec_str(dq_ff)}，tau={vec_str(tau_ff)}，kp=20.0，kd=0.5")  # 五个参数内容
     arm.send_mit_arm(q=q_cur, dq=dq_ff, tau=tau_ff, kp=kp, kd=kd)  # 整组下发 MIT 指令
     time.sleep(1.0)                                       # 低增益保持 1 秒（受重力轻微下垂属正常）
     print(f"保持后 arm：{status_arm(arm)}")               # 保持后位置对比
@@ -234,17 +234,17 @@ def run_demo(arm) -> None:
     sec("⑥ 末端夹爪 end：get/set_mode_end + set_action_end + send_position_end")
     print(f"当前 end：{status_end(arm)}")                 # 夹爪侧基线
 
-    sub("模式读取与切换 + MIT 五元组 send_mit_end 低增益保持")  # 小节：end 模式切换与 MIT 保持
+    sub("模式读取与切换 + MIT 五个参数 send_mit_end 低增益保持")  # 小节：end 模式切换与 MIT 保持
     print(f"get_mode_end：{mode_str(arm.get_mode_end())}（连接后默认 position 模式）")  # 读当前模式
-    ret = arm.set_mode_end(ControlMode.MIT)               # 切 MIT：演示 end 侧模式切换（end 侧不受 FSM 互斥）
+    ret = arm.set_mode_end(ControlMode.MIT)               # 切 MIT：演示 end 侧模式切换（end 侧不受 FSM 限制）
     print(f"set_mode_end(MIT) 返回：{ret}；读回：{mode_str(arm.get_mode_end())}")  # 切换结果与读回
     n_end = arm.n_end                                     # 末端电机数（本型号夹爪单自由度 = 1）
     q_end_cur = np.asarray(arm.joint_state_end.q, dtype=float)  # 当前电机位置（MIT 目标 = 原地保持）
     print(f"保持前 end：{status_end(arm)}")               # 保持前基线
-    arm.send_mit_end(q=q_end_cur, dq=np.zeros(n_end), tau=np.zeros(n_end),  # 五元组：q=当前位形、dq/tau 前馈 0
+    arm.send_mit_end(q=q_end_cur, dq=np.zeros(n_end), tau=np.zeros(n_end),  # 五个参数：q=当前位形、dq/tau 前馈 0
                      kp=np.full(n_end, 20.0), kd=np.full(n_end, 0.5))  # kp/kd 低增益软保持（与 ⑤ arm 侧同参）
     time.sleep(1.0)                                       # 低增益保持 1 秒（夹爪原地不动）
-    print(f"保持后 end：{status_end(arm)}（send_mit_end 五元组保持，位置应基本不变）")  # 保持后对比
+    print(f"保持后 end：{status_end(arm)}（send_mit_end 五个参数保持，位置应基本不变）")  # 保持后对比
     ret = arm.set_mode_end(ControlMode.POSITION)          # 切回 POSITION（后续动作 / 位置指令所需模式）
     print(f"set_mode_end(POSITION) 返回：{ret}；读回：{mode_str(arm.get_mode_end())}")  # 切换结果与读回
 
@@ -284,8 +284,8 @@ def run_demo(arm) -> None:
     sec("⑦ FSM 互斥说明（本例程未启动运动状态机）")
     print("运动状态机（FSM）运行期间，电机由其内部控制线程独占：")  # 互斥背景
     print("  - arm 侧 enable/disable、set_mode、send_mit/position/vel、clear_error")  # 被拦截方法清单
-    print("    等指令类方法被 _fsm_guard 互斥拦截：warn 提示 + 本次空操作")  # 拦截行为
-    print("  - end 侧（夹爪）无控制线程：send_mit/position/vel_end、set_action_end 不受限")  # end 侧豁免
+    print("    等指令类方法会被 _fsm_guard 拦下：打一条 warn 提示，本次不执行")  # 拦截行为
+    print("  - end 侧（夹爪）无控制线程：send_mit/position/vel_end、set_action_end 不受限")  # end 侧不受限
     print("本例程全程未调用 start_motion_fsm，上述指令均直通硬件；")  # 本例程状态
     print("FSM 的启停与状态切换请见例程 06（基于运动状态机的运动）。")  # 指向后续例程
 

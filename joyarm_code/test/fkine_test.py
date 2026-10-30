@@ -39,9 +39,9 @@ from pathlib import Path  # 标准库：跨平台路径处理
 import numpy as np  # 数值计算：向量/矩阵运算与格式化
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装 joyarm_core 时也可直接运行
-from joyarm_core import joyArm  # noqa: E402  JoyArm 唯一创建入口
-from joyarm_core.robotics.fkine import MdhFkineSolver, PinFkineSolver  # noqa: E402  受测双实现
-from joyarm_core.utils.limits import rand_within_limits  # noqa: E402  软限位内随机采样（固定种子）
+from joyarm_core import joyArm  # oyArm 唯一创建入口
+from joyarm_core.robotics.fkine import MdhFkineSolver, PinFkineSolver  # 受测双实现
+from joyarm_core.utils.limits import rand_within_limits  # 软限位内随机采样（固定种子）
 
 
 # ============================================================

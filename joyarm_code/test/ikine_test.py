@@ -46,7 +46,7 @@ import textwrap                              # 标准库：长错误信息按 78
 import numpy as np                           # 数值计算：向量 / 矩阵运算
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入模块搜索路径
-from joyarm_core import Pose, joyArm         # noqa: E402 —— JoyArm 创建入口 + 统一位姿数据类
+from joyarm_core import Pose, joyArm         # JoyArm 创建入口 + 统一位姿数据类
 
 N_SAMPLES = 6                                # 随机往返测试样本组数（任务规格要求 ≥5）
 

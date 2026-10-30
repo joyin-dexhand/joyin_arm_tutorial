@@ -3,16 +3,16 @@
 例程 07 —— 安全监视器（需真机）
 ==============================================================================
 【功能概要】
-    1. 聚焦安全监视器核心用法：按推荐顺序「先 start_motion_fsm 再 start_monitor」启动，并说明前置依赖原因；
+    1. 聚焦安全监视器核心用法：按推荐顺序「先 start_motion_fsm 再 start_monitor」启动，并说明这样排序的原因；
     2. 定义自定义超速规则 overspeed 并用 set_monitor_rules 挂接（单条 / 列表两种传法）；
     3. 用一次快速小幅运动触发规则，观察事件升为 DAMPING、状态机转入 DAMP 阻尼防护；
     4. 打印恢复流程说明：处理原因后 set_event(NORMAL)，FSM 经 HOME 回 MOTION；
     5. 按 stop_monitor() → stop_motion_fsm() 顺序收尾，with 退出再兜底一次。
 
 【原理简介】
-    安全监视器是独立后台线程，按配置 joyarm.MotionFSM.monitor_hz（本型号 50 Hz）节拍轮询，每拍只读采集关节状态快照（不新鲜时为 None）、FSM 当前状态与当前事件，绝不下发指令；
-    内置硬规则（故障码 ≥ 2 → DAMPING；断连 / 连续 0.1 s 无新鲜快照 → DISABLE）与自定义规则命中合并取危险度最高者且「只升不降」；
-    命中经 set_event 改写 FSM 目标状态（DAMPING → DAMP），由 FSM 执行防护（DAMP 态逐拍下发 MIT 纯阻尼 + 重力补偿软停）；
+    安全监视器是独立后台线程，按配置 joyarm.MotionFSM.monitor_hz（本型号 50 Hz）的频率周期性巡查，每个周期只读地采集关节状态缓存（不新鲜时为 None）、FSM 当前状态与当前事件，绝不下发指令；
+    内置规则（故障码 ≥ 2 → DAMPING；断连 / 连续 0.1 s 无新鲜数据 → DISABLE）与自定义规则的意见合并时取最严重者，且「只升不降」；
+    命中后经 set_event 改写 FSM 目标状态（DAMPING → DAMP），由 FSM 执行防护（DAMP 态每个周期下发 MIT 纯阻尼 + 重力补偿软停）；
     监视器只判定、FSM 才执行——FSM 未运行时防护不落地，故先启 FSM。
 
 【安全须知】
@@ -40,14 +40,14 @@
 
 import logging      # 日志配置：显示 FSM 状态迁移、监视器启停等 info 日志
 import sys          # sys.path 注入：未安装 joyarm_core 时也能直接运行本脚本
-import time         # 计时：触发运动的目标时刻与轮询节拍
+import time         # 计时：触发运动的目标时刻与轮询周期
 import unicodedata  # 计算字符串的终端显示宽度：表格中文列对齐
 from pathlib import Path  # 路径定位：找到本脚本上一级的 joyarm_code/ 目录
 
 import numpy as np  # 数组运算：超速判定 |dq| 与目标位形构造
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入模块搜索路径
-from joyarm_core import MotionState, SafetyEvent, joyArm  # noqa: E402  # JoyArm 入口 + 状态机 / 安全事件枚举
+from joyarm_core import MotionState, SafetyEvent, joyArm  # # JoyArm 入口 + 状态机 / 安全事件枚举
 
 DQ_LIMIT = 1.5      # 超速阈值（rad/s）：任一本体关节 |dq| 超过即判定超速
 TRIG_DQ = 0.25      # 触发运动的关节 1 位置偏移（rad，约 14°，属小幅摆动）
@@ -70,20 +70,20 @@ def parse_model() -> str:
 def overspeed(state_arm, state_end, motion, event):
     """自定义监视规则：任一本体关节 |dq| > 1.5 rad/s → 阻尼防护 DAMPING，否则 None。
 
-    规则签名固定为四参数（均只读，由监视线程每拍传入；规则内抛异常会被吞掉并告警）：
-      state_arm / state_end —— 本体 / 末端关节状态快照（JointState：q/dq/tau/温度/
-                               错误码）；快照先经新鲜度过滤，过期或未读到时为 None，
+    规则签名固定为四参数（均只读，由监视线程每个周期传入；规则内抛异常会被吞掉并告警）：
+      state_arm / state_end —— 本体 / 末端关节状态缓存（JointState：q/dq/tau/温度/
+                               错误码）；缓存先经新鲜度过滤，过期或未读到时为 None，
                                规则内必须判空后再取字段；
       motion                —— FSM 当前运动状态（MotionState，如 MOTION / DAMP）；
       event                 —— 当前安全事件（SafetyEvent，如 NORMAL / DAMPING）。
-    返回 None 表示「本规则无意见」；返回 SafetyEvent 表示命中意见，与内置硬规则及
-    其他自定义规则的命中合并后取危险程度最高者参与仲裁。
+    返回 None 表示「本规则无意见」；返回 SafetyEvent 表示命中意见，与内置规则及
+    其他自定义规则的意见合并后取最严重者生效。
     """
-    if (state_arm is not None                             # 判空：快照不新鲜时监视线程传 None
-            and np.all(np.isfinite(state_arm.dq))         # 防脏数据：dq 含 NaN/inf 时放弃本拍判定
+    if (state_arm is not None                             # 判空：数据不新鲜时监视线程传 None
+            and np.all(np.isfinite(state_arm.dq))         # 防脏数据：dq 含 NaN/inf 时本周期放弃判定
             and np.any(np.abs(state_arm.dq) > DQ_LIMIT)):  # 任一关节速度越限 → 超速
         return SafetyEvent.DAMPING                        # 超速意见：阻尼防护（FSM 将转入 DAMP 软停）
-    return None                                           # 无意见：本拍不触发
+    return None                                           # 无意见：本周期不触发
 
 
 # ============================================================
@@ -97,7 +97,7 @@ def pad(s: str, width: int, align: str = "left") -> str:
 
 
 def fmt(value, spec=".2f"):
-    """表格数值格式化：None（未读到快照）显「—」，数值按 spec 格式化。"""
+    """表格数值格式化：None（未读到数据）显「—」，数值按 spec 格式化。"""
     return "—" if value is None else format(value, spec)  # 「—」占位避免打印 None 造成歧义
 
 
@@ -110,50 +110,50 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")  # info 日志单行显示（含状态迁移轨迹）
 
     try:
-        with joyArm(model) as arm:                        # 创建整机对象；with 退出自动安全收尾（幂等）
+        with joyArm(model) as arm:                        # 创建整机对象；with 退出自动安全收尾（可重复调用）
             print("=" * 78)                               # 大节分隔线
             print("例程 07：安全监视器 safe_monitor（挂规则 → 触发 → 恢复说明 → 收尾）")  # 大节标题
             print("=" * 78)                               # 大节分隔线
-            print(f"『{model}』创建成功：本体 {arm.n_arm} 关节、末端 {arm.n_end} 电机")  # 创建回执
+            print(f"『{model}』创建成功：本体 {arm.n_arm} 关节、末端 {arm.n_end} 电机")  # 创建结果
             arm.connect_arm()                             # 连接本体总线（channel/protocol 缺省取配置值）
 
             # ---- ① 启动顺序：先启 FSM、再启监视器 ----
             print("=" * 78)                               # 大节分隔线
-            print("一、前置依赖与启动顺序：先 start_motion_fsm 再 start_monitor")  # 大节标题
+            print("一、启动依赖与顺序：先 start_motion_fsm 再 start_monitor")  # 大节标题
             print("-" * 78)                               # 小节分隔线
-            print("· 监视规则的第 3 参 motion 直接消费 FSM 当前运动状态（每拍传入）；")  # 依赖一
+            print("· 监视规则的第 3 参 motion 直接消费 FSM 当前运动状态（每个周期传入）；")  # 依赖一
             print("· 规则命中后经 set_event 改写 FSM 目标状态，防护动作（如 DAMP 阻尼软停）")  # 依赖二
             print("  由 FSM 线程执行——监视器只判定，不直接驱动电机；")  # 依赖二的续句
             print("· start_monitor 本身不校验 FSM 是否运行，但 FSM 未启动时事件无人消费、")  # 依赖三
             print("  防护不落地，因此建议先启 FSM 再启监视器（本例按此顺序演示）。")  # 依赖三的结论
-            input("\n>>> 确认机械臂工作半径内无人员与障碍物；回车后启动 FSM（自动回 home）……")  # 启动前确认门
+            input("\n>>> 确认机械臂工作半径内无人员与障碍物；回车后启动 FSM（自动回 home）……")  # 启动前人工确认
             arm.start_motion_fsm()                        # 启动运动状态机：DISABLE → HOME → MOTION 自动迁移
             if arm.wait_for_motion_state(MotionState.MOTION, timeout=10.0) != 1:  # 1=到达 / 0=超时
                 print("FSM 10 秒内未进入 MOTION 态，本例无法继续演示，直接收尾退出。")  # 超时分支
                 return                                    # 提前返回：with 退出仍会执行安全收尾
-            print(f"FSM 已到达 MOTION 态（当前安全事件 {arm.get_event().name}）")  # 到达回执
+            print(f"FSM 已到达 MOTION 态（当前安全事件 {arm.get_event().name}）")  # 到达结果
 
-            # ---- ② 自定义规则：四参数签名与两种挂接传法 ----
+            # ---- ② 自定义规则：四参数签名与两种传法 ----
             print("=" * 78)                               # 大节分隔线
             print("二、自定义规则：四参数签名与 set_monitor_rules 两种传法")  # 大节标题
             print("-" * 78)                               # 小节分隔线
             print("  规则签名 rule(state_arm, state_end, motion, event) → SafetyEvent | None：")  # 签名行
             rows = [                                      # 四参数含义速查表（左列对齐）
-                ("state_arm", "本体关节状态快照（q/dq/tau…；不新鲜或未读到时为 None，须判空）"),  # 参数 1
-                ("state_end", "末端关节状态快照（同上；本例未连接 end 总线，恒为 None）"),  # 参数 2
+                ("state_arm", "本体关节状态缓存（q/dq/tau…；不新鲜或未读到时为 None，须判空）"),  # 参数 1
+                ("state_end", "末端关节状态缓存（同上；本例未连接 end 总线，恒为 None）"),  # 参数 2
                 ("motion", "FSM 当前运动状态（MotionState，如 MOTION / DAMP）"),  # 参数 3
                 ("event", "当前安全事件（SafetyEvent，如 NORMAL / DAMPING）"),  # 参数 4
             ]
             for name, desc in rows:                       # 逐行打印参数说明
                 print(f"  {pad(name, 12)}{desc}")         # 参数名对齐 + 含义说明
-            print("· 返回 None = 无意见；返回 SafetyEvent = 命中，与内置硬规则（故障码 ≥ 2 →")  # 返回值语义
-            print("  DAMPING；断连 / 连续 0.1 s 无新鲜快照 → DISABLE）合并取危险度最高者。")  # 合并仲裁规则
+            print("· 返回 None = 无意见；返回 SafetyEvent = 命中，与内置规则（故障码 ≥ 2 →")  # 返回值语义
+            print("  DAMPING；断连 / 连续 0.1 s 无新鲜数据 → DISABLE）合并取最严重者。")  # 合并判定规则
             arm.set_monitor_rules(overspeed)              # 传法 1：直接传单条可调用对象
             print("· 传法 1：set_monitor_rules(overspeed)——单条挂接")
             arm.set_monitor_rules([overspeed])            # 传法 2：传规则列表（整表替换，非追加）
             print("· 传法 2：set_monitor_rules([overspeed])——列表可一次挂多条规则，重复")
             print("  绑定为整表替换语义；传入非可调用项会抛 ValueError。")
-            monitor_hz = arm.get_config()["joyarm"]["MotionFSM"]["monitor_hz"]  # 从配置快照读监视频率
+            monitor_hz = arm.get_config()["joyarm"]["MotionFSM"]["monitor_hz"]  # 从配置数据读监视频率
             arm.start_monitor()                           # 启动监视线程（daemon；重复调用安全忽略）
             print(f"· 监视器已启动：轮询频率 monitor_hz = {monitor_hz:g} Hz")
 
@@ -178,16 +178,16 @@ def main() -> None:
             t0 = time.time()                              # 触发运动的起始时刻（表格计时基准）
             triggered = False                             # 是否观察到事件升为 DAMPING
             while time.time() - t0 <= 5.0:                # 最多观察 5 s（监视器 50 Hz，远快于本表）
-                snap = arm.joint_state_arm                # 被动只读快照（不触发总线读帧）
+                snap = arm.joint_state_arm                # 后台只读缓存（不发总线读帧）
                 dq_max = float(np.max(np.abs(snap.dq))) if snap is not None else None  # 速度峰值（None 显「—」）
                 print(f"  {pad(f'{time.time() - t0:5.1f}', 8)}"
                       f"{pad(arm.get_event().name, 12)}"                 # 当前安全事件列
                       f"{pad(arm.get_current_motion_state().name, 12)}"  # FSM 当前状态列
                       f"{fmt(dq_max)}")                                  # 速度峰值列
-                if arm.get_event() is SafetyEvent.DAMPING:  # 超速规则已命中并升档（事件只升不降、会保持）
+                if arm.get_event() is SafetyEvent.DAMPING:  # 超速规则已命中并升级（事件只升不降、会保持）
                     triggered = True                      # 记录：已观察到目标现象
                     break                                 # 结束观察，转入恢复说明
-                time.sleep(0.2)                           # 0.2 s 表格刷新节拍
+                time.sleep(0.2)                           # 0.2 s 刷新一次表格
             print("-" * 78)
             if triggered:                                 # 命中分支：说明当前防护状态
                 print("· 已触发：事件升为 DAMPING（危险级 4/5）、状态机转入 DAMP——逐拍下发")

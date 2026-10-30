@@ -13,9 +13,9 @@
        home_arm / set_target_joint / stop_motion_fsm。
 
 【原理简介】
-    - 拖动示教的核心是 DAMP 阻尼态：FSM 每拍向电机下发 MIT 帧（kp=0、kd=阻尼系数 damping_kd、
+    - 拖动示教的核心是 DAMP 阻尼态：FSM 每个周期向电机下发 MIT 帧（kp=0、kd=阻尼系数 damping_kd、
       tau=重力补偿率 damping_k_gravity × 重力矩），电机像「带阻尼的铰链」般顺从外力，可徒手缓慢拖动；
-    - 录制端只读 joint_state_arm 被动快照（后台线程持续维护、不额外占用总线），按绝对时刻对齐节拍，
+    - 录制端只读 joint_state_arm 后台缓存（后台线程持续维护、不额外占用总线），按绝对时刻卡准采样节奏，
       采样率稳定在 50 Hz；
     - 回放端逐路点调用 set_target_joint 写入目标帧：默认激活的 single_joint_hold_traj_planner
       仅取帧内 q 直传控制器（忽略到达时刻 t），10 Hz 连续刷新目标即形成轨迹流；若用 set_traj_solver
@@ -48,13 +48,13 @@
 
 from pathlib import Path             # Path：定位本脚本上级目录（仓库代码根）
 import sys                           # sys：把代码根加入模块搜索路径
-import time                          # time：节拍对齐、目标到达时刻与超时判断
+import time                          # time：采样节奏对齐、目标到达时刻与超时判断
 
 import numpy as np                   # numpy：关节角序列的数组存储与抽样
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装 joyarm_core 时也可直接运行本脚本
 # 机械臂主类 joyArm + 运动状态 / 安全事件两个枚举（须在 sys.path 注入之后导入）
-from joyarm_core import MotionState, SafetyEvent, joyArm  # noqa: E402
+from joyarm_core import MotionState, SafetyEvent, joyArm
 
 
 # ============================================================
@@ -87,7 +87,7 @@ def vec_str(v) -> str:
 def record_teach(arm, hz: float, sec: float) -> np.ndarray:
     """以 hz 频率录制 sec 秒关节角序列（DAMP 阻尼态下调用）。
 
-    只读被动快照 joint_state_arm（不触发总线读帧），按绝对时刻对齐节拍。
+    只读后台缓存 joint_state_arm（不发总线读帧），按绝对时刻卡准采样节奏。
 
     :param arm: 已进入 DAMP 阻尼态的 joyArm 对象。
     :param hz: 采样频率（Hz）。
@@ -96,15 +96,15 @@ def record_teach(arm, hz: float, sec: float) -> np.ndarray:
     """
     frames, reported = [], 0        # 帧列表 / 已打印的整秒进度（每进入新一整秒报一次）
     t0 = time.perf_counter()        # 录制起点（perf_counter 单调递增，适合测时长）
-    tick = t0                       # 下一拍的理论绝对时刻
+    tick = t0                       # 下一个采样点的理论绝对时刻
     while time.perf_counter() - t0 < sec:             # 未满 sec 秒持续采样
         frames.append(list(arm.joint_state_arm.q))    # 追加一帧关节位置快照 (n_arm,)
         sec_now = int(time.perf_counter() - t0)       # 已录制完成的整秒数
         if sec_now > reported:                        # 每进入新的一整秒打印一次进度
             reported = sec_now                        # 更新已打印的整秒数
             print(f"    录制中 {sec_now}/{sec:.0f} 秒")
-        tick += 1.0 / hz                              # 下一拍绝对时刻推进一个采样周期
-        time.sleep(max(0.0, tick - time.perf_counter()))  # 睡到下一拍（已滞后则不睡，追赶节拍）
+        tick += 1.0 / hz                              # 下一个采样点的绝对时刻推进一个周期
+        time.sleep(max(0.0, tick - time.perf_counter()))  # 睡到下一个采样点（已滞后则不睡，追回节奏）
     return np.array(frames)                           # 汇总为 (帧数, n_arm) 数组
 
 
@@ -129,7 +129,7 @@ def replay_teach(arm, record: np.ndarray, ahead: float) -> None:
         arm.set_target_joint(t=time.time() + ahead, q=q_wp)  # 写入单帧关节目标（原子通道）
         if i % 10 == 0 or i == total:                 # 每 10 个路点（及最后一个）打印进度
             print(f"    回放进度 {i}/{total} 路点")
-        time.sleep(1.0 / REPLAY_HZ)                   # 按 10 Hz 节拍下发下一路点
+        time.sleep(1.0 / REPLAY_HZ)                   # 按 10 Hz 节奏下发下一个路点
     time.sleep(ahead)                                 # 末路点后的收尾余量（cubic 规划器下恰为到达时刻）
 
 
@@ -137,7 +137,7 @@ def replay_teach(arm, record: np.ndarray, ahead: float) -> None:
 # 五、主流程：连接启动 → 阻尼示教与录制 → 轨迹回放 → 安全收尾
 # ============================================================
 def main() -> None:
-    """拖动示教与轨迹复现主流程（真机，三处回车确认门）。"""
+    """拖动示教与轨迹复现主流程（真机，三处回车确认）。"""
     print("=" * 78)                                   # 大节横幅：开
     print("例程 08 —— 拖动示教与轨迹复现（需真机）")     # 例程标题
     print("=" * 78)                                   # 大节横幅：闭
@@ -190,7 +190,7 @@ def main() -> None:
             return                                    # 提前返回：with 退出自动安全收尾
         print("    已进入 DAMP 阻尼态：现可用手握臂杆缓慢拖动"
               "（重力补偿程度由 cfg 的 damping_k_gravity 决定）。")   # DAMP 态操作提示
-        input(">>> 缓慢拖动机械臂示范一段轨迹，就位后回车开始录制 4 秒……")     # 录制前确认门
+        input(">>> 缓慢拖动机械臂示范一段轨迹，就位后回车开始录制 4 秒……")     # 录制前人工确认
         record = record_teach(arm, RECORD_HZ, RECORD_SEC)  # 50 Hz × 4 s → 约 200 帧
         print(f"    录制完成 {record.shape[0]} 帧，起点 q = {vec_str(record[0])} rad")   # 录制结果
 
@@ -211,7 +211,7 @@ def main() -> None:
         print("=" * 78)                               # 大节横幅：开
         print("④ 安全收尾")                             # 大节标题
         print("=" * 78)                               # 大节横幅：闭
-        arm.stop_motion_fsm()                         # 阻塞等待回零到位后失能（危险度更高时直接失能）
+        arm.stop_motion_fsm()                         # 阻塞等待回零到位后失能（事件更严重时直接失能）
         print("    已安全停机（回零失能完成），with 退出后自动断开总线。例程结束。")
 
 

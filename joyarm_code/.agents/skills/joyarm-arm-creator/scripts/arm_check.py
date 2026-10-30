@@ -42,10 +42,10 @@ import sys                                      # 注入模块搜索路径 + 控
 import argparse                                 # 解析 --model 命令行参数
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))  # joyarm_code 根入 path（scripts→skill→skills→.agents→joyarm_code 共 4 级），未安装 joyarm_core 时也可直接运行本脚本
-import joyarm_core                              # noqa: E402  库包本体：以其所在位置定位 config / robot_model
-from joyarm_core import joyArm, listArm         # noqa: E402  工厂创建入口（第④步）与可用型号列举
-from joyarm_core.joyarm import load_config      # noqa: E402  第①步复用的配置读取（与工厂第①步同一实现）
-from joyarm_core.backend import REGISTRY        # noqa: E402  第②步对照的后端注册表
+import joyarm_core                              # 库包本体：以其所在位置定位 config / robot_model
+from joyarm_core import joyArm, listArm         # 工厂创建入口（第④步）与可用型号列举
+from joyarm_core.joyarm import load_config      # 第①步复用的配置读取（与工厂第①步同一实现）
+from joyarm_core.backend import REGISTRY        # 第②步对照的后端注册表
 
 CORE_DIR = Path(joyarm_core.__file__).resolve().parent    # joyarm_core 库根目录（config/ robot_model/ 均在其下）
 DEFAULT_MODEL = "rebot_arm_b601_dm"                       # 缺省体检型号（当前唯一可用型号）

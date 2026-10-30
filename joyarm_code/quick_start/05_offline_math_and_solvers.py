@@ -6,17 +6,17 @@
     无需连接硬件，纯控制台体验 JoyArm 的机器人学离线计算与六域求解器管理：
       1. 六域 18 法总览与热切换：get_<域>_solvers 查名单、set_<域>_solver 切换、get_activated_<域>_solver 查激活（含非法名拒绝、traj 域先试规划成功才替换）；
       2. fkine 域 pin ↔ mdh 两种正运动学算法热切换，同一 q 对比结果差异；
-      3. 离线数学门面：solve_fkine（末端帧 vs 基座系 frame=0）、solve_ikine 数值法往返、solve_ikine_all 解析法全解与数值法激活时的 RuntimeError 拦截；
+      3. 数学计算统一入口：solve_fkine（末端帧与基座系 frame=0 两种参考系）、solve_ikine 数值法往返、solve_ikine_all 解析法全解与数值法激活时的 RuntimeError 拦截；
       4. 雅可比 get_jac 与阻尼伪逆 get_jac_pinv_damped；
       5. 动力学四函数 get_mass_matrix / get_coriolis / get_gravity / solve_idyn（RNEA 一致性验证）；
-      6. 到位判断 is_in_q_arm / is_in_pose_arm 的离线行为（读硬件快照恒 False）；
+      6. 到位判断 is_in_q_arm / is_in_pose_arm 的离线行为（读硬件后台缓存恒 False）；
       7. rand_q_arm 缺省软限位采样与自定义限位采样（JointLimits 构造）；rand_q_end 末端电机侧同名采样（含无 end 段型号的行为说明）。
 
 【原理简介】
     JoyArm 把机器人学六类算法各划为一「域」：正运动学 fkine、逆运动学 ikine、雅可比 jacobian、动力学 dynamics、轨迹规划 trajectory、控制 control。
-    每域可加载多个求解器（config robotics 段的注册名，段内首个成员即默认激活），门面方法（solve_fkine / get_jac 等）只把计算转发给该域当前激活的求解器对象。
+    每域可加载多个求解器（config robotics 段的注册名，段内首个成员即默认激活），统一入口方法（solve_fkine / get_jac 等）只把计算转发给该域当前激活的求解器对象。
     set_<域>_solver 可运行期热切换——同一接口背后换算法，结果随之而变。
-    数学门面的 q/dq 参数缺省取硬件被动快照 joint_state_arm：离线未连接时快照恒无效（t=0、q=NaN），缺省调用会直接报错。
+    数学计算的 q/dq 参数缺省取硬件后台缓存 joint_state_arm：离线未连接时缓存恒无效（t=0、q=NaN），缺省调用会直接报错。
     故本脚本全部显式传 q——只需 URDF 数字模型即可完成全部计算。
     到位判断 is_in_q_arm / is_in_pose_arm 同样读该快照：离线无新鲜状态帧恒返回 False（设计内行为，真机在线后才以当前关节状态参与判定，真机路径见例程 04）。
 
@@ -39,7 +39,7 @@
 
 【预期输出】
     ①~③ 三大节依次打印：六域求解器总览与切换结果表、FK/IK/雅可比/动力学数值对比、到位判断离线行为说明，末尾打印「离线例程运行完毕」。
-    期间伴随的库 warn 日志（到位判断无快照、traj 试规划失败、非法求解器名、close 豁免）均为预期现象而非报错；随机采样的数值每次运行略有不同。
+    期间伴随的库 warn 日志（到位判断无缓存、traj 试规划失败、非法求解器名、close 未连接跳过）均为预期现象而非报错；随机采样的数值每次运行略有不同。
 ==============================================================================
 """
 
@@ -52,7 +52,7 @@ import numpy as np                                         # 数值计算：向�
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入搜索路径，未安装库也可运行
 # JoyArm 创建入口与关节限位类型（JointLimits 定义在 joyarm_core/utils/types.py，顶层 re-export）
-from joyarm_core import JointLimits, joyArm  # noqa: E402
+from joyarm_core import JointLimits, joyArm
 
 
 # ============================================================
@@ -184,7 +184,7 @@ def demo_fkine_compare(arm) -> None:
 
 
 # ============================================================
-# 四、离线数学门面演示：正/逆运动学、雅可比与动力学（小节 2.1~2.4）
+# 四、离线数学计算演示：正/逆运动学、雅可比与动力学（小节 2.1~2.4）
 # ============================================================
 def demo_fkine(arm) -> None:
     """2.1 正运动学 solve_fkine：home 与随机采样输入；末端帧（缺省）与基座系 frame=0。"""
@@ -224,10 +224,10 @@ def demo_ikine(arm) -> None:
     for k, q_k in enumerate(res_all.q, start=1):          # 逐行打印各组解（同一末端位姿的多个关节构型）
         print(f"      解 {k}：{fmt(q_k)}")                 # 第 k 组解
     arm.set_ikine_solver("pin_ikine_solver")               # 切回数值法
-    try:                                                   # 数值法激活时演示门面拦截
+    try:                                                   # 数值法激活时演示统一入口拦截
         arm.solve_ikine_all(pose_tgt)                      # 数值法只能给单解、无 solve_all 实现
         print("   ✘ 未拦截（不应发生）")                    # 到这里说明库行为变了（与本脚本预期不符）
-    except RuntimeError as e:                              # 门面把 NotImplementedError 转成 RuntimeError
+    except RuntimeError as e:                              # 统一入口把 NotImplementedError 转成 RuntimeError
         print(f"   数值法激活时 solve_ikine_all 被 RuntimeError 拦截 ✓（提示切换解析法）")
     soft = arm.joint_limits_soft_arm                       # 软限位（用于核对全解是否越限）
     n_over = int(np.sum(np.any((res_all.q < soft.q_min) | (res_all.q > soft.q_max), axis=1)))  # 统计任一关节超软限位的解数
@@ -270,15 +270,15 @@ def demo_dynamics(arm) -> None:
 # 五、到位判断与随机采样演示：离线恒 False 机制与双限位采样（小节 3.1~3.2）
 # ============================================================
 def demo_arrival(arm) -> None:
-    """3.1 到位判断离线行为：is_in_q_arm / is_in_pose_arm 读硬件被动快照恒 False。"""
-    sub("3.1 is_in_q_arm / is_in_pose_arm：读硬件被动快照，离线未连接恒返回 False")
+    """3.1 到位判断离线行为：is_in_q_arm / is_in_pose_arm 读硬件后台缓存恒 False。"""
+    sub("3.1 is_in_q_arm / is_in_pose_arm：读硬件后台缓存，离线未连接恒返回 False")
     q_perturbed = arm.home_arm.copy()                      # 构造加扰动的目标：第 1 关节 +0.1 rad
     q_perturbed[0] += 0.1                                  # 与 home 明显不同（超出到位容差）
     print(f"   is_in_q_arm(home_arm)         = {arm.is_in_q_arm(arm.home_arm)}")     # 目标=home：离线仍 False
     print(f"   is_in_q_arm(home + 0.1 rad)   = {arm.is_in_q_arm(q_perturbed)}")      # 加扰动：同样 False
     print(f"   is_in_pose_arm(fk(home))      = {arm.is_in_pose_arm(arm.solve_fkine(arm.home_arm))}")  # 位姿自判
     print("   机制：这三族函数把「当前实际关节状态」与目标比对，而当前状态取自硬件被动")  # 判定机制第一句
-    print("   快照 joint_state_arm（新鲜度门 0.1 s）；离线未连接时快照恒无效（t=0、q=NaN），")  # 快照新鲜度门
+    print("   缓存 joint_state_arm（0.1 s 内算新鲜）；离线未连接时缓存恒无效（t=0、q=NaN），")  # 缓存新鲜度判据
     print("   故无论目标是什么一律判「未到位」False——这是设计内行为，不是计算错误；伴随的")  # 离线恒 False 的结论
     print("   「无可用关节状态快照」warn 日志属预期。真机在线后快照新鲜，目标进入容差即 True")  # warn 属预期 + 真机行为
     print("   （is_in_q_arm 的真机轮询到位路径见例程 04；is_in_pose_arm 同理，真机快照有效后参与判定）。")  # 指向真机例程
@@ -320,7 +320,7 @@ def demo_rand_q(arm) -> None:
 # 六、主流程：创建对象 → 三大节演示 → 安全收尾
 # ============================================================
 def main() -> None:
-    """离线主流程：创建对象 → 六域求解器管理 → 数学门面 → 到位判断与采样 → 收尾。"""
+    """离线主流程：创建对象 → 六域求解器管理 → 数学计算 → 到位判断与采样 → 收尾。"""
     model = parse_model()                                  # 必填型号参数
     sec("创建 JoyArm（离线加载 URDF 数字模型与六域求解器，不连接任何硬件）")
     arm = joyArm(model)                                    # 离线创建：装配模型与算法，全程不触硬件
@@ -331,8 +331,8 @@ def main() -> None:
     demo_solver_set(arm)                                   # 1.2 设置 6 法（含 traj 三路径与非法名拒绝）
     demo_fkine_compare(arm)                                # 1.3 fkine 域 pin ↔ mdh 切换对比
 
-    sec("② 离线数学门面：solve_fkine / solve_ikine / get_jac / 动力学（全部显式传 q）")
-    print("   门面 q/dq 缺省取硬件被动快照，离线无效会报错——本节全部显式传参，纯模型即可计算。")
+    sec("② 数学计算统一入口：solve_fkine / solve_ikine / get_jac / 动力学（全部显式传 q）")
+    print("   这些方法的 q/dq 缺省取硬件后台缓存，离线无效会报错——本节全部显式传参，纯模型即可计算。")
     demo_fkine(arm)                                        # 2.1 正运动学：采样输入 + 末端帧/基座系
     demo_ikine(arm)                                        # 2.2 逆运动学：往返 + 全解 + RuntimeError 拦截
     demo_jac(arm)                                          # 2.3 雅可比与阻尼伪逆
@@ -343,7 +343,7 @@ def main() -> None:
     demo_rand_q(arm)                                       # 3.2 缺省软限位 / 自定义限位采样
 
     print("=" * 78)                                        # 收尾分隔线
-    arm.close()                                            # 显式安全收尾（幂等；离线时打印豁免日志属正常）
+    arm.close()                                            # 显式安全收尾（可重复调用；离线时打印的「未连接跳过」日志属正常）
     print("离线例程运行完毕（close 时「未连接……豁免跳过」类日志为正常提示）")
 
 

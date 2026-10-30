@@ -50,8 +50,8 @@ import numpy as np                             # 数值计算（矩阵 / SVD / �
 import pinocchio as pin                        # joyarm_core 底层运动学库：log₃ 旋转对数映射
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装时也可直接运行
-from joyarm_core import joyArm  # noqa: E402   # JoyArm 主门面（依赖上方 sys.path 生效）
-from joyarm_core.robotics.jacobian import JacobianSolver, PinJacobianSolver  # noqa: E402
+from joyarm_core import joyArm  # # JoyArm 主门面（依赖上方 sys.path 生效）
+from joyarm_core.robotics.jacobian import JacobianSolver, PinJacobianSolver
 
 H_DIFF = 1e-6                                  # 中心差分步长（rad）：再小会被浮点噪声淹没，再大截断误差增大
 

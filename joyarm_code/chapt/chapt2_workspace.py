@@ -42,7 +42,7 @@ import numpy as np
 import pinocchio as pin
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装时也可直接运行
-from joyarm_core import joyArm, rand_within_limits  # noqa: E402
+from joyarm_core import joyArm, rand_within_limits
 
 POINT_SIZE = 0.003   # MeshCat 点大小（m）
 

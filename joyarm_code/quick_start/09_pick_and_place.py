@@ -21,7 +21,7 @@
     - 清空机械臂工作半径内的人员与障碍物，确认急停按钮在手边随时可按；
     - 全程小幅运动：关节目标校验在 home ±0.2 rad 邻域内，配 2 s 三次多项式行程，
       关节峰值速度约 ≤0.15 rad/s（安全规范 ≤0.3 rad/s）；
-    - 首次运动前有回车确认门；运行中任何异常请立即急停或 Ctrl+C（自动安全停机并断连）。
+    - 首次运动前需回车确认；运行中任何异常请立即急停或 Ctrl+C（自动安全停机并断连）。
 
 【环境与运行】
     # 0. 安装 uv（仅首次）
@@ -115,13 +115,13 @@ def main() -> None:
             print("-" * 78)                                      # 小节：① 下边框
             conn_arm = arm.connect_arm()                         # 连接本体电机总线（返回 True/False/None）
             conn_end = arm.connect_end()                         # 连接末端（夹爪）电机总线
-            print(f"    总线连接结果：arm={fmt_flag(conn_arm)}，end={fmt_flag(conn_end)}")  # 连接回执表（None 显「—」）
+            print(f"    总线连接结果：arm={fmt_flag(conn_arm)}，end={fmt_flag(conn_end)}")  # 连接结果（None 显「—」）
             if conn_arm is not True:                             # backend 连接失败仅 warn 不抛错，须显式检查
                 raise RuntimeError("arm 总线连接失败，请检查电源与总线后重试")
             if conn_end is not True:                             # end 未连接时夹爪动作会被静默跳过
                 raise RuntimeError("end 总线连接失败：夹爪动作将被静默跳过，请检查末端电机与总线")
             arm.set_traj_solver("single_joint_cubic_traj_planner")  # 切三次多项式规划器：按 t 插值限速（默认直传规划器忽略 t）
-            input("\n确认机械臂工作半径内无人员与障碍物后，回车开始首次运动：")              # 危险动作前确认门
+            input("\n确认机械臂工作半径内无人员与障碍物后，回车开始首次运动：")              # 危险动作前人工确认
             arm.start_motion_fsm()                               # 启动运动状态机：DISABLE → HOME → MOTION 自动迁移
             if arm.wait_for_motion_state(MotionState.MOTION, timeout=10.0) != 1:  # 阻塞等待进入 MOTION（返回 1=到达）
                 raise RuntimeError("FSM 未在 10 s 内进入 MOTION 态，请检查电机状态")

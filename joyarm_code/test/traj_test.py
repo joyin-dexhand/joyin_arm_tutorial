@@ -55,8 +55,8 @@ from pathlib import Path  # 定位本文件所在目录，进而定位上一级�
 import numpy as np      # 向量构造与数值断言（allclose / 最大误差等）
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 保证未安装 joyarm_core 时可直接运行
-from joyarm_core import JointState, TrajFrame, joyArm  # noqa: E402  # 数据类 + 离线机械臂创建入口
-from joyarm_core.robotics.trajectory import (  # noqa: E402  # 轨迹域：注册表 + 基类 + 双规划器
+from joyarm_core import JointState, TrajFrame, joyArm  # 数据类 + 离线机械臂创建入口
+from joyarm_core.robotics.trajectory import (    # 轨迹域：注册表 + 基类 + 双规划器
     REGISTRY,                                    # 轨迹域注册表（注册名 → 规划器类）
     SingleJointCubicTrajPlanner,                 # cubic 三次多项式规划器（被测对象之一）
     SingleJointHoldTrajPlanner,                  # hold 直传保持规划器（被测对象之二）

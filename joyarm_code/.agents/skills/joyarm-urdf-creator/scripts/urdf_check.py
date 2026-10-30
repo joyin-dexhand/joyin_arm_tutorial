@@ -44,7 +44,7 @@ from pathlib import Path                                           # 路径拼�
 import pinocchio as pin                                            # URDF → 运动学/动力学模型（与 joyarm_core 同一入口）
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))       # 仓库未安装时也可直接运行（parents[4] = joyarm_code/）
-from joyarm_core.joyarm import load_config                         # noqa: E402 读取 config/<型号>.yaml（joyarm_core 公开入口）
+from joyarm_core.joyarm import load_config                         # 读取 config/<型号>.yaml（joyarm_core 公开入口）
 
 # ---------------- 常量（校验口径与 joyarm.py 保持一致） ----------------
 _JOYARM_CODE_DIR = Path(__file__).resolve().parents[4]             # joyarm_code/ 根目录（scripts→skill→skills→.agents→joyarm_code）

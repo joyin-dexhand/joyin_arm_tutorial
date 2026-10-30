@@ -963,7 +963,7 @@ class _VizWindow:
         :return: 是否成功创建子进程（早夭由看护线程事后告警）。
         """
         try:
-            from PySide6 import QtWebEngineWidgets  # noqa: F401  导入即预检（子进程内正式使用）
+            from PySide6 import QtWebEngineWidgets  # 导入即预检（子进程内正式使用）
         except Exception as e:
             logger.warning("joyarm.py - _VizWindow.launch：PySide6 预检失败（%s），"
                            "请用浏览器打开 %s", e, self._url)
@@ -3930,7 +3930,7 @@ class JoyArm:
         class _VizHandler(BaseHTTPRequestHandler):
             """可视化页面/数据请求处理（只读 + 界面开关；不触任何控制接口）。"""
 
-            def do_GET(self) -> None:  # noqa: N802（http.server 约定）
+            def do_GET(self) -> None:  # （http.server 约定）
                 path, _, query = self.path.partition("?")
                 if path == "/":
                     self.send_response(200)

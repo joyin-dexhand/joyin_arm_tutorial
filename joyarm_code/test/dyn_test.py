@@ -46,7 +46,7 @@ import unicodedata                                          # 判定字符终端
 import numpy as np                                          # 数值计算：向量 / 矩阵 / 特征值
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装 joyarm_core 时，把 joyarm_code/ 加入搜索路径
-from joyarm_core import joyArm                              # noqa: E402  机械臂主类（离线构造即可做动力学计算）
+from joyarm_core import joyArm                              # 机械臂主类（离线构造即可做动力学计算）
 
 N_RAND = 6                                                  # 随机位形组数（任务要求 ≥5，取 6 更充分）
 SYM_TOL = 1e-12                                             # 对称性容差：max|M−Mᵀ| 上限（实现显式对称化，应精确为 0）

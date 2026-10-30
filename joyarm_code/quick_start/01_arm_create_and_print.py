@@ -144,7 +144,7 @@ def print_solver_domains(arm) -> None:
 def create_and_show(name: str) -> None:
     """创建 joyArm(name)，按 ②~⑥ 分节打印核心配置信息。"""
     print("=" * 78)
-    print(f"② 创建对象 joyArm(\"{name}\")：工厂校验 + 初始化校验")
+    print(f"② 创建对象 joyArm(\"{name}\")：自检校验")
     arm = joyArm(name)                            # 任一步校验失败抛带原因的异常
     print(arm)                                    # __str__：多行表格摘要
 

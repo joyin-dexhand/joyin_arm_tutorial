@@ -46,19 +46,19 @@ import numpy as np                                               # 限位数组�
 import yaml                                                      # 型号配置文件解析
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))    # 未安装 joyarm_core 时也可直接运行（指向 joyarm_code/：scripts→joyarm-config-creator→skills→.agents 共 4 级）
-from joyarm_core import (                                        # noqa: E402  核心库公开接口
+from joyarm_core import (                                        # 核心库公开接口
     joyArm,                                                      # 工厂入口：终极离线构造校验
     listArm,                                                     # 列出当前可用型号（① 节展示）
     limits_from_joint_cfgs,                                      # backend joints 四键 → 硬限位
     soft_limits_from_cfg,                                        # joyarm 软限位四键 → JointLimits
 )
-from joyarm_core.backend import REGISTRY as _BACKEND_REGISTRY    # noqa: E402  backend 注册表
-from joyarm_core.robotics.fkine import REGISTRY as _FKINE_REGISTRY       # noqa: E402  fkine 域注册表
-from joyarm_core.robotics.ikine import REGISTRY as _IKINE_REGISTRY       # noqa: E402  ikine 域注册表
-from joyarm_core.robotics.jacobian import REGISTRY as _JAC_REGISTRY      # noqa: E402  jacobian 域注册表
-from joyarm_core.robotics.dynamics import REGISTRY as _DYN_REGISTRY      # noqa: E402  dynamics 域注册表
-from joyarm_core.robotics.trajectory import REGISTRY as _TRAJ_REGISTRY   # noqa: E402  trajectory 域注册表
-from joyarm_core.robotics.control import REGISTRY as _CTRL_REGISTRY      # noqa: E402  control 域注册表
+from joyarm_core.backend import REGISTRY as _BACKEND_REGISTRY    # backend 注册表
+from joyarm_core.robotics.fkine import REGISTRY as _FKINE_REGISTRY       # fkine 域注册表
+from joyarm_core.robotics.ikine import REGISTRY as _IKINE_REGISTRY       # ikine 域注册表
+from joyarm_core.robotics.jacobian import REGISTRY as _JAC_REGISTRY      # jacobian 域注册表
+from joyarm_core.robotics.dynamics import REGISTRY as _DYN_REGISTRY      # dynamics 域注册表
+from joyarm_core.robotics.trajectory import REGISTRY as _TRAJ_REGISTRY   # trajectory 域注册表
+from joyarm_core.robotics.control import REGISTRY as _CTRL_REGISTRY      # control 域注册表
 
 _CODE_ROOT = Path(__file__).resolve().parents[4]                 # joyarm_code/ 根（config、robot_model 的上级；本脚本再下四级）
 _URDF_LIMIT_TOL = 1e-4                                           # cfg↔URDF 限位核对容差（与库 joyarm.py 同值）

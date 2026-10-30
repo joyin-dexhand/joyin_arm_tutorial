@@ -3,20 +3,20 @@
 例程 06 —— 基于运动状态机的运动（需真机）
 ==============================================================================
 【功能概要】
-    1. 确认 FSM 运动管线依赖的 traj / ctrl 两域求解器，并把默认直传规划器切换为三次多项式规划器（按目标时刻 t 平滑插值到达）；
-    2. start_motion_fsm 启动状态机：先核对 4 项前置条件，再以 wait_for_motion_state 等待自动迁移 DISABLE→HOME→MOTION（按返回 1/0 判读）；
+    1. 确认 FSM 运动流程依赖的 traj / ctrl 两域求解器，并把默认直传规划器切换为三次多项式规划器（按目标时刻 t 平滑插值到达）；
+    2. start_motion_fsm 启动状态机：先核对 4 项启动条件，再以 wait_for_motion_state 等待自动迁移 DISABLE→HOME→MOTION（返回 1=到达、0=超时）；
     3. set_target_joint 下发 home 基准小偏移的关节目标，get_target_trajframe 读回并逐字段打印 TrajFrame；
     4. solve_fkine / solve_ikine 构造小位移笛卡尔目标并实际运动，set_target_cart 写入笛卡尔目标帧并读回；
     5. set_event(HOLDING) 触发 HOLD 原位锁定、set_event(NORMAL) 恢复 MOTION，get_event 读回当前事件；
-    6. stop_motion_fsm 回零收尾：当前事件危险度 ≤ZEROING 走回零失能，更高危事件直接失能。
+    6. stop_motion_fsm 回零收尾：当前事件不重于 ZEROING 就先回零位再失能，更严重的事件直接失能。
 
 【原理简介】
-    运动状态机（MotionFSM）共六状态：DISABLE / ZERO / HOME / MOTION / HOLD / DAMP，其中 HOME 是中枢——凡涉及 ZERO / MOTION 的跨状态迁移均经 HOME 中转；
+    运动状态机（MotionFSM）共六状态：DISABLE / ZERO / HOME / MOTION / HOLD / DAMP，其中 HOME 是中转站——在 ZERO 与 MOTION 之间切换都必须先经过 HOME；
     本例依次途经 DISABLE→HOME→MOTION→HOLD→MOTION→HOME→ZERO 五种状态（不含 DAMP）。
-    安全事件 SafetyEvent 危险度六级递升（NORMAL < HOLDING < HOMING < ZEROING < DAMPING < DISABLE），FSM 按 STATE_FROM 映射迁往对应状态；
-    安全监视器的仲裁只升不降（同拍多命中取最危险者、绝不自动降级），恢复正常须由外部显式 set_event(NORMAL)。
+    安全事件 SafetyEvent 按严重程度分六级，从轻到重为 NORMAL < HOLDING < HOMING < ZEROING < DAMPING < DISABLE，FSM 按 STATE_FROM 对照表迁往对应状态；
+    安全监视器的判定只升不降（同一周期多条规则命中时按最严重的处理、绝不自动降级），恢复正常必须手动 set_event(NORMAL)。
     运行期三线程分工：FSM 线程（fsm_hz）管状态迁移与维持；进入 MOTION 后另起 plan 线程（plan_hz，消费目标帧做规划）与 ctrl 线程（ctrl_hz，采样轨迹并下发控制指令）；
-    目标帧通道由 set_target_* 原子写入、plan 消费、ctrl 执行，三者互不阻塞。
+    目标帧通道由 set_target_* 一次性完整写入（不会写一半被别的线程读到）、plan 消费、ctrl 执行，三者互不阻塞。
 
 【安全须知】
     - 运行前清空机械臂工作半径内的人员与障碍物，全程手持急停手段待命；
@@ -37,8 +37,8 @@
     python quick_start/06_fsm_motion.py <型号>
 
 【预期输出】
-    依次打印求解器、FSM 前置条件、目标帧字段三张表，以及状态迁移、到位判断、安全事件切换与回零收尾结果；
-    连接失败或前置条件不满足时提示原因并安全退出。
+    依次打印求解器、FSM 启动条件、目标帧字段三张表，以及状态迁移、到位判断、安全事件切换与回零收尾结果；
+    连接失败或启动条件不满足时提示原因并安全退出。
 ==============================================================================
 """
 
@@ -50,7 +50,7 @@ from pathlib import Path                                      # 定位本文件�
 import numpy as np                                            # 关节角 / 位姿数组的构造与运算
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入模块搜索路径
-from joyarm_core import (  # noqa: E402                      # 上两行注入路径后再导入（避免 E402 误报）
+from joyarm_core import (                                     # 上两行注入路径后再导入（避免 E402 误报）
     joyArm,                                                   # JoyArm 对象创建入口
     MotionState,                                              # FSM 六状态枚举
     SafetyEvent,                                              # 安全事件六级枚举
@@ -82,7 +82,7 @@ def disp_width(s: str) -> int:
 def pad(s: str, width: int, align: str = "left") -> str:
     """按显示宽度补空格使表格列对齐（align="right" 为右对齐；超宽原样返回）。"""
     gap = " " * max(width - disp_width(s), 0)                 # 缺口 = 目标列宽 − 显示宽（不为负）
-    return gap + s if align == "right" else s + gap           # 左对齐后补、右对齐前置
+    return gap + s if align == "right" else s + gap           # 左对齐在右侧补空格、右对齐在左侧补空格
 
 
 def fmt_arr(arr, width: int = 6) -> str:
@@ -169,9 +169,9 @@ def run_demo() -> None:
         print(f"当前激活 = {arm.get_activated_traj_solver()}，"
               f"plan_hz = {arm.plan_hz} Hz\n")                # 切换后激活名与规划线程频率
 
-        # ---- ② FSM 启动：前置条件核对 → 确认门 → 启动并等待 MOTION ----
+        # ---- ② FSM 启动：启动条件核对 → 人工确认 → 启动并等待 MOTION ----
         print("-" * 78)                                       # 小节分隔线
-        print("② 启动运动状态机：start_motion_fsm（前置条件 4 项）")         # 小节标题
+        print("② 启动运动状态机：start_motion_fsm（启动条件 4 项）")       # 小节标题
         state = arm.joint_state_arm                           # arm 被动状态快照（刷新线程持续供给）
         if state.t > 0:                                       # t=0 表示从未收到状态帧
             lag_ms = (time.time() - state.t) * 1000.0         # 反馈时延（毫秒）
@@ -187,14 +187,14 @@ def run_demo() -> None:
             ("无电机故障", "joint_state_arm.error 全部 ∈ {0, 1}", faultless),  # 条件 3：故障码
             ("求解器已配置", "traj/ctrl 两域已加载成员非空", configured),    # 条件 4：两域求解器
         ]
-        print(pad("前置条件", 14) + pad("判定依据", 38) + "结果")       # 表头（列宽按显示列对齐）
-        for name, basis, ok in checks:                        # 逐行打印 4 项前置条件
+        print(pad("启动条件", 14) + pad("判定依据", 38) + "结果")       # 表头（列宽按显示列对齐）
+        for name, basis, ok in checks:                        # 逐行打印 4 项启动条件
             print(pad(name, 14) + pad(basis, 38) + ("通过" if ok else "不通过"))  # 结果列：通过/不通过
         input("\n>>> 即将启动 FSM：自动回 home 后开始小幅运动，"
-              "确认工作半径内无人无障碍后回车继续……")                          # 危险动作前的人工确认门
+              "确认工作半径内无人无障碍后回车继续……")                          # 危险动作前的人工确认
         try:
-            arm.start_motion_fsm()                            # 非阻塞启动（前置不满足会抛 RuntimeError）
-        except RuntimeError as err:                           # 前置检查不通过：打印原因退出
+            arm.start_motion_fsm()                            # 非阻塞启动（条件不满足会抛 RuntimeError）
+        except RuntimeError as err:                           # 启动检查不通过：打印原因退出
             print(f"start_motion_fsm 拒绝启动：{err}")             # 拒绝原因（连接/反馈/故障/域未配置）
             return                                            # with 退出自动安全收尾
         ok = arm.wait_for_motion_state(MotionState.MOTION, timeout=10.0)  # 返回 1=已到达 / 0=超时
@@ -214,7 +214,7 @@ def run_demo() -> None:
         q_goal[0] += 0.15                                     # 关节 1 +0.15 rad（home±0.2 rad 安全包络内）
         q_goal[1] -= 0.15                                     # 关节 2 −0.15 rad
         t_goal = time.time() + 2.0                            # 目标到达时刻：2 s 后（cubic 规划器按 t 定时长）
-        arm.set_target_joint(t=t_goal, q=q_goal)              # 单帧关节目标 → 原子写入目标帧通道
+        arm.set_target_joint(t=t_goal, q=q_goal)              # 单帧关节目标 → 一次性完整写入目标通道
         frames = arm.get_target_trajframe()                   # 深拷贝读回（单帧目标 → 单元素列表）
         print_frame_table(frames[0], "set_target_joint 写入后读回 TrajFrame")  # 逐字段打印读回帧
         print(f"到位判断 is_in_q_arm：{'是' if wait_q_arrival(arm, q_goal) else '否'}\n")  # 轮询到位（容差 0.05 rad）
@@ -251,7 +251,7 @@ def run_demo() -> None:
         # ---- ⑤ 安全事件：HOLDING 原位锁定 → NORMAL 恢复 ----
         print("-" * 78)                                       # 小节分隔线
         print("⑤ 安全事件：set_event / get_event"
-              "（危险度 NORMAL<HOLDING<HOMING<ZEROING<DAMPING<DISABLE）")  # 小节标题
+              "（严重程度 NORMAL<HOLDING<HOMING<ZEROING<DAMPING<DISABLE）")  # 小节标题
         print(f"当前事件 = {arm.get_event().name}，"
               f"目标态 = {STATE_FROM[arm.get_event()].name}")    # 事件 → 目标态映射（STATE_FROM）
         arm.set_event(SafetyEvent.HOLDING)                    # 触发原位锁定：目标态同步为映射的 HOLD
@@ -260,7 +260,7 @@ def run_demo() -> None:
               f"等待 = {ok_hold}（{'已到达' if ok_hold else '超时'}），"
               f"当前态 = {arm.get_current_motion_state().name}，"
               f"事件 = {arm.get_event().name}")                 # HOLD 到达情况与当前事件
-        arm.set_event(SafetyEvent.NORMAL)                     # 恢复正常（监视器仲裁只升不降，恢复须外部显式下发）
+        arm.set_event(SafetyEvent.NORMAL)                     # 恢复正常（监视器只升不降，恢复须手动下发）
         ok_back = arm.wait_for_motion_state(MotionState.MOTION, timeout=5.0)  # 返回 1=已到达 / 0=超时
         print(f"set_event(NORMAL) → {STATE_FROM[SafetyEvent.NORMAL].name}："  # NORMAL 的映射目标态
               f"等待 = {ok_back}（{'已到达' if ok_back else '超时'}），"
@@ -270,8 +270,8 @@ def run_demo() -> None:
         # ---- ⑥ 收尾：stop_motion_fsm 回零失能 ----
         print("-" * 78)                                       # 小节分隔线
         print("⑥ 收尾：stop_motion_fsm（阻塞式）")                    # 小节标题
-        print("危险度分级：当前事件 ≤ ZEROING → 置 ZEROING 经 HOME 中转回零、到位后失能；")  # 收尾规则一
-        print("            更高危（DAMPING/DISABLE）→ 直接置 DISABLE 失能停机。")  # 收尾规则二
+        print("收尾规则：当前事件不重于 ZEROING → 先回零位（经 HOME）再失能；")  # 收尾规则一
+        print("            更严重（DAMPING/DISABLE）→ 直接失能停机。")  # 收尾规则二
         arm.stop_motion_fsm()                                 # 当前事件 NORMAL（≤ZEROING）→ 走回零失能路径
         print(f"FSM 已停止：当前态 = {arm.get_current_motion_state().name}，"
               f"事件 = {arm.get_event().name}（收尾统一复位为 DISABLE）")  # 最终状态复核

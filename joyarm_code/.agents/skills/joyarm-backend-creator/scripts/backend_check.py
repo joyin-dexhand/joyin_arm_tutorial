@@ -50,10 +50,10 @@ from pathlib import Path               # 路径定位（模板文件 / 型号 ya
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))  # joyarm_code 入 path（scripts→backend-creator→skills→.agents→joyarm_code 共 4 级），未安装 joyarm_core 也可运行
 
-import yaml                            # noqa: E402  解析型号 yaml 的 backend 段（path 注入后导入）
+import yaml                            # 解析型号 yaml 的 backend 段（path 注入后导入）
 
-from joyarm_core.backend import REGISTRY, Backend  # noqa: E402  # 后端注册表与抽象基类
-from joyarm_core.utils.types import ControlMode    # noqa: E402  # 控制模式枚举（设模式桩的示例入参用）
+from joyarm_core.backend import REGISTRY, Backend  # # 后端注册表与抽象基类
+from joyarm_core.utils.types import ControlMode    # # 控制模式枚举（设模式桩的示例入参用）
 
 # ---- 路径常量（第二级检查对象与型号配置目录） ----
 TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "assets" / "backend_template.py"   # Backend 子类实现模板（本 skill 的 assets/ 下）
