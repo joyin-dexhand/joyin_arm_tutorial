@@ -6,7 +6,7 @@
     └── Backend<型号1>
     └── Backend<...>
 
-每个机械臂型号对应一个单独的硬件后端子类（`backend_<型号>` ↔ `<型号>`）；
+每个机械臂型号对应一个单独的硬件后端子类（第三方 `backend_<型号>` ↔ `<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`）；
 新后端创建流程见 `.agents/skills/joyarm-backend-creator/assets/backend_template.py`文件头 docstring。
 """
 from .backend import Backend
@@ -26,6 +26,6 @@ def get_backend(name: str) -> type:
     """
     if name not in REGISTRY:
         raise ValueError(
-            f"backend/__init__.py - get_backend：『{name}』型号在 backend 中未找到；"
+            f"backend/__init__.py - get_backend：后端注册名『{name}』未在 REGISTRY 登记；"
             f"可用：{sorted(REGISTRY)}")
     return REGISTRY[name]

@@ -9,8 +9,8 @@
 
 > 以下为 joyarm_core 架构**持久化约束**：代码演进不得违背；如需变更约束，须先经人工显式确认后再更新本节。
 
-1. **组合根·单类**：`joyarm/` 的 `JoyArm` 是组合根，基于 config 具体型号配置对其他层功能（backend、robot_model 资产、robotics 各求解器）做**可更换式组合**——能力委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**机械臂新型号 = `config/<型号>.yaml` + `robot_model/<型号>/` 资产 + `backend/backend_*.py`**（backend `REGISTRY` 一行；型号与整机后端 1:1，型号名不强制 `joyarm_` 前缀）。
-2. **接口先行**：robotics 六域（fkine/ikine/jacobian/dynamics/trajectory/control）= **ABC 接口 + 子类算法实现 + `REGISTRY`注册**（config 选配启用）——均为**纯计算内核、无线程**；自定义算法在所在域 `REGISTRY` 显式加一行注册（import 类 + 表中一行）即接入（**子类名 = 前缀 + 基类名，如 `PinFkineSolver`；注册名 = 类名小写+下划线，如 `pin_fkine_solver`**）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。backend = 基类(backend)定义功能接口 + 子类（backend_*）实现具体型号功能，`backend_*` 与 `<型号>` 一一对应（型号名不强制 `joyarm_` 前缀；约束1）。
+1. **组合根·单类**：`joyarm/` 的 `JoyArm` 是组合根，基于 config 具体型号配置对其他层功能（backend、robot_model 资产、robotics 各求解器）做**可更换式组合**——能力委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**机械臂新型号 = `config/<型号>.yaml` + `robot_model/<型号>/` 资产 + `backend/backend_*.py`**（backend `REGISTRY` 一行；型号与整机后端 1:1，注册命名因来源而异——第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`；型号名不强制 `joyarm_` 前缀）。
+2. **接口先行**：robotics 六域（fkine/ikine/jacobian/dynamics/trajectory/control）= **ABC 接口 + 子类算法实现 + `REGISTRY`注册**（config 选配启用）——均为**纯计算内核、无线程**；自定义算法在所在域 `REGISTRY` 显式加一行注册（import 类 + 表中一行）即接入（**子类名 = 前缀 + 基类名，如 `PinFkineSolver`；注册名 = 类名小写+下划线，如 `pin_fkine_solver`**）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。backend = 基类(backend)定义功能接口 + 子类（backend_*）实现具体型号功能，`backend_*` 与 `<型号>` 一一对应（注册命名因来源而异：第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`；约束1）。
 3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 5R/6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族）。
 4. **失败语义（抛异常，不返 None）**：工厂 `joyArm(model)` 四步固定顺序校验（①config 存在且解析为非空 dict → ②`backend.name` ∈ `REGISTRY` → ③robot_model 四路径齐全 → ④`JoyArm` 构造自检），任一步失败**抛携带具体原因的异常**（消息附可用型号列表 = `listArm()` 结果）；`JoyArm` 直用为**硬失败**——config 必需（缺失/自检不通过即抛）、backend 必配、robotics 配置的成员必须全部创建成功（约束2）。
 5. **参数排序契约**：接口**通用参数在前**（任何实现都需要，如 ikine 的 `pose`/`frame`/`q0`），**特有参数在后**（仅特定算法需要，如 ikine 数值法的 `tol`/`iters`，解析法可忽略）。
@@ -73,7 +73,7 @@ joyarm_code/
 
 ### 1.3 配置（yaml 分段 + 限位语义）
 
-`config/<model>.yaml` 三段：`joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层 + 硬限位四键）。**型号唯一标识 = yaml 文件名**（= 工厂入参；URDF 目录 `robot_model/<型号>/` 同名）；backend 与机械臂型号 1:1（约束1）；三段数值叶一律须有限且非空（null/NaN/inf 构造期硬失败）：
+`config/<model>.yaml` 三段：`joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层 + 硬限位四键）。**型号唯一标识 = yaml 文件名**（= 工厂入参；URDF 目录 `robot_model/<型号>/` 同名）；backend 与机械臂型号 1:1（注册命名因来源而异：第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`）；三段数值叶一律须有限且非空（null/NaN/inf 构造期硬失败）：
 
 ```yaml
 joyarm: {frame_end, arm_mdh, T_linkn_endtcp, joint_limits_soft_arm/end, tcp_limits, home_arm/end, MotionFSM, arrival_tol, runtime}   # 软限位四键直值 {q_min,q_max,dq_max,tau_max}（q_min/q_max 必配、缺键拒绝构造，dq_max/tau_max 缺键回退 ±∞；标量广播或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero=全零（构造期校验在各关节硬限位内）、neutral=软限位中点（代码固定，不经 config）；home 逐关节须在软限位内；arm_mdh（6×4：α/a/d/θ）/T_linkn_endtcp 为教学数据（约束8）；tcp_limits.workspace_box 为 (3,2) 每行 [min,max]（兼容旧 (2,3) 布局），v_lin_max/v_ang_max/f_max/t_max 须 >0；MotionFSM 四键 {fsm_hz(缺省50), damping_kd(必配，DAMP 态 MIT kd，标量广播或 n 元列表), damping_k_gravity(必配，DAMP 态重力补偿率 [0,1]，1=完全补偿；dynamics 域未配置时退化纯阻尼), monitor_hz(缺省=fsm_hz)}；arrival_tol 缺省 0.05/1e-3/1e-2；runtime.move_wait_timeout 缺省 10.0（stop_motion_fsm 回零等待超时；同段其余键暂无消费方）
@@ -99,7 +99,7 @@ backend: {name: backend_rebot_arm_b601_dm, 可选运行键 state_refresh_hz/writ
 
 - **类名 = 驼峰（PascalCase）；文件名 = 小写 snake_case。**
 - **设备模型**（`joyarm/`）：`JoyArm` = 组合根单类（无型号子类）；`joyArm(model)` 外部推荐创建入口（`JoyArmFactory` 实例、可直接调用；失败语义见约束4）；`listArm()` 列可用型号。文件 `joyarm.py` / `__init__.py`。
-- **Backend 整机两层**（`backend/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendRebotArmB601DM`（1:1 对应见约束1）。`REGISTRY` + `get_backend(name)` 供 config 选型。
+- **Backend 整机两层**（`backend/`）：根 `Backend`（`*_arm`/`*_end` 方法族）→ 型号层 `BackendRebotArmB601DM`。`REGISTRY` + `get_backend(name)` 供 config 选型。
 - **属性约定**：类内成员一律 `_` 前缀私有，类外访问经只读 `@property`（限位/位形数组只读化后零拷贝返本体）或 `get_*/set_*` 方法；型号名/教学数据经 `arm.get_config()` 读（约束8）。常用只读属性：`pin_model`（pinocchio 缩减构型，nq=n_arm；**勿与型号名混淆**）/ `n_arm`/`n_end` / `joint_limits_hard_arm/end` / `joint_limits_soft_arm/end`（限位语义见 §1.3）/ `zero_/neutral_/home_arm/end` / `tcp_limits` / `plan_hz`/`ctrl_hz` / `is_connected_arm/end`/`is_enabled_arm/end`、`joint_state_arm/end`（均与 backend 同名直连；joint_state 为缓存快照被动只读、不触发读帧，需实时走 `get_state_*`）；关节名查询 `get_joint_names_arm/end(joint)`（1 基序号口径，全文统一）；整机后端 = `_backend`（私有，必配，经 §3.3 委托面访问）。求解器形参用 `arm`（鸭子类型）。
 - **六域策略成员**：每域两成员 `_<域>_solvers`（`dict[注册名→实例]`）+ `_activated_<域>_solver`（激活**对象**指针）；域缩写 `fkine/ikine/jac/dyn/traj/ctrl`（cfg 段键 `fkine/ikine/jacobian/dynamics/trajectory/control`）。公开方法三件套：`get_<域>_solvers()` / `set_<域>_solver(name)` / `get_activated_<域>_solver()`（热切换协议见 §3.3）。
 - **方法命名**：本体带 `arm`、末端带 `end` 一一对应（`enable_arm`/`enable_end`…，末端离散动作 `set_action_end(action, **kw)`）；三模式整组下发 `send_mit/send_position/send_vel_{arm,end}`（无逐 joint 子集参数）；`set_mode_*` 默认 MIT；参数读写 `read/write_param_{arm,end}`（族级：读返列表、写等长列表）；数学门面前缀 `solve_`（solve_fkine/solve_ikine/solve_ikine_all/solve_idyn）或 `get_`（get_jac/get_jac_pinv_damped/get_mass_matrix/get_coriolis/get_gravity）；到位判断 `is_in_q_arm/end`、`is_in_pose_arm`；目标通道 `set/get_target_trajframe` + 便捷封装 `set_target_joint/set_target_cart`；FSM `start/stop_motion_fsm`、`get_current/get_target_motion_state`；安全 `set/get_event`、`start/stop_monitor`、`set_monitor_rules`；可视化 `start/stop_state_viz`；销毁 `close()`。
@@ -113,7 +113,7 @@ backend: {name: backend_rebot_arm_b601_dm, 可选运行键 state_refresh_hz/writ
 | **共享类型单定义** | 跨层类型只在 `utils/types.py`（约束12）；ROS2 消息仅在 ws 的 `adapters.py` 互转 |
 | **核心轻依赖** | 核心包代码仅 `numpy`/`pin`/`pyyaml`/`pyserial`/`meshcat`（pyserial 供硬件后端串口、meshcat 供可视化 3D——直接依赖顶层导入，初始化失败降级为仅 HTML 面板）；`rclpy` 仅 ws；matplotlib/PySide6/mujoco 为工程级教学依赖 |
 
-编码约定：`q=(n,)`、`T=(4,4)`、角度弧度、四元数 wxyz；关节序号 1 基（cfg 列表位置）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数排序遵约束5；**运行状态可视化在 joyarm 包内**（joyarm.py §8，HTTP 轮询零新增依赖 + meshcat 直接依赖）；异常消息统一格式**『文件名 - 故障的功能：具体原因』**（含 NotImplementedError 教学桩，新代码一律遵守；backend 子类模板桩例外——前缀自动取注册名 `self._name`（cfg `backend.name`，按 1:1 约定 = 文件名去 `.py`），未传 name 回退占位前缀 `backend_<型号>.py`）。
+编码约定：`q=(n,)`、`T=(4,4)`、角度弧度、四元数 wxyz；关节序号 1 基（cfg 列表位置）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数排序遵约束5；**运行状态可视化在 joyarm 包内**（joyarm.py §8，HTTP 轮询零新增依赖 + meshcat 直接依赖）；异常消息统一格式**『文件名 - 故障的功能：具体原因』**（含 NotImplementedError 教学桩，新代码一律遵守；backend 子类模板桩例外——前缀自动取注册名 `self._name`（cfg `backend.name`，按惯例 = 文件名去 `.py`），未传 name 回退占位前缀 `backend_<型号>.py`）。
 
 ### 2.3 库边界
 

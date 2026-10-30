@@ -125,7 +125,7 @@ source .venv/bin/activate  # 激活环境
 
 | 例程 | 运行条件 | 启动命令 | 说明 |
 |:---:|:---:|:---:|:---:|
-| 01 对象创建与初始化 | 离线 | `python quick_start/01_model_create.py [型号名]` | 扫描列出全部可用型号，交互或命令行参数指定型号创建 joyArm 对象，格式化打印 pin_model、关节限位、特征位形与六域求解器等核心信息 |
+| 01 对象创建与初始化 | 离线 | `python quick_start/01_model_create.py [型号名]` | 调用函数 listArm() 列出全部可用型号，交互或命令行参数指定型号创建 joyArm 对象，格式化打印关节、限位、特征位形与六域求解器等核心信息 |
 | 02 硬件连接与状态读取 | 真机 | `python quick_start/02_connect_read.py` | 连接并使能本体与末端电机总线，双口径对照读取关节状态、故障码与电机参数，全程不主动运动 |
 | 03 标零与参数设置 | 真机 | `python quick_start/03_zero_params.py` | set_zero_arm / set_zero_end 标零演示（双级 YES 确认）与 pmax/vmax/tmax 电机参数「读 → 写同值 → 读回核对」安全演示（arm/end 双侧） |
 | 04 直通硬件电机指令 | 真机 | `python quick_start/04_direct_command.py` | FSM 未运行时直通硬件电机：位置/速度/MIT 三模式指令（arm/end 双侧）、双侧清错、末端夹爪动作与 FSM 互斥说明 |

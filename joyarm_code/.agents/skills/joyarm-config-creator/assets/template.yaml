@@ -82,7 +82,7 @@ robotics:
 # 通信层（backend）：arm 与 end 的硬件通讯（以 DM 实现为参照）
 # -------------------------------------------------------------------
 backend:
-  name: backend_<型号> # backend 子类（backend/__init__.py REGISTRY 中的注册名），与 <型号> 对应
+  name: backend_<型号> # backend 子类（backend/__init__.py REGISTRY 注册名）
 
   # 可选运行参数（缺省或非正数时沿用默认并 warn）
   state_refresh_hz: 20.0 # 状态新鲜度承诺（Hz，默认 20）

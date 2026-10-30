@@ -1,7 +1,8 @@
 """`joyarm_core.joyarm` —— JoyArm 机械臂类 + 对象创建入口。
 
 JoyArm：机械臂类（负责把各子功能按 config 装配起来，对外提供统一调用入口，见 :mod:`joyarm_core.joyarm.joyarm`）；
-JoyArmFactory：按型号名创建机械臂对象（命名链：工厂入参 = config/<型号>.yaml 文件名 = robot_model/<型号>/ 文件夹及URDF文件名）；
+JoyArmFactory：按型号名创建机械臂对象（工厂入参 = config/<型号>.yaml 文件名 = robot_model/<型号>/ 文件夹及URDF文件名；
+                backend 与型号一一对应、注册名经 REGISTRY 选型——第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`）；
 listArm：列出当前可用的机械臂型号（三条件过滤，与工厂失败消息共用同一实现）。
 
 创建 JoyArm 对象方式：
@@ -12,7 +13,7 @@ listArm：列出当前可用的机械臂型号（三条件过滤，与工厂失�
 
 工厂四步固定顺序校验（任一步失败抛异常，错误消息附可用型号列表 = `listArm()` 结果）：
 
-① config——`config/<型号>.yaml` 存在且解析为非空 dict（空文件、纯注释、yaml 语法错误均判失败）；
+① config——`config/<型号>.yaml` 存在、解析为非空 dict、且含 `joyarm` / `robotics` / `backend` 三个顶层 dict 键；
 ② backend——cfg 的 `backend.name` ∈ `backend/__init__.py` 的 `REGISTRY` 键；
 ③ robot_model——四路径按序存在：`robot_model/<型号>/`、`meshes/`、`urdf/`、`urdf/<型号>.urdf`；
 ④ 构造——调用 `JoyArm(<型号>)` 做类内初始化自检（异常上抛、保留原因链）。
@@ -57,6 +58,11 @@ def _model_paths_missing(name: str) -> list:
     return [p for p in paths if not os.path.exists(p)]
 
 
+def _top_keys_missing(cfg: dict) -> list:
+    """三顶层键的缺失清单（空列表 = 齐全；`joyarm` / `robotics` / `backend` 缺失或非 dict 均计入）。"""
+    return [k for k in ("joyarm", "robotics", "backend") if not isinstance(cfg.get(k), dict)]
+
+
 def _available_models() -> list:
     """listArm 的共享实现（与工厂失败消息共用）：扫描 `config/*.yaml` 逐型号过滤。
 
@@ -82,8 +88,8 @@ def _available_models() -> list:
             continue     # 解析失败 → 不可用
         if not isinstance(cfg, dict) or not cfg:
             continue
-        if not all(isinstance(cfg.get(k), dict) for k in ("joyarm", "robotics", "backend")):
-            continue     # 段缺失或写成非 dict（如列表）→ 不可用
+        if _top_keys_missing(cfg):
+            continue     # 顶层键缺失或写成非 dict（如列表）→ 不可用
         if cfg["backend"].get("name") not in REGISTRY:
             continue
         if _model_paths_missing(name):
@@ -114,16 +120,21 @@ class JoyArmFactory:
 
         :param name: 型号名（= config 文件名 = URDF 目录`robot_model/<型号>/` 名）。
         :return: 初始化自检通过的 JoyArm 实例；四步全过 `logger.info`『创建成功』。
-        :raises ValueError: ①config 缺失/解析失败、②backend 名不在 REGISTRY、③robot_model 四路径缺失、④JoyArm 构造自检失败。
+        :raises ValueError: ①config 缺失/解析失败/顶层键缺失或非 dict、②backend 名不在 REGISTRY、③robot_model 四路径缺失、④JoyArm 构造自检失败。
         """
         avail = _available_models()
-        # ① config：存在且解析为非空 dict（load_config 抛错消息含路径与原始解析错误）
+        # ① config：存在、解析为非空 dict、且含三顶层 dict 键（load_config 抛错消息含路径与原始解析错误）
         try:
             cfg = load_config(name)
         except Exception as e:
             raise ValueError(
                 f"joyarm/__init__.py - JoyArmFactory.create：① config 校验失败：{e}；"
                 f"可用型号：{avail}") from e
+        missing_keys = _top_keys_missing(cfg)
+        if missing_keys:
+            raise ValueError(
+                f"joyarm/__init__.py - JoyArmFactory.create：① config 校验失败："
+                f"顶层键 {missing_keys} 缺失或非 dict；可用型号：{avail}")
         # ② backend：cfg.backend.name ∈ REGISTRY（backend 段须为 dict）
         backend_cfg = cfg.get("backend")
         backend_name = backend_cfg.get("name") if isinstance(backend_cfg, dict) else None

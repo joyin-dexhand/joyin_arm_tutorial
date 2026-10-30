@@ -18,7 +18,7 @@ description: "为 JoyArm 机械臂新型号做整机集成时使用——四件�
 | 3 | 硬件后端 | `joyarm_core/backend/backend_<型号>.py`（REGISTRY 注册） | [joyarm-backend-creator](../joyarm-backend-creator/) | `backend_check.py` |
 | 4 | 注册与自检 | 无新增文件（四步校验 + 验收阶梯） | 本 skill | `arm_check.py` |
 
-四件套由**型号名**贯穿：`config/<型号>.yaml` 文件名 = `robot_model/<型号>/` 目录名 = `urdf/<型号>.urdf` 文件名 = backend 注册名 `backend_<型号>` 的后缀。`listArm()` 列出的「可用型号」正是三件外部资源全部就位的型号（config 三顶层段齐全 + backend 命中 REGISTRY + 模型四路径齐全），自行验证（在 `joyarm_code/` 目录下执行）：
+前三件由**型号名**贯穿：`config/<型号>.yaml` 文件名 = `robot_model/<型号>/` 目录名 = `urdf/<型号>.urdf` 文件名；backend 与型号一一对应，注册命名因来源而异（第三方 `backend_<型号>` ↔ `<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`）。`listArm()` 列出的「可用型号」正是三件外部资源全部就位的型号（config 三顶层段齐全 + backend 命中 REGISTRY + 模型四路径齐全），自行验证（在 `joyarm_code/` 目录下执行）：
 
 ```bash
 python -c "from joyarm_core import listArm; listArm()"

@@ -1,11 +1,11 @@
 ---
 name: joyarm-backend-creator
-description: "为 JoyArm 机械臂新型号开发或接入硬件后端 backend_<型号>.py 时使用：拷贝模板实现 Backend 基类 29 个抽象方法（必实现 14 + 按需 15）、在 REGISTRY 注册并经 yaml backend.name 选型，再用离线桩冒烟（backend_check.py）与真机六分组验收（backend_verify.py）检查接入结果；亦适用于对照 DM 关节电机 / Feetech 舵机双家族差异选取实现方案、排查后端注册链路不通或离线构造失败等问题。"
+description: "为 JoyArm 机械臂新型号开发或接入硬件后端（第三方 backend_<型号>.py / 官方 backend_<版本>.py）时使用：拷贝模板实现 Backend 基类 29 个抽象方法（必实现 14 + 按需 15）、在 REGISTRY 注册并经 yaml backend.name 选型，再用离线桩冒烟（backend_check.py）与真机六分组验收（backend_verify.py）检查接入结果；亦适用于对照 DM 关节电机 / Feetech 舵机双家族差异选取实现方案、排查后端注册链路不通或离线构造失败等问题。"
 ---
 
 # joyarm-backend-creator：硬件后端创建
 
-为机械臂新型号编写硬件后端子类 `joyarm_core/backend/backend_<型号>.py`，把厂商总线协议接入 `Backend` 抽象基类的统一接口。本 skill 是新型号创建全流程（[joyarm-config-creator](../joyarm-config-creator/) → [joyarm-urdf-creator](../joyarm-urdf-creator/) → **本 skill** → [joyarm-arm-creator](../joyarm-arm-creator/)）的第三步；**第一个子类的参考实现**：`joyarm_core/backend/backend_rebot_arm_b601_dm.py`（DM 族完整实现，逐方法对照模板阅读）。
+为机械臂新型号编写硬件后端子类（第三方 `joyarm_core/backend/backend_<型号>.py`、官方 `joyarm_core/backend/backend_<版本>.py`），把厂商总线协议接入 `Backend` 抽象基类的统一接口。本 skill 是新型号创建全流程（[joyarm-config-creator](../joyarm-config-creator/) → [joyarm-urdf-creator](../joyarm-urdf-creator/) → **本 skill** → [joyarm-arm-creator](../joyarm-arm-creator/)）的第三步；**第一个子类的参考实现**：`joyarm_core/backend/backend_rebot_arm_b601_dm.py`（DM 族完整实现，逐方法对照模板阅读）。
 
 ## 1. 架构位置与选型链路
 
@@ -15,15 +15,20 @@ JoyArm 自上而下分三层，上层只面向抽象基类编程，型号差异�
 |:---:|:---:|:---:|
 | 编排层 | `joyarm_core/joyarm/joyarm.py` | 面向用户的整机功能（状态机、安全监视、求解器调度……） |
 | 抽象基类 | `joyarm_core/backend/backend.py` | 校验/裁剪/模式门禁/状态刷新等全部通用编排 |
-| 型号子类 | `joyarm_core/backend/backend_<型号>.py` | 只做单关节/单总线的厂商协议操作（本 skill 产物） |
+| 型号子类 | `joyarm_core/backend/backend_<型号>.py`（官方为 `backend_<版本>.py`） | 只做单关节/单总线的厂商协议操作（本 skill 产物） |
 
-选型链路：型号子类在 `joyarm_core/backend/__init__.py` 的 `REGISTRY` 注册表登记 → 型号 yaml 的 `backend.name` 键填注册名 → 创建 `joyArm("<型号>")` 时按 yaml 自动装配对应子类。注册名 = 子类文件名去 `.py`（如 `backend_rebot_arm_b601_dm` ↔ 类 `BackendRebotArmB601DM`）。
+选型链路：型号子类在 `joyarm_core/backend/__init__.py` 的 `REGISTRY` 注册表登记 → 型号 yaml 的 `backend.name` 键填注册名 → 创建 `joyArm("<型号>")` 时按 yaml 自动装配对应子类。注册名 = 子类文件名去 `.py`（如 `backend_rebot_arm_b601_dm` ↔ 类 `BackendRebotArmB601DM`）。backend 与型号一一对应，注册命名因来源而异：第三方 `backend_<型号>` ↔ `<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`；两类来源本 skill 均支持。
 
 子类三条架构约束（详见 [assets/backend_template.py](assets/backend_template.py) 文件头）：**不得新增公开方法/属性**（上层只面向基类）；**不在子类重复基类已做的操作**（校验/裁剪/门禁由基类负责）；失败**上抛异常或返回 `False`/`None`** 即可（基类统一转 warn 优雅降级）。
 
 ## 2. 七步接入新硬件后端
 
-以新型号 `<型号>`（如 `my_arm_v1`）为例；命令均在 `joyarm_code/` 目录下执行，七步与 [assets/backend_template.py](assets/backend_template.py) 文件头 docstring 一一对应。
+以第三方新型号 `<型号>`（如 `my_arm_v1`）为例；命令均在 `joyarm_code/` 目录下执行，七步与 [assets/backend_template.py](assets/backend_template.py) 文件头 docstring 一一对应。官方型号仅把 backend 文件名/注册名/类名中的 `<型号>` 换成 `<版本>`，其余步骤完全相同；config 文件名始终用完整型号名（如官方 `config/joyarm_dm.yaml`）：
+
+| 来源 | 型号名 | backend 文件/注册名 | 类名 | 示例 |
+|:---:|:---:|:---:|:---:|:---:|
+| 第三方 | `<型号>` | `backend_<型号>` | `Backend<型号>` | `my_arm_v1` → `backend_my_arm_v1` / `BackendMyArmV1` |
+| 官方 | `joyarm_<版本>` | `backend_<版本>` | `Backend<版本>` | `joyarm_dm` → `backend_dm` / `BackendDm` |
 
 ### 2.1 第 1 步：拷贝模板、改名
 
