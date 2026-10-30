@@ -125,15 +125,15 @@ source .venv/bin/activate  # 激活环境
 
 | 例程 | 运行条件 | 启动命令 | 说明 |
 |:---:|:---:|:---:|:---:|
-| 01 对象创建与初始化 | 离线 | `python quick_start/01_model_create.py [型号名]` | 调用函数 listArm() 列出全部可用型号，交互或命令行参数指定型号创建 joyArm 对象，格式化打印关节、限位、特征位形与六域求解器等核心信息 |
-| 02 硬件连接与状态读取 | 真机 | `python quick_start/02_connect_read.py` | 连接并使能本体与末端电机总线，双口径对照读取关节状态、故障码与电机参数，全程不主动运动 |
-| 03 标零与参数设置 | 真机 | `python quick_start/03_zero_params.py` | set_zero_arm / set_zero_end 标零演示（双级 YES 确认）与 pmax/vmax/tmax 电机参数「读 → 写同值 → 读回核对」安全演示（arm/end 双侧） |
-| 04 直通硬件电机指令 | 真机 | `python quick_start/04_direct_command.py` | FSM 未运行时直通硬件电机：位置/速度/MIT 三模式指令（arm/end 双侧）、双侧清错、末端夹爪动作与 FSM 互斥说明 |
-| 05 机器人学离线计算与求解器设置 | 离线 | `python quick_start/05_offline_math.py` | 无需硬件体验机器人学离线计算：六域 18 个求解器方法、正逆运动学/雅可比/动力学求解与求解器热切换、rand_q_arm/rand_q_end 采样 |
-| 06 基于运动状态机的运动 | 真机 | `python quick_start/06_fsm_motion.py` | 启动运动状态机等待自动迁移至 MOTION，下发关节与笛卡尔目标实际运动，演示 HOLD 事件切换与回零收尾 |
-| 07 安全监视器 | 真机 | `python quick_start/07_monitor.py` | 单脚本即可运行：先例程内自动启动 FSM，再挂接自定义超速规则触发 DAMP 阻尼防护，演示处理原因与恢复流程（无需另开终端先跑 06） |
-| 08 示教与轨迹复现 | 真机 | `python quick_start/08_teach_replay.py` | 发送 DAMPING 事件切入阻尼态拖动示教，50 Hz 录制关节轨迹，抽帧作路点逐点下发复现 |
-| 09 综合抓取演示 | 真机 | `python quick_start/09_pick_demo.py` | solve_fkine / solve_ikine 构造上方点与抓取点，FSM 托管运动 + 夹爪开闭，完成抓取—放置闭环 |
+| 01 对象创建与信息打印 | 离线 | `python quick_start/01_arm_create_and_print.py <型号>` | 调用函数 listArm() 列出全部可用型号，交互或命令行参数指定型号创建 joyArm 对象，格式化打印关节、限位、特征位形与六域求解器等核心信息 |
+| 02 硬件连接与状态读取 | 真机 | `python quick_start/02_connect_and_read_state.py <型号>` | 连接并使能本体与末端电机总线，双口径对照读取关节状态、故障码与电机参数，全程不主动运动 |
+| 03 标零与参数设置 | 真机 | `python quick_start/03_set_zero_and_params.py <型号>` | set_zero_arm / set_zero_end 标零演示（双级 YES 确认）与 pmax/vmax/tmax 电机参数「读 → 写同值 → 读回核对」安全演示（arm/end 双侧） |
+| 04 直通硬件电机指令 | 真机 | `python quick_start/04_direct_motor_command.py <型号>` | FSM 未运行时直通硬件电机：位置/速度/MIT 三模式指令（arm/end 双侧）、双侧清错、末端夹爪动作与 FSM 互斥说明 |
+| 05 机器人学离线计算与求解器设置 | 离线 | `python quick_start/05_offline_math_and_solvers.py <型号>` | 无需硬件体验机器人学离线计算：六域 18 个求解器方法、正逆运动学/雅可比/动力学求解与求解器热切换、rand_q_arm/rand_q_end 采样 |
+| 06 基于运动状态机的运动 | 真机 | `python quick_start/06_fsm_motion.py <型号>` | 启动运动状态机等待自动迁移至 MOTION，下发关节与笛卡尔目标实际运动，演示 HOLD 事件切换与回零收尾 |
+| 07 安全监视器 | 真机 | `python quick_start/07_safety_monitor.py <型号>` | 单脚本即可运行：先例程内自动启动 FSM，再挂接自定义超速规则触发 DAMP 阻尼防护，演示处理原因与恢复流程（无需另开终端先跑 06） |
+| 08 示教与轨迹复现 | 真机 | `python quick_start/08_teach_replay.py <型号>` | 发送 DAMPING 事件切入阻尼态拖动示教，50 Hz 录制关节轨迹，抽帧作路点逐点下发复现 |
+| 09 综合抓取演示 | 真机 | `python quick_start/09_pick_and_place.py <型号>` | solve_fkine / solve_ikine 构造上方点与抓取点，FSM 托管运动 + 夹爪开闭，完成抓取—放置闭环 |
 
 ## 8 完整资料汇总
 

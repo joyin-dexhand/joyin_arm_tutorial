@@ -21,14 +21,14 @@
     模式，与 MODE 不一致先切模式、再核使能，失败下一拍重试，指令路径始终合法。
 
 【环境与运行】
-    # 1. 安装 uv（仅首次）
+    # 0. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 2. 创建虚拟环境并同步依赖
+    # 1. 创建虚拟环境并同步依赖
     cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
 
-    # 3. 运行本脚本（离线测试脚本，无需连接机械臂硬件）
+    # 2. 运行本脚本（离线测试脚本，无需连接机械臂硬件）
     python test/ctrl_test.py
 
 【预期输出】

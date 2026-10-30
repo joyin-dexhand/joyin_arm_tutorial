@@ -22,16 +22,16 @@
     joyarm-urdf-creator → joyarm-backend-creator）的离线自检工具。
 
 【环境与运行】
-    # 1. 安装 uv（仅首次）
+    # 0. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 2. 创建虚拟环境并同步依赖
+    # 1. 创建虚拟环境并同步依赖
     cd <仓库路径>/joyarm_code
     uv sync
     source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需硬件）
+    # 2. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需硬件）
     python .agents/skills/joyarm-backend-creator/scripts/backend_check.py
     python .agents/skills/joyarm-backend-creator/scripts/backend_check.py --backend backend_<型号>  # 检查其他注册名
 

@@ -3,15 +3,15 @@
 JoyArm：机械臂类（负责把各子功能按 config 装配起来，对外提供统一调用入口，见 :mod:`joyarm_core.joyarm.joyarm`）；
 JoyArmFactory：按型号名创建机械臂对象（工厂入参 = config/<型号>.yaml 文件名 = robot_model/<型号>/ 文件夹及URDF文件名；
                 backend 与型号一一对应、注册名经 REGISTRY 选型——第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`）；
-listArm：列出当前可用的机械臂型号（三条件过滤，与工厂失败消息共用同一实现）。
+listArm：列出当前可用的机械臂型号（「有效型号校验规则」= 工厂校验①~③步；调用时随列表打印规则，与工厂失败消息共用同一实现）。
 
 创建 JoyArm 对象方式：
 
     from joyarm_core import joyArm
 
-    arm1 = joyArm("<型号>")    # 任一步校验失败抛携带具体原因的异常
+    arm = joyArm("<型号>")    # 任一步校验失败抛携带具体原因的异常
 
-工厂四步固定顺序校验（任一步失败抛异常，错误消息附可用型号列表 = `listArm()` 结果）：
+工厂四步固定顺序校验（任一步失败抛异常，错误消息附可用型号列表 `listArm()`）：
 
 ① config——`config/<型号>.yaml` 存在、解析为非空 dict、且含 `joyarm` / `robotics` / `backend` 三个顶层 dict 键；
 ② backend——cfg 的 `backend.name` ∈ `backend/__init__.py` 的 `REGISTRY` 键；
@@ -99,9 +99,13 @@ def _available_models() -> list:
 
 
 def listArm() -> list:
-    """列出可用机械臂型号（返回 `list[str]` 并打印）。"""
+    """列出可用机械臂型号（打印型号列表与「有效型号校验规则」三条件，返回 `list[str]`）。"""
     models = _available_models()
     print(f"可用机械臂型号：{models}")
+    print("有效型号校验规则（listArm 与 joyArm 工厂校验相同）：")
+    print("  ① config/<型号>.yaml 存在、解析为非空 dict，且 joyarm/robotics/backend 三顶层段齐全（段须为 dict）")
+    print("  ② yaml 的 backend.name 已在 backend REGISTRY 注册（一型号一后端，注册名 = backend 文件名去 .py）")
+    print("  ③ robot_model/<型号>/ 四路径齐全（目录、meshes/、urdf/、URDF 文件）")
     return models
 
 

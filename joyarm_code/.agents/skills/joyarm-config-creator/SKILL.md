@@ -151,4 +151,4 @@ JoyArm 是**配置驱动**的整机对象：`joyArm("<型号>")` 构造时按 `j
    python -c "from joyarm_core import listArm; listArm()"
    ```
 
-3. **后续真机验证**：配置与构造通过后，按 [02 连接与状态读取](../../../quick_start/02_connect_read.py) 连接真机核对限位/位形读数，整机创建全流程验收见 [joyarm-arm-creator](../joyarm-arm-creator/)。
+3. **后续真机验证**：配置与构造通过后，按 [02 连接与状态读取](../../../quick_start/02_connect_and_read_state.py) 连接真机核对限位/位形读数，整机创建全流程验收见 [joyarm-arm-creator](../joyarm-arm-creator/)。

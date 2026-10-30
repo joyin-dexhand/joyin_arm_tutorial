@@ -27,16 +27,16 @@ trajectory 轨迹规划测试分析  (test 离线测试)
     接口同名的鸭子替身 StubArm 提供确定性起点（与 test/test_robotics.py 的做法一致）。
 
 【环境与运行】
-    # 1. 安装 uv（仅首次）
+    # 0. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 2. 创建虚拟环境并同步依赖
+    # 1. 创建虚拟环境并同步依赖
     cd <仓库路径>/joyarm_code
     uv sync
     source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需连接机械臂硬件）
+    # 2. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需连接机械臂硬件）
     python test/traj_test.py
 
 【预期输出】
@@ -190,7 +190,7 @@ def main() -> None:
 
     # ================= ① 测试环境 =================
     section("① 测试环境：trajectory 域注册表、TrajFrame 结构与鸭子替身 StubArm")
-    arm = joyArm("rebot_arm_b601_dm")                            # 离线创建机械臂（不连硬件，同 quick_start/01_model_create.py）
+    arm = joyArm("rebot_arm_b601_dm")                            # 离线创建机械臂（不连硬件）
     print(f"   traj 域已加载规划器：{arm.get_traj_solvers()}")    # cfg 中 trajectory 列表的注册名
     print(f"   traj 域默认激活：{arm.get_activated_traj_solver()}（cfg 列表首位 = 默认激活）")
     n = arm.n_arm                                                # 本体自由度（本型号为 6）

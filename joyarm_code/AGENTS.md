@@ -112,6 +112,7 @@ backend: {name: backend_rebot_arm_b601_dm, 可选运行键 state_refresh_hz/writ
 | **离线模式** | 计算类显式传参即离线可用（数学门面缺省值取硬件状态，无状态抛 `RuntimeError`）；执行类需连接 |
 | **共享类型单定义** | 跨层类型只在 `utils/types.py`（约束12）；ROS2 消息仅在 ws 的 `adapters.py` 互转 |
 | **核心轻依赖** | 核心包代码仅 `numpy`/`pin`/`pyyaml`/`pyserial`/`meshcat`（pyserial 供硬件后端串口、meshcat 供可视化 3D——直接依赖顶层导入，初始化失败降级为仅 HTML 面板）；`rclpy` 仅 ws；matplotlib/PySide6/mujoco 为工程级教学依赖 |
+| **行宽上限** | 代码、注释与 docstring 每行均 ≤ 120 字符（PEP8 基线统一放宽至 120）；过短则禁止提前分行；超长则先精简表述，确需折行保证语法完整 |
 
 编码约定：`q=(n,)`、`T=(4,4)`、角度弧度、四元数 wxyz；关节序号 1 基（cfg 列表位置）；`ControlMode` 三态（纯力矩经 MIT `kp=kd=0`）；接口参数排序遵约束5；**运行状态可视化在 joyarm 包内**（joyarm.py §8，HTTP 轮询零新增依赖 + meshcat 直接依赖）；异常消息统一格式**『文件名 - 故障的功能：具体原因』**（含 NotImplementedError 教学桩，新代码一律遵守；backend 子类模板桩例外——前缀自动取注册名 `self._name`（cfg `backend.name`，按惯例 = 文件名去 `.py`），未传 name 回退占位前缀 `backend_<型号>.py`）。
 
@@ -171,7 +172,7 @@ Backend(ABC) ──▶ BackendRebotArmB601DM ✅（U2CAN 串口转 CAN 桥）
 
 ```python
 joyArm(name) → JoyArm      # 工厂实例直调（= JoyArmFactory.create）：四步校验（见约束4）任一失败抛 ValueError ✅
-listArm() → list[str]      # 可用型号三条件过滤（三顶层键 + backend.name ∈ REGISTRY + 四路径齐全）✅
+listArm() → list[str]      # 可用型号三条件过滤（三顶层键 + backend.name ∈ REGISTRY + 四路径齐全）；调用时随列表打印规则（规则正文见 joyarm/__init__.py 文件头）✅
 load_config(model) → dict  # config 加载（缺失/解析失败/顶层非映射抛 ValueError）✅
 ```
 

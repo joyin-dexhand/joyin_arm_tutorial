@@ -1,51 +1,45 @@
 """
 ==============================================================================
-机器人学离线计算与求解器设置  (快速上手 例程 05)
+例程 05 —— 机器人学离线计算与求解器设置（全程离线）
 ==============================================================================
 【功能概要】
     无需连接硬件，纯控制台体验 JoyArm 的机器人学离线计算与六域求解器管理：
-      1. 求解器六域（fkine/ikine/jacobian/dynamics/trajectory/control）三类
-         共 18 个方法逐一演示：get_<域>_solvers / set_<域>_solver /
-         get_activated_<域>_solver（含非法名拒绝、traj 域"先试规划成功才替换"）
-      2. fkine 域 pin ↔ mdh 两种正运动学算法热切换，同一 q 对比结果差异
-      3. 离线数学门面：solve_fkine（末端帧 vs 基座系 frame=0）、solve_ikine
-         数值法往返、solve_ikine_all 解析法全解与数值法激活时的 RuntimeError 拦截
-      4. 雅可比 get_jac 与阻尼伪逆 get_jac_pinv_damped；动力学四函数
-         get_mass_matrix / get_coriolis / get_gravity / solve_idyn（RNEA）
-      5. 到位判断 is_in_q_arm / is_in_pose_arm 的离线行为（读硬件快照恒 False）
-      6. rand_q_arm 缺省软限位采样与自定义限位采样（JointLimits 构造）；
-         rand_q_end 末端电机侧同名采样（含无 end 段型号的行为说明）
+      1. 六域 18 法总览与热切换：get_<域>_solvers 查名单、set_<域>_solver 切换、get_activated_<域>_solver 查激活（含非法名拒绝、traj 域先试规划成功才替换）；
+      2. fkine 域 pin ↔ mdh 两种正运动学算法热切换，同一 q 对比结果差异；
+      3. 离线数学门面：solve_fkine（末端帧 vs 基座系 frame=0）、solve_ikine 数值法往返、solve_ikine_all 解析法全解与数值法激活时的 RuntimeError 拦截；
+      4. 雅可比 get_jac 与阻尼伪逆 get_jac_pinv_damped；
+      5. 动力学四函数 get_mass_matrix / get_coriolis / get_gravity / solve_idyn（RNEA 一致性验证）；
+      6. 到位判断 is_in_q_arm / is_in_pose_arm 的离线行为（读硬件快照恒 False）；
+      7. rand_q_arm 缺省软限位采样与自定义限位采样（JointLimits 构造）；rand_q_end 末端电机侧同名采样（含无 end 段型号的行为说明）。
 
 【原理简介】
-    JoyArm 把机器人学六类算法各划为一"域"：正运动学 fkine、逆运动学 ikine、
-    雅可比 jacobian、动力学 dynamics、轨迹规划 trajectory、控制 control。每域
-    可加载多个求解器（config robotics 段的注册名，首个成员即默认激活），门面
-    方法（solve_fkine / get_jac 等）只把计算转发给该域当前激活的求解器对象，
+    JoyArm 把机器人学六类算法各划为一「域」：正运动学 fkine、逆运动学 ikine、雅可比 jacobian、动力学 dynamics、轨迹规划 trajectory、控制 control。
+    每域可加载多个求解器（config robotics 段的注册名，段内首个成员即默认激活），门面方法（solve_fkine / get_jac 等）只把计算转发给该域当前激活的求解器对象。
     set_<域>_solver 可运行期热切换——同一接口背后换算法，结果随之而变。
-    数学门面的 q/dq 参数缺省取硬件被动快照 joint_state_arm：离线未连接时快照
-    恒无效（t=0、q=NaN），缺省调用会直接报错，故本脚本全部显式传 q——只需 URDF
-    数字模型即可完成全部计算。到位判断 is_in_q_arm / is_in_pose_arm 同样读该
-    快照：离线无新鲜状态帧恒返回 False（设计内行为，真机在线后才以当前关节状态
-    参与判定，真机路径见例程 04）。
+    数学门面的 q/dq 参数缺省取硬件被动快照 joint_state_arm：离线未连接时快照恒无效（t=0、q=NaN），缺省调用会直接报错。
+    故本脚本全部显式传 q——只需 URDF 数字模型即可完成全部计算。
+    到位判断 is_in_q_arm / is_in_pose_arm 同样读该快照：离线无新鲜状态帧恒返回 False（设计内行为，真机在线后才以当前关节状态参与判定，真机路径见例程 04）。
+
+【安全须知】
+    - 本例程全程离线：不连接硬件、不上电、不下发任何控制指令，无运动风险
+    - set_target_joint / set_target_trajframe 仅写入对象内的目标数据，同样不触硬件
 
 【环境与运行】
-    # 1. 安装 uv（仅首次）
-    curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
-    # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
+    # 0. 安装 uv（仅首次）
+    curl -LsSf https://astral.sh/uv/install.sh | sh     # Linux
+    irm https://astral.sh/uv/install.ps1 | iex          # Windows PowerShell
 
-    # 2. 创建虚拟环境并同步依赖
+    # 1. 创建虚拟环境并同步依赖
     cd <仓库路径>/joyarm_code
     uv sync
     source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下；离线计算，无需连接任何硬件）
-    python quick_start/05_offline_math.py
+    # 2. 运行本脚本（全程离线，无需连接硬件）
+    python quick_start/05_offline_math_and_solvers.py <型号>    # 如 rebot_arm_b601_dm
 
 【预期输出】
-    ①~③ 三大节：六域求解器总览与切换结果表、FK/IK/雅可比/动力学数值对比、
-    到位判断离线行为说明；末尾打印「离线例程运行完毕」。期间伴随的库 warn
-    日志（到位判断无快照、traj 试规划失败、非法求解器名、close 豁免）均为
-    演示预期现象而非报错；随机采样的数值每次运行略有不同。
+    ①~③ 三大节依次打印：六域求解器总览与切换结果表、FK/IK/雅可比/动力学数值对比、到位判断离线行为说明，末尾打印「离线例程运行完毕」。
+    期间伴随的库 warn 日志（到位判断无快照、traj 试规划失败、非法求解器名、close 豁免）均为预期现象而非报错；随机采样的数值每次运行略有不同。
 ==============================================================================
 """
 
@@ -61,7 +55,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_co
 from joyarm_core import JointLimits, joyArm  # noqa: E402
 
 
-# ---------------- 输出格式化工具 ----------------
+# ============================================================
+# 一、命令行型号参数：解析必填的型号入参，缺失即打印用法退出
+# ============================================================
+def parse_model() -> str:
+    """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
+    if len(sys.argv) != 2:                                # 必须恰好携带 1 个型号参数
+        sys.exit(f"用法：python quick_start/05_offline_math_and_solvers.py <型号>")     # 缺参退出，不进入演示
+    return sys.argv[1].strip()                            # 型号名
+
+
+# ============================================================
+# 二、输出格式化工具：节标题、表格列对齐与数值显示
+# ============================================================
 def sec(title: str) -> None:
     """打印大节标题（上下各一条 78 字符 "=" 分隔线）。"""
     print("\n" + "=" * 78)                                 # 大节分隔线（前空一行更醒目）
@@ -83,21 +89,25 @@ def fmt(v, nd: int = 3) -> str:
     return "[" + " ".join(f"{x: .{nd}f}" for x in np.asarray(v, float)) + "]"  # 每元素定宽 7 字符对齐
 
 
-def disp_w(s: str) -> int:
+def disp_width(s: str) -> int:
     """字符串的终端显示宽度：全角/宽字符（中文等）计 2、半角计 1。"""
     return sum(2 if unicodedata.east_asian_width(ch) in "FW" else 1 for ch in s)  # 仅 F/W 两类算宽字符
 
 
-def pad(s: str, width: int) -> str:
-    """按终端显示宽度右侧补空格，保证中文混排表格列对齐。"""
-    return s + " " * max(0, width - disp_w(s))             # 不足宽度补空格；超宽不截断
+def pad(s: str, width: int, align: str = "left") -> str:
+    """按终端显示宽度补空格保证列对齐：缺省左对齐，align="right" 时右对齐。"""
+    gap = " " * max(0, width - disp_width(s))              # 缺口 = 目标宽 − 显示宽（不为负）
+    return gap + s if align == "right" else s + gap        # 左对齐右补 / 右对齐左补；超宽不截断
 
 
 def flag(ok: bool) -> str:
     """set_<域>_solver 返回值转可读标记：True → 「成功」，False → 「拒绝」。"""
-    return "成功" if ok else "拒绝"                         # 拒绝 = 返回 False，保持原激活不变
+    return "成功" if ok else "拒绝"                            # 拒绝 = 返回 False，保持原激活不变
 
 
+# ============================================================
+# 三、求解器六域管理演示：查询、热切换与 pin↔mdh 算法对比（小节 1.1~1.3）
+# ============================================================
 def demo_solver_overview(arm) -> None:
     """1.1 查询 12 法：六域各调 get_<域>_solvers() 与 get_activated_<域>_solver()。"""
     sub("1.1 查询 12 法：get_<域>_solvers()（已加载名单）+ get_activated_<域>_solver()（当前激活）")
@@ -110,7 +120,7 @@ def demo_solver_overview(arm) -> None:
         ("control", arm.get_ctrl_solvers, arm.get_activated_ctrl_solver),      # 控制域
     ]
     for name, get_all, get_act in domains:                 # 六域逐一查询，每域两行对齐输出
-        print(f"   {pad(name, 12)}已加载：{'、'.join(get_all())}")   # 第一行：域内全部注册名（逗号分隔）
+        print(f"   {pad(name, 12)}已加载：{'、'.join(get_all())}")   # 第一行：域内全部注册名（顿号分隔）
         print(f"   {pad('', 12)}当前激活：{get_act()}")      # 第二行：当前参与计算的求解器
     print("   说明：已加载名单来自 config robotics 各段；段内首个成员即默认激活；")
     print("         方法名规律——雅可比/动力学域用缩写 jac/dyn，其余用全称。")
@@ -122,6 +132,7 @@ def demo_solver_set(arm) -> None:
     print(f"   {pad('域', 12)}{pad('set 动作', 30)}{pad('返回', 8)}切换后激活")       # 表头四列
     rows = []                                              # (域, 动作, 返回值, 切后激活) 待打印行
 
+    # ---- ① 六域常规热切换动作：重选自身 / 切换算法 / 非法名拒绝 ----
     rows.append(("jacobian", "重选自身（域内仅一个）", arm.set_jac_solver(arm.get_activated_jac_solver()),
                  arm.get_activated_jac_solver()))          # jacobian 域：重选自身（域内仅 1 个成员）
     rows.append(("dynamics", "重选自身（域内仅一个）", arm.set_dyn_solver(arm.get_activated_dyn_solver()),
@@ -139,7 +150,7 @@ def demo_solver_set(arm) -> None:
     rows.append(("fkine", "切回 pin", arm.set_fkine_solver("pin_fkine_solver"),
                  arm.get_activated_fkine_solver()))        # fkine 域：切回默认 pin（对比见 1.3）
 
-    # trajectory 域特殊：新规划器先对当前目标帧试规划一次，成功才替换激活（防半成品接管在途轨迹）
+    # ---- ② trajectory 域三路径：新求解器先对当前目标帧试规划一次，成功才替换激活（防半成品接管在途轨迹）----
     rows.append(("trajectory", "a) 空目标帧切 cubic", arm.set_traj_solver("single_joint_cubic_traj_planner"),
                  arm.get_activated_traj_solver()))         # 路径 a：目标帧为空 → cubic 回退恒定 home 段，仍算规划成功
     arm.set_target_joint(time.time() + 5.0, arm.home_arm.copy())  # 写一个 5 秒后的单帧关节目标（纯数据，不触硬件）
@@ -172,6 +183,9 @@ def demo_fkine_compare(arm) -> None:
     print("   两套算法同源，差异仅为浮点精度量级；mdh 实现仅支持末端帧（frame 传其他名会报错）。")  # 结论与 mdh 限制
 
 
+# ============================================================
+# 四、离线数学门面演示：正/逆运动学、雅可比与动力学（小节 2.1~2.4）
+# ============================================================
 def demo_fkine(arm) -> None:
     """2.1 正运动学 solve_fkine：home 与随机采样输入；末端帧（缺省）与基座系 frame=0。"""
     sub("2.1 solve_fkine：home + 随机采样；末端帧（缺省）与基座系（frame=0）")
@@ -252,6 +266,9 @@ def demo_dynamics(arm) -> None:
     print(f"   一致性 max|tau − (M·ddq + C + G)| = {resid:.2e} —— 两种写法同一物理，偏差为浮点精度")
 
 
+# ============================================================
+# 五、到位判断与随机采样演示：离线恒 False 机制与双限位采样（小节 3.1~3.2）
+# ============================================================
 def demo_arrival(arm) -> None:
     """3.1 到位判断离线行为：is_in_q_arm / is_in_pose_arm 读硬件被动快照恒 False。"""
     sub("3.1 is_in_q_arm / is_in_pose_arm：读硬件被动快照，离线未连接恒返回 False")
@@ -270,6 +287,8 @@ def demo_arrival(arm) -> None:
 def demo_rand_q(arm) -> None:
     """3.2 rand_q_arm / rand_q_end：缺省软限位采样与自定义 JointLimits 限位采样。"""
     sub("3.2 rand_q_arm / rand_q_end：缺省软限位采样 vs 自定义限位采样（JointLimits 构造）")
+
+    # ---- ① rand_q_arm：缺省软限位采样与自定义限位采样（JointLimits 构造）----
     soft = arm.joint_limits_soft_arm                       # 缺省采样限位：软限位（只读 property）
     q_soft = arm.rand_q_arm()                              # 缺省调用：在软限位 [q_min, q_max] 内均匀采样
     over_soft = float(np.max(np.maximum(soft.q_min - q_soft, q_soft - soft.q_max)))  # 相对软限位的越界量（≤0 即在内）
@@ -285,7 +304,7 @@ def demo_rand_q(arm) -> None:
     print("   说明：越界量 ≤ 0 表示采样落在对应限位内；JointLimits 其余字段（dq_max/tau_max）")  # 越界量判读
     print("         缺省 ±inf，对位置采样无影响；采样均匀且独立（每次运行结果不同）。")  # 其余字段行为
 
-    # ---- rand_q_end：末端电机侧的同名采样接口（与 rand_q_arm 完全对称）----
+    # ---- ② rand_q_end：末端电机侧的同名采样接口（与 rand_q_arm 完全对称）----
     soft_end = arm.joint_limits_soft_end                   # end 侧软限位（无 end 段型号为 None）
     if soft_end is None:                                   # 无 end 段：采样返回全零向量（无实际意义）
         print("   rand_q_end：本型号无 end 软限位段，采样返回全零向量。")  # 无 end 段行为说明
@@ -297,11 +316,15 @@ def demo_rand_q(arm) -> None:
         print("         rand_q_end 主要用于算法测试等一般化采样需求，日常操作用 set_action_end。")  # 指向离散动作
 
 
+# ============================================================
+# 六、主流程：创建对象 → 三大节演示 → 安全收尾
+# ============================================================
 def main() -> None:
     """离线主流程：创建对象 → 六域求解器管理 → 数学门面 → 到位判断与采样 → 收尾。"""
+    model = parse_model()                                  # 必填型号参数
     sec("创建 JoyArm（离线加载 URDF 数字模型与六域求解器，不连接任何硬件）")
-    arm = joyArm("rebot_arm_b601_dm")                      # 离线创建：装配模型与算法，全程不触硬件
-    print(f"   print(arm) 展示 __repr__：\n   {arm}")       # 一行核心信息（型号 / 关节数 / 求解器域）
+    arm = joyArm(model)                                    # 离线创建：装配模型与算法，全程不触硬件
+    print(arm)                                             # __str__：多行表格摘要（与例程 01 相同）
 
     sec("① 求解器六域管理：get / set / get_activated 三类共 18 法")
     demo_solver_overview(arm)                              # 1.1 查询 12 法（六域 × 两个查询入口）

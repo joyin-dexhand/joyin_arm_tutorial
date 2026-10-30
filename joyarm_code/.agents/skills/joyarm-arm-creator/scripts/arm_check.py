@@ -23,12 +23,12 @@
     报错逐行猜原因；第④步全离线，只装配数字模型与算法，不连接任何硬件。
 
 【环境与运行】
-    ① 安装 uv（仅首次）
+    ⓪ 安装 uv（仅首次）
        curl -LsSf https://astral.sh/uv/install.sh | sh     # Linux / macOS
        irm https://astral.sh/uv/install.ps1 | iex          # Windows PowerShell
-    ② 创建虚拟环境并同步依赖
+    ① 创建虚拟环境并同步依赖
        cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
-    ③ 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需硬件）
+    ② 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需硬件）
        python .agents/skills/joyarm-arm-creator/scripts/arm_check.py --model rebot_arm_b601_dm
 
 【预期输出】四步校验逐项 PASS/FAIL 与汇总表；全 PASS 打印验收阶梯建议并以退出码 0
@@ -52,10 +52,10 @@ DEFAULT_MODEL = "rebot_arm_b601_dm"                       # 缺省体检型号�
 
 # 验收阶梯：四步全 PASS 后按序推进（命令均在 joyarm_code/ 目录下执行）
 LADDER = [
-    ("离线", "quick_start/01_model_create.py",    "对象创建与核心信息打印"),   # 阶梯 1：离线对象创建
-    ("离线", "quick_start/05_offline_math.py",    "机器人学离线计算与求解器设置"),   # 阶梯 2：离线数学
-    ("真机", "quick_start/02_connect_read.py",    "硬件连接与状态读取"),   # 阶梯 3：真机只读
-    ("真机", "quick_start/04_direct_command.py",  "直通硬件电机指令"),   # 阶梯 4：真机直通指令
+    ("离线", "quick_start/01_arm_create_and_print.py", "对象创建与核心信息打印"),   # 阶梯 1：离线对象创建
+    ("离线", "quick_start/05_offline_math_and_solvers.py",    "机器人学离线计算与求解器设置"),   # 阶梯 2：离线数学
+    ("真机", "quick_start/02_connect_and_read_state.py",    "硬件连接与状态读取"),   # 阶梯 3：真机只读
+    ("真机", "quick_start/04_direct_motor_command.py",  "直通硬件电机指令"),   # 阶梯 4：真机直通指令
     ("真机", "quick_start/06_fsm_motion.py",      "基于运动状态机的运动"),   # 阶梯 5：真机 FSM 运动
     ("真机", "test/joyarm_test.py",               "真机冒烟（连接 + 状态可视化）"),   # 阶梯 6：真机冒烟
 ]
@@ -218,7 +218,7 @@ def main() -> None:
     print(f"整机集成四步校验  ——  型号『{model}』")             # 大节标题（附目标型号）
     print("=" * 78)                                           # 大节分隔线
     print(f"  joyarm_core 库根：{CORE_DIR}")                  # 四件套中 config/robot_model/backend 的宿主目录
-    avail = listArm()                                         # 列出可用型号（自打印一行；= 工厂失败消息同源）
+    avail = listArm()                                         # 列出可用型号（自打印列表与有效型号校验规则；= 工厂失败消息同源）
     if model not in avail:                                    # 目标型号不在可用列表：先提示再继续逐项体检定位缺件
         print(f"  ⚠ 『{model}』不在可用型号列表——继续四步体检以定位缺失的件（可能仅个别件未就位）")   # 缺件提示
     results = {"s1": False, "s2": False, "s3": False, "s4": False}   # 四步结果登记表

@@ -21,10 +21,10 @@ fkine 正运动学测试分析  (test 离线测试)
     frame 参数指定求哪个坐标系：整数 0 即基座系（universe 帧），任意 q 下位姿恒为恒等。
 
 【环境与运行】
-    ① 安装 uv（仅首次）：curl -LsSf https://astral.sh/uv/install.sh | sh
+    ⓪ 安装 uv（仅首次）：curl -LsSf https://astral.sh/uv/install.sh | sh
       （Windows PowerShell：irm https://astral.sh/uv/install.ps1 | iex）
-    ② cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
-    ③ python test/fkine_test.py（离线脚本，无需硬件）
+    ① cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
+    ② python test/fkine_test.py（离线脚本，无需硬件）
 
 【预期输出】
     ①~⑦ 七节控制台信息：两实现位置差在 1e-12 m 量级（数值一致），末尾打印分析

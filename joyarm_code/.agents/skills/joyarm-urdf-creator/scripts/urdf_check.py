@@ -24,10 +24,10 @@ URDF 模型资产检查  (joyarm-urdf-creator skill)
     自由度——与 JoyArm._build_pin_model 的做法完全一致。
 
 【环境与运行】
-    ① 安装 uv（仅首次）：curl -LsSf https://astral.sh/uv/install.sh | sh
+    ⓪ 安装 uv（仅首次）：curl -LsSf https://astral.sh/uv/install.sh | sh
        （Windows PowerShell：irm https://astral.sh/uv/install.ps1 | iex）
-    ② cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
-    ③ python .agents/skills/joyarm-urdf-creator/scripts/urdf_check.py --model <型号>
+    ① cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
+    ② python .agents/skills/joyarm-urdf-creator/scripts/urdf_check.py --model <型号>
        （离线脚本，无需硬件；--model 缺省 rebot_arm_b601_dm）
 
 【预期输出】

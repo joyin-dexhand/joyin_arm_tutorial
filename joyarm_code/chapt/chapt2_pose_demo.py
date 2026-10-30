@@ -17,18 +17,18 @@
     而 RPY 自身退化（Roll/Yaw 无法区分）。
 
 【环境与运行】
-    # 1. 安装 uv（仅首次）
+    # 0. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 2. 创建虚拟环境并同步依赖
+    # 1. 创建虚拟环境并同步依赖
     cd <仓库路径>/joyarm_code
     uv sync
     source .venv/bin/activate
     # Linux 缺少 libxcb-cursor.so.0 时执行
     sudo apt-get install -y libxcb-cursor0 
 
-    # 3. 运行本脚本
+    # 2. 运行本脚本
     cd ./chapt
     python chapt2_pose_demo.py
 

@@ -23,10 +23,10 @@
     装配成整机对象。全程离线，不需要连接机械臂。
 
 【环境与运行】
-    ① 装 uv：curl -LsSf https://astral.sh/uv/install.sh | sh
+    ⓪ 装 uv：curl -LsSf https://astral.sh/uv/install.sh | sh
       （Windows 用 irm https://astral.sh/uv/install.ps1 | iex）
-    ② cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
-    ③ python .agents/skills/joyarm-config-creator/scripts/config_check.py --model rebot_arm_b601_dm
+    ① cd <仓库路径>/joyarm_code && uv sync && source .venv/bin/activate
+    ② python .agents/skills/joyarm-config-creator/scripts/config_check.py --model rebot_arm_b601_dm
       （离线脚本，无需硬件；--model 缺省 rebot_arm_b601_dm）
 
 【预期输出】

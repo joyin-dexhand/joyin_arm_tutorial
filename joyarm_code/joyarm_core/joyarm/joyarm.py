@@ -1053,6 +1053,11 @@ class _VizWindow:
         return app.exec()
 
 
+def _disp_pad(s: str, width: int) -> str:
+    """按终端显示宽度左对齐补空格（CJK 全角字符计 2 列）。"""
+    return s + " " * max(width - sum(2 if ord(ch) > 0x2E80 else 1 for ch in s), 0)  # 0x2E80 起大致为 CJK 区
+
+
 class JoyArm:
     """JoyArm 机械臂类（本体 arm + 末端 end，config 驱动的组合根）
 
@@ -2783,6 +2788,28 @@ class JoyArm:
         return (f"<{type(self).__name__} model={self._model!r} n_arm={self._n_arm} "
                 f"n_end={self._n_end} frame_end={self._frame_end!r} "
                 f"solvers={act} fsm={self._current_motion_state.name}>")
+
+    def __str__(self) -> str:
+        """print/str 的多行表格摘要；字段与 __repr__ 一一对应。"""
+        act = {d: (self._activated_name_of(d) if getattr(self, f"_{d}_solvers") else "-")
+               for d in _DOMAIN_REGISTRIES}
+        rows = [                                       # 标量字段：标签 → 当前值
+            ("model 型号", self._model),
+            ("n_arm 本体关节数", self._n_arm),
+            ("n_end 末端电机数", self._n_end),
+            ("frame_end 末端帧名", self._frame_end),
+            ("fsm FSM 状态", self._current_motion_state.name),
+        ]
+        lines = [                                      # 表头：标题 + 两列表头 + 分隔线
+            f"{type(self).__name__} 对象摘要：",
+            "-" * 60,
+            f"{_disp_pad('字段', 24)}值",
+            "-" * 60,
+        ]
+        lines += [f"{_disp_pad(str(k), 24)}{v}" for k, v in rows]   # 标量字段逐行
+        lines += [f"{_disp_pad(f'solvers[{d}]', 24)}{n}" for d, n in act.items()]  # 六域激活逐行
+        lines += ["-" * 60]
+        return "\n".join(lines)
 
     # ============================================================
     # 7.2 关节查询与随机采样

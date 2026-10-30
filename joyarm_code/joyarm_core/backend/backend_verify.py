@@ -34,16 +34,16 @@ Backend 子类全方位测试验证（上层视角）  joyarm_core/backend/backe
         组展开不含本项），且每族各自二次确认（任一次非 yes 即跳过该族及后续）。
 
 【环境与运行】
-    # 1. 安装 uv（仅首次）
+    # 0. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.sh | iex
 
-    # 2. 创建虚拟环境并同步依赖
+    # 1. 创建虚拟环境并同步依赖
     cd <仓库>/joyarm_code
     uv sync
     source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下）
+    # 2. 运行本脚本（在 joyarm_code/ 目录下）
     python joyarm_core/backend/backend_verify.py --help                                  # 完整用法
     python joyarm_core/backend/backend_verify.py --list                                  # 全部测试项清单
     python joyarm_core/backend/backend_verify.py --sub=backend_rebot_arm_b601_dm --step=offline         # 00 组（缺省）
