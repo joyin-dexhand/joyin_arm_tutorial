@@ -49,7 +49,7 @@ from pathlib import Path                                         # 标准库：�
 import numpy as np                                               # 数组运算：位姿偏移与关节偏差幅值
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入搜索路径
-from joyarm_core import MotionState, Pose, joyArm                # 核心库：FSM 状态枚举 / 位姿类型 / 对象入口
+from joyarm_core import MotionState, Pose, joyArm, listArm      # 核心库：FSM 状态枚举 / 位姿类型 / 对象入口 + 可用型号列表
 
 
 # ============================================================
@@ -64,9 +64,11 @@ DEV_LIMIT = 0.2                                                  # 关节解偏�
 # 二、命令行与格式化助手：型号解析与表格显示
 # ============================================================
 def parse_model() -> str:
-    """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
+    """解析必填的命令行型号参数；缺失时打印用法并列出可用型号（listArm），以退出码 1 结束。"""
     if len(sys.argv) != 2:                                       # 必须恰好携带 1 个型号参数
-        sys.exit(f"用法：python quick_start/09_pick_and_place.py <型号>")  # 缺参退出，不进入演示
+        print(f"用法：python quick_start/09_pick_and_place.py <型号>")  # 缺参：先打印用法
+        listArm()                                                # 顺带列出全部可用型号
+        sys.exit(1)                                              # 退出码 1，不进入演示
     return sys.argv[1].strip()                                   # 型号名
 
 
@@ -103,9 +105,7 @@ def move_to(arm, q_target, horizon_s=2.0, timeout_s=6.0):
 # ============================================================
 def main() -> None:
     """综合抓取演示主流程：准备 → 规划 → 抓取 → 收尾（Ctrl+C 可随时安全退出）。"""
-    print("=" * 78)                                              # 大节：标题上边框
-    print("例程 09 —— 综合抓取演示（需真机）")                       # 大节标题
-    print("=" * 78)                                              # 大节：标题下边框
+    print("=============== 例程 09 —— 综合抓取演示（需真机） ========================== ")
     model = parse_model()                                        # 必填型号参数
     try:
         with joyArm(model) as arm:                               # with 退出自动安全收尾（停机/失能/断连）
@@ -178,9 +178,7 @@ def main() -> None:
             print("    收尾完成：FSM 已停机，with 退出时自动断开连接")             # ④ 阶段收尾提示
 
         # 全部完成横幅（仅在未中断时打印）
-        print("=" * 78)                                          # 大节：完成上边框
-        print("例程运行完成：已走通「准备 → 规划 → 抓取 → 收尾」完整闭环。")              # 完成标语
-        print("=" * 78)                                          # 大节：完成下边框
+        print("=============== 完成：已走通「准备 → 规划 → 抓取 → 收尾」完整闭环。 ================ ")
     except KeyboardInterrupt:                                    # Ctrl+C：with 已先走安全收尾（停机/失能/断连）
         print("\n检测到 Ctrl+C：已中断例程，机械臂经 with 退出路径安全停机并断连。")
 

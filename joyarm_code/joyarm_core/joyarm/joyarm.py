@@ -839,14 +839,15 @@ async function loadStatic() {
   finally { staticLoading = false; }
 }
 // ---- 右栏动态渲染（/state.json 约 5 Hz）----
-function renderBk(s) {   // 运行状态表1：行=族（arm/end），列=连接/使能/状态快照
+function renderBk(s) {   // 运行状态表1：行=族（arm/end），列=连接/使能/控制/状态快照
   const b = s.backend, nEnd = (s.end && s.end.names) ? s.end.names.length : 0;
-  const famRow = (fam, conn, ena, m) => `<tr><td class="lbl">${fam}</td><td>${tri(conn)}</td>`
+  const famRow = (fam, conn, ena, mode, m) => `<tr><td class="lbl">${fam}</td><td>${tri(conn)}</td>`
     + `<td>${tri(ena)}</td>`
+    + `<td>${(fam === "end" && nEnd === 0) ? "（无电机）" : (mode ?? "—")}</td>`
     + `<td>${(fam === "end" && nEnd === 0) ? "（无电机）" : snapCell(m)}</td></tr>`;
-  $("bk").innerHTML = "<tr><th></th><th>连接状态</th><th>使能状态</th><th>状态快照</th></tr>"
-    + famRow("arm", b.connected_arm, b.enabled_arm, s.snapshot.arm)
-    + famRow("end", b.connected_end, b.enabled_end, s.snapshot.end);
+  $("bk").innerHTML = "<tr><th></th><th>连接状态</th><th>使能状态</th><th>控制状态</th><th>状态快照</th></tr>"
+    + famRow("arm", b.connected_arm, b.enabled_arm, b.mode_arm, s.snapshot.arm)
+    + famRow("end", b.connected_end, b.enabled_end, b.mode_end, s.snapshot.end);
 }
 function renderFsm(s) {   // 运行状态表2：状态机运行状态/当前/目标/安全事件各一列（两行四列）
   $("fsm").innerHTML = "<tr><th>状态机运行状态</th><th>当前状态</th><th>目标状态</th><th>安全事件</th></tr>"
@@ -2278,6 +2279,9 @@ class JoyArm:
                 "enabled_arm": self._viz_bool(self._backend.is_enabled_arm),
                 "connected_end": self._viz_bool(self._backend.is_connected_end),
                 "enabled_end": self._viz_bool(self._backend.is_enabled_end),
+                # 控制模式直读组缓存成员（get_mode_* 是 0x33 总线事务，可视化 5 Hz 轮询须零总线）
+                "mode_arm": getattr(getattr(self._backend, "_mode_arm", None), "name", None),
+                "mode_end": getattr(getattr(self._backend, "_mode_end", None), "name", None),
             },
             "solvers": self._viz_solvers(),
             "traj_enabled": self._viz_traj_enabled,

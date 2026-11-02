@@ -52,6 +52,7 @@ import numpy as np                                            # 关节角 / 位�
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入模块搜索路径
 from joyarm_core import (                                     # 上两行注入路径后再导入（避免 E402 误报）
     joyArm,                                                   # JoyArm 对象创建入口
+    listArm,                                                  # 可用型号列表（listArm）
     MotionState,                                              # FSM 六状态枚举
     SafetyEvent,                                              # 安全事件六级枚举
     STATE_FROM,                                               # SafetyEvent → MotionState 映射表
@@ -65,9 +66,11 @@ TRAJ_CUBIC = "single_joint_cubic_traj_planner"                # 三次多项式�
 # 一、命令行参数解析：必填型号，缺失打印用法并以退出码 1 结束
 # ============================================================
 def parse_model() -> str:
-    """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
+    """解析必填的命令行型号参数；缺失时打印用法并列出可用型号（listArm），以退出码 1 结束。"""
     if len(sys.argv) != 2:                                    # 必须恰好携带 1 个型号参数
-        sys.exit(f"用法：python quick_start/06_fsm_motion.py <型号>")  # 缺参退出，不进入演示
+        print(f"用法：python quick_start/06_fsm_motion.py <型号>")  # 缺参：先打印用法
+        listArm()                                             # 顺带列出全部可用型号
+        sys.exit(1)                                           # 退出码 1，不进入演示
     return sys.argv[1].strip()                                # 型号名
 
 
@@ -135,9 +138,7 @@ def run_demo() -> None:
     """真机演示全流程：连接 → 求解器 → FSM → 关节/笛卡尔目标 → 安全事件 → 回零收尾。"""
     model = parse_model()                                     # 必填型号参数
     with joyArm(model) as arm:                                # with 退出自动安全收尾（停 FSM→失能→断连）
-        print("=" * 78)                                       # 大节横幅：开
-        print("例程 06 —— 基于运动状态机（MotionFSM）的运动")
-        print("=" * 78)                                       # 大节横幅：闭
+        print("================== 例程 06 —— 基于运动状态机（MotionFSM）的运动 ================ ")
 
         # ---- 连接：FSM 仅涉 arm 侧，无需连接 end ----
         if arm.connect_arm() is not True:                     # 连接 arm 总线（通道取配置缺省值）
@@ -147,9 +148,7 @@ def run_demo() -> None:
         print(f"已连接 {model}（{arm.n_arm} 关节），"
               f"home = {fmt_arr(q_home)} rad\n")              # 打印连接信息与运动基准位形
 
-        # ---- ① 求解器确认：FSM 运动管线依赖 traj / ctrl 两域 ----
-        print("-" * 78)                                       # 小节分隔线
-        print("① 求解器确认：traj（轨迹规划）与 ctrl（关节控制）两域")             # 小节标题
+        print("================== ① 求解器确认：traj（轨迹规划）与 ctrl（关节控制）两域 ================ ")
         traj_names = arm.get_traj_solvers()                   # traj 域已加载规划器注册名（排序深拷贝）
         ctrl_names = arm.get_ctrl_solvers()                   # ctrl 域已加载控制器注册名
         traj_act = arm.get_activated_traj_solver()            # traj 域当前激活规划器
@@ -169,9 +168,7 @@ def run_demo() -> None:
         print(f"当前激活 = {arm.get_activated_traj_solver()}，"
               f"plan_hz = {arm.plan_hz} Hz\n")                # 切换后激活名与规划线程频率
 
-        # ---- ② FSM 启动：启动条件核对 → 人工确认 → 启动并等待 MOTION ----
-        print("-" * 78)                                       # 小节分隔线
-        print("② 启动运动状态机：start_motion_fsm（启动条件 4 项）")       # 小节标题
+        print("================== ② 启动运动状态机：start_motion_fsm（启动条件 4 项） ================ ")
         state = arm.joint_state_arm                           # arm 被动状态快照（刷新线程持续供给）
         if state.t > 0:                                       # t=0 表示从未收到状态帧
             lag_ms = (time.time() - state.t) * 1000.0         # 反馈时延（毫秒）
@@ -207,9 +204,7 @@ def run_demo() -> None:
             return                                            # 终止演示
         print()                                               # 节间空行
 
-        # ---- ③ 关节目标：set_target_joint 写入 → get_target_trajframe 读回 → 到位判断 ----
-        print("-" * 78)                                       # 小节分隔线
-        print("③ 关节目标帧：set_target_joint（home 基准小偏移）")         # 小节标题
+        print("================== ③ 关节目标帧：set_target_joint（home 基准小偏移） ================ ")
         q_goal = q_home.copy()                                # 目标 = home 拷贝（不污染只读引用）
         q_goal[0] += 0.15                                     # 关节 1 +0.15 rad（home±0.2 rad 安全包络内）
         q_goal[1] -= 0.15                                     # 关节 2 −0.15 rad
@@ -219,9 +214,7 @@ def run_demo() -> None:
         print_frame_table(frames[0], "set_target_joint 写入后读回 TrajFrame")  # 逐字段打印读回帧
         print(f"到位判断 is_in_q_arm：{'是' if wait_q_arrival(arm, q_goal) else '否'}\n")  # 轮询到位（容差 0.05 rad）
 
-        # ---- ④ 笛卡尔目标：fkine 求当前位姿 → ikine 解小偏移目标 → set_target_cart 通道 ----
-        print("-" * 78)                                       # 小节分隔线
-        print("④ 笛卡尔目标：solve_fkine / solve_ikine 构造，set_target_cart 写入")  # 小节标题
+        print("================== ④ 笛卡尔目标：solve_fkine / solve_ikine 构造，set_target_cart 写入 ================ ")
         pose_cur = arm.solve_fkine()                          # 正运动学（q 缺省取当前快照）→ Pose
         pose_goal = Pose(position=pose_cur.position + np.array([0.04, 0.0, 0.02]),
                          orientation=pose_cur.orientation)    # 沿基座系 x/z 平移 4/2 cm，姿态保持不变
@@ -248,10 +241,8 @@ def run_demo() -> None:
                 # ↑ pose-only 帧会被规划器回退为恒定 q_home（已在 home 位，不产生意外运动）
         print()                                               # 节间空行
 
-        # ---- ⑤ 安全事件：HOLDING 原位锁定 → NORMAL 恢复 ----
-        print("-" * 78)                                       # 小节分隔线
-        print("⑤ 安全事件：set_event / get_event"
-              "（严重程度 NORMAL<HOLDING<HOMING<ZEROING<DAMPING<DISABLE）")  # 小节标题
+        print("================== ⑤ 安全事件：set_event / get_event ================ ")
+        print("严重程度从轻到重：NORMAL < HOLDING < HOMING < ZEROING < DAMPING < DISABLE")  # 六级链速查
         print(f"当前事件 = {arm.get_event().name}，"
               f"目标态 = {STATE_FROM[arm.get_event()].name}")    # 事件 → 目标态映射（STATE_FROM）
         arm.set_event(SafetyEvent.HOLDING)                    # 触发原位锁定：目标态同步为映射的 HOLD
@@ -267,17 +258,13 @@ def run_demo() -> None:
               f"当前态 = {arm.get_current_motion_state().name}，"
               f"事件 = {arm.get_event().name}\n")             # MOTION 恢复情况与当前事件
 
-        # ---- ⑥ 收尾：stop_motion_fsm 回零失能 ----
-        print("-" * 78)                                       # 小节分隔线
-        print("⑥ 收尾：stop_motion_fsm（阻塞式）")            # 小节标题
+        print("================== ⑥ 收尾：stop_motion_fsm（阻塞式） ================ ")
         print("收尾规则：当前事件不重于 ZEROING → 先回零位（经 HOME）再失能；")  # 收尾规则一
         print("            更严重（DAMPING/DISABLE）→ 直接失能停机。")  # 收尾规则二
         arm.stop_motion_fsm()                                 # 当前事件 NORMAL（≤ZEROING）→ 走回零失能路径
         print(f"FSM 已停止：当前态 = {arm.get_current_motion_state().name}，"
               f"事件 = {arm.get_event().name}（收尾统一复位为 DISABLE）")  # 最终状态复核
-        print("=" * 78)                                       # 大节横幅：开
-        print("例程完成：机械臂已回零失能，with 退出将自动断开连接。")                # 结束语
-        print("=" * 78)                                       # 大节横幅：闭
+        print("================== 完成：机械臂已回零失能，with 退出将自动断开连接。 ================= ")
 
 
 # ============================================================

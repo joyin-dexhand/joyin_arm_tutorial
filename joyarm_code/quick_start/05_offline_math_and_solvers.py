@@ -52,16 +52,18 @@ import numpy as np                                         # 数值计算：向�
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入搜索路径，未安装库也可运行
 # JoyArm 创建入口与关节限位类型（JointLimits 定义在 joyarm_core/utils/types.py，顶层 re-export）
-from joyarm_core import JointLimits, joyArm
+from joyarm_core import JointLimits, joyArm, listArm
 
 
 # ============================================================
 # 一、命令行型号参数：解析必填的型号入参，缺失即打印用法退出
 # ============================================================
 def parse_model() -> str:
-    """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
+    """解析必填的命令行型号参数；缺失时打印用法并列出可用型号（listArm），以退出码 1 结束。"""
     if len(sys.argv) != 2:                                # 必须恰好携带 1 个型号参数
-        sys.exit(f"用法：python quick_start/05_offline_math_and_solvers.py <型号>")  # 缺参退出，不进入演示
+        print(f"用法：python quick_start/05_offline_math_and_solvers.py <型号>")  # 缺参：先打印用法
+        listArm()                                         # 顺带列出全部可用型号
+        sys.exit(1)                                       # 退出码 1，不进入演示
     return sys.argv[1].strip()                            # 型号名
 
 
@@ -69,10 +71,8 @@ def parse_model() -> str:
 # 二、输出格式化工具：节标题、表格列对齐与数值显示
 # ============================================================
 def sec(title: str) -> None:
-    """打印大节标题（上下各一条 78 字符 "=" 分隔线）。"""
-    print("\n" + "=" * 78)                                 # 大节分隔线（前空一行更醒目）
-    print(title)                                           # 大节标题本体
-    print("=" * 78)                                        # 大节分隔线（下）
+    """打印单行大节横幅：35 个 "=" + 标题 + 右侧 "=" 补齐至 84 字符（末尾带一个空格）。"""
+    print("\n" + "=" * 35 + f" {title} " + "=" * max(46 - len(title), 2) + " ")  # 前空一行更醒目
 
 
 def sub(title: str) -> None:
@@ -342,7 +342,7 @@ def main() -> None:
     demo_arrival(arm)                                      # 3.1 is_in_* 离线恒 False 的机制演示
     demo_rand_q(arm)                                       # 3.2 缺省软限位 / 自定义限位采样
 
-    print("=" * 78)                                        # 收尾分隔线
+    print("=" * 83 + " ")
     arm.close()                                            # 显式安全收尾（可重复调用；离线时打印的「未连接跳过」日志属正常）
     print("离线例程运行完毕（close 时「未连接……豁免跳过」类日志为正常提示）")
 

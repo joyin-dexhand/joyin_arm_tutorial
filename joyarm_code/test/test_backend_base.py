@@ -26,6 +26,8 @@ MIT 位域打包位级校验、反馈帧解码含双温度与残尾拼接、参�
 test_71 为 backend_rebot_arm_b601_dm 审阅轮新增（总线生命周期：RX 存活判定/僵尸重建/无主清扫，防真机重连失败与泄漏）。
 test_72 为 backend_rebot_arm_b601_dm 末端离散动作新增（open/home/close/position：自动切 POSITION+增益序列、cfg vlim/flim
 默认、按需位置透传与越限裁硬限位、未知动作/缺参/切模式失败异常路径）。
+test_74 为 send 指令流新鲜度语义新增（桩注入应答帧：一发一收即时换入缓存、get_state 直返毫秒级新值且不补 0xCC；
+静默越半承诺周期才补查且本次仍返旧快照——state_refresh_hz 是承诺阈值而非缓存更新频率）。
 """
 import copy
 import gc
@@ -2062,3 +2064,46 @@ def test_dm_expired_feedback_requests_refresh_but_does_not_publish(cfg):
     with pytest.raises(TimeoutError):
         d._read_state('arm', 0)
     assert sent == [motor.query_frame]
+
+
+def test_74_dm_command_reply_stream_keeps_state_cache_fresh(cfg):
+    """send 指令流（一发一收）下 get_state 返回指令应答刷新的毫秒级缓存，而非 1 Hz 低频刷新值。
+
+    机制：任何来源的状态帧（0xCC 查询应答 / 伺服指令应答）都经 _dispatch 原子换入同一 motor.state 槽；
+    state_refresh_hz 只是新鲜度承诺阈值（_read_state 的 half = 0.5/hz 补查门控），不是缓存更新频率。
+    """
+    from joyarm_core.backend.backend_rebot_arm_b601_dm import BackendRebotArmB601DM, _DMBus
+
+    d = BackendRebotArmB601DM(cfg)
+    d._refresh_stop.set()                                   # 刷新线程静默：缓存只受注入帧控制
+    try:
+        bus = _DMBus("/dev/null", 921600, 1000)             # 构造不开串口
+        bus.register(d._motors_arm)                         # 按 master_id 路由到 6 个 arm 电机
+        sent = []                                           # 总线发帧记录桩
+        bus.write = sent.append
+        d._bus_arm = bus
+        d._is_connected_arm = True                          # 绕过连接前置检查
+
+        def feed_all(q_u):                                  # 模拟一拍指令应答：6 电机各回一帧状态
+            for m in d._motors_arm:
+                bus._dispatch(m.master_id, bytes((1, q_u >> 8, q_u & 0xFF, 0x80, 0x80, 0, 30, 31)))
+
+        # 1) 指令应答流（两拍、q 不同）→ 缓存即时换入：get_state 直返毫秒级新值、不补发任何 0xCC
+        feed_all(0x2000)
+        st1 = d.get_state_arm()
+        time.sleep(0.005)                                   # 200 Hz 拍距 5 ms
+        feed_all(0xB000)
+        st2 = d.get_state_arm()
+        assert time.time() - st2.t < 0.2                    # 缓存跟的是指令应答节拍（非 1 Hz 承诺）
+        assert all(abs(b - a) > 0.1 for a, b in zip(st1.q, st2.q))  # 第二拍应答已换入（一发一收即时生效）
+        assert sent == []                                   # 龄 << half 门控：一次 0xCC 都没补发
+
+        # 2) 对照：静默超过半承诺周期 → 补发 6 帧 0xCC 查询，且本次仍返回旧快照（非阻塞语义）
+        t_old = st2.t
+        time.sleep(0.5 / d._refresh_hz + 0.06)              # 越过 half = 0.5 / state_refresh_hz
+        st3 = d.get_state_arm()
+        assert len(sent) == len(d._motors_arm)               # 每电机补发一帧 0xCC 查询
+        assert all(f is m.query_frame for f, m in zip(sent, d._motors_arm))
+        assert st3.t == pytest.approx(t_old, abs=0.01)       # 应答未回：返回发帧前的旧快照
+    finally:
+        d._refresh_stop.set()

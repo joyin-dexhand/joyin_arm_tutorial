@@ -28,7 +28,7 @@
 
 【预期输出】
     可用型号列表与判断规则 → 选定型号 → 分节打印：对象摘要表、关节数与关节名、硬/软限位四表、特征位形与 tcp 限位、运行频率与六域激活求解器。
-    收尾时「arm 未连接……豁免跳过」类日志属正常提示，非报错。
+
 ==============================================================================
 """
 
@@ -53,7 +53,7 @@ def ask_model(models: list):
             print("\n输入流已结束：未创建对象，安全退出。")
             return None
         if answer.lower() == "q":                 # q → 主动退出
-            print("已选择退出：未创建对象，再见。")
+            print("已选择退出：未创建对象。")
             return None
         if answer in models:                      # 有效型号 → 返回并结束循环
             return answer
@@ -143,26 +143,23 @@ def print_solver_domains(arm) -> None:
 
 def create_and_show(name: str) -> None:
     """创建 joyArm(name)，按 ②~⑥ 分节打印核心配置信息。"""
-    print("=" * 78)
-    print(f"② 创建对象 joyArm(\"{name}\")：自检校验")
+    title = f"② 创建对象 joyArm(\"{name}\")：自检校验"
+    print("=" * 10 + f" {title} " + "=" * max(46 - len(title), 2) + " ")
     arm = joyArm(name)                            # 任一步校验失败抛带原因的异常
     print(arm)                                    # __str__：多行表格摘要
 
-    print("=" * 78)
-    print("③ 关节数与关节名")
+    print("========== ③ 关节数与关节名 ===================================== ")
     print(f"   本体关节数 n_arm = {arm.n_arm}，末端电机数 n_end = {arm.n_end}")
     print(f"   本体关节名：{arm.get_joint_names_arm()}")
     print(f"   末端电机名：{arm.get_joint_names_end()}")
 
-    print("=" * 78)
-    print("④ 逐关节硬限位与软限位（joint_limits_hard / joint_limits_soft）")
+    print("========== ④ 逐关节硬限位与软限位（joint_limits_hard / joint_limits_soft） ==== ")
     print_limits_table("本体 arm", arm.get_joint_names_arm(), arm.joint_limits_hard_arm, "硬")
     print_limits_table("本体 arm", arm.get_joint_names_arm(), arm.joint_limits_soft_arm, "软")
     print_limits_table("末端 end", arm.get_joint_names_end(), arm.joint_limits_hard_end, "硬")
     print_limits_table("末端 end", arm.get_joint_names_end(), arm.joint_limits_soft_end, "软")
 
-    print("=" * 78)
-    print("⑤ 特征位形与 tcp 限位")
+    print("========== ⑤ 特征位形与 tcp 限位 ================================ ")
     print(f"   neutral_arm  = {vec_str(arm.neutral_arm)}")   # 软限位中点（数值ik默认初值）
     print(f"   home_arm     = {vec_str(arm.home_arm)}")      # cfg 配置的归位位形
     print(f"   neutral_end  = {vec_str(arm.neutral_end)}")   # 末端软限位中点
@@ -175,19 +172,19 @@ def create_and_show(name: str) -> None:
         print(f"   tcp 工作空间包围盒 (m)：x {vec_str(b[0])}，y {vec_str(b[1])}，z {vec_str(b[2])}")
     print(f"   tcp 速度/力上限：v_lin {tcp.v_lin_max} m/s，v_ang {tcp.v_ang_max} rad/s，f {tcp.f_max} N，t {tcp.t_max} N·m")
 
-    print("=" * 78)
-    print(f"⑥ 运行频率与求解器六域：plan_hz = {arm.plan_hz}，ctrl_hz = {arm.ctrl_hz}")
+    title = f"⑥ 运行频率与求解器六域：plan_hz = {arm.plan_hz}，ctrl_hz = {arm.ctrl_hz}"
+    print("=" * 10 + f" {title} " + "=" * max(46 - len(title), 2) + " ")
     print_solver_domains(arm)
 
     arm.close()                                   # 显式安全收尾（离线仅停线程并清缓存）
-    print("=" * 78)
-    print("例程运行完毕（收尾时「arm 未连接……豁免跳过」类日志为正常提示）。")
+    print("========== 运行完毕（收尾时「arm 未连接……豁免跳过」类日志为正常提示）。 ============ ")
 
-
+# ============================================================
+# 四、main()
+# ============================================================
 def main() -> None:
     """主流程：列出可用型号 → 选定型号 → 创建对象并分节打印核心信息。"""
-    print("=" * 78)
-    print("① 可用机械臂型号（库函数 listArm() 扫描 config/ 并按三条件过滤）")
+    print("========== ① 可用机械臂型号（库函数 listArm() 扫描 config） ========= ")
     models = listArm()                            # 打印可用型号列表与判断规则并返回
     name = choose_model(models)                   # 命令行参数优先，否则交互输入
     if name is None:                              # q 退出 / 输入流结束：不创建对象

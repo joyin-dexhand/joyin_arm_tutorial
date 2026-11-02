@@ -54,7 +54,7 @@ import numpy as np                   # numpy：关节角序列的数组存储与
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装 joyarm_core 时也可直接运行本脚本
 # 机械臂主类 joyArm + 运动状态 / 安全事件两个枚举（须在 sys.path 注入之后导入）
-from joyarm_core import MotionState, SafetyEvent, joyArm
+from joyarm_core import MotionState, SafetyEvent, joyArm, listArm
 
 
 # ============================================================
@@ -70,9 +70,11 @@ REPLAY_AHEAD = 0.15   # 路点目标到达时刻提前量（秒；仅 cubic 规�
 # 二、命令行参数与打印助手：解析必填型号参数，向量转可读文本
 # ============================================================
 def parse_model() -> str:
-    """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
+    """解析必填的命令行型号参数；缺失时打印用法并列出可用型号（listArm），以退出码 1 结束。"""
     if len(sys.argv) != 2:                              # 必须恰好携带 1 个型号参数
-        sys.exit(f"用法：python quick_start/08_teach_replay.py <型号>")  # 缺参退出，不进入演示
+        print(f"用法：python quick_start/08_teach_replay.py <型号>")  # 缺参：先打印用法
+        listArm()                                       # 顺带列出全部可用型号
+        sys.exit(1)                                     # 退出码 1，不进入演示
     return sys.argv[1].strip()                          # 型号名
 
 
@@ -138,9 +140,7 @@ def replay_teach(arm, record: np.ndarray, ahead: float) -> None:
 # ============================================================
 def main() -> None:
     """拖动示教与轨迹复现主流程（真机，三处回车确认）。"""
-    print("=" * 78)                                   # 大节横幅：开
-    print("例程 08 —— 拖动示教与轨迹复现（需真机）")        # 例程标题
-    print("=" * 78)                                   # 大节横幅：闭
+    print("========================= 例程 08 —— 拖动示教与轨迹复现（需真机） ======================= ")
 
     # ---- ⓪ 参数表：先看清本例程的全部可调常量 ----
     rows = [                                          # (参数名, 取值, 说明) 三列数据
@@ -157,10 +157,7 @@ def main() -> None:
     model = parse_model()                             # 必填型号参数
     with joyArm(model) as arm:                        # with 退出（含异常）自动安全收尾 close()
 
-        # ---- ① 连接并启动 FSM：自动 DISABLE → HOME → MOTION ----
-        print("=" * 78)                               # 大节横幅：开
-        print("① 连接真机并启动运动状态机")              # 大节标题
-        print("=" * 78)                               # 大节横幅：闭
+        print("=============== ① 连接真机并启动运动状态机 =========================== ")
         ret = arm.connect_arm()                       # 连接本体 arm 电机总线（成功后自动设 cfg 默认模式）
         print(f"    connect_arm 返回：{'—' if ret is None else ret}；"
               f"is_connected_arm：{arm.is_connected_arm}")   # None（意外）显「—」
@@ -180,10 +177,7 @@ def main() -> None:
               f"（当前态={arm.get_current_motion_state().name}），"   # 当前 FSM 状态名
               f"home = {vec_str(arm.home_arm)} rad")  # home 位形（运动基准）
 
-        # ---- ② DAMP 阻尼态拖动示教 + 50 Hz 录制 4 秒 ----
-        print("=" * 78)                               # 大节横幅：开
-        print("② 阻尼态拖动示教与录制")                  # 大节标题
-        print("=" * 78)                               # 大节横幅：闭
+        print("=============== ② 阻尼态拖动示教与录制 =============================== ")
         arm.set_event(SafetyEvent.DAMPING)            # 阻尼防护事件 → FSM 目标态 DAMP（STATE_FROM 映射）
         if arm.wait_for_motion_state(MotionState.DAMP, timeout=5.0) != 1:    # 阻塞等待实际进入 DAMP
             print("    未进入 DAMP 阻尼态，安全收尾退出。")
@@ -194,10 +188,7 @@ def main() -> None:
         record = record_teach(arm, RECORD_HZ, RECORD_SEC)  # 50 Hz × 4 s → 约 200 帧
         print(f"    录制完成 {record.shape[0]} 帧，起点 q = {vec_str(record[0])} rad")   # 录制结果
 
-        # ---- ③ 切回 MOTION 并以 10 Hz 逐路点回放 ----
-        print("=" * 78)                               # 大节横幅：开
-        print("③ 轨迹回放")                            # 大节标题
-        print("=" * 78)                               # 大节横幅：闭
+        print("=============== ③ 轨迹回放 ========================================== ")
         arm.set_event(SafetyEvent.NORMAL)             # 正常事件 → FSM 目标态 MOTION（经 HOME 中转、途中先回 home 位形）
         if arm.wait_for_motion_state(MotionState.MOTION, timeout=10.0) != 1:  # 阻塞等待回到 MOTION
             print("    10 秒内未回到 MOTION 正常运动态，安全收尾退出。")
@@ -207,10 +198,7 @@ def main() -> None:
         replay_teach(arm, record, REPLAY_AHEAD)       # 10 Hz 逐路点下发复现示教轨迹
         print(f"    回放完成，当前 q = {vec_str(arm.joint_state_arm.q)} rad")
 
-        # ---- ④ 收尾：阻塞安全停机（经 HOME 回零失能），with 退出自动断连 ----
-        print("=" * 78)                               # 大节横幅：开
-        print("④ 安全收尾")                            # 大节标题
-        print("=" * 78)                               # 大节横幅：闭
+        print("=============== ④ 安全收尾 ======================================== ")
         arm.stop_motion_fsm()                         # 阻塞等待回零到位后失能（事件更严重时直接失能）
         print("    已安全停机（回零失能完成），with 退出后自动断开总线。例程结束。")
 

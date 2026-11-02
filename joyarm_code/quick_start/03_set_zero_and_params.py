@@ -10,6 +10,8 @@
        输出（读取失败显「—」并说明）
     4. 参数写入安全演示：读当前值 → write_param_arm / write_param_end 把刚读到的值原样写回 →
        读回核对一致（不改变电机行为；真正改值的写法以注释示例给出，默认不执行）
+    5. 清错指令：clear_error_arm / clear_error_end 以注释示例给出（先排查并消除故障原因
+       再清除；默认不执行）
 
 【原理简介】
     每个关节电机内部有一组 RAM 参数寄存器，主控按「参数键 → 寄存器号」经总线逐关节读写；
@@ -53,18 +55,20 @@ import time               # 时间模块：标零后等待一个刷新周期
 import numpy as np  # 数值计算：状态向量取整与最大绝对值计算
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装 joyarm_core 时也可直接运行
-from joyarm_core import joyArm   # JoyArm 整机类（连接/标零/参数读写统一入口）
+from joyarm_core import joyArm, listArm   # 机械臂对象创建入口 + 可用型号列表
 
 ZERO_TOL = 0.05  # 标零复核容差（rad）：与 cfg arrival_tol 的关节到位容差同量级
 
 
 # ============================================================
-# 一、命令行解析：必填型号参数，缺参打印用法并以退出码 1 结束
+# 一、命令行解析：必填型号参数，缺参打印用法、列出可用型号并以退出码 1 结束
 # ============================================================
 def parse_model() -> str:
-    """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
+    """解析必填的命令行型号参数；缺失时打印用法并列出可用型号（listArm），以退出码 1 结束。"""
     if len(sys.argv) != 2:                       # 必须恰好携带 1 个型号参数
-        sys.exit(f"用法：python quick_start/03_set_zero_and_params.py <型号>")  # 缺参退出，不进入演示
+        print(f"用法：python quick_start/03_set_zero_and_params.py <型号>")  # 缺参：先打印用法
+        listArm()                                # 顺带列出全部可用型号
+        sys.exit(1)                              # 退出码 1，不进入演示
     return sys.argv[1].strip()                   # 型号名
 
 
@@ -230,14 +234,12 @@ def demo_write_same_value(arm: "joyArm", family: str) -> None:
 
 
 # ============================================================
-# 六、主流程：连接使能 → 标零与参数演示 → 失能收尾
+# 六、主流程：连接使能 → 标零与参数演示 → 清错指令 → 失能收尾
 # ============================================================
 def main() -> None:
-    """真机流程：连接使能 → 标零演示（默认跳过）→ 参数读取 → 原值写回演示 → 失能收尾。"""
+    """真机流程：连接使能 → 标零演示（默认跳过）→ 参数读取 → 原值写回演示 → 清错指令 → 失能收尾。"""
     model = parse_model()  # 必填型号参数
-    # ---- ① 连接与使能 ----
-    print("=" * 78)
-    print("① 连接与使能")
+    print("=============== ① 连接与使能 ====================================== ")
     with joyArm(model) as arm:  # with 退出（含异常）自动安全收尾：停线程→失能→断连
         ok = arm.connect_arm()  # 连接本体电机总线（通道取配置缺省值）
         print(f"connect_arm 返回：{ok}；is_connected_arm：{arm.is_connected_arm}")
@@ -248,32 +250,29 @@ def main() -> None:
         ret = arm.enable_end()  # 使能末端电机（返回 1/0，含义同上）
         print(f"enable_end 返回：{ret}；使能后 is_enabled_end：{arm.is_enabled_end}")
 
-        # ---- ② 标零：默认演示路径只打印说明，不执行 ----
-        print("=" * 78)
-        print("② 标零（set_zero_arm / set_zero_end）：默认演示路径只打印说明，不执行")
+        print("=============== ② 标零：默认只打印说明，不执行 ================== ")
         demo_set_zero(arm, "arm")  # 本体标零演示：两次 YES 确认后才真正执行
         demo_set_zero(arm, "end")  # 末端标零演示：流程同上（零点改写影响开合行程基准）
 
-        # ---- ③ 参数读取 ----
-        print("=" * 78)
-        print("③ 参数读取（read_param_arm / read_param_end）")
+        print("=============== ③ 参数读取 ================================== ")
         demo_read_params(arm)  # arm 与 end 的 pmax/vmax/tmax 逐关节表格
 
-        # ---- ④ 参数写入安全演示：原值写回，不改变电机行为 ----
-        print("=" * 78)
-        print("④ 参数写入安全演示（write_param_arm / write_param_end 原值写回，不改变电机行为）")
+        print("=============== ④ 参数写入安全演示 =========================== ")
         demo_write_same_value(arm, "arm")  # 本体侧：读 → 写同值 → 读回核对的完整安全流程
         demo_write_same_value(arm, "end")  # 末端侧：同一流程对称演示（write_param_end）
 
-        # ---- ⑤ 收尾 ----
-        print("=" * 78)
-        print("⑤ 收尾")
+        print("=============== ⑤ 清错指令 ================================== ")
+        print("（先排查并消除故障原因，再清除故障码；需理解风险后手动放开执行）")  # 使用提醒
+        # arm.clear_error_arm()  # 清除本体各关节硬件故障码（高危，默认不执行）
+        # arm.clear_error_end()  # 清除末端电机故障码（含义同上，默认不执行）
+
+        print("=============== ⑥ 收尾 ===================================== ")
         print(f"disable_arm 返回：{arm.disable_arm()}；disable_end 返回：{arm.disable_end()}")  # 主动失能两端电机
     print("例程完成：机械臂已失能，with 退出自动断开总线。")
 
 
 if __name__ == "__main__":  # 直接运行本文件时执行 main（被 import 时不执行）
     try:
-        main()                 # 主流程：连接 → 标零/参数演示 → 失能收尾
-    except KeyboardInterrupt:  # Ctrl+C：with 已在异常退出时自动安全收尾（失能+断连）
-        print("\n检测到 Ctrl+C：已安全退出（电机已失能、总线已断开）。")
+        main()                 # 主流程：连接 → 标零/参数演示 → 清错指令 → 失能收尾
+    except KeyboardInterrupt:  # Ctrl+C：`with arm` 已在异常退出时自动安全收尾
+        print("\n检测到 Ctrl+C：已安全退出。")

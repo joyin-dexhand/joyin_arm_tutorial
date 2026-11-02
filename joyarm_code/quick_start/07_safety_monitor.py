@@ -47,7 +47,7 @@ from pathlib import Path  # 路径定位：找到本脚本上一级的 joyarm_co
 import numpy as np  # 数组运算：超速判定 |dq| 与目标位形构造
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入模块搜索路径
-from joyarm_core import MotionState, SafetyEvent, joyArm  # # JoyArm 入口 + 状态机 / 安全事件枚举
+from joyarm_core import MotionState, SafetyEvent, joyArm, listArm  # JoyArm 入口 + 状态机 / 安全事件枚举 + 可用型号列表
 
 DQ_LIMIT = 1.5      # 超速阈值（rad/s）：任一本体关节 |dq| 超过即判定超速
 TRIG_DQ = 0.25      # 触发运动的关节 1 位置偏移（rad，约 14°，属小幅摆动）
@@ -58,9 +58,11 @@ TRIG_T = 0.2        # 触发运动的目标时长（s）：0.25 rad / 0.2 s 名�
 # 一、命令行解析：必填型号参数，缺参打印用法并以退出码 1 结束
 # ============================================================
 def parse_model() -> str:
-    """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
+    """解析必填的命令行型号参数；缺失时打印用法并列出可用型号（listArm），以退出码 1 结束。"""
     if len(sys.argv) != 2:                                # 必须恰好携带 1 个型号参数
-        sys.exit(f"用法：python quick_start/07_safety_monitor.py <型号>")  # 缺参退出，不进入演示
+        print(f"用法：python quick_start/07_safety_monitor.py <型号>")  # 缺参：先打印用法
+        listArm()                                         # 顺带列出全部可用型号
+        sys.exit(1)                                       # 退出码 1，不进入演示
     return sys.argv[1].strip()                            # 型号名
 
 
@@ -111,15 +113,11 @@ def main() -> None:
 
     try:
         with joyArm(model) as arm:                        # 创建整机对象；with 退出自动安全收尾（可重复调用）
-            print("=" * 78)                               # 大节分隔线
-            print("例程 07：安全监视器 safe_monitor（挂规则 → 触发 → 恢复说明 → 收尾）")  # 大节标题
-            print("=" * 78)                               # 大节分隔线
+            print("=============== 例程 07：安全监视器 safe_monitor（挂规则 → 触发 → 恢复说明 → 收尾） ========= ")
             print(f"『{model}』创建成功：本体 {arm.n_arm} 关节、末端 {arm.n_end} 电机")  # 创建结果
             arm.connect_arm()                             # 连接本体总线（channel/protocol 缺省取配置值）
 
-            # ---- ① 启动顺序：先启 FSM、再启监视器 ----
-            print("=" * 78)                               # 大节分隔线
-            print("一、启动依赖与顺序：先 start_motion_fsm 再 start_monitor")  # 大节标题
+            print("=============== 一、启动依赖与顺序：先 start_motion_fsm 再 start_monitor ================ ")
             print("-" * 78)                               # 小节分隔线
             print("· 监视规则的第 3 参 motion 直接消费 FSM 当前运动状态（每个周期传入）；")  # 依赖一
             print("· 规则命中后经 set_event 改写 FSM 目标状态，防护动作（如 DAMP 阻尼软停）")  # 依赖二
@@ -133,9 +131,7 @@ def main() -> None:
                 return                                    # 提前返回：with 退出仍会执行安全收尾
             print(f"FSM 已到达 MOTION 态（当前安全事件 {arm.get_event().name}）")  # 到达结果
 
-            # ---- ② 自定义规则：四参数签名与两种传法 ----
-            print("=" * 78)                               # 大节分隔线
-            print("二、自定义规则：四参数签名与 set_monitor_rules 两种传法")  # 大节标题
+            print("=============== 二、自定义规则：四参数签名与 set_monitor_rules 两种传法 =============== ")
             print("-" * 78)                               # 小节分隔线
             print("  规则签名 rule(state_arm, state_end, motion, event) → SafetyEvent | None：")  # 签名行
             rows = [                                      # 四参数含义速查表（左列对齐）
@@ -157,9 +153,8 @@ def main() -> None:
             arm.start_monitor()                           # 启动监视线程（daemon；重复调用安全忽略）
             print(f"· 监视器已启动：轮询频率 monitor_hz = {monitor_hz:g} Hz")
 
-            # ---- ③ 触发演示：快速小幅运动 → 超速防护 DAMP ----
-            print("=" * 78)                               # 大节分隔线
-            print(f"三、触发演示：关节 1 快速摆动 {TRIG_DQ} rad → 观察超速防护")  # 大节标题
+            title = f"三、触发演示：关节 1 快速摆动 {TRIG_DQ} rad → 观察超速防护"
+            print("=" * 15 + f" {title} " + "=" * max(46 - len(title), 2) + " ")
             print("-" * 78)                               # 小节分隔线
             # 默认规划器为「直传」single_joint_hold_traj_planner：忽略目标时刻 t、按电机内部
             # 能力直达目标，快慢不可控；切换三次多项式规划器后 t 决定运动时长——
@@ -202,9 +197,7 @@ def main() -> None:
             print("     MOTION，FSM 按路线表 DAMP → HOME → MOTION 自动恢复运动；")  # 步骤②的恢复路径
             print("  ③ 本例不复位，直接收尾（事件为 DAMPING 时收尾走「直接失能」路径，见下）。")  # 步骤③本例不执行
 
-            # ---- ④ 收尾：先停监视器、再停状态机 ----
-            print("=" * 78)                               # 大节分隔线
-            print("四、收尾：stop_monitor() → stop_motion_fsm()")  # 大节标题
+            print("=============== 四、收尾：stop_monitor() → stop_motion_fsm() ================ ")
             print("-" * 78)                               # 小节分隔线
             was_damping = arm.get_event() is SafetyEvent.DAMPING  # 收尾前记录事件（决定停机路径）
             arm.stop_monitor()                            # 停监视线程：join 带超时（超时仅告警、不强杀）
