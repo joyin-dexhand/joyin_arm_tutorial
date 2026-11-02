@@ -92,7 +92,7 @@ def test_dynamics_F0_mass_matrix_split_line_bitwise():
         M_mod = solver.mass_matrix(arm, q)          # 现行实现
         M_ref = np.array(pin.crba(model, pin.Data(model),
                                   np.asarray(q, dtype=float)), dtype=float)  # 原式参照
-        M_ref = np.triu(M_ref) + np.triu(M_ref, 1).T                # + 上三角对称化
+        M_ref = np.triu(M_ref) + np.triu(M_ref, 1).T                         # + 上三角对称化
         assert M_mod.tobytes() == M_ref.tobytes(), f"q[{i}] 实现整理改变输出"
     assert np.allclose(M_mod, M_mod.T), "对称化失效"
 
@@ -182,7 +182,7 @@ def test_traj_single_joint_cubic_boundary_conditions():
 def test_traj_single_joint_cubic_invalid_falls_back_hold_home():
     stub = StubArm()
     planner = SingleJointCubicTrajPlanner()
-    for bad in (TrajFrame(time=time.time() + 1.0),                # q 为 None
+    for bad in (TrajFrame(time=time.time() + 1.0),                 # q 为 None
                 TrajFrame(time=time.time() + 1.0, q=np.zeros(5)),  # 维度不符
                 None, []):                                         # 空目标
         assert planner.plan(stub, bad) is True

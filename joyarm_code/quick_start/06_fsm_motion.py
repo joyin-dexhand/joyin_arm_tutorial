@@ -123,7 +123,7 @@ def print_frame_table(frame, title: str) -> None:
         ("ddq", "—" if frame.ddq is None else f"{fmt_arr(frame.ddq)} rad/s²"),  # 关节加速度
         ("tau", "—" if frame.tau is None else f"{fmt_arr(frame.tau)} N·m"),  # 前馈力矩
     ]
-    print(pad("字段", 8) + "读回值")                               # 表头（字段列宽 8 显示列）
+    print(pad("字段", 8) + "读回值")                            # 表头（字段列宽 8 显示列）
     for name, value in rows:                                  # 逐行打印，字段列对齐
         print(pad(name, 8) + value)                           # 名称列补齐后拼接读回值
 
@@ -159,7 +159,7 @@ def run_demo() -> None:
             mark = "默认激活" if name == traj_act else "本例待切换"    # 标注当前激活项
             print(pad("traj", 6) + pad(name, 34) + mark)      # 一行一个规划器
         for name in ctrl_names:                               # ctrl 域逐行打印
-            mark = "默认激活" if name == ctrl_act else "备选"       # 标注当前激活项
+            mark = "默认激活" if name == ctrl_act else "备选"   # 标注当前激活项
             print(pad("ctrl", 6) + pad(name, 34) + mark)      # 一行一个控制器
         print(f"默认激活的 {traj_act} 为直传规划器：忽略目标帧的 t 等其余字段，")     # 说明默认规划器行为
         print("把目标 q 当作恒定目标直发（不按到达时刻插值、无法约束运动时长）。")           # 为什么要切换
@@ -183,7 +183,7 @@ def run_demo() -> None:
         configured = bool(traj_names) and bool(ctrl_names)    # traj/ctrl 两域均已加载求解器成员
         checks = [                                            # (条件名, 判定依据, 是否通过) 行集
             ("总线已连接", "is_connected_arm is True", arm.is_connected_arm is True),  # 条件 1：连接
-            ("反馈新鲜", basis_fresh, fresh),                     # 条件 2：状态帧时延 ≤ 50 ms
+            ("反馈新鲜", basis_fresh, fresh),                 # 条件 2：状态帧时延 ≤ 50 ms
             ("无电机故障", "joint_state_arm.error 全部 ∈ {0, 1}", faultless),  # 条件 3：故障码
             ("求解器已配置", "traj/ctrl 两域已加载成员非空", configured),    # 条件 4：两域求解器
         ]
@@ -191,11 +191,11 @@ def run_demo() -> None:
         for name, basis, ok in checks:                        # 逐行打印 4 项启动条件
             print(pad(name, 14) + pad(basis, 38) + ("通过" if ok else "不通过"))  # 结果列：通过/不通过
         input("\n>>> 即将启动 FSM：自动回 home 后开始小幅运动，"
-              "确认工作半径内无人无障碍后回车继续……")                          # 危险动作前的人工确认
+              "确认工作半径内无人无障碍后回车继续……")         # 危险动作前的人工确认
         try:
             arm.start_motion_fsm()                            # 非阻塞启动（条件不满足会抛 RuntimeError）
         except RuntimeError as err:                           # 启动检查不通过：打印原因退出
-            print(f"start_motion_fsm 拒绝启动：{err}")             # 拒绝原因（连接/反馈/故障/域未配置）
+            print(f"start_motion_fsm 拒绝启动：{err}")        # 拒绝原因（连接/反馈/故障/域未配置）
             return                                            # with 退出自动安全收尾
         ok = arm.wait_for_motion_state(MotionState.MOTION, timeout=10.0)  # 返回 1=已到达 / 0=超时
         print(f"wait_for_motion_state(MOTION) = {ok}（{'已到达' if ok else '超时'}），"
@@ -228,7 +228,7 @@ def run_demo() -> None:
         res = arm.solve_ikine(pose_goal)                      # 数值法自当前 q 迭代 → IKResult 单解
         print(f"逆解：success = {res.success}，err = {res.err:.2e}，n_iter = {res.n_iter}")  # 逆解质量
         if not res.success or res.q is None:                  # 未收敛（q 可能为 None）：跳过本节
-            print("逆解未收敛，跳过笛卡尔运动")                            # 失败路径提示
+            print("逆解未收敛，跳过笛卡尔运动")               # 失败路径提示
         else:
             dev = float(np.abs(res.q - q_home).max())         # 逆解相对 home 的最大关节偏差
             if dev > 0.2:                                     # 超出 home±0.2 rad 安全包络：不下发
@@ -259,17 +259,17 @@ def run_demo() -> None:
         print(f"set_event(HOLDING) → {STATE_FROM[SafetyEvent.HOLDING].name}："  # HOLDING 的映射目标态
               f"等待 = {ok_hold}（{'已到达' if ok_hold else '超时'}），"
               f"当前态 = {arm.get_current_motion_state().name}，"
-              f"事件 = {arm.get_event().name}")                 # HOLD 到达情况与当前事件
+              f"事件 = {arm.get_event().name}")               # HOLD 到达情况与当前事件
         arm.set_event(SafetyEvent.NORMAL)                     # 恢复正常（监视器只升不降，恢复须手动下发）
         ok_back = arm.wait_for_motion_state(MotionState.MOTION, timeout=5.0)  # 返回 1=已到达 / 0=超时
         print(f"set_event(NORMAL) → {STATE_FROM[SafetyEvent.NORMAL].name}："  # NORMAL 的映射目标态
               f"等待 = {ok_back}（{'已到达' if ok_back else '超时'}），"
               f"当前态 = {arm.get_current_motion_state().name}，"
-              f"事件 = {arm.get_event().name}\n")               # MOTION 恢复情况与当前事件
+              f"事件 = {arm.get_event().name}\n")             # MOTION 恢复情况与当前事件
 
         # ---- ⑥ 收尾：stop_motion_fsm 回零失能 ----
         print("-" * 78)                                       # 小节分隔线
-        print("⑥ 收尾：stop_motion_fsm（阻塞式）")                    # 小节标题
+        print("⑥ 收尾：stop_motion_fsm（阻塞式）")            # 小节标题
         print("收尾规则：当前事件不重于 ZEROING → 先回零位（经 HOME）再失能；")  # 收尾规则一
         print("            更严重（DAMPING/DISABLE）→ 直接失能停机。")  # 收尾规则二
         arm.stop_motion_fsm()                                 # 当前事件 NORMAL（≤ZEROING）→ 走回零失能路径

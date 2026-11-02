@@ -11,10 +11,9 @@
     6. 读取控制模式、逐关节状态码、健康检查结果与电机参数 pmax。
 
 【原理简介】
-    JoyArm 经 backend 后端与电机总线通信：连接后后台低频刷新线程持续读帧，为每个关节维护一份 JointState 快照（q / dq / tau / 温度 / 状态码）。
-    读状态有两种方式——get_state_arm 在调用的瞬间主动向电机发一次读帧、拿到此刻最新值（要实时数据时用）；joint_state_arm 只拿后台线程最近一次成功读帧的缓存、本身不发读帧（高频轮询时用，不占总线）。
-    两种方式读出的值有时间差，本例程并排打印方便观察。
-    state_viz 是独立的只读可视化线程 + 本地 HTTP 监控页面（meshcat 3D 模型 + 状态面板），不要求已连接，连接后快照自动出数。
+    JoyArm 经 backend 后端与电机总线通信：连接后后台低频刷新线程持续读帧(若状态过旧则主动读)，为每个关节维护一份 JointState 快照（q / dq / tau / 温度 / 状态码）。
+    读状态两种方式：get_state_arm 主动向电机发读取帧、继而拿到最新值（需实时数据时用）；joint_state_arm 只引用后台低频刷新线程的最近一次帧缓存、不发读取帧（用作可视化数据）。
+    state_viz 是独立的只读可视化线程 + 本地 HTTP 监控页面（中间 meshcat 3D 模型 + 两侧状态面板）。
 
 【安全须知】
     - 清空机械臂工作半径内的人员与障碍物，机械臂稳固放置后再上电
@@ -33,7 +32,7 @@
     source .venv/bin/activate
 
     # 2. 运行本脚本（需连接对应的机械臂）
-    python quick_start/02_connect_and_read_state.py <型号>
+    python quick_start/02_connect_and_read_state.py <型号>  # 如：rebot_arm_b601_dm
 
 【预期输出】
     依次打印连接 / 可视化 / 使能 / 两种读法的状态 / 模式 / 状态码 / 参数读取结果，随后刷新逐关节状态表；
@@ -102,14 +101,14 @@ def print_snapshot(tag: str, s) -> None:
     if s is None:                                           # 读取失败：显式提示而非崩溃
         print(f"{tag}：读取失败（返回 None）")
         return
-    print(f"{tag}：")                                        # 以下逐物理量键值行输出
+    print(f"{tag}：")                                          # 以下逐物理量键值行输出
     print(f"    位置 q (rad)     ：{vec_str(s.q)}")            # 关节位置向量
     print(f"    速度 dq (rad/s)  ：{vec_str(s.dq)}")           # 关节速度向量
     print(f"    力矩 tau (N·m)   ：{vec_str(s.tau)}")          # 关节力矩向量
-    print(f"    驱动板温度 (℃)  ：{vec_str(s.temp_mos)}")         # MOS 温度（固件不反馈则恒 0）
-    print(f"    转子温度 (℃)    ：{vec_str(s.temp_rotor)}")      # 转子线圈温度（同上）
+    print(f"    驱动板温度 (℃)  ：{vec_str(s.temp_mos)}")      # MOS 温度（固件不反馈则恒 0）
+    print(f"    转子温度 (℃)    ：{vec_str(s.temp_rotor)}")    # 转子线圈温度（同上）
     print(f"    状态码 error     ：{'—' if s.error is None else s.error.tolist()}"
-          "（0=失能、1=使能、≥2=故障）")                              # 状态码逐关节列出 + 取值含义
+          "（0=失能、1=使能、≥2=故障）")                         # 状态码逐关节列出 + 取值含义
 
 
 def print_beat_table(k: int, beats: int, s_get, names) -> None:
@@ -158,17 +157,17 @@ def main() -> None:
     with joyArm(model) as arm:
 
         # ---- ① 连接：本体与末端电机总线 ----
-        print("=" * 78)                                     # 大节分隔线
-        print("① 连接本体 arm 与末端 end 电机总线")                    # 大节标题：连接
+        print("=" * 78)
+        print("① 连接本体 arm 与末端 end 电机总线")
         ok = arm.connect_arm()                              # 连接本体总线；成功后自动设 cfg 默认控制模式
         print(f"connect_arm 返回：{ok}；is_connected_arm：{arm.is_connected_arm}")  # 回显连接结果与标志
         ok = arm.connect_end()                              # 连接末端（夹爪）电机总线
         print(f"connect_end 返回：{ok}；is_connected_end：{arm.is_connected_end}")  # 回显连接结果与标志
-        print("（连接标志有三种结果：True=已连接、False=未连接、None=未知）")   # 三种结果说明
+        print("（连接的三种结果：True=已连接、False=未连接、None=未知）")   # 三种结果说明
 
         # ---- ② state_viz 状态可视化（在读接口演示之前） ----
-        print("=" * 78)                                     # 大节分隔线
-        print("② 启动 state_viz 状态可视化（单页面监控网页 + 只读刷新线程）")     # 大节标题：可视化
+        print("=" * 78)
+        print("② 启动 state_viz 状态可视化（单页面监控网页 + 只读刷新线程）")
         print("    - 默认自动弹出原生监控窗口（左静态参考 | 中 meshcat 3D | 右状态面板）")  # 提示：默认弹窗
         print("    - 无显示器 / 远程环境：设环境变量 JOYARM_VIZ_NOWINDOW=1 可禁用弹窗，")  # 提示：禁用弹窗方法
         print("      仅保留监控网页 URL（启动后见终端日志）")                # 提示：禁用后仍可网页监控
@@ -176,56 +175,51 @@ def main() -> None:
         arm.start_state_viz(traj_points=200)                # 启动可视化（轨迹采样点 200；0=关闭轨迹）
 
         # ---- ③ 使能：结果同样有 True / False / None 三种 ----
-        print("=" * 78)                                     # 大节分隔线
-        print("③ 使能两端电机（使能后关节锁定，切勿强行扳动）")                   # 大节标题：使能
-        print(f"使能前 is_enabled_arm：{arm.is_enabled_arm}"
-              "（None=未知：未读到有效状态、各关节不一致或含故障码）")         # None 的含义说明
-        input("现场确认安全后按回车使能（Ctrl+C 可随时中止）…")                # 危险动作前人工确认
+        print("=" * 78)
+        print("③ 使能两端电机（使能后关节锁定，切勿强行扳动）")
+        print(f"使能前 is_enabled_arm：{arm.is_enabled_arm}（None=未知）")
+        input("现场确认安全后按回车使能（Ctrl+C 可随时中止）…")              # 危险动作前人工确认
         ret = arm.enable_arm()                              # 使能本体全部电机：1=全部成功、0=有失败
         print(f"enable_arm 返回：{ret}；使能后 is_enabled_arm：{arm.is_enabled_arm}")  # 回显使能结果与状态
         ret = arm.enable_end()                              # 使能末端电机（返回 1/0，含义同上）
         print(f"enable_end 返回：{ret}；使能后 is_enabled_end：{arm.is_enabled_end}")  # 回显使能结果与状态
 
         # ---- ④ 两种读法单次读取：主动读 vs 后台缓存 ----
-        print("=" * 78)                                     # 大节分隔线
-        print("④ 关节状态的两种读法（单次读取演示）")                       # 大节标题：两种读法单次读取
+        print("=" * 78)
+        print("④ 关节状态的两种读法（单次读取演示）")
         print("    - get_state_arm：主动读——调用的瞬间向电机发一次读帧，拿到此刻最新值")  # 读法一说明
-        print("      （要实时数据时用，占用一次总线读）")                    # 读法一说明（续）
+        print("      （要实时数据时用，占用一次总线读）")   # 读法一说明（续）
         print("    - joint_state_arm/end：后台缓存——只拿后台低频刷新线程最近一次的缓存，")  # 读法二说明
         print("      本身不发读帧（高频轮询 / 监视时用，不占总线）")           # 读法二说明（续）
         s = arm.get_state_arm()                             # 读法一：主动读
-        print_snapshot("get_state_arm（主动读）", s)               # 打印读法一快照
+        print_snapshot("get_state_arm（主动读）", s)        # 打印读法一快照
         print_snapshot("joint_state_arm（后台缓存）", arm.joint_state_arm)  # 读法二：本体后台缓存
         print_snapshot("joint_state_end（夹爪后台缓存）", arm.joint_state_end)  # 末端同理（读法二）
 
         # ---- ⑤ 控制模式与故障检查 ----
-        print("=" * 78)                                     # 大节分隔线
-        print("⑤ 控制模式与逐关节状态码")                              # 大节标题：模式与故障
+        print("=" * 78)
+        print("⑤ 控制模式与逐关节状态码")
         mode = arm.get_mode_arm()                           # 读模式（主动读；全组一致才返回该模式）
         print(f"arm 控制模式：{mode}（连接时已自动设默认模式；全组一致才返回，否则 None）")  # 回显模式（枚举或 None）
         errs = arm.get_error_arm()                          # 各关节状态码缓存（0=失能、1=使能、≥2=故障）
-        print(f"arm 状态码缓存 get_error_arm：{errs}")            # 回显逐关节状态码
+        print(f"arm 状态码缓存 get_error_arm：{errs}")      # 回显逐关节状态码
         print(f"健康检查 check_error_arm：{arm.check_error_arm()}（全 0/1 判正常 True）")  # 回显健康检查结果
 
         # ---- ⑥ 电机参数读取 ----
-        print("=" * 78)                                     # 大节分隔线
-        print("⑥ 电机参数读取")                                   # 大节标题：参数读取
-        vals = arm.read_param_arm("pmax")                   # pmax = MIT 模式位置的可表示范围 (rad)，逐关节返回
-        print(f"read_param_arm('pmax') 返回：{vals}")          # 回显逐关节参数值
-        print("（可读键还有 vmax / tmax / pos_kp 等；写入接口见下方高危注释块）")  # 提示：其他可读键
+        print("=" * 78)
+        print("⑥ 电机参数读取")
+        vals = arm.read_param_arm("pos_kp")                 # pmax = MIT 模式位置的可表示范围 (rad)，逐关节返回
+        print(f"read_param_arm('pos_kp') 返回：{vals}")     # 回显逐关节参数值
+        print("（可读键依型号而定；写入接口见下方高危注释块）")       # 提示：其他可读键
 
         # ---- ⑦ 高危接口（默认注释不执行） ----
-        print("=" * 78)                                     # 大节分隔线
-        print("⑦ 高危接口注释块（理解风险并确认需要时，再手动放开执行）")              # 大节标题：高危接口
-        # arm.write_param_arm("pmax", [12.5] * arm.n_arm)  # 写电机参数寄存器（RAM 态、断电丢失；写错可致电机行为异常）
-        # arm.set_zero_arm()                               # 把当前位置记为零点（零位标定；执行后零点即被改写）
+        print("=" * 78)
+        print("⑦ 高危接口注释块（理解风险并确认需要时，再手动放开执行）")
         # arm.clear_error_arm()                            # 清除各关节硬件故障码（先排查并消除故障原因，再清除）
-        print("（write_param_arm / set_zero_arm / clear_error_arm 三项见上方注释，默认不执行）")  # 确认未执行高危接口
 
         # ---- ⑧ 2 Hz 周期刷新：逐关节状态表 × 10 轮 ----
-        print("=" * 78)                                     # 大节分隔线
-        print(f"⑧ 周期刷新：{BEATS} 轮 × {PERIOD_S:.1f} s（{1 / PERIOD_S:.0f} Hz）；"
-              "轮间用 = 分隔、轮内用 - 分隔；Ctrl+C 可提前结束")             # 本节规则说明
+        print("=" * 78)
+        print(f"⑧ 周期刷新：{BEATS} 轮 × {PERIOD_S:.1f} s（{1 / PERIOD_S:.0f} Hz）；轮间用 = 分隔、轮内用 - 分隔；Ctrl+C 可提前结束")  # 规则说明
         names = arm.get_joint_names_arm()                   # 关节名 tuple（cfg 顺序 = q 向量顺序）
         if names is None:                                   # 兜底：查询异常时按关节数生成占位名
             names = tuple(f"joint{i + 1}" for i in range(arm.n_arm))
@@ -245,8 +239,8 @@ def main() -> None:
             print("\n检测到 Ctrl+C：提前结束状态刷新，进入安全收尾。")
 
         # ---- ⑨ 安全收尾：失能 → 停可视化 → 断开 ----
-        print("=" * 78)                                     # 大节分隔线
-        print("⑨ 安全收尾：失能两端 → 停止可视化 → 断开总线（顺序不可颠倒）")         # 大节标题：安全收尾
+        print("=" * 78)
+        print("⑨ 安全收尾：失能两端 → 停止可视化 → 断开总线（顺序不可颠倒）")
         ret_a = arm.disable_arm()                           # 主动失能本体电机（1=全部成功、0=有失败）
         ret_e = arm.disable_end()                           # 主动失能末端电机（含义同上）
         print(f"disable_arm 返回：{ret_a}；disable_end 返回：{ret_e}")  # 回显失能结果
@@ -256,10 +250,10 @@ def main() -> None:
         arm.disconnect_arm()                                # 断开本体总线（同上）
         print(f"disconnect_end / disconnect_arm 已调用；"
               f"is_connected_arm：{arm.is_connected_arm}，"
-              f"is_connected_end：{arm.is_connected_end}")   # 复查连接标志（应为 False）
+              f"is_connected_end：{arm.is_connected_end}")  # 复查连接标志（应为 False）
     # with 退出（含异常）：__exit__ 调 close() 兜底（可重复调用）——arm 已主动断连则跳过失能/断连，仅停线程清缓存
-    print("=" * 78)                                         # 收尾分隔线
-    print("例程结束：机械臂已失能并断开，全程未主动运动。")                        # 结束语
+    print("=" * 78)
+    print("例程结束：机械臂已失能并断开，全程未主动运动。")
 
 
 if __name__ == "__main__":                                  # 直接运行入口（被导入时不执行）

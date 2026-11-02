@@ -42,8 +42,8 @@ logger = logging.getLogger("joyarm_core.backend_rebot_arm_b601_dm")
 
 # ---------------- DM 协议常量 ----------------
 _CMD_ENABLE, _CMD_DISABLE, _CMD_ZERO, _CMD_CLEAR = 0xFC, 0xFD, 0xFE, 0xFB  # 使能/失能/设零/清错帧（FF×7+cmd → SlaveID）
-_QUERY_HOST_ID = 0x7FF      # 0xCC 状态查询 / 0x33 参数读 / 0x55 参数写帧的固定主机 CAN id
-_MODE_RID = 10              # 控制模式寄存器（CTRL_MODE，uint32）
+_QUERY_HOST_ID = 0x7FF         # 0xCC 状态查询 / 0x33 参数读 / 0x55 参数写帧的固定主机 CAN id
+_MODE_RID = 10                 # 控制模式寄存器（CTRL_MODE，uint32）
 _KP_MAX, _KD_MAX = 500.0, 5.0  # MIT 帧 kp / kd 位域量程（12bit）
 
 # 基类模式 ↔ DM 模式寄存器码（POSITION=4 即 Torque_Pos/pos_force 力位混合；枚举外码 2/5/6/7 读回映射 None）
@@ -53,10 +53,10 @@ _CODE_MODE = {1: ControlMode.MIT, 3: ControlMode.VELOCITY, 4: ControlMode.POSITI
 # 参数寄存器组织三件套（读写共用；写入均为 RAM 态、断电丢失）
 _PARAM_RIDS: dict = {"pos_kp": 27, "pos_ki": 28, "vel_kp": 25, "vel_ki": 26,
                      "pmax": 21, "vmax": 22, "tmax": 23, "hw_ver": 13, "sw_ver": 14, "sn": 15}
-_READONLY_KEYS = frozenset({"hw_ver", "sw_ver", "sn"})          # 只读参数（写侧上抛拒绝）
-_UINT_RIDS = frozenset(range(7, 11)) | frozenset(range(13, 17)) | {35, 36}  # uint32 寄存器 RID，其余 float32
+_READONLY_KEYS = frozenset({"hw_ver", "sw_ver", "sn"})                         # 只读参数（写侧上抛拒绝）
+_UINT_RIDS = frozenset(range(7, 11)) | frozenset(range(13, 17)) | {35, 36}     # uint32 寄存器 RID，其余 float32
 _GAIN_RIDS = (("pos_kp", 27), ("pos_ki", 28), ("vel_kp", 25), ("vel_ki", 26))  # 切 POSITION/VELOCITY 随模式写入
-_END_ACTION_POS = {"open": -5.0, "home": -3.0, "close": 0.0}  # 末端离散动作 → 目标位置 rad（夹爪固定位，均在行程内）
+_END_ACTION_POS = {"open": -5.0, "home": -3.0, "close": 0.0}                   # 末端离散动作 → 目标位置 rad（夹爪固定位，均在行程内）
 
 # 型号 → MIT 位域量程 (PMAX, VMAX, TMAX)（rad / rad/s / N·m，取自厂商 DM_Motor_Type 量程表，键小写匹配）
 _MODEL_LIMITS = {"4310": (12.5, 30.0, 10.0), "4310_48v": (12.5, 50.0, 10.0),
@@ -280,7 +280,7 @@ class _DMBus:
         while not self._rx_stop.is_set():
             try:
                 chunk = ser.read(1)  # 阻塞至多一个节拍（timeout=1/rx_hz）
-                n = ser.in_waiting  # 有数据即刻排空处理（延迟≈0，空闲时节拍即 rx_hz）
+                n = ser.in_waiting   # 有数据即刻排空处理（延迟≈0，空闲时节拍即 rx_hz）
                 if n:
                     chunk += ser.read(n)
             except Exception:

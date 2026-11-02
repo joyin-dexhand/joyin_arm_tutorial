@@ -79,11 +79,11 @@ def overspeed(state_arm, state_end, motion, event):
     返回 None 表示「本规则无意见」；返回 SafetyEvent 表示命中意见，与内置规则及
     其他自定义规则的意见合并后取最严重者生效。
     """
-    if (state_arm is not None                             # 判空：数据不新鲜时监视线程传 None
-            and np.all(np.isfinite(state_arm.dq))         # 防脏数据：dq 含 NaN/inf 时本周期放弃判定
+    if (state_arm is not None                              # 判空：数据不新鲜时监视线程传 None
+            and np.all(np.isfinite(state_arm.dq))          # 防脏数据：dq 含 NaN/inf 时本周期放弃判定
             and np.any(np.abs(state_arm.dq) > DQ_LIMIT)):  # 任一关节速度越限 → 超速
-        return SafetyEvent.DAMPING                        # 超速意见：阻尼防护（FSM 将转入 DAMP 软停）
-    return None                                           # 无意见：本周期不触发
+        return SafetyEvent.DAMPING                         # 超速意见：阻尼防护（FSM 将转入 DAMP 软停）
+    return None                                            # 无意见：本周期不触发
 
 
 # ============================================================
@@ -181,9 +181,9 @@ def main() -> None:
                 snap = arm.joint_state_arm                # 后台只读缓存（不发总线读帧）
                 dq_max = float(np.max(np.abs(snap.dq))) if snap is not None else None  # 速度峰值（None 显「—」）
                 print(f"  {pad(f'{time.time() - t0:5.1f}', 8)}"
-                      f"{pad(arm.get_event().name, 12)}"                 # 当前安全事件列
+                      f"{pad(arm.get_event().name, 12)}"  # 当前安全事件列
                       f"{pad(arm.get_current_motion_state().name, 12)}"  # FSM 当前状态列
-                      f"{fmt(dq_max)}")                                  # 速度峰值列
+                      f"{fmt(dq_max)}")                   # 速度峰值列
                 if arm.get_event() is SafetyEvent.DAMPING:  # 超速规则已命中并升级（事件只升不降、会保持）
                     triggered = True                      # 记录：已观察到目标现象
                     break                                 # 结束观察，转入恢复说明

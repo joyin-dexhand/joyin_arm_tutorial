@@ -110,7 +110,7 @@ CAP_MISSING2 = "未实现"
 # 同时出现在发送空值门禁与状态数据异常两种消息里，须用发送门禁独有的尾部"，本次不发送"区分，
 # 防刷新线程的并发 warn 误判）
 GATE_CONN = "未连接或状态未知"      # 连接门禁（_require_connected 唯一）
-GATE_MODE = "≠ 所需"               # 模式门禁（_require_mode 唯一）
+GATE_MODE = "≠ 所需"                # 模式门禁（_require_mode 唯一）
 GATE_TYPE = "非 ControlMode 枚举"   # set_mode 类型门禁（唯一）
 KERN_EXC = "内核异常"               # 子类内核异常（基类 _call 唯一）
 EMPTY_VAL = "，本次不发送"          # 发送前空值检查（_require_present 唯一尾部）
@@ -962,10 +962,10 @@ def _power_item(fam: str):
     def fn(s: Session):
         b = s.backend()
         i0 = _mark()
-        pre = getattr(b, f"is_enabled_{fam}")  # 读
-        r_en = getattr(b, f"enable_{fam}")()  # 使能
-        enabled_en = getattr(b, f"is_enabled_{fam}")  # 回读
-        r_dis = getattr(b, f"disable_{fam}")()  # 失能
+        pre = getattr(b, f"is_enabled_{fam}")          # 读
+        r_en = getattr(b, f"enable_{fam}")()           # 使能
+        enabled_en = getattr(b, f"is_enabled_{fam}")   # 回读
+        r_dis = getattr(b, f"disable_{fam}")()         # 失能
         enabled_dis = getattr(b, f"is_enabled_{fam}")  # 回读
         fails = []
         if r_en != 1:

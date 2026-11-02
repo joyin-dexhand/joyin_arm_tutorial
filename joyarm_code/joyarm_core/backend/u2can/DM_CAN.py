@@ -67,7 +67,7 @@ class Motor:
         :return: the error of the motor 电机错误码（缓存）
         """
         return self.state_err
-    
+
     def getParam(self, RID):
         """
         get the parameter of the motor 获取电机内部的参数，需要提前读取
@@ -224,7 +224,7 @@ class MotorControl:
         self.__send_data(motorid, data_buf)
         self.recv()  # receive the data from serial port
 
-    def control_Pos_Vel_CSP(self, Motor, P_desired: float, V_desired: float):#谐波JH11电机有这个模式
+    def control_Pos_Vel_CSP(self, Motor, P_desired: float, V_desired: float):  #谐波JH11电机有这个模式
         """
         control the motor in position and velocity control mode 电机位置速度控制模式
         :param Motor: Motor object 电机对象
@@ -245,7 +245,7 @@ class MotorControl:
         # time.sleep(0.001)
         self.recv()  # receive the data from serial port
 
-    def control_Vel_CSP(self, Motor, Vel_desired):#谐波JH11电机有这个模式
+    def control_Vel_CSP(self, Motor, Vel_desired):  #谐波JH11电机有这个模式
         """
         control the motor in velocity control mode 电机速度控制模式
         :param Motor: Motor object 电机对象
@@ -261,7 +261,7 @@ class MotorControl:
         self.__send_data(motorid, data_buf)
         self.recv()  # receive the data from serial port
 
-    def control_Tor_CSP(self, Motor, Tor_desired):#谐波JH11电机有这个模式
+    def control_Tor_CSP(self, Motor, Tor_desired):  #谐波JH11电机有这个模式
         """
         control the motor in velocity control mode 电机速度控制模式
         :param Motor: Motor object 电机对象
@@ -424,14 +424,14 @@ class MotorControl:
         self.serial_.write(bytes(self.send_data_frame.T))
 
     def __read_RID_param(self, Motor, RID):
-        can_id_l = Motor.SlaveID & 0xff #id low 8 bits
-        can_id_h = (Motor.SlaveID >> 8)& 0xff  #id high 8 bits
+        can_id_l = Motor.SlaveID & 0xff         #id low 8 bits
+        can_id_h = (Motor.SlaveID >> 8)& 0xff   #id high 8 bits
         data_buf = np.array([np.uint8(can_id_l), np.uint8(can_id_h), 0x33, np.uint8(RID), 0x00, 0x00, 0x00, 0x00], np.uint8)
         self.__send_data(0x7FF, data_buf)
 
     def __write_motor_param(self, Motor, RID, data):
-        can_id_l = Motor.SlaveID & 0xff #id low 8 bits
-        can_id_h = (Motor.SlaveID >> 8)& 0xff  #id high 8 bits
+        can_id_l = Motor.SlaveID & 0xff         #id low 8 bits
+        can_id_h = (Motor.SlaveID >> 8)& 0xff   #id high 8 bits
         data_buf = np.array([np.uint8(can_id_l), np.uint8(can_id_h), 0x55, np.uint8(RID), 0x00, 0x00, 0x00, 0x00], np.uint8)
         if not is_in_ranges(RID):
             # data is float
@@ -468,8 +468,8 @@ class MotorControl:
         :param Motor: Motor object 电机对象
         :return:
         """
-        can_id_l = Motor.SlaveID & 0xff #id low 8 bits
-        can_id_h = (Motor.SlaveID >> 8)& 0xff  #id high 8 bits
+        can_id_l = Motor.SlaveID & 0xff         #id low 8 bits
+        can_id_h = (Motor.SlaveID >> 8)& 0xff   #id high 8 bits
         data_buf = np.array([np.uint8(can_id_l), np.uint8(can_id_h), 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00], np.uint8)
         self.disable(Motor)  # before save disable the motor
         self.__send_data(0x7FF, data_buf)
@@ -492,7 +492,7 @@ class MotorControl:
         """
         get the motor status 获得电机状态
         """
-        can_id_l = Motor.SlaveID & 0xff #id low 8 bits
+        can_id_l = Motor.SlaveID & 0xff         #id low 8 bits
         can_id_h = (Motor.SlaveID >> 8) & 0xff  #id high 8 bits
         data_buf = np.array([np.uint8(can_id_l), np.uint8(can_id_h), 0xCC, 0x00, 0x00, 0x00, 0x00, 0x00], np.uint8)
         self.__send_data(0x7FF, data_buf)

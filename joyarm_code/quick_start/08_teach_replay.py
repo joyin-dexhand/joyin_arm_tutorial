@@ -139,7 +139,7 @@ def replay_teach(arm, record: np.ndarray, ahead: float) -> None:
 def main() -> None:
     """拖动示教与轨迹复现主流程（真机，三处回车确认）。"""
     print("=" * 78)                                   # 大节横幅：开
-    print("例程 08 —— 拖动示教与轨迹复现（需真机）")     # 例程标题
+    print("例程 08 —— 拖动示教与轨迹复现（需真机）")        # 例程标题
     print("=" * 78)                                   # 大节横幅：闭
 
     # ---- ⓪ 参数表：先看清本例程的全部可调常量 ----
@@ -149,7 +149,7 @@ def main() -> None:
         ("REPLAY_HZ", f"{REPLAY_HZ} Hz", "回放路点下发频率：每 0.1 s 下发一路点"),
         ("REPLAY_AHEAD", f"{REPLAY_AHEAD} s", "路点到达时刻提前量（仅 cubic 规划器生效）"),
     ]
-    print(f"{'参数':<16}{'取值':>10}   说明")          # 表头（列宽与下方数据行对齐）
+    print(f"{'参数':<16}{'取值':>10}   说明")           # 表头（列宽与下方数据行对齐）
     print("-" * 78)                                   # 表头与数据行的分隔线
     for name, val, desc in rows:                      # 逐行打印参数表
         print(f"{name:<16}{val:>10}   {desc}")
@@ -159,7 +159,7 @@ def main() -> None:
 
         # ---- ① 连接并启动 FSM：自动 DISABLE → HOME → MOTION ----
         print("=" * 78)                               # 大节横幅：开
-        print("① 连接真机并启动运动状态机")               # 大节标题
+        print("① 连接真机并启动运动状态机")              # 大节标题
         print("=" * 78)                               # 大节横幅：闭
         ret = arm.connect_arm()                       # 连接本体 arm 电机总线（成功后自动设 cfg 默认模式）
         print(f"    connect_arm 返回：{'—' if ret is None else ret}；"
@@ -182,7 +182,7 @@ def main() -> None:
 
         # ---- ② DAMP 阻尼态拖动示教 + 50 Hz 录制 4 秒 ----
         print("=" * 78)                               # 大节横幅：开
-        print("② 阻尼态拖动示教与录制")                 # 大节标题
+        print("② 阻尼态拖动示教与录制")                  # 大节标题
         print("=" * 78)                               # 大节横幅：闭
         arm.set_event(SafetyEvent.DAMPING)            # 阻尼防护事件 → FSM 目标态 DAMP（STATE_FROM 映射）
         if arm.wait_for_motion_state(MotionState.DAMP, timeout=5.0) != 1:    # 阻塞等待实际进入 DAMP
@@ -196,7 +196,7 @@ def main() -> None:
 
         # ---- ③ 切回 MOTION 并以 10 Hz 逐路点回放 ----
         print("=" * 78)                               # 大节横幅：开
-        print("③ 轨迹回放")                             # 大节标题
+        print("③ 轨迹回放")                            # 大节标题
         print("=" * 78)                               # 大节横幅：闭
         arm.set_event(SafetyEvent.NORMAL)             # 正常事件 → FSM 目标态 MOTION（经 HOME 中转、途中先回 home 位形）
         if arm.wait_for_motion_state(MotionState.MOTION, timeout=10.0) != 1:  # 阻塞等待回到 MOTION
@@ -209,7 +209,7 @@ def main() -> None:
 
         # ---- ④ 收尾：阻塞安全停机（经 HOME 回零失能），with 退出自动断连 ----
         print("=" * 78)                               # 大节横幅：开
-        print("④ 安全收尾")                             # 大节标题
+        print("④ 安全收尾")                            # 大节标题
         print("=" * 78)                               # 大节横幅：闭
         arm.stop_motion_fsm()                         # 阻塞等待回零到位后失能（事件更严重时直接失能）
         print("    已安全停机（回零失能完成），with 退出后自动断开总线。例程结束。")

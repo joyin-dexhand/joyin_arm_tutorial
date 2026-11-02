@@ -61,7 +61,7 @@ from joyarm_core import JointLimits, joyArm
 def parse_model() -> str:
     """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
     if len(sys.argv) != 2:                                # 必须恰好携带 1 个型号参数
-        sys.exit(f"用法：python quick_start/05_offline_math_and_solvers.py <型号>")     # 缺参退出，不进入演示
+        sys.exit(f"用法：python quick_start/05_offline_math_and_solvers.py <型号>")  # 缺参退出，不进入演示
     return sys.argv[1].strip()                            # 型号名
 
 
@@ -102,7 +102,7 @@ def pad(s: str, width: int, align: str = "left") -> str:
 
 def flag(ok: bool) -> str:
     """set_<域>_solver 返回值转可读标记：True → 「成功」，False → 「拒绝」。"""
-    return "成功" if ok else "拒绝"                            # 拒绝 = 返回 False，保持原激活不变
+    return "成功" if ok else "拒绝"                        # 拒绝 = 返回 False，保持原激活不变
 
 
 # ============================================================
@@ -121,7 +121,7 @@ def demo_solver_overview(arm) -> None:
     ]
     for name, get_all, get_act in domains:                 # 六域逐一查询，每域两行对齐输出
         print(f"   {pad(name, 12)}已加载：{'、'.join(get_all())}")   # 第一行：域内全部注册名（顿号分隔）
-        print(f"   {pad('', 12)}当前激活：{get_act()}")      # 第二行：当前参与计算的求解器
+        print(f"   {pad('', 12)}当前激活：{get_act()}")    # 第二行：当前参与计算的求解器
     print("   说明：已加载名单来自 config robotics 各段；段内首个成员即默认激活；")
     print("         方法名规律——雅可比/动力学域用缩写 jac/dyn，其余用全称。")
 
@@ -221,12 +221,12 @@ def demo_ikine(arm) -> None:
     arm.set_ikine_solver("analytic_ikine_solver")          # 切解析法：枚举肩/肘/腕分支，可一次求出全部解
     res_all = arm.solve_ikine_all(pose_tgt)                # 全解：q 形状 (K, n_arm)，每行一组解析解
     print(f"   解析法 solve_ikine_all：success={res_all.success}，共 K = {res_all.q.shape[0]} 组解")
-    for k, q_k in enumerate(res_all.q, start=1):          # 逐行打印各组解（同一末端位姿的多个关节构型）
+    for k, q_k in enumerate(res_all.q, start=1):           # 逐行打印各组解（同一末端位姿的多个关节构型）
         print(f"      解 {k}：{fmt(q_k)}")                 # 第 k 组解
     arm.set_ikine_solver("pin_ikine_solver")               # 切回数值法
     try:                                                   # 数值法激活时演示统一入口拦截
         arm.solve_ikine_all(pose_tgt)                      # 数值法只能给单解、无 solve_all 实现
-        print("   ✘ 未拦截（不应发生）")                    # 到这里说明库行为变了（与本脚本预期不符）
+        print("   ✘ 未拦截（不应发生）")                   # 到这里说明库行为变了（与本脚本预期不符）
     except RuntimeError as e:                              # 统一入口把 NotImplementedError 转成 RuntimeError
         print(f"   数值法激活时 solve_ikine_all 被 RuntimeError 拦截 ✓（提示切换解析法）")
     soft = arm.joint_limits_soft_arm                       # 软限位（用于核对全解是否越限）
@@ -296,7 +296,7 @@ def demo_rand_q(arm) -> None:
     custom = JointLimits(q_min=center - 0.2, q_max=center + 0.2)  # 自定义限位：中点 ±0.2 rad（仅需 q_min/q_max 两字段）
     q_custom = arm.rand_q_arm(custom)                      # 传入自定义限位：在该窄带内均匀采样
     over_custom = float(np.max(np.maximum(custom.q_min - q_custom, q_custom - custom.q_max)))  # 相对自定义带的越界量
-    print(f"   {pad('采样方式', 12)}限位来源")              # 表头：两行式表格，第一行为限位来源
+    print(f"   {pad('采样方式', 12)}限位来源")             # 表头：两行式表格，第一行为限位来源
     print(f"   {pad('缺省调用', 12)}软限位 joint_limits_soft_arm（property）")  # 缺省行的限位来源
     print(f"   {pad('', 12)}q (rad) = {fmt(q_soft)}   越界量 {over_soft:.2e}")   # 缺省采样的结果与越界量
     print(f"   {pad('自定义限位', 12)}JointLimits(q_min=软限位中点−0.2, q_max=中点+0.2)")  # 自定义行的限位来源

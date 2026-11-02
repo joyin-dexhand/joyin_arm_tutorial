@@ -93,8 +93,8 @@ class Backend(ABC):
         self._vel_ki_end: Optional[np.ndarray] = None         # end 电机寄存器速度环 ki 增益（cfg POS_VEL.vel_ki → (n,)）
         self._is_connected_arm: Optional[bool] = None         # arm 连接状态（True 已连接 / False 未连接 / None 未知）
         self._is_connected_end: Optional[bool] = None         # end 连接状态（True 已连接 / False 未连接 / None 未知）
-        self._is_enabled_arm: Optional[bool] = None             # arm 使能状态（True 已使能 / False 已失能 / None 未知）
-        self._is_enabled_end: Optional[bool] = None             # end 使能状态（True 已使能 / False 已失能 / None 未知）
+        self._is_enabled_arm: Optional[bool] = None           # arm 使能状态（True 已使能 / False 已失能 / None 未知）
+        self._is_enabled_end: Optional[bool] = None           # end 使能状态（True 已使能 / False 已失能 / None 未知）
         self._mode_arm: Optional[ControlMode] = None          # arm 全组一致的控制模式（get_mode 读齐且一致时更新 / set_mode 成功时乐观更新，None=未读取）
         self._mode_end: Optional[ControlMode] = None          # end 全组一致的控制模式（get_mode 读齐且一致时更新 / set_mode 成功时乐观更新，None=未读取）
         self._default_mode_arm: ControlMode = ControlMode.MIT # arm 连接后自动设置的控制模式（cfg arm.default_mode，缺省 MIT）
@@ -292,9 +292,9 @@ class Backend(ABC):
             return
         if getattr(self, f"_is_enabled_{family}") is not False:  # 先失能：未确知已失能才发帧；失败仅提示，不阻断断连
             self._disable_impl(family)
-            time.sleep(self._write_settle)  # 等失能帧生效再断总线
+            time.sleep(self._write_settle)              # 等失能帧生效再断总线
         setattr(self, f"_is_connected_{family}", None)  # 执行前置 None；中途意外则停留于此
-        setattr(self, f"_is_enabled_{family}", None)      # 连接已断，使能状态无法核实
+        setattr(self, f"_is_enabled_{family}", None)    # 连接已断，使能状态无法核实
         try:
             getattr(self, f"_disconnect_{family}")()
         except Exception as e:
@@ -575,7 +575,7 @@ class Backend(ABC):
             return None
         # 全部字段备齐后构造完整状态对象，单一赋值换入
         fields = {name: None for name in absent}
-        fields.update(assembled)  # error 整数异常码，其余物理量 float
+        fields.update(assembled)                     # error 整数异常码，其余物理量 float
         new_state = JointState(t=t_batch, **fields)  # t=各电机帧到达最早时刻（缺/非法回退装配时刻）
         setattr(self, f"_joint_state_{family}", new_state)
         return new_state

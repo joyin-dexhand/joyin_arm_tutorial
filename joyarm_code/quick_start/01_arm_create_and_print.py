@@ -167,8 +167,8 @@ def create_and_show(name: str) -> None:
     print(f"   home_arm     = {vec_str(arm.home_arm)}")      # cfg 配置的归位位形
     print(f"   neutral_end  = {vec_str(arm.neutral_end)}")   # 末端软限位中点
     print(f"   home_end     = {vec_str(arm.home_end)}")      # 末端 cfg 配置的归位位形
-    tcp = arm.tcp_limits                          # 工作空间包围盒 + 速度/力上限
-    if tcp.workspace_box is None:                 # 未配置包围盒 → 显示「—」
+    tcp = arm.tcp_limits                                     # 工作空间包围盒 + 速度/力上限
+    if tcp.workspace_box is None:                            # 未配置包围盒 → 显示「—」
         print("   tcp 工作空间包围盒 (m)：—（未配置）")
     else:                                         # 已配置 → 三轴区间一行
         b = tcp.workspace_box                     # (3,2)：每行 x/y/z 的 [min, max]

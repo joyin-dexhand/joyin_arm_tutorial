@@ -72,7 +72,7 @@ def pad(s: str, width: int) -> str:
 
 def print_table(header: list, rows: list, widths: list) -> None:
     """打印列对齐表格：header 为表头、rows 为数据行、widths 为各列显示宽度。"""
-    print("    " + "".join(pad(h, w) for h, w in zip(header, widths)))   # 表头行（统一缩进 4 空格）
+    print("    " + "".join(pad(h, w) for h, w in zip(header, widths)))  # 表头行（统一缩进 4 空格）
     for r in rows:                                          # 逐行按同宽拼接，保证列对齐
         print("    " + "".join(pad(str(c), w) for c, w in zip(r, widths)))
 
@@ -104,7 +104,7 @@ class StubArm:
 
         :param tau: 关节一阶跟随时间常数（秒），越小跟随越快。
         """
-        self._st = JointState(q=np.zeros(6), dq=np.zeros(6))    # 当前关节状态（规划器/控制器的读数来源）
+        self._st = JointState(q=np.zeros(6), dq=np.zeros(6))  # 当前关节状态（规划器/控制器的读数来源）
         self.cmds = []                                      # 每拍 send_position_arm 收到的指令序列
         self._tau = tau                                     # 一阶跟随时间常数
 
@@ -134,22 +134,22 @@ def show_contract_and_mode() -> bool:
     print("=" * 78)                                         # 大节分隔线
     print("① control 域契约与 MODE 机制（Controller 基类 / JointPositionController 子类）")
     print("-" * 78)                                         # 小节分隔线
-    print("1.1 step 契约（Controller 唯一抽象接口，子类必须实现）")   # 契约小节标题
-    print("    step(arm, target, joint_state) -> bool")            # 契约签名
-    print("    入参：arm 机械臂对象（指令经它下发）；target 当前轨迹帧 TrajFrame；")   # 入参说明
-    print("        joint_state 当前关节状态 JointState；返回是否已成功下发本拍指令。")   # 入参与返回值
-    print("    JointPositionController 实现：校验 target.q → 经 arm.send_position_arm 直发。")   # 默认实现说明
+    print("1.1 step 契约（Controller 唯一抽象接口，子类必须实现）")  # 契约小节标题
+    print("    step(arm, target, joint_state) -> bool")     # 契约签名
+    print("    入参：arm 机械臂对象（指令经它下发）；target 当前轨迹帧 TrajFrame；")  # 入参说明
+    print("        joint_state 当前关节状态 JointState；返回是否已成功下发本拍指令。")  # 入参与返回值
+    print("    JointPositionController 实现：校验 target.q → 经 arm.send_position_arm 直发。")  # 默认实现说明
     print("-" * 78)                                         # 小节分隔线
-    mode_ok = JointPositionController.MODE == ControlMode.POSITION   # 核验子类声明的电机模式
+    mode_ok = JointPositionController.MODE == ControlMode.POSITION  # 核验子类声明的电机模式
     print("1.2 MODE 类属性——控制律声明的电机控制模式")
     print_table(                                            # 两级 MODE 对比表
         ["控制律类", "MODE 类属性", "含义"],                # 表头三列
-        [["Controller（基类）", str(Controller.MODE), "缺省：子类未覆写时沿用"],   # 基类行：缺省 MIT
+        [["Controller（基类）", str(Controller.MODE), "缺省：子类未覆写时沿用"],  # 基类行：缺省 MIT
          ["JointPositionController", str(JointPositionController.MODE), "覆写：位置跟随所需模式"]],  # 子类行：POSITION
         [24, 21, 29])
-    print(f"    校验 JointPositionController.MODE == ControlMode.POSITION：{mode_ok}")   # 覆写校验结果
-    print("    机制：切换控制器时 JoyArm 校验 MODE 合法性；MOTION 态每拍 FSM 自愈——")   # 自愈机制第一句
-    print("    只读一次实际模式，与 MODE 不一致先切模式、再核使能，失败下一拍重试。")   # 自愈机制第二句
+    print(f"    校验 JointPositionController.MODE == ControlMode.POSITION：{mode_ok}")  # 覆写校验结果
+    print("    机制：切换控制器时 JoyArm 校验 MODE 合法性；MOTION 态每拍 FSM 自愈——")  # 自愈机制第一句
+    print("    只读一次实际模式，与 MODE 不一致先切模式、再核使能，失败下一拍重试。")  # 自愈机制第二句
     return mode_ok                                          # 供 ④ 结论表引用
 
 
@@ -161,13 +161,13 @@ def run_contract_tests() -> dict:
     print("=" * 78)                                         # 大节分隔线
     print("② 契约测试：StubArm 捕获下发序列，逐条核对 step 的三条契约")
     ctrl = JointPositionController()                        # 被测控制律（默认实现）
-    q_ok = np.array([0.25, -0.20, 0.15, -0.15, 0.20, -0.25])    # 有效目标：六元有限向量
+    q_ok = np.array([0.25, -0.20, 0.15, -0.15, 0.20, -0.25])  # 有效目标：六元有限向量
 
     print("-" * 78)                                         # 小节分隔线
     print("2.1 有效帧（含 q）→ 返回 True 且经 send_position_arm 下发")
     stub = StubArm()                                        # 全新桩：指令记录从零开始
-    ret = ctrl.step(stub, TrajFrame(q=q_ok), stub.get_state_arm())   # 正常一步：应下发 q_ok
-    sent_ok = len(stub.cmds) == 1 and np.allclose(stub.cmds[0], q_ok)    # 恰一条指令且等于参考
+    ret = ctrl.step(stub, TrajFrame(q=q_ok), stub.get_state_arm())  # 正常一步：应下发 q_ok
+    sent_ok = len(stub.cmds) == 1 and np.allclose(stub.cmds[0], q_ok)  # 恰一条指令且等于参考
     print(f"    step 返回：{ret}；下发条数：{len(stub.cmds)}；指令 q：{vec_str(stub.cmds[0])}")
     print(f"    校验（返回 True 且指令 == 参考 q）：{'通过' if ret is True and sent_ok else '未通过'}")
 
@@ -176,7 +176,7 @@ def run_contract_tests() -> dict:
     stub2 = StubArm()                                       # 全新桩：验证拒绝时零下发
     raised = False                                          # 是否按预期抛错
     try:
-        ctrl.step(stub2, TrajFrame(), stub2.get_state_arm())    # q 缺失：预期抛 ValueError
+        ctrl.step(stub2, TrajFrame(), stub2.get_state_arm())  # q 缺失：预期抛 ValueError
         print("    未抛异常（契约失效）")                   # 走到这里说明未按契约拒绝
     except ValueError as e:
         raised = True                                       # 按契约抛错
@@ -191,7 +191,7 @@ def run_contract_tests() -> dict:
     q_nan[2] = np.nan                                       # 单关节 NaN（模拟脏数据）
     raised = False                                          # 是否按预期抛错
     try:
-        ctrl.step(stub3, TrajFrame(q=q_nan), stub3.get_state_arm())    # NaN 入参：预期抛错
+        ctrl.step(stub3, TrajFrame(q=q_nan), stub3.get_state_arm())  # NaN 入参：预期抛错
         print("    未抛异常（契约失效）")                   # 走到这里说明未按契约拒绝
     except ValueError as e:
         raised = True                                       # NaN 兜底生效
@@ -209,28 +209,28 @@ def run_closed_loop() -> dict:
     print("=" * 78)                                         # 大节分隔线
     print("③ 离线闭环小仿真：cubic 规划器 + JointPositionController + 一阶跟随 StubArm")
     print("-" * 78)                                         # 小节分隔线
-    q_goal = np.array([0.60, -0.45, 0.30, -0.30, 0.45, -0.60])   # 目标关节角：限位内、各关节幅值不同
+    q_goal = np.array([0.60, -0.45, 0.30, -0.30, 0.45, -0.60])  # 目标关节角：限位内、各关节幅值不同
     n_tick, t_traj, tol = 50, 0.9, 0.01                     # 拍数 / 轨迹时长 s / 到位容差 rad
     dt = 1.0 / StubArm.ctrl_hz                              # 一拍时长 20 ms（与 ctrl_hz 一致）
-    n_hold = sum(1 for k in range(n_tick) if k * dt >= t_traj)   # 采样超出轨迹末端的拍数（保持段）
+    n_hold = sum(1 for k in range(n_tick) if k * dt >= t_traj)  # 采样超出轨迹末端的拍数（保持段）
     print("3.1 仿真参数")                                   # 仿真参数小节标题
-    print(f"    目标 q_goal (rad)：{vec_str(q_goal)}；终点速度 dq_goal：{vec_str(None)}（缺省取 0）")   # 目标与末速
-    print(f"    轨迹时长 {t_traj:.2f} s；控制频率 {StubArm.ctrl_hz:.0f} Hz；共 {n_tick} 拍"   # 时长/频率/拍数
+    print(f"    目标 q_goal (rad)：{vec_str(q_goal)}；终点速度 dq_goal：{vec_str(None)}（缺省取 0）")  # 目标与末速
+    print(f"    轨迹时长 {t_traj:.2f} s；控制频率 {StubArm.ctrl_hz:.0f} Hz；共 {n_tick} 拍"  # 时长/频率/拍数
           f"（其中 {n_hold} 拍超出轨迹末端：规划器保持末端状态）")
     print("    数据通路：规划器 sample 出参考帧 → 控制器 step 直发 q → 桩按一阶模型推进关节")   # 数据通路说明
 
     stub = StubArm()                                        # 被控对象：一阶跟随（tau=0.08 s）
     planner = SingleJointCubicTrajPlanner()                 # 规划器：三次多项式到单点目标
     ctrl = JointPositionController()                        # 控制器：直发位置参考（与 ② 同类）
-    ok_plan = planner.plan(stub, TrajFrame(time=time.time() + t_traj, q=q_goal))   # 规划：now 起 0.9 s 到达
+    ok_plan = planner.plan(stub, TrajFrame(time=time.time() + t_traj, q=q_goal))  # 规划：now 起 0.9 s 到达
     t0 = time.time()                                        # 仿真零点（sample 按绝对时间求值）
     q_refs, q_acts, oks = [], [], []                        # 每拍参考 / 实际 / step 返回的记录
     for k in range(n_tick):                                 # 50 拍闭环主循环
         frame = planner.sample(t0 + k * dt)                 # 本拍参考帧（超末端自动钳位保持）
-        oks.append(ctrl.step(stub, frame, stub.get_state_arm()))    # 控制器下发 frame.q，桩随之推进
-        q_refs.append(np.asarray(frame.q, dtype=float).copy())      # 存参考（拷贝防篡改）
+        oks.append(ctrl.step(stub, frame, stub.get_state_arm()))  # 控制器下发 frame.q，桩随之推进
+        q_refs.append(np.asarray(frame.q, dtype=float).copy())  # 存参考（拷贝防篡改）
         q_acts.append(stub.get_state_arm().q.copy())        # 存本拍指令作用后的实际关节角
-    sent_eq_ref = all(np.allclose(stub.cmds[k], q_refs[k]) for k in range(n_tick))    # 逐拍指令==参考
+    sent_eq_ref = all(np.allclose(stub.cmds[k], q_refs[k]) for k in range(n_tick))  # 逐拍指令==参考
 
     print("-" * 78)                                         # 小节分隔线
     print("3.2 逐拍记录（每 5 拍一行；关节 0 为代表列，‖e‖ 为六关节全误差范数）")
@@ -238,7 +238,7 @@ def run_closed_loop() -> dict:
         ["拍", "τ(s)", "关节0 q_ref", "关节0 q_act", "‖e‖ (rad)"],
         [[f"{k}", f"{k * dt:.2f}", f"{q_refs[k][0]:+.4f}", f"{q_acts[k][0]:+.4f}",
           f"{np.linalg.norm(q_refs[k] - q_acts[k]):.5f}"]   # 行数据：拍号/时刻/代表关节/误差范数
-         for k in range(n_tick) if k % 5 == 0 or k == n_tick - 1],   # 每 5 拍 + 末拍
+         for k in range(n_tick) if k % 5 == 0 or k == n_tick - 1],  # 每 5 拍 + 末拍
         [6, 8, 14, 14, 12])
     print("    规律：中段参考速度大 → 一阶跟随滞后使 ‖e‖ 最大；进入保持段后误差收敛")
 
@@ -249,14 +249,14 @@ def run_closed_loop() -> dict:
         print(f"    {pad('', 14)}q_act：{vec_str(q_acts[k], 2)}")    # 对齐显示同一拍的实际值
 
     print("-" * 78)                                         # 小节分隔线
-    print("3.4 到位判断（末拍实际 vs 目标 q_goal，全关节进容差才算到位）")   # 到位判断小节标题
+    print("3.4 到位判断（末拍实际 vs 目标 q_goal，全关节进容差才算到位）")  # 到位判断小节标题
     err_final = np.abs(q_acts[-1] - q_goal)                 # 末拍逐关节绝对误差
     arrived = bool(err_final.max() < tol)                   # 到位判定：最大误差 < 容差
-    print(f"    逐关节绝对误差 (rad)：{vec_str(err_final, 4)}")   # 误差明细
-    print(f"    最大误差 {err_final.max():.5f} rad < 容差 {tol} rad → {'到位' if arrived else '未到位'}")   # 判定结论
-    print(f"    附：规划成功 {ok_plan}；{n_tick} 拍 step 全部返回 True：{all(oks)}；"   # 附注一：规划与 step 返回
-          f"逐拍指令 == 参考 q：{sent_eq_ref}；下发总数 {len(stub.cmds)}")   # 附注二：指令一致性
-    return {"arrived": arrived, "max_err": float(err_final.max()), "tol": tol,   # 结果交 ④ 汇总
+    print(f"    逐关节绝对误差 (rad)：{vec_str(err_final, 4)}")  # 误差明细
+    print(f"    最大误差 {err_final.max():.5f} rad < 容差 {tol} rad → {'到位' if arrived else '未到位'}")  # 判定结论
+    print(f"    附：规划成功 {ok_plan}；{n_tick} 拍 step 全部返回 True：{all(oks)}；"  # 附注一：规划与 step 返回
+          f"逐拍指令 == 参考 q：{sent_eq_ref}；下发总数 {len(stub.cmds)}")  # 附注二：指令一致性
+    return {"arrived": arrived, "max_err": float(err_final.max()), "tol": tol,  # 结果交 ④ 汇总
             "all_ok": all(oks), "sent_eq_ref": sent_eq_ref, "n_cmds": len(stub.cmds)}
 
 
@@ -268,7 +268,7 @@ def print_conclusion(contract: dict, loop: dict, mode_ok: bool) -> None:
     print("=" * 78)                                         # 大节分隔线
     print("④ 分析结论")
     rows = [                                                # 五行结论：三条契约 + MODE + 闭环
-        ("1", "有效帧经 step 下发", "通过" if contract["valid"] else "未通过",   # 结论 1：有效帧
+        ("1", "有效帧经 step 下发", "通过" if contract["valid"] else "未通过",  # 结论 1：有效帧
          "返回 True；指令恰 1 条且 == 参考 q"),
         ("2", "缺 q 帧拒绝", "通过" if contract["no_q"] else "未通过",          # 结论 2：缺 q 拒绝
          "抛 ValueError；零下发"),

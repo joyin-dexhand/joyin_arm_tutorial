@@ -83,7 +83,7 @@ def pose_gap(pose_ref, pose_chk) -> tuple:
     """
     d_pos = float(np.linalg.norm(np.asarray(pose_ref.position)  # 位置误差：‖p_ref − p_chk‖
                                  - np.asarray(pose_chk.position)))
-    R_rel = np.asarray(pose_ref.T[:3, :3]) @ np.asarray(pose_chk.T[:3, :3]).T   # 相对旋转 R_ref·R_chkᵀ
+    R_rel = np.asarray(pose_ref.T[:3, :3]) @ np.asarray(pose_chk.T[:3, :3]).T  # 相对旋转 R_ref·R_chkᵀ
     d_rot = float(np.arccos(np.clip((np.trace(R_rel) - 1.0) / 2.0, -1.0, 1.0)))  # 等效旋转角
     return d_pos, d_rot                                         # 返回 (m, rad) 二元组
 
@@ -94,7 +94,7 @@ def wrap_dist(q_a, q_b) -> float:
     解析解会做 ±2π 平移以贴近限位区间，与数值解可能相差整圈但构型等价，
     折算后的距离才能反映二者是否为同一构型。
     """
-    dq = np.asarray(q_a, dtype=float) - np.asarray(q_b, dtype=float)   # 逐关节角差
+    dq = np.asarray(q_a, dtype=float) - np.asarray(q_b, dtype=float)  # 逐关节角差
     dq = np.arctan2(np.sin(dq), np.cos(dq))                     # 等价角折算到 (-π, π]
     return float(np.linalg.norm(dq))                            # 折算后欧氏范数
 
@@ -112,10 +112,10 @@ def main() -> None:
     print(f"   软限位 q_max：{np.round(soft.q_max, 3)}")        # 各关节上限（rad）
 
     # ---- ② 数值法：随机 q → FK → IK 往返误差表 ----
-    print("=" * 78)                                    # 大节分隔线
-    print("② 数值法 PinIkineSolver：随机 q → FK → IK 往返误差表")   # 大节标题
-    print("-" * 78)                                    # 小节分隔线
-    print(f"   采样 {N_SAMPLES} 组软限位内随机关节角（rand_q_arm），迭代起点统一 q0 = home_arm")   # 采样说明
+    print("=" * 78)                                             # 大节分隔线
+    print("② 数值法 PinIkineSolver：随机 q → FK → IK 往返误差表")  # 大节标题
+    print("-" * 78)                                             # 小节分隔线
+    print(f"   采样 {N_SAMPLES} 组软限位内随机关节角（rand_q_arm），迭代起点统一 q0 = home_arm")  # 采样说明
     samples = []                                                # 每组存 (q_rand, pose_rand, 数值解 IKResult)
     for _ in range(N_SAMPLES):
         q_rand = arm.rand_q_arm()                               # 公开接口：软限位内均匀随机采样
@@ -130,19 +130,19 @@ def main() -> None:
         print_row([(f"{i + 1}", 6), ("是" if res.success else "否", 9),
                    (fmt_err(res.err), 11), (f"{d_pos:.2e}", 13),
                    (f"{d_rot:.2e}", 14), (f"{res.n_iter}", 7)])  # 一行：标志 + 残差 + 分项误差 + 迭代数
-    print("   说明：err 为 IKResult 残差（位置范数 m + 姿态范数 rad 之和）；"   # err 字段口径
-          "位置 / 姿态误差由解 q 经 FK 回代后独立复算。")   # 分项误差口径
-    print("-" * 78)                                    # 小节分隔线
-    print("   参数敏感性：固定目标（FK(home_arm)）+ 固定起点（neutral_arm），每次只动一个参数")   # 敏感性小节标题
+    print("   说明：err 为 IKResult 残差（位置范数 m + 姿态范数 rad 之和）；"  # err 字段口径
+          "位置 / 姿态误差由解 q 经 FK 回代后独立复算。")       # 分项误差口径
+    print("-" * 78)                                             # 小节分隔线
+    print("   参数敏感性：固定目标（FK(home_arm)）+ 固定起点（neutral_arm），每次只动一个参数")  # 敏感性小节标题
     pose_fix = arm.solve_fkine(arm.home_arm)                    # 固定目标位姿：home 位形的 FK 结果
     q0_fix = arm.neutral_arm                                    # 固定迭代起点：软限位中点（数值法默认初值口径）
     groups = [                                                  # (组名, 求解关键字参数)——tol / iters 各两组
-        ("tol=1e-1（松）", dict(tol=1e-1)),                      # 松容差：残差压到 1e-1 即停
-        ("tol=1e-6（紧）", dict(tol=1e-6)),                      # 紧容差：残差须压到 1e-6
-        ("iters=1（过小）", dict(iters=1)),                      # 迭代上限 1：几乎无法收敛
-        ("iters=200（默认）", dict(iters=200)),                  # 迭代上限 200：求解器默认值
+        ("tol=1e-1（松）", dict(tol=1e-1)),                     # 松容差：残差压到 1e-1 即停
+        ("tol=1e-6（紧）", dict(tol=1e-6)),                     # 紧容差：残差须压到 1e-6
+        ("iters=1（过小）", dict(iters=1)),                     # 迭代上限 1：几乎无法收敛
+        ("iters=200（默认）", dict(iters=200)),                 # 迭代上限 200：求解器默认值
     ]
-    print_row([("参数组", 19), ("success", 9), ("err", 11), ("n_iter", 7)])   # 参数对比表表头
+    print_row([("参数组", 19), ("success", 9), ("err", 11), ("n_iter", 7)])  # 参数对比表表头
     param_res = {}                                              # 组名 → IKResult，供⑥结论表引用实测值
     for name, kw in groups:                                     # 逐组求解（其余参数取默认）
         r = arm.solve_ikine(pose_fix, q0=q0_fix, **kw)          # 只变动 tol 或 iters 之一
@@ -152,9 +152,9 @@ def main() -> None:
     print("   解读：收紧 tol → 残差更小、所需迭代往往更多；iters 过小 → 上限内未收敛（success=False）。")
 
     # ---- ③ 解析法：solve_all 全解 ----
-    print("=" * 78)                                    # 大节分隔线
-    print("③ 解析法 AnalyticIkineSolver：solve_all 全解（≤8 组）")   # 大节标题
-    print("-" * 78)                                    # 小节分隔线
+    print("=" * 78)                                             # 大节分隔线
+    print("③ 解析法 AnalyticIkineSolver：solve_all 全解（≤8 组）")  # 大节标题
+    print("-" * 78)                                             # 小节分隔线
     ok = arm.set_ikine_solver("analytic_ikine_solver")          # ikine 域内热切换到解析法
     print(f"   set_ikine_solver 返回 {ok}；当前激活：{arm.get_activated_ikine_solver()}")
     print("   适用前提：第 2/3/4 轴平行 + 第 5/6 轴相交的六转动关节构型（本型号满足）")
@@ -174,23 +174,23 @@ def main() -> None:
     print("-" * 78)
     r0 = all_res[0]                                             # 取样本 1 展开全解明细
     if r0.q.shape[0] == 0:                                      # 可达位姿不应出现空解集（防御性提示）
-        print("   样本 1 无解析解（K=0）——可达位姿不应出现，请检查模型")   # 防御性提示
+        print("   样本 1 无解析解（K=0）——可达位姿不应出现，请检查模型")  # 防御性提示
     else:
-        print("   样本 1 全解明细（每行一组 q，rad；回代残差 = 该组 q 经 FK 后与目标的混合残差）")   # 明细表标题
-        print_row([("解号", 6)] + [(f"q{j + 1}", 8) for j in range(6)]        # 明细表头：q1~q6
+        print("   样本 1 全解明细（每行一组 q，rad；回代残差 = 该组 q 经 FK 后与目标的混合残差）")  # 明细表标题
+        print_row([("解号", 6)] + [(f"q{j + 1}", 8) for j in range(6)]  # 明细表头：q1~q6
                   + [("软限位内", 10), ("回代残差", 11)])
         for k in range(r0.q.shape[0]):                          # 逐组解打印
             q_k = r0.q[k]                                       # 第 k 组解 (6,)
             pose_k = arm.solve_fkine(q_k)                       # FK 回代验证该组解
             d_pos, d_rot = pose_gap(samples[0][1], pose_k)      # 与目标位姿的分项残差
             in_soft = bool(np.all((q_k >= soft.q_min) & (q_k <= soft.q_max)))  # 逐关节均在软限位内
-            print_row([(f"{k + 1}", 6)] + [(f"{v:+.3f}", 8) for v in q_k]     # 6 个关节角
+            print_row([(f"{k + 1}", 6)] + [(f"{v:+.3f}", 8) for v in q_k]  # 6 个关节角
                       + [("是" if in_soft else "否", 10), (f"{d_pos + d_rot:.2e}", 11)])
 
     # ---- ④ 交叉验证：数值解 ↔ 解析解集合 ----
-    print("=" * 78)                                    # 大节分隔线
-    print("④ 交叉验证：数值解 ↔ 解析解集合（最近解距离）")   # 大节标题
-    print("-" * 78)                                    # 小节分隔线
+    print("=" * 78)                                             # 大节分隔线
+    print("④ 交叉验证：数值解 ↔ 解析解集合（最近解距离）")      # 大节标题
+    print("-" * 78)                                             # 小节分隔线
     print_row([("序号", 6), ("数值success", 12), ("解析K", 8), ("最近距离(rad)", 14),
                ("整圈折算(rad)", 14), ("最近解号", 10)])        # 交叉验证表表头
     d_plain_max, d_wrap_max, n_cross, n_conv = None, None, 0, 0  # 收敛组距离最大值 / 可比数 / 收敛数
@@ -204,7 +204,7 @@ def main() -> None:
             if res_num.success:                                 # 仅收敛解才计入一致性统计
                 n_conv += 1                                     # 收敛组计数
                 d_plain_max = d_plain if d_plain_max is None else max(d_plain_max, d_plain)  # 更新最大值
-                d_wrap_max = d_wrap if d_wrap_max is None else max(d_wrap_max, d_wrap)      # 同上
+                d_wrap_max = d_wrap if d_wrap_max is None else max(d_wrap_max, d_wrap)  # 同上
             cells = [(f"{i + 1}", 6), ("是" if res_num.success else "否", 12),
                      (f"{r_all.q.shape[0]}", 8), (f"{d_plain:.3e}", 14),
                      (f"{d_wrap:.3e}", 14), (f"{k_near + 1}", 10)]  # 正常行：实测距离
@@ -216,9 +216,9 @@ def main() -> None:
           "success=否 的行数值解仅为最优尝试，距离大属预期；欧氏距离大而折算距离小说明仅相差整圈（±2π 等价角）。")
 
     # ---- ⑤ 异常路径：不可达位姿与误用接口 ----
-    print("=" * 78)                                    # 大节分隔线
-    print("⑤ 异常路径：不可达位姿与误用接口")           # 大节标题
-    print("-" * 78)                                    # 小节分隔线
+    print("=" * 78)                                             # 大节分隔线
+    print("⑤ 异常路径：不可达位姿与误用接口")                   # 大节标题
+    print("-" * 78)                                             # 小节分隔线
     arm.set_ikine_solver("pin_ikine_solver")                    # 切回数值法（默认激活项）
     pose_far = Pose(position=np.array([5.0, 5.0, 5.0]))         # 远超工作空间的不可达位姿（姿态取默认单位四元数）
     r_num = arm.solve_ikine(pose_far, q0=arm.home_arm)          # 数值法：起点 + 随机重启耗尽仍无法收敛
@@ -241,9 +241,9 @@ def main() -> None:
           f"q.shape={r_ana_all.q.shape}（0 组解）")             # 空解集：形状 (0, 6)
 
     # ---- ⑥ 分析结论表 ----
-    print("=" * 78)                                    # 大节分隔线
-    print("⑥ 分析结论（数值均取自本次运行实测）")        # 大节标题
-    print("-" * 78)                                    # 小节分隔线
+    print("=" * 78)                                             # 大节分隔线
+    print("⑥ 分析结论（数值均取自本次运行实测）")               # 大节标题
+    print("-" * 78)                                             # 小节分隔线
     ok_cnt = sum(1 for _, _, r in samples if r.success)         # 数值法往返收敛组数
     ok_pos, ok_rot, ok_iter = [], [], []                        # 成功样本的分项误差与迭代数
     for _, pose_rand, res in samples:                           # 仅统计成功组
@@ -258,10 +258,10 @@ def main() -> None:
     else:                                                       # 全失败属异常情形，如实报告
         err_brief = "本次无成功组（异常，请检查模型配置）"
     k_list = [r.q.shape[0] for r in all_res]                    # 各样本解析全解数 K
-    r_loose = param_res["tol=1e-1（松）"]                        # 松容差组结果（结论引用）
-    r_tight = param_res["tol=1e-6（紧）"]                        # 紧容差组结果
-    r_few = param_res["iters=1（过小）"]                         # 过小迭代上限组结果
-    r_many = param_res["iters=200（默认）"]                      # 默认迭代上限组结果
+    r_loose = param_res["tol=1e-1（松）"]                       # 松容差组结果（结论引用）
+    r_tight = param_res["tol=1e-6（紧）"]                       # 紧容差组结果
+    r_few = param_res["iters=1（过小）"]                        # 过小迭代上限组结果
+    r_many = param_res["iters=200（默认）"]                     # 默认迭代上限组结果
     if n_conv:                                                  # 有收敛可比样本才给一致性结论
         cross_brief = (f"收敛组最近欧氏距离最大 {d_plain_max:.2e} rad（整圈折算 {d_wrap_max:.2e} rad）")
         if n_cross > n_conv:                                    # 存在未收敛的可比样本时补充说明
@@ -269,15 +269,15 @@ def main() -> None:
     else:                                                       # 无收敛可比样本：如实标注
         cross_brief = "—（本次无收敛的可比样本）"
     rows = [                                                    # 结论表：条目 + 实测结论文本
-        ("数值法往返", f"{ok_cnt}/{N_SAMPLES} 组 success=True；{err_brief}"),   # 结论 1：往返收敛统计
-        ("tol 影响", f"1e-1→1e-6：err {fmt_err(r_loose.err)}→{fmt_err(r_tight.err)}，"   # 结论 2：容差敏感性
+        ("数值法往返", f"{ok_cnt}/{N_SAMPLES} 组 success=True；{err_brief}"),  # 结论 1：往返收敛统计
+        ("tol 影响", f"1e-1→1e-6：err {fmt_err(r_loose.err)}→{fmt_err(r_tight.err)}，"  # 结论 2：容差敏感性
                     f"n_iter {r_loose.n_iter}→{r_tight.n_iter}（收紧 → 残差更小）"),
-        ("iters 影响", f"iters=1：success={r_few.success}；iters=200：success={r_many.success}"   # 结论 3：迭代上限敏感性
+        ("iters 影响", f"iters=1：success={r_few.success}；iters=200：success={r_many.success}"  # 结论 3：迭代上限敏感性
                       f"（上限过小 → 未收敛）"),
-        ("解析法全解", f"全解数 {min(k_list)}~{max(k_list)} 组/目标，软限位内有效 "   # 结论 4：全解规模
+        ("解析法全解", f"全解数 {min(k_list)}~{max(k_list)} 组/目标，软限位内有效 "  # 结论 4：全解规模
                       f"{min(valid_counts)}~{max(valid_counts)} 组"),
         ("交叉验证", cross_brief),                              # 结论 5：两法解集一致性
-        ("异常路径", "不可达位姿两法均 success=False；数值法激活调 solve_ikine_all → RuntimeError"),   # 结论 6：异常行为
+        ("异常路径", "不可达位姿两法均 success=False；数值法激活调 solve_ikine_all → RuntimeError"),  # 结论 6：异常行为
     ]
     for name, text in rows:                                     # 两列对齐逐行打印
         print(f"   {pad(name, 12)}{text}")

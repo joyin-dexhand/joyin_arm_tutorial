@@ -357,7 +357,7 @@ def test_06_connect(b):
     assert b._joint_mode_end == [ControlMode.MIT]
     assert b._mode_arm == ControlMode.MIT and b._mode_end == ControlMode.MIT
     assert any("连接成功" in m for m in cap.msgs)  # 成功信息默认可见
-    b._refresh_stop.set()  # 停保活线程，避免后台读取干扰后续调用计数
+    b._refresh_stop.set()                          # 停保活线程，避免后台读取干扰后续调用计数
 
 
 def test_06b_connect_failure(cfg):
@@ -416,7 +416,7 @@ def test_09_get_state(b):
     for i, tv in enumerate(ts):
         b.jstates["arm"][i]["t"] = tv
     st = b.get_state_arm()
-    assert st.t == min(ts)  # t=各电机 RX 时刻最早值（min 聚合，整批判旧保守判定）
+    assert st.t == min(ts)       # t=各电机 RX 时刻最早值（min 聚合，整批判旧保守判定）
     for jd in b.jstates["arm"]:  # 还原（b 为 module 级共享夹具：旧 t 会让后续 get_error 判过期）
         jd.pop("t", None)
     b.jstates["arm"][3].pop("temp_mos")
@@ -471,14 +471,14 @@ def test_12_set_mode(b):
     assert b.set_mode_arm(ControlMode.MIT) == 1
     assert b._mode_arm == ControlMode.MIT and b._joint_mode_arm == [ControlMode.MIT] * 6  # set_mode 乐观更新为目标模式
     assert b.set_mode_arm(ControlMode.VELOCITY) == 1
-    assert b._mode_arm == ControlMode.VELOCITY  # set_mode 成功即乐观更新缓存
+    assert b._mode_arm == ControlMode.VELOCITY       # set_mode 成功即乐观更新缓存
     assert b.get_mode_arm() == ControlMode.VELOCITY  # 读回硬件真值（内核已改写 dummy）
     assert b._mode_arm == ControlMode.VELOCITY
     b.fail_at["set_joint_mode_arm"] = {0}
     assert b.set_mode_arm(ControlMode.POSITION) == 0  # 内核失败 → 0（joint0 未写入，其余未尝试）
     del b.fail_at["set_joint_mode_arm"]
-    assert b._mode_arm == ControlMode.VELOCITY  # 失败同样不动缓存
-    assert b.set_mode_arm() == 1  # 省参默认 MIT
+    assert b._mode_arm == ControlMode.VELOCITY       # 失败同样不动缓存
+    assert b.set_mode_arm() == 1                     # 省参默认 MIT
     assert b.get_mode_arm() == ControlMode.MIT
 
 
@@ -598,7 +598,7 @@ def test_16_send_position(b, cfg):
     b.send_position_arm(np.zeros(6), np.full(6, 99.0), np.full(6, 1.5))
     c13b3 = [c for c in b.calls if c[0] == "send_joint_position_arm"]
     assert np.allclose([c[3] for c in c13b3], b.joint_limits_arm.dq_max)  # vlim 裁到 [0,dq_max]
-    assert np.allclose([c[4] for c in c13b3], 1.0)  # flim 裁到 [0,1]
+    assert np.allclose([c[4] for c in c13b3], 1.0)                        # flim 裁到 [0,1]
 
 
 # ---- T13 守卫与发送：MIT ----
@@ -673,7 +673,7 @@ def test_19_send_single_joint_fail(b):
     b.send_mit_arm(q=np.zeros(6), dq=np.full(6, 2.0), tau=np.full(6, 3.0))
     del b.fail_at["send_mit_arm"]
     sent = [c for c in b.calls if c[0] == "send_joint_mit_arm"]
-    assert [c[1] for c in sent] == list(range(6))  # 全部 joint 均尝试下发（失败不阻断其余）
+    assert [c[1] for c in sent] == list(range(6))                          # 全部 joint 均尝试下发（失败不阻断其余）
     assert any("send_mit_arm（joint3）：内核异常" in m for m in cap.msgs)  # 失败 joint 指名 warn
 
 
@@ -805,9 +805,9 @@ def test_21d_close(cfg):
     th = r._refresh_thread
     r.connect_arm()
     r.close()
-    assert not th.is_alive()            # close 返回即已停止（join 带超时）
-    r.close()                           # 幂等，二次调用不抛
-    assert r.is_connected_arm is True   # close 不断总线（与 disconnect_* 正交）
+    assert not th.is_alive()              # close 返回即已停止（join 带超时）
+    r.close()                             # 幂等，二次调用不抛
+    assert r.is_connected_arm is True     # close 不断总线（与 disconnect_* 正交）
     assert r.get_state_arm() is not None  # 显式同步调用不依赖定时器
     r._refresh_stop.set()
 
@@ -1007,7 +1007,7 @@ def test_34_end_check_clear_error(e):
     e.get_state_end()  # 重新填槽恢复新鲜
     assert e.get_error_end() == [0]
     e.jstates["end"][0]["error"] = 9  # 欠压故障码
-    assert e.get_error_end() == [0]  # 槽不跟手（仍是旧快照）
+    assert e.get_error_end() == [0]   # 槽不跟手（仍是旧快照）
     e.get_state_end()
     assert e.get_error_end() == [9]
     cap.msgs.clear()
@@ -1339,8 +1339,8 @@ def test_53_mode_nonenum(cfg):
         assert len(warns("非 ControlMode 枚举")) >= 1
         assert b12._jname("arm", 3) in warns("非 ControlMode 枚举")[0]  # 指名 joint
         assert "int" in warns("非 ControlMode 枚举")[0]                 # 附实际类型
-        assert b12._joint_mode_arm == [ControlMode.MIT] * 6  # 逐 joint 缓存不被毒化
-        assert b12._mode_arm == ControlMode.MIT               # 族模式成员不动
+        assert b12._joint_mode_arm == [ControlMode.MIT] * 6             # 逐 joint 缓存不被毒化
+        assert b12._mode_arm == ControlMode.MIT                         # 族模式成员不动
         b12._read_joint_mode_arm = orig
         assert b12.get_mode_arm() == ControlMode.MIT         # 恢复枚举后正常读取
     finally:
@@ -1395,7 +1395,7 @@ def test_57_extract_section_absent_silent(cfg):
     try:
         assert np.isnan(bsv._kp_mit_default_arm).all() and np.isnan(bsv._kd_mit_default_arm).all()
         assert not any("MIT.kp" in m or "MIT.kd" in m for m in cap.msgs)  # 整段缺省 → 静默
-        assert np.isfinite(bsv._vlim_default_arm).all()                    # 其余段正常解析
+        assert np.isfinite(bsv._vlim_default_arm).all()                   # 其余段正常解析
     finally:
         bsv._refresh_stop.set()
     cfg_key = copy.deepcopy(cfg)
@@ -1577,7 +1577,7 @@ def test_64_empty_family_read_write_disconnect(cfg):
         assert r.read_param_end("pos_kp") == []
         assert r.set_mode_end(ControlMode.MIT) == 1
         assert r.set_zero_end() == 1
-        r.disconnect_end()  # 空族断连：空操作
+        r.disconnect_end()                                      # 空族断连：空操作
         assert not any(c[0].endswith("_end") for c in r.calls)  # 全程不触任何 end 内核
     finally:
         r._refresh_stop.set()
@@ -1803,7 +1803,8 @@ def test_70_backend_rebot_arm_b601_dm(cfg):
 
     # 6c) 位置低字节撞操作码仍须更新状态；真正的参数应答不污染状态
     st_ref = m.state
-    bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0x10, 0x55, 0, 0, 0, 0, 0, 0x55)))  # 位置低字节撞 0x55，完整 SlaveID 不匹配
+    bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0x10, 0x55, 0, 0, 0, 0, 0, 0x55)))
+    # 位置低字节撞 0x55，完整 SlaveID 不匹配
     assert m.state is not st_ref
     st_ref = m.state
     bus._feed(bytes((0xAA, 0x11, 0x00, 0x11, 0, 0, 0, 0x01, 0x00, 0x33, 27)) + _struct.pack("<f", 9.9)

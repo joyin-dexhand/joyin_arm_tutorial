@@ -126,7 +126,7 @@ def check_pin_load(urdf_path: Path, pin_model) -> tuple:
     if pin_model is None:                                          # 前置失败（文件缺失或 pinocchio 解析报错）
         return False, [f"结果：buildModelFromUrdf 未成功（文件：{urdf_path}）"]
     names = [pin_model.names[i] for i in range(1, pin_model.njoints)]  # 活动关节名（下标 0 是 universe 根关节）
-    lines = [f"结果：解析成功——活动关节 {len(names)} 个、帧 {pin_model.nframes} 个、nq={pin_model.nq}",   # 解析成功摘要
+    lines = [f"结果：解析成功——活动关节 {len(names)} 个、帧 {pin_model.nframes} 个、nq={pin_model.nq}",  # 解析成功摘要
              f"关节：{names}"]                                     # 活动关节名清单
     return True, lines                                             # PASS + 明细
 
@@ -142,7 +142,7 @@ def check_robot_name(model_name: str, root) -> tuple:
         return False, ["结果：URDF XML 未解析成功，无法读取 <robot name>"]
     name = root.get("name") or "—"                                 # <robot> 根元素的 name 属性（缺失显「—」）
     ok = name == model_name                                        # 规范总原则：robot name = 型号名 = 目录名
-    verdict = "一致" if ok else "不一致"                            # 判定文案
+    verdict = "一致" if ok else "不一致"                             # 判定文案
     return ok, [f"结果：<robot name> = {name!r}，型号名 = {model_name!r}，{verdict}"]
 
 
@@ -171,13 +171,13 @@ def check_limits(root) -> tuple:
             incomplete.append(f"{jname}（缺 {'/'.join(miss)}）")    # 缺键关节入清单
         rows.append([jname, jtype,                                 # 本行前两列：关节名 + 类型
                      "是" if j.find("mimic") is not None else "否",  # mimic 从动关节标记（规范：从动须带 <mimic>）
-                     _fmt(vals["lower"]), _fmt(vals["upper"]),      # 位置上下限（revolute 单位 rad，prismatic 单位 m）
+                     _fmt(vals["lower"]), _fmt(vals["upper"]),     # 位置上下限（revolute 单位 rad，prismatic 单位 m）
                      _fmt(vals["effort"]), _fmt(vals["velocity"]),  # 力/力矩上限与速度上限
                      "OK" if not miss else "缺 " + "/".join(miss)])  # 行判定
     lines = _table(rows, right_cols=frozenset({3, 4, 5, 6}))       # 数值列（lower/upper/effort/velocity）右对齐
     lines.append(f"另：非活动关节 {n_fixed} 个（fixed 无 <limit>，不检查）")
     if incomplete:                                                 # 任一活动关节缺键 → FAIL 并列出明细
-        lines.append(f"结果：{len(incomplete)} 个活动关节四限位不完整——" + "；".join(incomplete))   # 不完整清单
+        lines.append(f"结果：{len(incomplete)} 个活动关节四限位不完整——" + "；".join(incomplete))  # 不完整清单
         return False, lines                                        # FAIL + 明细
     lines.append("结果：全部活动关节四限位齐全")                   # 全齐结论
     return True, lines                                             # PASS + 明细
@@ -214,12 +214,12 @@ def check_meshes(urdf_path: Path, root) -> tuple:
     mesh_dir = urdf_path.parent.parent / "meshes"                  # 型号根下的 meshes/ 目录（与 urdf/ 平级）
     if mesh_dir.is_dir():                                          # 附加提示：目录中未被引用的孤立 mesh（不影响判定）
         orphans = sorted(p.name for p in mesh_dir.iterdir()        # 收集 meshes/ 下的全部文件名
-                         if p.is_file() and p.name not in used_names)   # 过滤：未被 URDF 引用者
-        lines.append(f"提示：meshes/ 目录孤立文件 {orphans if orphans else '—'}（未被 URDF 引用，不影响判定）")   # 孤立文件提示
+                         if p.is_file() and p.name not in used_names)  # 过滤：未被 URDF 引用者
+        lines.append(f"提示：meshes/ 目录孤立文件 {orphans if orphans else '—'}（未被 URDF 引用，不影响判定）")  # 孤立文件提示
     if bad:                                                        # 有不合格引用 → FAIL
-        lines.append(f"结果：{len(bad)} 个 mesh 引用不合格（非相对路径或文件缺失）——" + "；".join(bad))   # 不合格清单
+        lines.append(f"结果：{len(bad)} 个 mesh 引用不合格（非相对路径或文件缺失）——" + "；".join(bad))  # 不合格清单
         return False, lines                                        # FAIL + 明细
-    lines.append(f"结果：{len(refs)} 个 mesh 引用全部为相对路径且文件存在")   # 全部合格结论
+    lines.append(f"结果：{len(refs)} 个 mesh 引用全部为相对路径且文件存在")  # 全部合格结论
     return True, lines                                             # PASS + 明细
 
 
@@ -247,8 +247,8 @@ def check_frame_end(model_name: str, cfg, pin_model) -> tuple:
     fid = pin_model.getFrameId(frame_end)                          # 查帧索引（查不到时静默返回越界哨兵）
     ok = 0 <= fid < pin_model.nframes                              # 用区间判断拦截越界哨兵（同 _build_pin_model）
     if ok:                                                         # 帧索引在界内 = 帧存在
-        return True, [f"frame_end = {frame_end!r}（来自 config joyarm.frame_end）",   # PASS 明细行 1
-                      f"结果：帧存在（索引 {fid}/{pin_model.nframes}）"]   # PASS 明细行 2：索引位置
+        return True, [f"frame_end = {frame_end!r}（来自 config joyarm.frame_end）",  # PASS 明细行 1
+                      f"结果：帧存在（索引 {fid}/{pin_model.nframes}）"]  # PASS 明细行 2：索引位置
     frames = [f.name for f in pin_model.frames]                    # 失败时列出模型全部可用帧辅助排查
     return False, [f"frame_end = {frame_end!r}（来自 config joyarm.frame_end）",
                    f"结果：帧不存在；模型可用帧：{frames}"]
@@ -283,8 +283,8 @@ def check_arm_joints(cfg, pin_model) -> tuple:
     names = [reduced.names[i] for i in range(1, reduced.njoints)]  # 缩减模型活动关节名（文档顺序）
     lines.append(f"URDF 缩减模型关节：{names}（nq={reduced.nq}）")
     ok = names == arm_names and reduced.nq == len(arm_names)       # 同名同序 + 自由度一致（_build_pin_model 同款判据）
-    lines.append("结果：" + ("关节同名同序且 nq 一致（与 JoyArm._build_pin_model 判据一致）" if ok   # 一致结论
-                           else "缩减模型关节与 cfg 名单不一致（同名同序或 nq 不符）"))   # 不一致结论
+    lines.append("结果：" + ("关节同名同序且 nq 一致（与 JoyArm._build_pin_model 判据一致）" if ok  # 一致结论
+                           else "缩减模型关节与 cfg 名单不一致（同名同序或 nq 不符）"))  # 不一致结论
     return ok, lines                                               # 判定 + 明细
 
 
@@ -326,12 +326,12 @@ def main() -> None:
     # ---- 七项检查有序表（标题, 零参闭包）：逐项执行并打印 ----
     checks = [                                                     # (标题, 触发闭包) 依序七项
         ("① URDF 文件存在", lambda: check_file(urdf_path)),        # 检查①：文件存在
-        ("② pinocchio 可加载", lambda: check_pin_load(urdf_path, pin_model)),   # 检查②：pin 加载
-        ("③ <robot name> = 型号名", lambda: check_robot_name(model_name, root)),   # 检查③：命名链
+        ("② pinocchio 可加载", lambda: check_pin_load(urdf_path, pin_model)),  # 检查②：pin 加载
+        ("③ <robot name> = 型号名", lambda: check_robot_name(model_name, root)),  # 检查③：命名链
         ("④ 逐关节四限位完整", lambda: check_limits(root)),        # 检查④：四限位
-        ("⑤ mesh 相对路径文件存在", lambda: check_meshes(urdf_path, root)),   # 检查⑤：mesh 引用
-        ("⑥ frame_end 帧存在", lambda: check_frame_end(model_name, cfg, pin_model)),   # 检查⑥：末端帧
-        ("⑦ 活动关节与 config arm 段一致", lambda: check_arm_joints(cfg, pin_model)),   # 检查⑦：关节名单
+        ("⑤ mesh 相对路径文件存在", lambda: check_meshes(urdf_path, root)),  # 检查⑤：mesh 引用
+        ("⑥ frame_end 帧存在", lambda: check_frame_end(model_name, cfg, pin_model)),  # 检查⑥：末端帧
+        ("⑦ 活动关节与 config arm 段一致", lambda: check_arm_joints(cfg, pin_model)),  # 检查⑦：关节名单
     ]
     print("=" * 78)                                                # 大节：总标题区
     print(f"URDF 模型资产检查：型号 {model_name!r}")

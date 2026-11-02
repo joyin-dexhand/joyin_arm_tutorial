@@ -50,7 +50,7 @@ import numpy as np                             # 数值计算（矩阵 / SVD / �
 import pinocchio as pin                        # joyarm_core 底层运动学库：log₃ 旋转对数映射
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 未安装时也可直接运行
-from joyarm_core import joyArm  # # JoyArm 主门面（依赖上方 sys.path 生效）
+from joyarm_core import joyArm                 # JoyArm 主门面（依赖上方 sys.path 生效）
 from joyarm_core.robotics.jacobian import JacobianSolver, PinJacobianSolver
 
 H_DIFF = 1e-6                                  # 中心差分步长（rad）：再小会被浮点噪声淹没，再大截断误差增大
@@ -67,7 +67,7 @@ def disp_w(text: str) -> int:
 def pad(text: str, width: int, align: str = ">") -> str:
     """按显示宽度补空格对齐：align='>' 右对齐（数值列），'<' 左对齐（文本列）。"""
     gap = max(width - disp_w(text), 0)         # 防负数：超宽时不截断、只不补
-    return " " * gap + text if align == ">" else text + " " * gap   # 按对齐方向补空格
+    return " " * gap + text if align == ">" else text + " " * gap  # 按对齐方向补空格
 
 
 def row(cells: list, widths: list, aligns: list) -> str:
@@ -100,8 +100,8 @@ def jac_numeric(arm, q: np.ndarray, frame: str, h: float = H_DIFF) -> np.ndarray
         qm[i] -= h                             # 第 i 关节 -h 扰动
         Tp = arm.solve_fkine(qp, frame).T      # +h 位形末端齐次矩阵（基座系）
         Tm = arm.solve_fkine(qm, frame).T      # -h 位形末端齐次矩阵（基座系）
-        J[:3, i] = (Tp[:3, 3] - Tm[:3, 3]) / (2 * h)          # 位置中心差分 → 线速度列
-        J[3:, i] = pin.log3(Tp[:3, :3] @ Tm[:3, :3].T) / (2 * h)   # 相对旋转 log₃ → 基座系角速度列
+        J[:3, i] = (Tp[:3, 3] - Tm[:3, 3]) / (2 * h)  # 位置中心差分 → 线速度列
+        J[3:, i] = pin.log3(Tp[:3, :3] @ Tm[:3, :3].T) / (2 * h)  # 相对旋转 log₃ → 基座系角速度列
     return J                                   # 形状与 get_jac 相同，可逐元素比对
 
 
@@ -113,9 +113,9 @@ def singularity_metrics(J: np.ndarray) -> tuple:
     """
     s = np.linalg.svd(J, compute_uv=False)     # 奇异值降序排列：s[0]=σ_max，s[-1]=σ_min
     s_min, s_max = float(s[-1]), float(s[0])   # 转内置 float，便于格式化
-    cond = s_max / s_min if s_min > 0.0 else float("inf")    # σ_min=0（奇异）时条件数无穷大
+    cond = s_max / s_min if s_min > 0.0 else float("inf")  # σ_min=0（奇异）时条件数无穷大
     det = float(np.linalg.det(J @ J.T))        # 可操作度定义式中的 det(JJᵀ)
-    mani = float(np.sqrt(det)) if det > 0.0 else 0.0         # det≤0（浮点误差/降秩）时取 0
+    mani = float(np.sqrt(det)) if det > 0.0 else 0.0  # det≤0（浮点误差/降秩）时取 0
     return s_min, s_max, cond, mani            # 四元组一并返回
 
 
@@ -125,25 +125,25 @@ def main() -> None:
     print("=" * 78)
     print("① 对象与求解器：离线创建 JoyArm，查看 jacobian 域与形状契约")
     arm = joyArm("rebot_arm_b601_dm")          # 离线创建：装配 URDF/pin 模型与算法层，不触硬件
-    frame_end = arm.get_config()["joyarm"]["frame_end"]       # cfg 指定的末端帧名，后续统一用它
+    frame_end = arm.get_config()["joyarm"]["frame_end"]  # cfg 指定的末端帧名，后续统一用它
     print(f"   型号 rebot_arm_b601_dm：n_arm = {arm.n_arm}，末端帧 frame_end = {frame_end}")  # 模型基本参数
-    print(f"   jacobian 域已注册求解器：{arm.get_jac_solvers()}")   # 域内注册名（字母序）
+    print(f"   jacobian 域已注册求解器：{arm.get_jac_solvers()}")  # 域内注册名（字母序）
     print(f"   jacobian 域当前激活求解器：{arm.get_activated_jac_solver()}")  # 缺省激活（cfg 首位）
     solver = PinJacobianSolver()               # 激活求解器对应的类：实例化做基类契约说明
     print(f"   PinJacobianSolver 是 JacobianSolver 基类的子类：{isinstance(solver, JacobianSolver)}"
           "（基类定义抽象方法 jac、内置通用 jac_pinv_damped，门面 get_jac* 转发到激活实例）")
-    J0 = arm.get_jac(arm.home_arm, frame_end)              # 门面 get_jac → 激活求解器 .jac(解析式)
+    J0 = arm.get_jac(arm.home_arm, frame_end)  # 门面 get_jac → 激活求解器 .jac(解析式)
     J0s = arm.get_jac_pinv_damped(arm.home_arm, frame_end)  # 门面 → 基类通用 SVD 阻尼伪逆
-    ok_shape = J0.shape == (6, arm.n_arm) and J0s.shape == (arm.n_arm, 6)   # 契约：J 为 (6,n)、J* 为 (n,6)
+    ok_shape = J0.shape == (6, arm.n_arm) and J0s.shape == (arm.n_arm, 6)  # 契约：J 为 (6,n)、J* 为 (n,6)
     print(f"   形状契约：J {J0.shape} = (6, n)、J* {J0s.shape} = (n, 6) → {'满足' if ok_shape else '不满足'}")
     print("   home 位形的 J(q)（行 = 末端速度分量 [vx,vy,vz,wx,wy,wz]，列 = 关节 1~6）：")
-    with np.printoptions(precision=3, suppress=True):      # 紧凑打印：3 位小数、去多余零
+    with np.printoptions(precision=3, suppress=True):  # 紧凑打印：3 位小数、去多余零
         print(J0)                              # 上 3 行单位 m/rad、下 3 行 rad/rad
 
     # ---- ② 解析 vs 数值差分：5 组 rand_q，中心差分步长 h = 1e-6 ----
-    print("=" * 78)                                      # 大节分隔线
+    print("=" * 78)                            # 大节分隔线
     print("② 解析雅可比 vs 数值差分：5 组 rand_q，中心差分步长 h = 1e-6")  # 大节标题
-    print("-" * 78)                                      # 小节分隔线
+    print("-" * 78)                            # 小节分隔线
     widths = [6, 20, 20, 18]                   # 四列显示宽度：组号 / 线速度行 / 角速度行 / 整体
     aligns = [">", ">", ">", ">"]              # 全数值列，统一右对齐
     print(row(["组#", "max|ΔJ| 线速度行", "max|ΔJ| 角速度行", "max|ΔJ| 整体"], widths, aligns))
@@ -166,8 +166,8 @@ def main() -> None:
     print("=" * 78)
     print("③ 奇异值分析：σ_min / σ_max / 条件数 / 可操作度（home + 4 个典型位形）")
     configs = [                                # (名称, 说明, q)：均取软限位内的可达位形
-        ("home", "归位位形（cfg home_arm）", np.asarray(arm.home_arm, dtype=float)),      # cfg 归位构型
-        ("zero", "全零位形（伸直边界）", np.asarray(arm.zero_arm, dtype=float)),         # 全零伸直构型
+        ("home", "归位位形（cfg home_arm）", np.asarray(arm.home_arm, dtype=float)),  # cfg 归位构型
+        ("zero", "全零位形（伸直边界）", np.asarray(arm.zero_arm, dtype=float)),  # 全零伸直构型
         ("neutral", "软限位中点（数值法初值）", np.asarray(arm.neutral_arm, dtype=float)),  # 数值求解默认初值
         ("folded", "折叠位形（肘部大幅弯折）", np.array([0.0, -2.9, -2.9, 0.0, 1.3, 0.0])),  # 人为折叠
         ("side", "侧伸位形（肩转 90°）", np.array([1.57, -1.2, -0.5, 0.0, 0.8, 0.0])),  # 人为侧伸
@@ -181,18 +181,18 @@ def main() -> None:
     print("-" * 78)
     metrics = {}                               # 位形名 → 四指标（供 ④⑤ 节复用）
     for name, _, q in configs:                 # 逐位形算指标并打印
-        s_min, s_max, cond, mani = singularity_metrics(arm.get_jac(q, frame_end))   # J(q) → 四指标
-        metrics[name] = (s_min, s_max, cond, mani)          # 缓存备用
-        judge = "良态" if s_min >= 0.05 else ("条件较差" if s_min >= 0.01 else "接近奇异")   # 按 σ_min 裕度分档
+        s_min, s_max, cond, mani = singularity_metrics(arm.get_jac(q, frame_end))  # J(q) → 四指标
+        metrics[name] = (s_min, s_max, cond, mani)  # 缓存备用
+        judge = "良态" if s_min >= 0.05 else ("条件较差" if s_min >= 0.01 else "接近奇异")  # 按 σ_min 裕度分档
         print(row([name, fmt(s_min), fmt(s_max), fmt(cond, 1), fmt(mani), judge], widths, aligns))
-    best_cfg = min(metrics, key=lambda n: metrics[n][2])    # 条件数最小 = 最远离奇异
-    worst_cfg = max(metrics, key=lambda n: metrics[n][2])   # 条件数最大 = 最接近奇异
-    worst_mani_cfg = min(metrics, key=lambda n: metrics[n][3])   # 可操作度最小 = 各向灵巧度最差
+    best_cfg = min(metrics, key=lambda n: metrics[n][2])  # 条件数最小 = 最远离奇异
+    worst_cfg = max(metrics, key=lambda n: metrics[n][2])  # 条件数最大 = 最接近奇异
+    worst_mani_cfg = min(metrics, key=lambda n: metrics[n][3])  # 可操作度最小 = 各向灵巧度最差
     print(f"   结论：{best_cfg} 条件数最小（{metrics[best_cfg][2]:.1f}，灵活性最好）；"
           f"{worst_cfg} 条件数最大（{metrics[worst_cfg][2]:.1f}，奇异风险最高）")
 
     # ---- ④ 阻尼伪逆：λ = 0（参照）/ 1e-3（默认档）/ 0.1（强阻尼档） ----
-    print("=" * 78)                                      # 大节分隔线
+    print("=" * 78)                            # 大节分隔线
     print("④ 阻尼伪逆：get_jac_pinv_damped 三档 λ 下 max|J·J*-I| 与理论上界对比")  # 大节标题
     print("   J·J* = I 表示末端速度指令被精确还原；偏差 = 阻尼引入的『执行损失』")  # 偏差的物理含义
     print("-" * 78)
@@ -200,30 +200,30 @@ def main() -> None:
     aligns = ["<", "<", ">", ">"]              # 前两列文本左对齐、后两列数值右对齐
     print(row(["位形", "阻尼 λ", "实测 max|J·J*-I|", "理论上界 λ²/(σ_min²+λ²)"], widths, aligns))
     print("-" * 78)
-    lams = [(0.0, "0（精确伪逆参照）"), (1e-3, "1e-3（默认档）"), (0.1, "0.1（强阻尼档）")]   # 三档阻尼
+    lams = [(0.0, "0（精确伪逆参照）"), (1e-3, "1e-3（默认档）"), (0.1, "0.1（强阻尼档）")]  # 三档阻尼
     dev_by_cfg = {}                            # 位形名 → {λ: 实测偏差}（供趋势判定与结论表）
     for name, _, q in configs:                 # 与 ③ 相同的 5 个位形逐一测试
         J = arm.get_jac(q, frame_end)          # 该位形的解析雅可比
         dev_by_cfg[name] = {}                  # 本位形的偏差记录字典
         for lam, label in lams:                # 三档阻尼逐一求 J* 并核对 J·J*
-            Js = arm.get_jac_pinv_damped(q, frame_end, damping=lam)   # 阻尼伪逆 J*
-            dev = float(np.abs(J @ Js - np.eye(6)).max())             # 偏离单位阵的最大元素
-            bound = lam ** 2 / (metrics[name][0] ** 2 + lam ** 2) if lam > 0.0 else 0.0   # 最劣奇异方向的理论偏差
+            Js = arm.get_jac_pinv_damped(q, frame_end, damping=lam)  # 阻尼伪逆 J*
+            dev = float(np.abs(J @ Js - np.eye(6)).max())  # 偏离单位阵的最大元素
+            bound = lam ** 2 / (metrics[name][0] ** 2 + lam ** 2) if lam > 0.0 else 0.0  # 最劣奇异方向的理论偏差
             dev_by_cfg[name][lam] = dev        # 记录实测偏差
             print(row([name, label, f"{dev:.2e}", f"{bound:.2e}" if lam > 0.0 else "0"], widths, aligns))
-    mono_ok = all(d[0.1] > d[1e-3] > d[0.0] for d in dev_by_cfg.values())   # 全部位形：λ↑ ⇒ 偏差单调增大
-    exact_ok = all(d[0.0] < 1e-8 for d in dev_by_cfg.values())             # λ=0 满秩处应精确还原（数值精度内）
+    mono_ok = all(d[0.1] > d[1e-3] > d[0.0] for d in dev_by_cfg.values())  # 全部位形：λ↑ ⇒ 偏差单调增大
+    exact_ok = all(d[0.0] < 1e-8 for d in dev_by_cfg.values())  # λ=0 满秩处应精确还原（数值精度内）
     bound_ok = all(dev_by_cfg[n][lam] <= lam ** 2 / (metrics[n][0] ** 2 + lam ** 2) + 1e-12
-                   for n in dev_by_cfg for lam in (1e-3, 0.1))             # λ>0 各行实测偏差 ≤ 理论上界
+                   for n in dev_by_cfg for lam in (1e-3, 0.1))  # λ>0 各行实测偏差 ≤ 理论上界
     print(f"   结论：λ 增大偏差单调增大（5/5 位形）{'✓' if mono_ok else '✗'}；"  # 趋势一：λ↑ ⇒ 偏差↑
-          f"λ=0 精确伪逆（<1e-8）{'✓' if exact_ok else '✗'}；"                 # 趋势二：λ=0 精确还原
+          f"λ=0 精确伪逆（<1e-8）{'✓' if exact_ok else '✗'}；"  # 趋势二：λ=0 精确还原
           f"实测偏差 ≤ 理论上界 {'✓' if bound_ok else '✗'}；{worst_cfg} 位形上即便小阻尼也现大偏差"  # 趋势三：上界验证
           f"（1e-3 档偏差 {dev_by_cfg[worst_cfg][1e-3]:.2e}）——阻尼的意义正是压制奇异方向的增益爆炸")  # 压制增益爆炸
 
     # ---- ⑤ 分析结论表 ----
-    print("=" * 78)                                      # 大节分隔线
-    print("⑤ 分析结论表")                                 # 大节标题
-    print("-" * 78)                                      # 小节分隔线
+    print("=" * 78)                            # 大节分隔线
+    print("⑤ 分析结论表")                      # 大节标题
+    print("-" * 78)                            # 小节分隔线
     widths = [6, 22, 44]                       # 序号 / 测试项 / 判定与结论
     aligns = [">", "<", "<"]                   # 序号右对齐，其余文本左对齐
     print(row(["序号", "测试项", "判定 / 结论"], widths, aligns))

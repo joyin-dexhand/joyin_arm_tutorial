@@ -63,7 +63,7 @@ ZERO_TOL = 0.05  # 标零复核容差（rad）：与 cfg arrival_tol 的关节�
 # ============================================================
 def parse_model() -> str:
     """解析必填的命令行型号参数；缺失时打印用法并以退出码 1 结束。"""
-    if len(sys.argv) != 2:  # 必须恰好携带 1 个型号参数
+    if len(sys.argv) != 2:                       # 必须恰好携带 1 个型号参数
         sys.exit(f"用法：python quick_start/03_set_zero_and_params.py <型号>")  # 缺参退出，不进入演示
     return sys.argv[1].strip()                   # 型号名
 
@@ -110,18 +110,18 @@ def demo_set_zero(arm: "joyArm", family: str) -> None:
     :param arm: 已连接的 JoyArm 实例。
     :param family: `"arm"`（本体六关节）或 `"end"`（末端夹爪电机）。
     """
-    label = "本体 arm" if family == "arm" else "末端 end"                        # 提示语用的总线名称
+    label = "本体 arm" if family == "arm" else "末端 end"                     # 提示语用的总线名称
     get_state = arm.get_state_arm if family == "arm" else arm.get_state_end  # 主动读的状态接口
     set_zero = arm.set_zero_arm if family == "arm" else arm.set_zero_end     # 设零接口（arm 侧受 FSM 互斥，本例程未启 FSM）
     print("-" * 78)                                                          # 小节分隔线
-    print(f"○ {label} 标零（set_zero_{family}）：默认只演示不执行。")                      # 小节标题（说明默认路径不执行）
+    print(f"○ {label} 标零（set_zero_{family}）：默认只演示不执行。")        # 小节标题（说明默认路径不执行）
     print("  含义：把该总线电机「当前时刻的位置」记为零点；执行后零点即被改写，")                             # 标零语义
-    print("  本次上电内后续一切关节角都以新零点为基准（高危、影响持久）。")                                # 影响范围提示
+    print("  本次上电内后续一切关节角都以新零点为基准（高危、影响持久）。")  # 影响范围提示
     s = get_state()                                                          # 读当前关节位置（主动读）
     if s is None:                                                            # 读取失败：无法展示当前位置，直接跳过本段
-        print(f"  当前位置读取失败（返回 None），跳过 {label} 标零演示。")                       # 失败分支提示
+        print(f"  当前位置读取失败（返回 None），跳过 {label} 标零演示。")   # 失败分支提示
         return                                                               # 提前返回，不进入确认流程
-    print(f"  当前位置 q（rad）：{np.round(s.q, 3).tolist()}")                      # 当前位置基线
+    print(f"  当前位置 q（rad）：{np.round(s.q, 3).tolist()}")               # 当前位置基线
     print("  执行前请确认：机械臂已摆到该型号定义的零位构型（见教程「整机初始化标定与调试」章）。")                    # 执行前提
     if not confirm_two_level(label):                                         # 两次确认：任一级非 YES 即跳过
         print(f"  未两次确认 YES：已跳过 {label} 标零（零点未改动）。")
@@ -135,7 +135,7 @@ def demo_set_zero(arm: "joyArm", family: str) -> None:
         return
     q_max = float(np.max(np.abs(s2.q)))                               # 各关节绝对值的最大者
     ok = q_max <= ZERO_TOL                                            # 容差内即认为「当前位置已成新零点」
-    print(f"  复核 q（rad）：{np.round(s2.q, 3).tolist()}")                # 标零后的位置读数
+    print(f"  复核 q（rad）：{np.round(s2.q, 3).tolist()}")           # 标零后的位置读数
     print(f"  最大绝对关节角 |q|max = {q_max:.4f} rad（容差 {ZERO_TOL} rad）→ "  # 复核结论：容差内即标零生效
           f"{'接近零点，标零生效' if ok else '未接近零点（状态帧可能尚未刷新，可重跑复核）'}")
 
@@ -150,7 +150,7 @@ def print_param_table(names, key_vals: dict, units: dict) -> None:
     :param key_vals: {参数键: 逐关节值列表 或 None}。
     :param units: {参数键: 单位字符串}。
     """
-    header = pad("关节", 12, "left")                                               # 表头首列：关节名（左对齐）
+    header = pad("关节", 12, "left")                                             # 表头首列：关节名（左对齐）
     header += "".join(pad(f"{k} ({u})", 17, "right") for k, u in units.items())  # 表头数值列：键名 + 单位（右对齐）
     print(header)
     for i, name in enumerate(names):                                            # 逐关节一行
@@ -192,7 +192,7 @@ def demo_write_same_value(arm: "joyArm", family: str) -> None:
     :param arm: 已连接的 JoyArm 实例。
     :param family: `"arm"`（本体六关节）或 `"end"`（末端夹爪电机）。
     """
-    label = "本体 arm" if family == "arm" else "末端 end"                                    # 提示语用的总线名称
+    label = "本体 arm" if family == "arm" else "末端 end"                                # 提示语用的总线名称
     read = arm.read_param_arm if family == "arm" else arm.read_param_end                 # 参数整组读接口
     write = arm.write_param_arm if family == "arm" else arm.write_param_end              # 参数整组写接口
     names = arm.get_joint_names_arm() if family == "arm" else arm.get_joint_names_end()  # 关节名（cfg 顺序）
@@ -209,7 +209,7 @@ def demo_write_same_value(arm: "joyArm", family: str) -> None:
         print("  写后读回失败（返回 None），无法核对。")
         return
     header = (pad("关节", 12, "left") + pad("写前 pmax (rad)", 17, "right")
-              + pad("写后 pmax (rad)", 17, "right") + pad("偏差", 12, "right"))           # 核对表表头
+              + pad("写后 pmax (rad)", 17, "right") + pad("偏差", 12, "right"))        # 核对表表头
     print(header)                                                                     # 打印表头
     all_ok = True                                                                     # 全关节核对结果汇总标志
     for i, name in enumerate(names):                                                  # 逐关节比对写前/写后值
@@ -218,7 +218,7 @@ def demo_write_same_value(arm: "joyArm", family: str) -> None:
         all_ok = all_ok and ok                                                        # 任一关节不一致则整体判不一致
         print(pad(str(name), 12, "left") + pad(f"{vals[i]:.3f}", 17, "right")         # 关节名 + 写前值
               + pad(f"{back[i]:.3f}", 17, "right") + pad(f"{diff:.4f}", 12, "right")  # 写后值 + 偏差
-              + (" 一致" if ok else " 不一致!"))                                           # 单关节结论（前置空格与偏差列隔开）
+              + (" 一致" if ok else " 不一致!"))                                      # 单关节结论（前置空格与偏差列隔开）
     print(f"  核对结果：{'全部一致——原值写回未改变电机行为' if all_ok else '存在不一致（见上表），请排查总线与电机状态'}")
     # ---- 风险与「真正改值」的写法（默认不执行，理解风险并确认需要时再手动放开） ----
     # write_param 写的是电机 RAM 寄存器：断电即丢、上电恢复固件默认；

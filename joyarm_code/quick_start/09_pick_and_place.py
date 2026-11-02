@@ -104,7 +104,7 @@ def move_to(arm, q_target, horizon_s=2.0, timeout_s=6.0):
 def main() -> None:
     """综合抓取演示主流程：准备 → 规划 → 抓取 → 收尾（Ctrl+C 可随时安全退出）。"""
     print("=" * 78)                                              # 大节：标题上边框
-    print("例程 09 —— 综合抓取演示（需真机）")                                # 大节标题
+    print("例程 09 —— 综合抓取演示（需真机）")                       # 大节标题
     print("=" * 78)                                              # 大节：标题下边框
     model = parse_model()                                        # 必填型号参数
     try:
@@ -160,16 +160,16 @@ def main() -> None:
             print("③ 抓取：上方点 → 下降 → 闭爪夹取 → 抬回上方点")                # 小节标题
             print("-" * 78)                                      # 小节：③ 下边框
             move_to(arm, res_above.q)                            # 先到上方点关节解（接近抓取点，便于竖直下探）
-            print("    已到上方点，开始竖直下降到抓取点")                        # 阶段进度提示
+            print("    已到上方点，开始竖直下降到抓取点")              # 阶段进度提示
             move_to(arm, res_grab.q)                             # 降到抓取点关节解
             arm.set_action_end("close")                          # 闭合夹爪（固定行程位 0.0 rad），夹取物体
             time.sleep(2.5)                                      # 等闭合到位再抬臂：行程 5.0 rad、限速 3.0 rad/s ≈ 1.7 s，取 2.5 s 留余量
-            print("    夹取完成，抬回上方点")                              # 阶段进度提示
+            print("    夹取完成，抬回上方点")                        # 阶段进度提示
             move_to(arm, res_above.q)                            # 抬升回上方点（带物体离开抓取位）
 
             # ---- ④ 收尾：回 home 释放物体 → 安全停机 ----
             print("-" * 78)                                      # 小节：④ 上边框
-            print("④ 收尾：回 home 释放物体 → 安全停机")                     # 小节标题
+            print("④ 收尾：回 home 释放物体 → 安全停机")             # 小节标题
             print("-" * 78)                                      # 小节：④ 下边框
             move_to(arm, arm.home_arm)                           # 回 home 位形（把物体放回起始位置）
             arm.set_action_end("open")                           # 张开夹爪，释放物体

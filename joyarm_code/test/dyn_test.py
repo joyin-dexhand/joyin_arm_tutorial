@@ -73,19 +73,19 @@ def print_table(headers: list, rows: list) -> None:
     """
     widths = [max(disp_width(h), *(disp_width(r[i]) for r in rows)) for i, h in enumerate(headers)]  # 逐列求最大显示宽度
     print("  ".join(pad(h, w) for h, w in zip(headers, widths)).rstrip())  # 表头行（去掉行尾多余空格）
-    print("  ".join("-" * w for w in widths))               # 表头下的分隔线行
-    for row in rows:                                        # 逐行打印数据
+    print("  ".join("-" * w for w in widths))              # 表头下的分隔线行
+    for row in rows:                                       # 逐行打印数据
         print("  ".join(pad(c, w) for c, w in zip(row, widths)).rstrip())  # 单元格按列宽对齐（去行尾空格）
 
 
 def section_setup(arm) -> None:
     """① 打印模型与 dynamics 域求解器信息：确认本脚本测试的是哪一个求解器实现。"""
     print("=" * 78)                                        # 大节分隔线
-    print("① 模型与 dynamics 域求解器（离线创建，不连接硬件）")   # 大节标题
-    print(f"   关节数 n_arm = {arm.n_arm}；关节名（顺序 = q 向量顺序）：{arm.get_joint_names_arm('all')}")   # 关节数与关节名
-    print(f"   dynamics 域已加载求解器：{arm.get_dyn_solvers()}；当前激活：{arm.get_activated_dyn_solver()}")   # 域成员与激活
-    print("   数学门面 → DynamicsSolver 基类接口：solve_idyn→idyn、get_mass_matrix→mass_matrix、")   # 门面转发关系一
-    print("   get_coriolis→coriolis、get_gravity→gravity（门面把调用转发给激活的求解器）")   # 门面转发关系二
+    print("① 模型与 dynamics 域求解器（离线创建，不连接硬件）")  # 大节标题
+    print(f"   关节数 n_arm = {arm.n_arm}；关节名（顺序 = q 向量顺序）：{arm.get_joint_names_arm('all')}")  # 关节数与关节名
+    print(f"   dynamics 域已加载求解器：{arm.get_dyn_solvers()}；当前激活：{arm.get_activated_dyn_solver()}")  # 域成员与激活
+    print("   数学门面 → DynamicsSolver 基类接口：solve_idyn→idyn、get_mass_matrix→mass_matrix、")  # 门面转发关系一
+    print("   get_coriolis→coriolis、get_gravity→gravity（门面把调用转发给激活的求解器）")  # 门面转发关系二
 
 
 def section_mass_matrix(arm, qs: list) -> dict:
@@ -133,9 +133,9 @@ def section_rnea(arm, qs: list, rng) -> dict:
     print("=" * 78)                                        # 大节分隔线
     print("③ RNEA 分解一致性：solve_idyn(q,dq,ddq) 对比 M(q)·ddq + C(q,dq)·dq + G(q)")
     print("-" * 78)                                        # 小节分隔线
-    print("   口径说明：get_coriolis 返回科氏/向心力矩向量 C(q,dq)·dq（形状 (n,)、单位 N·m），")   # 口径第一句
-    print("   而非 C 矩阵本身（依据 joyarm.py get_coriolis docstring 与 PinDynamicsSolver")   # 口径依据
-    print("   实现：nonLinearEffects 结果减重力项），故分项和直接三项相加即可。")   # 口径结论
+    print("   口径说明：get_coriolis 返回科氏/向心力矩向量 C(q,dq)·dq（形状 (n,)、单位 N·m），")  # 口径第一句
+    print("   而非 C 矩阵本身（依据 joyarm.py get_coriolis docstring 与 PinDynamicsSolver")  # 口径依据
+    print("   实现：nonLinearEffects 结果减重力项），故分项和直接三项相加即可。")  # 口径结论
     print("-" * 78)                                        # 小节分隔线
     headers = ["组号", "max|τ_RNEA| (N·m)", "max|τ_分项和| (N·m)", "max|Δτ| (N·m)", "相对误差", "判定"]
     rows = []                                              # 数据行收集器
@@ -232,7 +232,7 @@ def section_conclusion(res_m: dict, res_r: dict, res_s: dict, peak: dict) -> Non
     print("⑥ 分析结论")                                    # 大节标题
     headers = ["检查项", "关键数值", "结论"]               # 结论表三列表头
     rows = [                                               # 逐项汇总（布尔结论转中文，观察项单列）
-        ["质量矩阵对称性", f"最差 max|M−Mᵀ| = {res_m['max_asym']:.2e}",   # 结论行 1：对称性
+        ["质量矩阵对称性", f"最差 max|M−Mᵀ| = {res_m['max_asym']:.2e}",  # 结论行 1：对称性
          "通过" if res_m["pass_sym"] else "未通过"],
         ["质量矩阵正定性", f"最小 λ_min = {res_m['min_eig']:.4f} > 0",    # 结论行 2：正定性
          "通过" if res_m["pass_pd"] else "未通过"],
