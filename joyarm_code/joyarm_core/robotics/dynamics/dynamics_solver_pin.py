@@ -36,7 +36,7 @@ class PinDynamicsSolver(DynamicsSolver):
         :param q: `(n,)` 关节角，弧度。
         :return: `(n,n)` 惯量矩阵 `M(q)`。
 
-        **实现**：CRBA 只填上三角，此处对称化补全。
+        **实现**：CRBA 后三角重建强制对称。
         """
         model = arm.pin_model
         M = np.array(pin.crba(model, pin.Data(model), np.asarray(q, dtype=float)), dtype=float)

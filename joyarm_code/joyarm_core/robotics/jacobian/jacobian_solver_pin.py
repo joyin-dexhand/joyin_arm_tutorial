@@ -31,7 +31,7 @@ class PinJacobianSolver(JacobianSolver):
 
         :param arm: 机械臂对象。
         :param q: `(n,)` 关节角，弧度。
-        :param frame: 目标帧名（``str``）。
+        :param frame: 目标帧名（`str`）。
         :return: `(6,n)` 基座系雅可比矩阵 `J(q)`（LOCAL_WORLD_ALIGNED）。
         """
         model = arm.pin_model

@@ -1,9 +1,9 @@
-"""``joyarm_core.utils`` —— 共享工具层
+"""`joyarm_core.utils` —— 共享工具层
 
 底层的共享基础设施（仅依赖 numpy / 标准库，被 robotics / backend / joyarm 依赖）：
 
 - :mod:`joyarm_core.utils.transforms` ：  纯 numpy 数学；
-- :mod:`joyarm_core.utils.types`      ：  ``@dataclass`` 数据类型与枚举，全库统一引用、杜绝重复定义。
+- :mod:`joyarm_core.utils.types`      ：  `@dataclass` 数据类型与枚举，全库统一引用、杜绝重复定义。
 - :mod:`joyarm_core.utils.limits`     ：  关节限位守卫 + 限位构建解析 + 限位内均匀采样。
 
 """
@@ -19,6 +19,7 @@ from .types import (
     JointState,
     Wrench,
     Twist,
+    Accel,
     Pose,
     TrajFrame,
     JointLimits,
@@ -26,6 +27,9 @@ from .types import (
     IKResult,
     ComplianceParams,
     ControlMode,
+    MotionState,
+    SafetyEvent,
+    STATE_FROM,
 )
 from .transforms import (
     rot_x,
@@ -61,6 +65,7 @@ __all__ = [
     "JointState",
     "Wrench",
     "Twist",
+    "Accel",
     "Pose",
     "TrajFrame",
     "JointLimits",
@@ -68,6 +73,9 @@ __all__ = [
     "IKResult",
     "ComplianceParams",
     "ControlMode",
+    "MotionState",
+    "SafetyEvent",
+    "STATE_FROM",
     # transforms
     "rot_x",
     "rot_y",

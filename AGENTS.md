@@ -15,8 +15,9 @@ joyin_arm_tutorial/
 │   ├── *.md              #   各章正文（命名规则见下）
 │   ├── images/           #   章内配图（按正文文件同名子目录，如 images/chapt1_intro/）
 │   ├── stylesheets/      #   extra.css（表格居中等）、mermaid.css
-│   └── javascripts/      #   mathjax.js（数学公式渲染配置）
+│   └── javascripts/      #   image-viewer.js、mathjax.js
 ├── joyarm_code/          # ★ 配套代码库（用户向见其 README.md；架构/约定/维护规则见其 AGENTS.md）
+├── output/               # 脚本产出的分析图（如 fk_trajectory）
 ├── mkdocs.yml            # ★ 站点配置（主题、扩展、nav 目录树）
 ├── .github/workflows/    # deploy.yml：推 main 自动构建发布到 gh-pages
 ├── AGENTS.md             # 本文件：教程站点部分的项目记忆
@@ -31,7 +32,7 @@ joyin_arm_tutorial/
 
 | 篇 | 文件命名 | 章范围 | 定位 |
 |:---:|:---:|:---:|:---:|
-| **使用篇** | 主题式：`quickstart` / `joint_motor` / `arm_6dof` / `gripper` | 无章号 | 面向"想立刻用起来"，无需理论，按操作让机械臂动起来 |
+| **使用篇** | 主题式：`quick_start` / `motor` / `arm` / `end` | 无章号 | 面向"想立刻用起来"，无需理论，按操作让机械臂动起来 |
 | **基础篇** | `chapt1~6_<主题>.md` | 第 1~6 章 | 机器人学必备知识（位姿、运动学、轨迹、控制） |
 | **进阶篇** | `chapt7~10_<主题>.md` | 第 7~10 章 | 构型设计/动力学/力控制/ROS2 等专业进阶 |
 | **应用篇** | `chapt11~15_<主题>.md` | 第 11~15 章 | 状态监测、示教遥操作、末端执行器、用户接口、综合项目 |

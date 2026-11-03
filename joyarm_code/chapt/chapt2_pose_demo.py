@@ -17,18 +17,18 @@
     而 RPY 自身退化（Roll/Yaw 无法区分）。
 
 【环境与运行】
-    # 1. 安装 uv（仅首次）
+    # 0. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 2. 创建虚拟环境并同步依赖
-    cd ~/joyarm_code
+    # 1. 创建虚拟环境并同步依赖
+    cd <仓库路径>/joyarm_code
     uv sync
     source .venv/bin/activate
     # Linux 缺少 libxcb-cursor.so.0 时执行
     sudo apt-get install -y libxcb-cursor0 
 
-    # 3. 运行本脚本
+    # 2. 运行本脚本
     cd ./chapt
     python chapt2_pose_demo.py
 
@@ -55,11 +55,11 @@ from PySide6.QtWidgets import (
 # ----------------------------------------------------------------------------
 # 全局常量
 # ----------------------------------------------------------------------------
-ROT_MIN, ROT_MAX = -180, 180           # RPY 旋转角滑块范围 (度)
-AXIS_MIN, AXIS_MAX = -1.0, 1.0         # 轴向量分量范围
-THETA_MIN, THETA_MAX = 0, 180          # 轴角转角范围 (度)
+ROT_MIN, ROT_MAX = -180, 180            # RPY 旋转角滑块范围 (度)
+AXIS_MIN, AXIS_MAX = -1.0, 1.0          # 轴向量分量范围
+THETA_MIN, THETA_MAX = 0, 180           # 轴角转角范围 (度)
 SLIDER_STEPS = 400                      # 滑块离散步数（越大越平滑）
-AXIS_COLORS = ("#e6194b", "#3cb44b", "#2b6cb0")   # RGB 对应 X/Y/Z
+AXIS_COLORS = ("#e6194b", "#3cb44b", "#2b6cb0")  # RGB 对应 X/Y/Z
 PLOT_LIM = 1.8                          # 3D 坐标轴显示范围
 
 
@@ -93,9 +93,9 @@ def rpy_to_matrix(rx: float, ry: float, rz: float) -> np.ndarray:
 def rpy_from_matrix(R: np.ndarray):
     """由旋转矩阵反算 RPY 角（弧度），与 rpy_to_matrix 的 R = R_Z·R_Y·R_X 顺序对应。
     β=±90°（万向锁）时用 arctan2 稳定形式，不报错（但 Roll/Yaw 解不唯一，R 仍一致）。"""
-    ry = np.arctan2(-R[2, 0], np.hypot(R[0, 0], R[1, 0]))  
-    rz = np.arctan2(R[1, 0], R[0, 0])               
-    rx = np.arctan2(R[2, 1], R[2, 2])                   
+    ry = np.arctan2(-R[2, 0], np.hypot(R[0, 0], R[1, 0]))
+    rz = np.arctan2(R[1, 0], R[0, 0])
+    rx = np.arctan2(R[2, 1], R[2, 2])
     return rx, ry, rz
 
 
@@ -104,13 +104,13 @@ def rpy_from_matrix(R: np.ndarray):
 # ----------------------------------------------------------------------------
 def rodrigues(k: np.ndarray, theta: float) -> np.ndarray:
     """由轴角 (k, theta) 求旋转矩阵（罗德里格斯公式）。k 自动单位化。"""
-    k = np.asarray(k, dtype=float)       
-    norm = np.linalg.norm(k)                  
-    if norm < 1e-12:                   
+    k = np.asarray(k, dtype=float)
+    norm = np.linalg.norm(k)
+    if norm < 1e-12:
         return np.eye(3)
-    k = k / norm                         
-    ct, st = np.cos(theta), np.sin(theta)    
-    kkt = np.outer(k, k)                      
+    k = k / norm
+    ct, st = np.cos(theta), np.sin(theta)
+    kkt = np.outer(k, k)
     # 反对称矩阵 K（叉积矩阵），让公式能写成纯矩阵乘法
     K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
     # 罗德里格斯公式：R = cosθ·I + (1-cosθ)·(k⊗k) + sinθ·K
@@ -150,7 +150,7 @@ def axis_angle_from_matrix(R: np.ndarray):
 def quat_to_matrix(q) -> np.ndarray:
     """由四元数 q=(w,x,y,z) 求旋转矩阵（自动单位化）。"""
     q = np.asarray(q, dtype=float)
-    q = q / np.linalg.norm(q)       
+    q = q / np.linalg.norm(q)
     w, x, y, z = q
     return np.array([
         [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
@@ -164,15 +164,15 @@ def axis_angle_to_quat(k: np.ndarray, theta: float) -> np.ndarray:
     k = np.asarray(k, dtype=float)
     norm = np.linalg.norm(k)
     if norm < 1e-12:
-        return np.array([1.0, 0.0, 0.0, 0.0])        
-    k = k / norm              
+        return np.array([1.0, 0.0, 0.0, 0.0])
+    k = k / norm
     return np.concatenate(([np.cos(theta / 2)], np.sin(theta / 2) * k))
 
 
 def quat_from_matrix(R: np.ndarray) -> np.ndarray:
     """由旋转矩阵求四元数（经轴角中转：R→(k,θ)→q），返回单位四元数。"""
-    k, theta = axis_angle_from_matrix(R)     
-    return axis_angle_to_quat(k, theta)      
+    k, theta = axis_angle_from_matrix(R)
+    return axis_angle_to_quat(k, theta)
 
 
 # ----------------------------------------------------------------------------
@@ -193,7 +193,7 @@ def unit_ball_lines():
     for t in theta[2:-2:4]:
         x = np.sin(t) * np.cos(phi)
         y = np.sin(t) * np.sin(phi)
-        z = np.full_like(phi, np.cos(t))   
+        z = np.full_like(phi, np.cos(t))
         lines.append(np.stack([x, y, z], axis=-1))
     return lines
 
@@ -208,38 +208,38 @@ class PoseRepWindow(QMainWindow):
     任一组控件变化，都先折算成 R，再由 R 反推出另三组的显示值并刷新 3D。"""
 
     def __init__(self):
-        super().__init__()                
+        super().__init__()
         self.setWindowTitle("四种姿态表示可视化演示  (RPY / 轴角 / 四元数 / R)")
         self.resize(1320, 800)
 
         self._R = np.eye(3)
 
         self._build_ui()
-        self._refresh_from_R(self._R, source=None)   
+        self._refresh_from_R(self._R, source=None)
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
         """搭建主界面：左 3D 画布 + 右控制面板（四组）的横向布局。"""
         central = QWidget()
         self.setCentralWidget(central)
-        h = QHBoxLayout(central)          
+        h = QHBoxLayout(central)
 
         # --- 左侧：3D 画布 ---
         self.fig = plt.figure(figsize=(7, 7))
-        self.canvas = FigureCanvas(self.fig) 
-        self.ax = self.fig.add_subplot(111, projection="3d") 
-        self._setup_axes()                  
-        h.addWidget(self.canvas, stretch=3)   
+        self.canvas = FigureCanvas(self.fig)
+        self.ax = self.fig.add_subplot(111, projection="3d")
+        self._setup_axes()
+        h.addWidget(self.canvas, stretch=3)
 
         # --- 右侧：控制面板（四组） ---
         panel = QWidget()
-        pv = QVBoxLayout(panel)           
-        pv.addWidget(self._build_rpy_group())       
-        pv.addWidget(self._build_axis_angle_group())  
-        pv.addWidget(self._build_quat_group())         
-        pv.addWidget(self._build_matrix_group())      
-        pv.addStretch(1)                   
-        h.addWidget(panel, stretch=2)       
+        pv = QVBoxLayout(panel)
+        pv.addWidget(self._build_rpy_group())
+        pv.addWidget(self._build_axis_angle_group())
+        pv.addWidget(self._build_quat_group())
+        pv.addWidget(self._build_matrix_group())
+        pv.addStretch(1)
+        h.addWidget(panel, stretch=2)
 
     def _setup_axes(self):
         """固定 3D 坐标系样式（等比例、正方向、网格）。"""
@@ -256,9 +256,9 @@ class PoseRepWindow(QMainWindow):
     def _build_rpy_group(self):
         """构建 RPY 控件组：Roll/Pitch/Yaw 三轴，各带滑块和数值框。"""
         box = QGroupBox("RPY 角  (rx ry rz, 单位:°)")
-        g = QGridLayout(box)             
-        self.rpy_sliders = []     
-        self.rpy_spins = []             
+        g = QGridLayout(box)
+        self.rpy_sliders = []
+        self.rpy_spins = []
         for i, name in enumerate(("rx (Roll)", "ry (Pitch)", "rz (Yaw)")):
             g.addWidget(QLabel(name), i, 0)
             s = QSlider(Qt.Horizontal)
@@ -280,8 +280,8 @@ class PoseRepWindow(QMainWindow):
         """构建轴角控件组：旋转轴 k=(kx,ky,kz) 三分量 + 转角 θ。"""
         box = QGroupBox("轴角  (k̂=(kx,ky,kz), θ, 单位:°)")
         g = QGridLayout(box)
-        self.k_sliders = []             
-        self.k_spins = []                 
+        self.k_sliders = []
+        self.k_spins = []
         for i, name in enumerate(("kx", "ky", "kz")):
             g.addWidget(QLabel(name), i, 0)
             s = QSlider(Qt.Horizontal)
@@ -320,7 +320,7 @@ class PoseRepWindow(QMainWindow):
         for i, name in enumerate(("w", "x", "y", "z")):
             g.addWidget(QLabel(name), 0, i)
             sp = self._make_spin(-1.0, 1.0, 4)
-            sp.setReadOnly(True)          
+            sp.setReadOnly(True)
             g.addWidget(sp, 1, i)
             self.quat_spins.append(sp)
         return box
@@ -380,9 +380,9 @@ class PoseRepWindow(QMainWindow):
 
     def _commit_from_rpy(self):
         """由 RPY 三控件折算权威 R，再分发刷新另三组。"""
-        degs = [self.rpy_spins[i].value() for i in range(3)]  
-        R = rpy_to_matrix(*np.deg2rad(degs))                  
-        self._refresh_from_R(R, source="rpy")              
+        degs = [self.rpy_spins[i].value() for i in range(3)]
+        R = rpy_to_matrix(*np.deg2rad(degs))
+        self._refresh_from_R(R, source="rpy")
 
     # ------------------------------------------------------------------ 轴角回调
     def _on_axis_slider(self, idx, _v):
@@ -401,18 +401,18 @@ class PoseRepWindow(QMainWindow):
         归一化规则：其余两分量按原比例缩放，使其平方和补足 (1 - val²)；
         若其余两分量本就为零（无方向可保留），则均分剩余模长。
         归一化后的三个分量回写各自滑块+数值框（阻断信号防递归）。"""
-        val = float(np.clip(val, AXIS_MIN, AXIS_MAX)) 
+        val = float(np.clip(val, AXIS_MIN, AXIS_MAX))
         k = [self.k_spins[i].value() for i in range(3)]
-        k[idx] = val                               
-        others = [i for i in range(3) if i != idx]  
-        rem_sq = max(0.0, 1.0 - val * val)       
+        k[idx] = val
+        others = [i for i in range(3) if i != idx]
+        rem_sq = max(0.0, 1.0 - val * val)
         cur_sq = sum(k[i] * k[i] for i in others)
         if cur_sq < 1e-12:
-            each = (rem_sq / len(others)) ** 0.5 
+            each = (rem_sq / len(others)) ** 0.5
             for i in others:
                 k[i] = each
         else:
-            scale = (rem_sq / cur_sq) ** 0.5   
+            scale = (rem_sq / cur_sq) ** 0.5
             for i in others:
                 k[i] *= scale
         for i, v in enumerate(k):
@@ -435,10 +435,10 @@ class PoseRepWindow(QMainWindow):
 
     def _commit_from_axis_angle(self):
         """由轴角控件折算权威 R，再分发刷新另三组。"""
-        k = np.array([self.k_spins[i].value() for i in range(3)]) 
-        theta = np.deg2rad(self.theta_spin.value())   
-        R = rodrigues(k, theta)                     
-        self._refresh_from_R(R, source="axis")         
+        k = np.array([self.k_spins[i].value() for i in range(3)])
+        theta = np.deg2rad(self.theta_spin.value())
+        R = rodrigues(k, theta)
+        self._refresh_from_R(R, source="axis")
 
     # ------------------------------------------------------------------
     def _refresh_from_R(self, R: np.ndarray, source):
@@ -447,8 +447,8 @@ class PoseRepWindow(QMainWindow):
         self._R = R
 
         if source != "rpy":
-            rx, ry, rz = rpy_from_matrix(R)     
-            degs = np.rad2deg([rx, ry, rz])      
+            rx, ry, rz = rpy_from_matrix(R)
+            degs = np.rad2deg([rx, ry, rz])
             for i, (s, sp, v) in enumerate(zip(self.rpy_sliders, self.rpy_spins, degs)):
                 with QSignalBlocker(s), QSignalBlocker(sp):   # 阻断两者防递归
                     s.setValue(self._to_slider(v, ROT_MIN, ROT_MAX))
@@ -456,8 +456,8 @@ class PoseRepWindow(QMainWindow):
 
         # 轴角组（非 axis 触发时回写）
         if source != "axis":
-            k, theta = axis_angle_from_matrix(R) 
-            deg = np.rad2deg(theta)           
+            k, theta = axis_angle_from_matrix(R)
+            deg = np.rad2deg(theta)
             for i, (s, sp, v) in enumerate(zip(self.k_sliders, self.k_spins, k)):
                 with QSignalBlocker(s), QSignalBlocker(sp):
                     s.setValue(self._to_slider(v, AXIS_MIN, AXIS_MAX))
@@ -466,7 +466,7 @@ class PoseRepWindow(QMainWindow):
                 self.theta_slider.setValue(self._to_slider(deg, THETA_MIN, THETA_MAX))
                 self.theta_spin.setValue(deg)
 
-        q = quat_from_matrix(R)                   
+        q = quat_from_matrix(R)
         for sp, v in zip(self.quat_spins, q):
             with QSignalBlocker(sp):
                 sp.setValue(v)
@@ -481,7 +481,7 @@ class PoseRepWindow(QMainWindow):
         R = self._R
         for r in range(3):
             for c in range(3):
-                self.table.item(r, c).setText(f"{R[r, c]:+.3f}") 
+                self.table.item(r, c).setText(f"{R[r, c]:+.3f}")
 
     def _reset_identity(self):
         """重置为单位阵：直接走分发（source=None 触发全部回写）。"""
@@ -491,14 +491,14 @@ class PoseRepWindow(QMainWindow):
     def _render(self):
         """重绘 3D 视图：清空 -> 画固定系 {A} -> 画被驱动的系 {B} + 球。"""
         ax = self.ax
-        ax.cla()            
-        self._setup_axes()        
+        ax.cla()
+        self._setup_axes()
 
         T_A = np.eye(4)
         self._draw_frame(ax, T_A, dashed=True, prefix="{A}")
 
         T_B = np.eye(4)
-        T_B[:3, :3] = self._R               
+        T_B[:3, :3] = self._R
         self._draw_frame(ax, T_B, dashed=False, prefix="{B}")
         self._draw_ball(ax, T_B)
 
@@ -506,13 +506,13 @@ class PoseRepWindow(QMainWindow):
 
     def _draw_frame(self, ax, T, dashed: bool, prefix: str):
         """画一个坐标系：原点(黑点) + 三条 RGB 单位轴。dashed=True 画虚线。"""
-        origin = T[:3, 3]                  
-        length = 1.0                  
-        for i, color in enumerate(AXIS_COLORS): 
-            direction = T[:3, i]              
-            end = origin + direction * length 
-            ls = "--" if dashed else "-"     
-            lw = 1.5 if dashed else 2.4        
+        origin = T[:3, 3]
+        length = 1.0
+        for i, color in enumerate(AXIS_COLORS):
+            direction = T[:3, i]
+            end = origin + direction * length
+            ls = "--" if dashed else "-"
+            lw = 1.5 if dashed else 2.4
             ax.plot([origin[0], end[0]], [origin[1], end[1]], [origin[2], end[2]],
                     color=color, linestyle=ls, linewidth=lw)
             ax.text(end[0], end[1], end[2], f"{prefix}", color=color, fontsize=8)
@@ -522,7 +522,7 @@ class PoseRepWindow(QMainWindow):
         """画单位球：把球面经纬线用 T 变换到 {A} 下后绘制（半透明线框，让旋转可见）。"""
         R, p0 = T[:3, :3], T[:3, 3]
         for pts in unit_ball_lines():
-            p = (R @ pts.T).T + p0           
+            p = (R @ pts.T).T + p0
             ax.plot(p[:, 0], p[:, 1], p[:, 2],
                     color="#4a5568", linewidth=0.5, alpha=0.45)
 

@@ -25,11 +25,11 @@ class Controller(ABC):
     MODE: ControlMode = ControlMode.MIT
 
     @abstractmethod
-    def step(self, arm, target: TrajFrame, jointstate: JointState) -> bool:
+    def step(self, arm, target: TrajFrame, joint_state: JointState) -> bool:
         """步进指令：基于目标与当前状态计算单步控制指令并经 arm 下发。
 
         :param arm: 机械臂对象。
-        :param target: 目标轨迹帧（`TrajFrame`，采样产出的轨迹帧）。
-        :param jointstate: 当前关节状态（`JointState`）。
+        :param target: 目标轨迹帧（`TrajFrame`，采样产出；q/dq/ddq/tau 单位 rad / rad/s / rad/s² / N·m）。
+        :param joint_state: 当前关节状态（`JointState`；q/dq/tau 单位 rad / rad/s / N·m）。
         :return: 是否已成功计算并下发本拍指令。
         """

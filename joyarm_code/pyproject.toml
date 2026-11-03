@@ -9,10 +9,10 @@ description = "sdk-ros2-chapt code for JoyArm"
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = [
-    "meshcat>=0.3.2",
     "pin>=3.9.0",
     "pyyaml>=6.0",
     "matplotlib>=3.10.0",
+    "meshcat>=0.3.2",
     "pyside6>=6.5.2",
     "numpy>=2.0.1",
     "pyserial>=3.5",

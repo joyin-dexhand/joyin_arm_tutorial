@@ -1,12 +1,22 @@
-"""``joyarm_core.joyarm`` —— JoyArm 机械臂类 + 对象创建入口。
+"""`joyarm_core.joyarm` —— JoyArm 机械臂类 + 对象创建入口。
 
-JoyArm：机械臂类（负责把各子功能按config装配起来，对外提供统一调用入口，见 :mod:`joyarm_core.joyarm.joyarm`）；
-JoyArmFactory：按型号名创建机械臂对象（命名链：工厂入参 = config/<型号>.yaml 文件名 = robot_model/<型号>/ 文件夹及URDF文件名）
+JoyArm：机械臂类（负责把各子功能按 config 装配起来，对外提供统一调用入口，见 :mod:`joyarm_core.joyarm.joyarm`）；
+JoyArmFactory：按型号名创建机械臂对象（工厂入参 = config/<型号>.yaml 文件名 = robot_model/<型号>/ 文件夹及URDF文件名；
+                backend 与型号一一对应、注册名经 REGISTRY 选型——第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`）；
+listArm：列出当前可用的机械臂型号（「有效型号校验规则」= 工厂校验①~③步；调用时随列表打印规则，与工厂失败消息共用同一实现）。
 
 创建 JoyArm 对象方式：
+
     from joyarm_core import joyArm
-    
-    arm1 = joyArm("joyarm_<型号>") 
+
+    arm = joyArm("<型号>")    # 任一步校验失败抛携带具体原因的异常
+
+工厂四步固定顺序校验（任一步失败抛异常，错误消息附可用型号列表 `listArm()`）：
+
+① config——`config/<型号>.yaml` 存在、解析为非空 dict、且含 `joyarm` / `robotics` / `backend` 三个顶层 dict 键；
+② backend——cfg 的 `backend.name` ∈ `backend/__init__.py` 的 `REGISTRY` 键；
+③ robot_model——四路径按序存在：`robot_model/<型号>/`、`meshes/`、`urdf/`、`urdf/<型号>.urdf`；
+④ 构造——调用 `JoyArm(<型号>)` 做类内初始化自检（异常上抛、保留原因链）。
 
 对象的创建流程：
 ① 传入型号名 → ② 加载对应 config 文件 → ③ 按 config 配置初始化并创建 JoyArm 对象。
@@ -15,61 +25,149 @@ JoyArmFactory：按型号名创建机械臂对象（命名链：工厂入参 = c
 
 **新型号接入步骤**：
 
-    1. 完善配置文件：拷贝 ``config/joyarm_template.yaml`` 为 `joyarm_<型号>.yaml` 并完成型号的配置填写；
-    2. 放置模型资产：按照本库约定，将导出或修复后的机械臂URDF和Mesh资产放入到``robot_model/joyarm_<型号>/`` ；
-    3. 连接硬件后端：拷贝 ``backend/backend_template.py`` 为 `backend/backend_<型号>.py`，并实现子类(详见``backend/backend_template.py``)。
+    1. 完善配置文件：拷贝 `.agents/skills/joyarm-config-creator/assets/template.yaml` 为 `<型号>.yaml` 并完成型号的配置填写；
+    2. 放置模型资产：按照本库约定，将导出或修复后的机械臂URDF和Mesh资产放入到`robot_model/<型号>/` ；
+    3. 连接硬件后端：拷贝 `.agents/skills/joyarm-backend-creator/assets/backend_template.py` 为 `backend/backend_<型号>.py`，并实现子类(详见`.agents/skills/joyarm-backend-creator/assets/backend_template.py`)。
 """
 from __future__ import annotations
 
 import logging
+import os
+
+import yaml
 
 from .joyarm import JoyArm, load_config
+from .joyarm import _CONFIG_DIR, _ROBOT_MODEL_DIR
+from ..backend import REGISTRY
 
-__all__ = ["JoyArm", "JoyArmFactory", "joyArm", "load_config"]
+__all__ = ["JoyArm", "JoyArmFactory", "joyArm", "listArm", "load_config"]
 
 logger = logging.getLogger("joyarm_core.joyarm")
 
 
-class JoyArmFactory:
-    """按型号名创建机械臂：加载 ``config/<型号>.yaml`` → 实例化 JoyArm。
+def _model_paths_missing(name: str) -> list:
+    """工厂路径的缺失清单（空列表 = 齐全）。
 
-    每次调用返回新实例（机械臂对象有状态、可连真机，不做缓存）。
-    创建失败（config 缺失 / 初始化异常）返回 ``None`` 并输出失败信息。
+    路径按序：`robot_model/<name>/`、`<name>/meshes/`、`<name>/urdf/`、`<name>/urdf/<name>.urdf`（型号名 = 目录名 = URDF 文件名）。
+    """
+    base = os.path.join(_ROBOT_MODEL_DIR, name)
+    paths = [base,
+             os.path.join(base, "meshes"),
+             os.path.join(base, "urdf"),
+             os.path.join(base, "urdf", f"{name}.urdf")]
+    return [p for p in paths if not os.path.exists(p)]
+
+
+def _top_keys_missing(cfg: dict) -> list:
+    """三顶层键的缺失清单（空列表 = 齐全；`joyarm` / `robotics` / `backend` 缺失或非 dict 均计入）。"""
+    return [k for k in ("joyarm", "robotics", "backend") if not isinstance(cfg.get(k), dict)]
+
+
+def _available_models() -> list:
+    """listArm 的共享实现（与工厂失败消息共用）：扫描 `config/*.yaml` 逐型号过滤。
+
+    可行型号须**同时**满足：
+
+    1. `config/<name>.yaml` 存在、非空 dict、含 `joyarm` / `robotics` / `backend` 三顶层键；
+    2. `backend.name` ∈ `backend/__init__.py` 的 `REGISTRY` 键；
+    3. 四路径齐全（`_model_paths_missing` 为空）。
+    """
+    out = []
+    try:
+        files = sorted(os.listdir(_CONFIG_DIR))
+    except OSError:
+        return out
+    for f in files:
+        if not f.endswith(".yaml"):
+            continue
+        name = f[:-5]
+        try:
+            with open(os.path.join(_CONFIG_DIR, f), encoding="utf-8") as fh:
+                cfg = yaml.safe_load(fh)
+        except Exception:
+            continue     # 解析失败 → 不可用
+        if not isinstance(cfg, dict) or not cfg:
+            continue
+        if _top_keys_missing(cfg):
+            continue     # 顶层键缺失或写成非 dict（如列表）→ 不可用
+        if cfg["backend"].get("name") not in REGISTRY:
+            continue
+        if _model_paths_missing(name):
+            continue
+        out.append(name)
+    return out
+
+
+def listArm() -> list:
+    """列出可用机械臂型号（打印型号列表与「有效型号校验规则」三条件，返回 `list[str]`）。"""
+    models = _available_models()
+    print(f"可用机械臂型号：{models}")
+    print("有效型号校验规则（listArm 与 joyArm 工厂校验相同）：")
+    print("  ① config/<型号>.yaml 存在、解析为非空 dict，且 joyarm/robotics/backend 三顶层段齐全（段须为 dict）")
+    print("  ② yaml 的 backend.name 已在 backend REGISTRY 注册（一型号一后端，注册名 = backend 文件名去 .py）")
+    print("  ③ robot_model/<型号>/ 四路径齐全（目录、meshes/、urdf/、URDF 文件）")
+    return models
+
+
+class JoyArmFactory:
+    """按型号名创建机械臂：四步固定顺序外部资源校验 → 实例化 JoyArm。
+
+    每次调用返回新实例（机械臂对象有状态、可连真机，不做缓存）；
+    任一步校验失败**抛携带具体原因的异常**，错误消息附可用型号列表。
     """
 
     # ----------------------------------------------------------
     # factory 工厂方法
     # ----------------------------------------------------------
-    def create(self, model: str) -> JoyArm | None:
-        """创建指定型号的 JoyArm 实例
+    def create(self, name: str) -> JoyArm:
+        """创建指定型号的 JoyArm 实例（四步固定顺序校验）。
 
-        :param model: 型号名（如 ``"joyarm_dm"``）——= config 文件名（URDF 目录 ``robot_model/<型号>/`` 同名）。
-        :return: 实例；**任一环节未找到 / 初始化失败时返回 ``None``**（失败信息经日志输出，可用型号见信息中列表）。
+        :param name: 型号名（= config 文件名 = URDF 目录`robot_model/<型号>/` 名）。
+        :return: 初始化自检通过的 JoyArm 实例；四步全过 `logger.info`『创建成功』。
+        :raises ValueError: ①config 缺失/解析失败/顶层键缺失或非 dict、②backend 名不在 REGISTRY、③robot_model 四路径缺失、④JoyArm 构造自检失败。
         """
-        # 1) 型号 config
-        cfg = load_config(model, strict=False)
-        if cfg is None:
-            logger.error("创建失败：config/%s.yaml 未找到或解析失败", model)
-            return None
-        # 2) 创建 + 初始化（异常软化：输出信息并返回 None；JoyArm 构造本身为硬失败）
+        avail = _available_models()
+        # ① config：存在、解析为非空 dict、且含三顶层 dict 键（load_config 抛错消息含路径与原始解析错误）
         try:
-            return JoyArm(model=model, config=cfg)
+            cfg = load_config(name)
         except Exception as e:
-            logger.exception("创建失败：『%s』初始化异常：%s", model, e)
-            return None
+            raise ValueError(
+                f"joyarm/__init__.py - JoyArmFactory.create：① config 校验失败：{e}；"
+                f"可用型号：{avail}") from e
+        missing_keys = _top_keys_missing(cfg)
+        if missing_keys:
+            raise ValueError(
+                f"joyarm/__init__.py - JoyArmFactory.create：① config 校验失败："
+                f"顶层键 {missing_keys} 缺失或非 dict；可用型号：{avail}")
+        # ② backend：cfg.backend.name ∈ REGISTRY（backend 段须为 dict）
+        backend_cfg = cfg.get("backend")
+        backend_name = backend_cfg.get("name") if isinstance(backend_cfg, dict) else None
+        if not isinstance(backend_name, str) or backend_name not in REGISTRY:
+            raise ValueError(
+                f"joyarm/__init__.py - JoyArmFactory.create：② backend 校验失败："
+                f"backend.name={backend_name!r} 不在 REGISTRY"
+                f"（可用：{sorted(REGISTRY)}）；可用型号：{avail}")
+        # ③ robot_model：四路径按序存在
+        missing = _model_paths_missing(name)
+        if missing:
+            raise ValueError(
+                f"joyarm/__init__.py - JoyArmFactory.create：③ robot_model 校验失败，"
+                f"逐项缺失：{missing}；可用型号：{avail}")
+        # ④ 构造：JoyArm(name) 类内初始化自检（异常向上抛、保留原因链）
+        try:
+            arm = JoyArm(name)
+        except Exception as e:
+            raise ValueError(
+                f"joyarm/__init__.py - JoyArmFactory.create：④ 构造自检失败：{e}；"
+                f"可用型号：{avail}") from e
+        logger.info("joyarm/__init__.py - JoyArmFactory.create：『%s』创建成功", name)
+        return arm
 
     __call__ = create
 
-    def list_models(self) -> list:
-        """列出可用型号名（扫描 ``config/*.yaml``，排除 ``*_template.yaml`` 模板）。"""
-        from .joyarm import _CONFIG_DIR
+    def listArm(self) -> list:
+        """列出可用型号名（实例方法透传模块级 :func:`listArm`）。"""
+        return listArm()
 
-        try:
-            import os
-
-            return sorted(f[:-5] for f in os.listdir(_CONFIG_DIR)
-                          if f.endswith(".yaml") and not f.endswith("_template.yaml"))
-        except OSError:
-            return []
 
 joyArm = JoyArmFactory()
