@@ -198,13 +198,13 @@ class DummyBackend(Backend):
         self.calls.append(("send_joint_position_end", i, q, vlim, flim))
         self._hit("send_position_end", i)
 
-    def _send_joint_vel_arm(self, i, dq):
-        self.calls.append(("send_joint_vel_arm", i, dq))
-        self._hit("send_vel_arm", i)
+    def _send_joint_velocity_arm(self, i, dq):
+        self.calls.append(("send_joint_velocity_arm", i, dq))
+        self._hit("send_velocity_arm", i)
 
-    def _send_joint_vel_end(self, i, dq):
-        self.calls.append(("send_joint_vel_end", i, dq))
-        self._hit("send_vel_end", i)
+    def _send_joint_velocity_end(self, i, dq):
+        self.calls.append(("send_joint_velocity_end", i, dq))
+        self._hit("send_velocity_end", i)
 
     def _send_action_end(self, action, **kwargs):
         self.calls.append(("send_action_end", action, kwargs))
@@ -294,10 +294,10 @@ def test_02_extract_holes(cfg):
 # ---- T2 维度校验（先于连接门禁） ----
 def test_03_dims(b):
     cap.msgs.clear()
-    b.send_vel_arm([1, 2, 3, 4, 5])
-    assert warns("dq=5") and not any(c[0] == "send_joint_vel_arm" for c in b.calls)
+    b.send_velocity_arm([1, 2, 3, 4, 5])
+    assert warns("dq=5") and not any(c[0] == "send_joint_velocity_arm" for c in b.calls)
     cap.msgs.clear()
-    b.send_vel_end([1, 2])
+    b.send_velocity_end([1, 2])
     assert warns("dq=2")
     cap.msgs.clear()
     assert b.write_param_arm("pos_kp", [1, 2]) == 0 and len(warns("值列表维度 2")) >= 1
@@ -312,7 +312,7 @@ def test_04_empty_family(cfg):
         cap.msgs.clear()
         assert bne.enable_end() == 1 and len(warns("未配置任何 joint")) >= 1
         cap.msgs.clear()
-        bne.send_vel_end(np.zeros(1))
+        bne.send_velocity_end(np.zeros(1))
         assert len(warns("未配置任何 joint")) >= 1
         cap.msgs.clear()
         bne.send_action_end("open")  # 空族判定先于连接门禁（统一顺序）
@@ -334,8 +334,8 @@ def test_05_unconnected_gates(b):
     assert b.get_state_arm() is None
     assert len(warns("未连接")) >= 1
     cap.msgs.clear()
-    assert b.send_vel_arm(np.zeros(6)) is None
-    assert not any(c[0] == "send_joint_vel_arm" for c in b.calls)
+    assert b.send_velocity_arm(np.zeros(6)) is None
+    assert not any(c[0] == "send_joint_velocity_arm" for c in b.calls)
     assert len(warns("未连接")) >= 1
     cap.msgs.clear()
     assert b.enable_arm() == 0
@@ -562,18 +562,18 @@ def test_14_get_check_clear_error(b):
 
 
 # ---- T13 守卫与发送：速度 ----
-def test_15_send_vel_guard(b):
+def test_15_send_velocity_guard(b):
     b.modes["arm"] = [ControlMode.VELOCITY] * 6
     b.get_mode_arm()
     cap.msgs.clear()
     b.calls.clear()
-    b.send_vel_arm(np.full(6, 100.0))
-    c13 = [c for c in b.calls if c[0] == "send_joint_vel_arm"]
+    b.send_velocity_arm(np.full(6, 100.0))
+    c13 = [c for c in b.calls if c[0] == "send_joint_velocity_arm"]
     exp13 = np.clip(np.full(6, 100.0), -b.joint_limits_arm.dq_max, b.joint_limits_arm.dq_max)
     assert len(c13) == 6 and [c[1] for c in c13] == list(range(6))
     assert np.allclose([c[2] for c in c13], exp13)
     for _ in range(9):
-        b.send_vel_arm(np.full(6, 100.0))
+        b.send_velocity_arm(np.full(6, 100.0))
     assert len(warns("越限")) == 10  # 10 次越限发送，每次均 warn
 
 
@@ -644,8 +644,8 @@ def test_18_send_gates(b):
     assert warns("参数『tau』")
     cap.msgs.clear()
     b.calls.clear()
-    b.send_vel_arm(np.zeros(6))  # 当前 MIT ≠ 所需 VELOCITY → 模式门禁拦下
-    assert not any(c[0] == "send_joint_vel_arm" for c in b.calls)
+    b.send_velocity_arm(np.zeros(6))  # 当前 MIT ≠ 所需 VELOCITY → 模式门禁拦下
+    assert not any(c[0] == "send_joint_velocity_arm" for c in b.calls)
     assert len(warns("≠ 所需")) >= 1
 
 
@@ -894,8 +894,8 @@ def test_24_write_param_float32(cfg):
 def test_25_none_input_no_raise(b):
     cap.msgs.clear()
     b.calls.clear()
-    b.send_vel_arm(["a"] * 6)  # 非数值 → warn，不抛
-    assert not any(c[0] == "send_joint_vel_arm" for c in b.calls)
+    b.send_velocity_arm(["a"] * 6)  # 非数值 → warn，不抛
+    assert not any(c[0] == "send_joint_velocity_arm" for c in b.calls)
     assert len(warns("非数值")) >= 1
     cap.msgs.clear()
     b.send_mit_arm(q=np.zeros(6), dq=np.zeros(6), tau=[None] * 6)  # 含 None 同样不抛、不触内核
@@ -1054,13 +1054,13 @@ def test_35_end_send_mit(e, cfg):
     assert len(warns("越限")) >= 1
 
 
-def test_36_end_send_vel(e):
+def test_36_end_send_velocity(e):
     assert e.set_mode_end(ControlMode.VELOCITY) == 1
     e.get_mode_end()  # set_mode 已乐观填缓存，get_mode 核实
     cap.msgs.clear()
     e.calls.clear()
-    e.send_vel_end([99.0])
-    c = [x for x in e.calls if x[0] == "send_joint_vel_end"]
+    e.send_velocity_end([99.0])
+    c = [x for x in e.calls if x[0] == "send_joint_velocity_end"]
     assert len(c) == 1 and np.allclose(c[0][2], e.joint_limits_end.dq_max)  # 裁到 dq_max
     assert len(warns("越限")) >= 1
 
@@ -1111,8 +1111,8 @@ def test_42_cmd_2d_blocked(cfg):
         b2._refresh_stop.set()
         cap.msgs.clear()
         b2.calls.clear()
-        b2.send_vel_arm(np.arange(6).reshape(6, 1))  # len==6 溜过长度检查，须被一维性拦下
-        assert not any(c[0] == "send_joint_vel_arm" for c in b2.calls)
+        b2.send_velocity_arm(np.arange(6).reshape(6, 1))  # len==6 溜过长度检查，须被一维性拦下
+        assert not any(c[0] == "send_joint_velocity_arm" for c in b2.calls)
         assert len(warns("需为 (n,) 一维序列")) >= 1
         cap.msgs.clear()
         assert b2.write_param_arm("pos_kp", np.arange(6).reshape(6, 1)) == 0  # 写参数路径同样拦截
@@ -1698,7 +1698,7 @@ def test_69_template_smoke():
         "_set_joint_zero_arm": (0,), "_set_joint_zero_end": (0,),
         "_send_joint_mit_arm": (0, 0.0, 0.0, 0.0, 0.0, 0.0), "_send_joint_mit_end": (0, 0.0, 0.0, 0.0, 0.0, 0.0),
         "_send_joint_position_arm": (0, 0.0, 0.0, 0.0), "_send_joint_position_end": (0, 0.0, 0.0, 0.0),
-        "_send_joint_vel_arm": (0, 0.0), "_send_joint_vel_end": (0, 0.0),
+        "_send_joint_velocity_arm": (0, 0.0), "_send_joint_velocity_end": (0, 0.0),
         "_send_action_end": ("open",),
         "_clear_joint_error_arm": (0,), "_clear_joint_error_end": (0,),
     }

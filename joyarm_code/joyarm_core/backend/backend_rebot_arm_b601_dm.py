@@ -587,11 +587,11 @@ class BackendRebotArmB601DM(Backend):
         """end 第 `i` 电机 pos_force 帧下发（pos float32 + vel×100 + 电流标幺×10000，见 :func:`_pack_pos`）。"""
         self._bus_end.write(self._motors_end[i].prefix_pos + _pack_pos(q, vlim, flim) + b"\x00")
 
-    def _send_joint_vel_arm(self, i: int, dq: float) -> None:
+    def _send_joint_velocity_arm(self, i: int, dq: float) -> None:
         """arm 第 `i` 关节 vel 帧下发（速度 float32，见 :func:`_pack_vel`）。"""
         self._bus_arm.write(self._motors_arm[i].prefix_vel + _pack_vel(dq) + b"\x00")
 
-    def _send_joint_vel_end(self, i: int, dq: float) -> None:
+    def _send_joint_velocity_end(self, i: int, dq: float) -> None:
         """end 第 `i` 电机 vel 帧下发（速度 float32，见 :func:`_pack_vel`）。"""
         self._bus_end.write(self._motors_end[i].prefix_vel + _pack_vel(dq) + b"\x00")
 

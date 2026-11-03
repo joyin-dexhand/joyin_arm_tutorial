@@ -18,7 +18,7 @@
 - 必实现 14 个：`_connect/_disconnect_arm/end` / `_enable/_disable_joint_arm/end` / `_read_joint_state_arm/end` / `_read/_set_joint_mode_arm/end`
     ——任何电机/舵机型号的可用底线（协议无模式回读时 `_read_joint_mode_*` 须用本地镜像，恒返 `None` 会使 `get_mode_*` 核实永远失败）；
 - 按需实现 15 个：`_read/_write_joint_param_arm/end`（协议支持寄存器读写才需要）、`_set_joint_zero_arm/end`、
-  `_send_joint_mit/position/vel_arm/end`（型号支持哪种模式实现哪种，如舵机通常仅位置）、
+  `_send_joint_mit/position/velocity_arm/end`（型号支持哪种模式实现哪种，如舵机通常仅位置）、
   `_send_action_end`（仅离散动作末端）、`_clear_joint_error_arm/end`（固件支持清错才需要）。
 
 联调自检清单（实现完成后逐项核对，每项对应一条基类保障）：
@@ -486,7 +486,7 @@ class BackendTemplate(Backend):
         """
         raise NotImplementedError(f"{self._name or 'backend_<型号>.py'} - _send_joint_position_end：功能缺失：子类内核方法未实现，若需实现请参照backend子类实现模板约束实现。")
 
-    def _send_joint_vel_arm(self, i: int, dq: float) -> None:
+    def _send_joint_velocity_arm(self, i: int, dq: float) -> None:
         """向 arm 第 `i` 个关节电机发一帧速度模式指令。
 
         实现要点：
@@ -496,9 +496,9 @@ class BackendTemplate(Backend):
         :param dq: 目标速度标量（rad/s，已裁至 ±dq_max）。
         :raises Exception: 发送失败上抛。
         """
-        raise NotImplementedError(f"{self._name or 'backend_<型号>.py'} - _send_joint_vel_arm：功能缺失：子类内核方法未实现，若需实现请参照backend子类实现模板约束实现。")
+        raise NotImplementedError(f"{self._name or 'backend_<型号>.py'} - _send_joint_velocity_arm：功能缺失：子类内核方法未实现，若需实现请参照backend子类实现模板约束实现。")
 
-    def _send_joint_vel_end(self, i: int, dq: float) -> None:
+    def _send_joint_velocity_end(self, i: int, dq: float) -> None:
         """向 end 第 `i` 个电机发一帧速度模式指令。
 
         实现要点：
@@ -508,7 +508,7 @@ class BackendTemplate(Backend):
         :param dq: 目标速度标量（rad/s，已裁至 ±dq_max）。
         :raises Exception: 发送失败上抛。
         """
-        raise NotImplementedError(f"{self._name or 'backend_<型号>.py'} - _send_joint_vel_end：功能缺失：子类内核方法未实现，若需实现请参照backend子类实现模板约束实现。")
+        raise NotImplementedError(f"{self._name or 'backend_<型号>.py'} - _send_joint_velocity_end：功能缺失：子类内核方法未实现，若需实现请参照backend子类实现模板约束实现。")
 
     def _send_action_end(self, action: str, **kwargs) -> None:
         """向 end 执行器发送离散动作指令（整组粒度，无单关节语义）。

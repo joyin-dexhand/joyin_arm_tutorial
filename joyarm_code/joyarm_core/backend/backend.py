@@ -874,10 +874,10 @@ class Backend(ABC):
         flim = self._flim_default_arm if flim is None else flim
         self._send_position_impl("arm", q, vlim, flim)
 
-    def send_vel_arm(self, dq) -> None:
+    def send_velocity_arm(self, dq) -> None:
         """arm 速度指令整组下发。
         """
-        self._send_vel_impl("arm", dq)
+        self._send_velocity_impl("arm", dq)
 
     def send_mit_end(self, q, dq=None, tau=None, kp=None, kd=None) -> None:
         """end MIT 指令（电机内部 `τ = tau + kp·(q_d−q) + kd·(dq_d−dq)`），整组下发。
@@ -901,10 +901,10 @@ class Backend(ABC):
         flim = self._flim_default_end if flim is None else flim
         self._send_position_impl("end", q, vlim, flim)
 
-    def send_vel_end(self, dq) -> None:
+    def send_velocity_end(self, dq) -> None:
         """end 速度指令整组下发。
         """
-        self._send_vel_impl("end", dq)
+        self._send_velocity_impl("end", dq)
 
     def send_action_end(self, action: str, **kwargs) -> None:
         """end 离散动作（子类定义）。
@@ -1005,36 +1005,36 @@ class Backend(ABC):
                        getattr(self, f"_send_joint_position_{family}"),
                        i, q[i], vlim[i], flim[i])
 
-    def _send_vel_impl(self, family: str, dq) -> None:
+    def _send_velocity_impl(self, family: str, dq) -> None:
         """速度发送的共用实现：①维度校验 → ②空值检查+幅值裁剪 → ③连接/模式检查 → ④逐关节调用子类实现下发。"""
-        if self._skip_empty_family(family, f"send_vel_{family}"):
+        if self._skip_empty_family(family, f"send_velocity_{family}"):
             return
         # ① 维度校验（不符 → warn 跳过本次发送）
         n = self._n_joints_arm if family == "arm" else self._n_joints_end
-        dq = self._to_float_arr(dq, f"send_vel_{family}")
+        dq = self._to_float_arr(dq, f"send_velocity_{family}")
         if dq is None:
             return
         if len(dq) != n:
-            logger.warning("backend.py - Backend.send_vel_%s：指令维度（dq=%d）≠ 关节数 %d，本次发送跳过",
+            logger.warning("backend.py - Backend.send_velocity_%s：指令维度（dq=%d）≠ 关节数 %d，本次发送跳过",
                            family, len(dq), n)
             return
         # ② 空值检查（有空值 → warn 不发送）+ 裁剪（越限 → 就近裁剪 + 告警）
-        if not self._require_present(f"send_vel_{family}", dq=dq):
+        if not self._require_present(f"send_velocity_{family}", dq=dq):
             return
         lim = getattr(self, f"_joint_limits_{family}")  # 空组已在前跳过，限位必已解析
         clipped = np.clip(dq, -lim.dq_max, lim.dq_max)
         if not np.array_equal(dq, clipped):
-            logger.warning("backend.py - Backend.send_vel_%s：dq 指令越限，已就近裁剪 %s → %s",
+            logger.warning("backend.py - Backend.send_velocity_%s：dq 指令越限，已就近裁剪 %s → %s",
                            family, np.round(dq, 4).tolist(), np.round(clipped, 4).tolist())
             dq = clipped
         # ③ 连接/模式前置检查 → ④ 逐关节调用子类实现下发
-        if not self._require_connected(family, f"send_vel_{family}"):
+        if not self._require_connected(family, f"send_velocity_{family}"):
             return
-        if not self._require_mode(family, ControlMode.VELOCITY, f"send_vel_{family}"):
+        if not self._require_mode(family, ControlMode.VELOCITY, f"send_velocity_{family}"):
             return
         for i in range(n):
-            self._call(f"send_vel_{family}（{self._jname(family, i)}）",
-                       getattr(self, f"_send_joint_vel_{family}"), i, dq[i])
+            self._call(f"send_velocity_{family}（{self._jname(family, i)}）",
+                       getattr(self, f"_send_joint_velocity_{family}"), i, dq[i])
 
     # =================== 抽象方法（子类实现） ===================
     @abstractmethod
@@ -1056,11 +1056,11 @@ class Backend(ABC):
         """end 单电机位置发送抽象方法（子类实现）：发一帧位置指令，入参已经过检查和限幅裁剪。失败上抛。"""
 
     @abstractmethod
-    def _send_joint_vel_arm(self, i: int, dq: float) -> None:
+    def _send_joint_velocity_arm(self, i: int, dq: float) -> None:
         """arm 单关节速度发送抽象方法（子类实现）：发一帧速度指令，入参已经过检查和幅值裁剪。失败上抛。"""
 
     @abstractmethod
-    def _send_joint_vel_end(self, i: int, dq: float) -> None:
+    def _send_joint_velocity_end(self, i: int, dq: float) -> None:
         """end 单电机速度发送抽象方法（子类实现）：发一帧速度指令，入参已经过检查和幅值裁剪。失败上抛。"""
 
     @abstractmethod

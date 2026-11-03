@@ -484,7 +484,7 @@ def test_velocity_verification_stops_even_when_feedback_raises(monkeypatch):
     monkeypatch.setattr(verify, 'time', clock)
     arm = FeedbackArm(clock)
     commands = []
-    arm.send_vel_arm = lambda dq: commands.append(np.array(dq))
+    arm.send_velocity_arm = lambda dq: commands.append(np.array(dq))
     initial = arm.get_state_arm
 
     def read():

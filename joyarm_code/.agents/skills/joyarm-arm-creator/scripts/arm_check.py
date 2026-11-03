@@ -53,7 +53,7 @@ DEFAULT_MODEL = "rebot_arm_b601_dm"                       # 缺省体检型号�
 # 验收阶梯：四步全 PASS 后按序推进（命令均在 joyarm_code/ 目录下执行）
 LADDER = [
     ("离线", "quick_start/01_arm_create_and_print.py", "对象创建与核心信息打印"),   # 阶梯 1：离线对象创建
-    ("离线", "quick_start/05_offline_math_and_solvers.py",    "机器人学离线计算与求解器设置"),   # 阶梯 2：离线数学
+    ("离线", "quick_start/05_robotics_solvers_and_math.py",    "机器人学离线计算与求解器设置"),   # 阶梯 2：离线数学
     ("真机", "quick_start/02_connect_and_read_state.py",    "硬件连接与状态读取"),   # 阶梯 3：真机只读
     ("真机", "quick_start/04_direct_motor_command.py",  "直通硬件电机指令"),   # 阶梯 4：真机直通指令
     ("真机", "quick_start/06_fsm_motion.py",      "基于运动状态机的运动"),   # 阶梯 5：真机 FSM 运动

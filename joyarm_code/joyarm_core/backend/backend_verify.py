@@ -13,7 +13,7 @@ Backend 子类全方位测试验证（上层视角）  joyarm_core/backend/backe
       30 组  控制验证：三模式设置（低危）、非法模式门禁（低危）、使能 / 失能
              与重复调用、写参数（高危）、设置零点（极高危，仅显式单项 + 每族
              二次确认）；
-      40 组  运动发送：MIT 零力矩 / 零点保持、position / vel 自动小幅（原幅度
+      40 组  运动发送：MIT 零力矩 / 零点保持、position / velocity 自动小幅（原幅度
              减半 + 限位裕量自动选向）、末端离散动作（全高危，五项均发送前
              参数预览 + 确认，--yes 不放行）；
       50 组  清除错误（双族，高危：使能→读错误码→清错→再读核对）。
@@ -1176,7 +1176,7 @@ def _it42(s: Session):
 
 
 def _it43(s: Session):
-    """send vel（双族）：低速短时下发（原幅度减半 + 按限位裕量逐关节选向 + 运动
+    """send velocity（双族）：低速短时下发（原幅度减半 + 按限位裕量逐关节选向 + 运动
     时间 VEL_DUR）后发 dq=0 停止。"""
     b = s.backend()
     results = []
@@ -1188,12 +1188,12 @@ def _it43(s: Session):
             continue
         dq_cmd = _safe_vel_dirs(getattr(b, f"joint_limits_{fam}"), q0, VEL_TEST)
         i0 = _mark()
-        getattr(b, f"send_vel_{fam}")(dq_cmd)
+        getattr(b, f"send_velocity_{fam}")(dq_cmd)
         m1 = _since(i0)
         time.sleep(VEL_DUR)
         st = getattr(b, f"get_state_{fam}")()
         i1 = _mark()
-        getattr(b, f"send_vel_{fam}")(np.zeros(n))  # 停止
+        getattr(b, f"send_velocity_{fam}")(np.zeros(n))  # 停止
         m2 = _since(i1)
         verdict = _classify_send(m1 + m2)
         ev = (f"dq 指令={np.round(dq_cmd, 2).tolist()} rad/s（按限位裕量逐关节选向，"
@@ -1488,7 +1488,7 @@ _item(42, "send position", "motion", "高", None,
       "零位在极限位置时自动往行程内走），限速 0.5 rad/s",
       [("connected", "both"), ("mode", "both", ControlMode.POSITION), ("enabled", "both")],
       _it42, preview=_preview42, hold=True)
-_item(43, "send vel", "motion", "高", None,
+_item(43, "send velocity", "motion", "高", None,
       "双族速度指令：0.1 rad/s（原幅度减半）按限位裕量逐关节选向 × 0.5s（运动时间）"
       "后发 dq=0 停止",
       [("connected", "both"), ("mode", "both", ControlMode.VELOCITY), ("enabled", "both")],

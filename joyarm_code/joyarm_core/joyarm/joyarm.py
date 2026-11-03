@@ -85,7 +85,7 @@ read_param_arm/end(key) · write_param_arm/end(key, values)                     
 get/check/clear_error_arm/end()                                                                   错误码读 / 检 / 清                                             已连接
 send_mit_arm/end(q, dq=None, tau=None, kp=None, kd=None)                                          MIT 指令整组下发                                               已连接 + MIT 模式
 send_position_arm/end(q, vlim=None, flim=None)                                                    位置指令整组下发                                                已连接 + POSITION
-send_vel_arm/end(dq)                                                                              速度指令整组下发                                                已连接 + VELOCITY
+send_velocity_arm/end(dq)                                                                              速度指令整组下发                                                已连接 + VELOCITY
 set_action_end(action, **kw)                                                                      末端离散动作（如open/home/close）                               已连接（end 侧不受 FSM 互斥）
 is_in_q_arm/end(q, tol_q=None)                                                                    关节到位判断（读被动快照）                                        ——
 is_in_pose_arm(pose, tol_pos=None, tol_rot=None, frame=None)                                      末端位姿到位判断                                                fkine 已配置
@@ -3131,21 +3131,21 @@ class JoyArm:
         """
         self._backend.send_position_end(q, vlim, flim)
 
-    def send_vel_arm(self, dq) -> None:
+    def send_velocity_arm(self, dq) -> None:
         """arm 速度指令整组下发：FSM 运行中被外部调用时空操作 + warn（ctrl 线程自身豁免放行）。
 
         :param dq: 速度目标 `(n_arm,)` rad/s；幅值越 `|dq_max|` 裁剪。
         """
-        if not self._fsm_guard("send_vel_arm"):
+        if not self._fsm_guard("send_velocity_arm"):
             return
-        self._backend.send_vel_arm(dq)
+        self._backend.send_velocity_arm(dq)
 
-    def send_vel_end(self, dq) -> None:
+    def send_velocity_end(self, dq) -> None:
         """end 速度指令整组下发。
 
         :param dq: 速度目标 `(n_end,)` rad/s；幅值越 `|dq_max|` 裁剪。
         """
-        self._backend.send_vel_end(dq)
+        self._backend.send_velocity_end(dq)
 
     # =============== 末端离散动作（end 侧不受互斥） ===============
     def set_action_end(self, action: str, **kw) -> None:

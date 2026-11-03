@@ -77,7 +77,7 @@ KERNEL_ARGS = {
     "_set_joint_zero_arm": (0,), "_set_joint_zero_end": (0,),                              # 设零：关节下标
     "_send_joint_mit_arm": (0, 0.0, 0.0, 0.0, 0.0, 0.0), "_send_joint_mit_end": (0, 0.0, 0.0, 0.0, 0.0, 0.0),   # MIT 五元组
     "_send_joint_position_arm": (0, 0.0, 0.0, 0.0), "_send_joint_position_end": (0, 0.0, 0.0, 0.0),   # 位置：q + vlim/flim
-    "_send_joint_vel_arm": (0, 0.0), "_send_joint_vel_end": (0, 0.0),                      # 速度：下标 + dq
+    "_send_joint_velocity_arm": (0, 0.0), "_send_joint_velocity_end": (0, 0.0),                      # 速度：下标 + dq
     "_send_action_end": ("open",),                                                          # 离散动作：动作名
     "_clear_joint_error_arm": (0,), "_clear_joint_error_end": (0,),                         # 清错：关节下标
 }
@@ -95,7 +95,7 @@ KERNEL_GROUPS = (
       "_set_joint_zero_arm", "_set_joint_zero_end")),             # 设零 2 桩
     ("第四部分：发送（7 个）",                                     # 分组四标题
      ("_send_joint_mit_arm", "_send_joint_mit_end", "_send_joint_position_arm", "_send_joint_position_end",   # MIT 与位置 4 桩
-      "_send_joint_vel_arm", "_send_joint_vel_end", "_send_action_end")),   # 速度与离散动作 3 桩
+      "_send_joint_velocity_arm", "_send_joint_velocity_end", "_send_action_end")),   # 速度与离散动作 3 桩
     ("第五部分：清错（2 个）",                                     # 分组五标题
      ("_clear_joint_error_arm", "_clear_joint_error_end")),       # 清错 2 桩
 )

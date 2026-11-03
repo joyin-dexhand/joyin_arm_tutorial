@@ -54,7 +54,7 @@ python .agents/skills/joyarm-arm-creator/scripts/arm_check.py --model <型号>  
 | 级 | 例程 | 硬件 | 验证内容 | 通过产出 | 不通过时回退 |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 | 1 | [`quick_start/01_arm_create_and_print.py`](../../../quick_start/01_arm_create_and_print.py) | 离线 | 对象创建与核心信息（限位 / 位形 / 求解器六域） | 控制台整机核心信息表 | 重跑 `arm_check.py` 定位缺件 → 回对应 skill |
-| 2 | [`quick_start/05_offline_math_and_solvers.py`](../../../quick_start/05_offline_math_and_solvers.py) | 离线 | fk / ik / jac / dyn 离线计算与求解器设置切换 | 各域数值结果与切换日志 | 数值异常多为 config 与 URDF 参数不一致 → [config](../joyarm-config-creator/) / [urdf](../joyarm-urdf-creator/) |
+| 2 | [`quick_start/05_robotics_solvers_and_math.py`](../../../quick_start/05_robotics_solvers_and_math.py) | 离线 | fk / ik / jac / dyn 离线计算与求解器设置切换 | 各域数值结果与切换日志 | 数值异常多为 config 与 URDF 参数不一致 → [config](../joyarm-config-creator/) / [urdf](../joyarm-urdf-creator/) |
 | 3 | [`quick_start/02_connect_and_read_state.py`](../../../quick_start/02_connect_and_read_state.py) | 真机 | 连接 / 断开、双口径状态读取、模式与状态码 | 连接成功 + 结构化状态表 | 总线联调 → [backend](../joyarm-backend-creator/)；通道/波特率等参数 → [config](../joyarm-config-creator/) |
 | 4 | [`quick_start/04_direct_motor_command.py`](../../../quick_start/04_direct_motor_command.py) | 真机 | 使能、清错、位置 / 速度 / MIT 直通指令、夹爪动作 | 指令执行与到位确认 | 协议实现 → [backend](../joyarm-backend-creator/)；增益 / 限位 → [config](../joyarm-config-creator/) |
 | 5 | [`quick_start/06_fsm_motion.py`](../../../quick_start/06_fsm_motion.py) | 真机 | 运动状态机启停、安全事件、关节 / 笛卡尔运动 | FSM 状态转移与小幅运动完成 | MotionFSM 段与 robotics 段参数 → [config](../joyarm-config-creator/) |

@@ -82,7 +82,7 @@ Python 的 abc 机制要求 29 个 `@abstractmethod` 内核**全部被定义**�
 |:---:|:---:|:---:|
 | 参数读写（4） | `_read_joint_param_arm/_end`、`_write_joint_param_arm/_end` | 协议支持寄存器/RAM 表读写 |
 | 设零（2） | `_set_joint_zero_arm/_set_joint_zero_end` | 有专用设零帧或零位寄存器 |
-| 发送（6） | `_send_joint_mit_arm/_end`、`_send_joint_position_arm/_end`、`_send_joint_vel_arm/_end` | 型号支持哪种模式实现哪种（舵机通常仅位置） |
+| 发送（6） | `_send_joint_mit_arm/_end`、`_send_joint_position_arm/_end`、`_send_joint_velocity_arm/_end` | 型号支持哪种模式实现哪种（舵机通常仅位置） |
 | 离散动作（1） | `_send_action_end` | 仅离散动作末端（夹爪 open/close/home 等） |
 | 清错（2） | `_clear_joint_error_arm/_clear_joint_error_end` | 固件支持错误清除命令 |
 

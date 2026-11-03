@@ -6,8 +6,8 @@
     1. 连接 / 断开 arm 与 end 的电机总线，查询连接状态（True=已连接、False=未连接、None=未知）；
     2. 启动 state_viz 状态可视化（默认自动弹出原生窗口）；
     3. 使能 / 失能电机，观察使能状态（同样 True / False / None 三种状态）；
-    4. 读取控制模式、逐关节状态码、健康检查结果与电机内部参数；
-    5. 读关节状态：读状态缓存 joint_state_arm（后台刷新，频率配置于 cfg.backend） + send 指令应答式刷新后 get_state_arm。
+    4. 读控制模式、逐关节状态码、健康检查结果与电机内部参数；
+    5. 读关节状态：读状态缓存 joint_state__arm/end（后台刷新，频率配置于 cfg.backend） + send 指令应答式刷新后 get_state__arm/end。
 
 【原理简介】
     JoyArm 经 backend 后端与电机总线通信：连接后后台刷新线程持续读帧(若状态过旧则主动读)，为每个关节维护一份 JointState 快照（q / dq / tau / 温度 / 状态码）。
@@ -72,7 +72,7 @@ def main() -> None:
         print("=============== ② 可视化 ========================================= ")
         print("默认弹出原生监控窗口；无显示器 / 远程环境设 JOYARM_VIZ_NOWINDOW=1 可禁用")  # 弹窗与禁用法
         arm.start_state_viz(traj_points=200)              # 启动可视化
-        time.sleep(2)                                     # 等待启动完毕
+        time.sleep(3)                                     # 等待启动完毕
 
         print("=============== ③ 使能 ========================================== ")
         print(f"使能前 is_enabled_arm：{arm.is_enabled_arm}（None=未知）")
@@ -80,39 +80,56 @@ def main() -> None:
         print(f"enable_arm 返回：{ret}；使能后 is_enabled_arm：{arm.is_enabled_arm}")
         ret = arm.enable_end()                            # 使能 end ：1=全部成功、0=有失败
         print(f"enable_end 返回：{ret}；使能后 is_enabled_end：{arm.is_enabled_end}")
+        time.sleep(0.01)                                  # 等电机使能并更新关节状态完毕
 
         print("=============== ④ 模式与错误码 ===================================== ")
         mode = arm.get_mode_arm()                              # 读模式（主动读；全组一致返回该模式）
         print(f"arm 控制模式：{mode}（连接时已自动设置）")
         errs = arm.get_error_arm()                             # 各关节状态码缓存（0=失能、1=使能、≥2=故障）
         print(f"arm 状态码缓存 get_error_arm：{errs}")           # 逐关节状态码
-        print(f"状态检查 check_error_arm：{arm.check_error_arm()}（全 0/1 判 True）")
+        print(f"arm 状态检查 check_error_arm：{arm.check_error_arm()}（全 0/1 判 True）")
+        mode = arm.get_mode_end()                              # end 同上
+        print(f"end 控制模式：{mode}（连接时已自动设置）")
+        errs = arm.get_error_end()
+        print(f"end 状态码缓存 get_error_end：{errs}")
+        print(f"end 状态检查 check_error_end：{arm.check_error_end()}（全 0/1 判 True）")
 
         print("=============== ⑤ 参数读取 ======================================== ")
         vals = arm.read_param_arm("pos_kp")                    # 参数读取
         print(f"read_param_arm('pos_kp') 返回：{vals}")         # 逐关节参数值
+        vals = arm.read_param_end("pos_kp")                    # end 同上
+        print(f"read_param_end('pos_kp') 返回：{vals}")
         print("（可读键名依型号而定；由实际硬件的 backend 定义）")
 
-        print("=============== ⑥ 引用状态缓存 joint_state_arm ==================== ")
+        print("=============== ⑥ 引用状态缓存 ===================================== ")
         hz = arm.get_config().get("backend", {}).get("state_refresh_hz", 20.0)  # 后台刷新频率
         print(f"（后台刷新，频率 {hz:g} Hz 配置于 cfg.backend；不主动读取、只取缓存，陈旧应<=刷新周期）")
         s = arm.joint_state_arm                            # 引用后台缓存（不发帧）
         now = time.time()                                  # 当前时刻
-        print(f"状态快照时间戳 {s.t:.3f}｜当前时间戳 {now:.3f}｜陈旧度 {now - s.t:.3f} s" if s.t else "快照 —（从未收到帧）")
+        print(f"arm 状态快照时间戳 {s.t:.3f}｜当前时间戳 {now:.3f}｜陈旧度 {now - s.t:.3f} s" if s.t else "arm 快照 —（从未收到帧）")
+        s = arm.joint_state_end                            # end 同上
+        now = time.time()
+        print(f"end 状态快照时间戳 {s.t:.3f}｜当前时间戳 {now:.3f}｜陈旧度 {now - s.t:.3f} s" if s.t else "end 快照 —（从未收到帧）")
 
-        print("=============== ⑦ 主动读关节状态：MIT 空指令应答式刷新 ======================= ")
+        print("=============== ⑦ 主动读关节状态：指令应答式刷新 ======================= ")
         print("（读旧快照 t → 发 MIT 指令 → 电机应答式刷新状态 → 组装新状态 → 统计陈旧）")
-        ret = arm.set_mode_arm(ControlMode.MIT)            # 切 MIT 模式：1=成功（乐观更新模式缓存）、0=失败
-        print(f"set_mode_arm(MIT) 返回：{ret}；当前模式：{arm.get_mode_arm()}")
-        if ret == 1:                                       # 切模式成功
+        ret_arm = arm.set_mode_arm(ControlMode.MIT)            # 切 MIT 模式：1=成功（乐观更新模式缓存）、0=失败
+        ret_end = arm.set_mode_end(ControlMode.MIT)   
+        print(f"set_mode_arm(MIT) 返回：{ret_arm}；当前模式：{arm.get_mode_arm()}")
+        print(f"set_mode_end(MIT) 返回：{ret_end}；当前模式：{arm.get_mode_end()}")
+        if ret_arm == 1 and ret_end == 1:                                       # 切模式成功
             t_send = time.time()                           # 发出时刻
             arm.send_mit_arm(arm.zero_arm, arm.zero_arm, arm.zero_arm, arm.zero_arm, arm.zero_arm)
-            s = arm.get_state_arm()                        # 组装状态快照
-            while (s is None or s.t - t_send <= 0.000001): # 等新状态更新完毕
+            arm.send_mit_end([0,], [0,], [0,], [0,], [0,]) # 单电机末端
+            s_arm = arm.get_state_arm()                    # 组装状态快照
+            s_end = arm.get_state_end()
+            while (s_arm is None or s_arm.t - t_send <= 0.000001 or s_end is None or s_end.t - t_send <= 0.000001): # 等新状态更新完毕
                 time.sleep(0.0000001)
-                s = arm.get_state_arm()
+                s_arm = arm.get_state_arm()
+                s_end = arm.get_state_end()
             now = time.time()                              # 当前时刻
-            print(f"状态快照时间戳 {s.t:.3f}｜当前时间戳 {now:.3f} ｜陈旧度 {now - s.t:.3f} s")
+            print(f"arm 状态快照时间戳 {s_arm.t:.6f}｜当前时间戳 {now:.6f}｜陈旧度 {now - s_arm.t:.6f} s")
+            print(f"end 状态快照时间戳 {s_end.t:.6f}｜当前时间戳 {now:.6f}｜陈旧度 {now - s_end.t:.6f} s")
 
         # print("=============== ⑧ 收尾 ========================================== ")
         # ret_a = arm.disable_arm()                         # 失能 arm
