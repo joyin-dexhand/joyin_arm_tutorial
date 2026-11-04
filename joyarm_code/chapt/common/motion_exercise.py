@@ -42,7 +42,7 @@ if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
 from joyarm_core import (  # noqa: E402
-    JointPositionController,
+    JointPositionDirectController,
     JointState,
     PinIkineSolver,
     PinJacobianSolver,
@@ -84,7 +84,7 @@ TRAJ_PLANNER, TRAJ_IS_PRACTICE = SingleJointCubicTrajPlanner(), False  # 官方�
 # TRAJ_PLANNER, TRAJ_IS_PRACTICE = PracticeTrajPlanner(), True
 
 # 第六章：运动控制 -----------------------------------------------------------
-CONTROLLER, CONTROL_IS_PRACTICE = JointPositionController(), False  # 官方实现
+CONTROLLER, CONTROL_IS_PRACTICE = JointPositionDirectController(), False  # 官方实现
 # from chapt.chapt6.chapt6_control_exercise import PracticeController
 # CONTROLLER, CONTROL_IS_PRACTICE = PracticeController(), True
 
