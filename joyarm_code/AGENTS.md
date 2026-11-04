@@ -129,6 +129,15 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举（ControlMode/MotionState/SafetyEvent）+ 数据类（Pose/TrajFrame/JointState/Wrench/Twist/Accel/JointLimits/TcpLimits/IKResult/ComplianceParams 等） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | 限位助手：硬/软/tcp 限位构建 + 指令裁剪 + 限位内采样（签名见 §3.3） | Ch11 | ✅ |
+| `chapt/chapt3/chapt3_ikine_demo.py` | 离线教学：FK 构造单一目标 → 解析 IK 八组几何解与限位/回代检查 → MeshCat 依次播放全部构型并对照目标/当前 TCP | Ch3 | ✅ |
+| `chapt/chapt3/chapt3_ikine_exercise.py` | 实践主文件：预留 `IkineSolver.solve()` 实现区，读者使用 Pinocchio FK/雅可比接口完成 JoyArm 固定阻尼数值逆解 | Ch3 | ✅ |
+| `chapt/chapt3/_ikine_exercise_support.py` | 第三章实践固定框架：提供连续目标、上一解续作初值、FK 回代、库内求解器对照、结果表格与 MeshCat 路径播放 | Ch3 | ✅ |
+| `chapt/chapt4/chapt4_jacobian_demo.py` / `_jacobian_demo_gui.py` / `_meshcat_demo_view.py` | 官方实现交互 GUI：嵌入 MeshCat 的 URDF/STL 真实外观（失败回退连杆图）、关节滑块、逐关节速度贡献、预设奇异位形及伪逆对比、可调末端载荷与关节力矩映射；保留 headless 验证 | Ch4 | ✅ |
+| `chapt/chapt4/chapt4_jacobian_exercise.py` | 双任务实践入口：①实现 `JacobianSolver.jac()`；②实现末端外载荷到关节平衡力矩 $-J^TF_{ext}$ 的映射 | Ch4 | ✅ |
+| `chapt/chapt4/_jacobian_exercise_support.py` | 第四章章内辅助框架：提供模型、预设关节轨迹、雅可比契约校验、奇异性指标、2 kg 末端负载工况和 MeshCat 播放 | Ch4 | ✅ |
+| `chapt/common/exercise_metrics.py` | 多章共用的末端帧读取、位姿误差、关节限位和雅可比指标校验 | Ch3～6 | ✅ |
+| `chapt/common/model_visualization.py` | 多章共用的当前型号、URDF 资产定位、缩减可视化模型和 MeshCat 标记/路径工具 | Ch3～6 | ✅ |
+| `chapt/common/motion_exercise.py` | 第三至六章综合离线实验：固定末端任务依次经过 IK、雅可比分析、关节轨迹规划和控制跟踪 | Ch3～6 | ✅ |
 | `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个抽象内核：24 单 joint + 4 总线级 + 1 整组动作）；三模式发送（cfg `default_mode` 可配、缺省 MIT，connect 自动 best-effort 设定）；动态数据读取：`get_mode_*`/`get_state_*` **读时刷新**；`joint_state_*` 只读快照 @property（被动直读槽位、不触发读帧，供监视器/可视化等无需实时者）；`is_connected_*`/`is_enabled_*` 三值标志 @property；无 `mode_*` 直读属性；`send_mit_*` 签名 `(q, dq=None, tau=None, kp=None, kd=None)`（`q` 必填；`dq`/`tau` 缺省置 `zeros(n)` 不广播；`kp`/`kd` 缺省取 cfg MIT 增益成员；三指令校验全在 `*_impl`、公开接口零校验）；cfg 预解析硬限位/发送默认/POS_VEL 四增益（切 POSITION/VELOCITY 随写寄存器）/baud/协议标识三键/两运行键（state_refresh_hz、write_settle）；`cfg` @property 返 MappingProxyType 只读视图、`joint_limits_*` 数组 writeable=False 零拷贝；成员变量全私有化；运行期 warn/info 直接输出 | Ch2 | ✅ |
 | `backend/backend_rebot_arm_b601_dm.py` | `BackendRebotArmB601DM`（DM 7 电机经 U2CAN 串口转 CAN 桥，模块私有 `_DMMotor`/`_DMBus`：RX 收取线程纯收取默认 1000Hz（cfg `rx_hz`，上限 5000）、状态快照单一 tuple 原子换入、状态读非阻塞（新鲜直返/陈旧发 0xCC 即返当前快照、t 如实带旧帧时刻不上抛，新鲜度由上层按 t 判定）；模式寄存器 RID10 MIT/VEL/Torque_Pos=1/3/4（POSITION 走 0x300+id pos_force 帧）、切 POSITION/VELOCITY 随写 4 增益（RID25-28，NaN 跳过）；反馈帧含双温度（data[6]=T_MOS、data[7]=T_Rotor）；全操作内核验证+重试（参数 0x55 回显核对/0x33 应答、使能/失能/设零/清错 0xFC/FD/FE/FB 新状态帧核对 err，应答按电机+RID+时刻配对防洗白）；僵尸总线重连先关再重建、断连清扫无主总线；组帧/解码与厂商库比特级一致；无 save；末端离散动作 open/home/close/position（-5.0/-3.0/0.0 rad/kwarg `position` 透传：自动切 POSITION 随写增益 + cfg vlim/flim 发送默认 + 位置经基类管道裁硬限位） | Ch6/13 | ✅ |
 | `backend/backend_rebot_arm_b601_dm_mujoco.py` | `BackendRebotArmB601DMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_rebot_arm_b601_dm` 同型号配套；文件待创建，实现后 REGISTRY 注册 `backend_rebot_arm_b601_dm_mujoco`） | — | 🟡 |

@@ -1,0 +1,19 @@
+digraph position_kinematic_control {
+    graph [rankdir=LR, bgcolor="white", pad="0.45", nodesep="1.00", ranksep="0.32", splines=ortho];
+    node [shape=box, style="filled", fillcolor="white", color="black", penwidth=1.5, fontname="sans-serif", fontsize=14, margin="0.16,0.11"];
+    edge [color="black", penwidth=1.4, arrowsize=0.75, fontname="sans-serif", fontsize=12];
+
+    td [shape=plain, label="目标末端位姿 T_d"];
+    ik [label="逆运动学"];
+    qd [shape=plain, label="目标关节角 q_d"];
+    sum [shape=circle, fixedsize=true, width=0.40, label="Σ", margin=0];
+    ctrl [label="关节位置控制器"];
+    arm [label="机械臂"];
+    tap [shape=point, fixedsize=true, width=0.08, label="", fillcolor="black"];
+    q [shape=plain, label="实际关节角 q"];
+    fk [label="正运动学"];
+    t [shape=plain, label="实际末端位姿 T"];
+
+    td -> ik -> qd -> sum -> ctrl -> arm -> tap -> q -> fk -> t;
+    tap -> sum [xlabel="负反馈  −", constraint=false, tailport=s, headport=n];
+}

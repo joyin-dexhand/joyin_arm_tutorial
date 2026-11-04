@@ -108,3 +108,37 @@
   line-height: 1;
   cursor: pointer;
 }
+
+/* ============================================================
+   教程拓展内容折叠块
+   - 使用原生 details，兼容 MkDocs 与常见 Markdown 编辑器预览
+   - 内容中的 Markdown 与数学公式由 md_in_html 继续解析
+   ============================================================ */
+.md-typeset details.tutorial-details {
+  margin: 1.2em 0;
+  overflow: hidden;
+  border: 0.05rem solid var(--md-primary-fg-color);
+  border-radius: 0.25rem;
+  background: var(--md-code-bg-color);
+}
+
+.md-typeset details.tutorial-details > summary {
+  padding: 0.65rem 0.8rem 0.65rem 2.4rem;
+  color: var(--md-default-fg-color);
+  font-weight: 700;
+  cursor: pointer;
+  background: color-mix(
+    in srgb,
+    var(--md-primary-fg-color) 12%,
+    transparent
+  );
+}
+
+.md-typeset details.tutorial-details[open] > summary {
+  border-bottom: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset details.tutorial-details > :not(summary) {
+  margin-right: 0.8rem;
+  margin-left: 0.8rem;
+}

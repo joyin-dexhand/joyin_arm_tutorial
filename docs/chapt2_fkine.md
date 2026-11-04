@@ -117,7 +117,7 @@ $$
 | 复合变换 | 同时改位置与姿态 | 球边移边转|
 | 连乘级联 | 多个 $\bm{T}$ 相乘 | 多段变换的累积效果 |
 
-对应脚本位于 `joyarm_code/chapt/chapt2_T_demo.py`，使用说明见脚本头部注释。
+对应脚本位于 `joyarm_code/chapt/chapt2/chapt2_T_demo.py`，使用说明见脚本头部注释。
 
 > 💡 建议亲手改动UI界面里的 $^A_B\bm{T}$ 数值或上方滑块条，观察球与坐标轴的实时响应，建立"矩阵数字"与"空间运动"的对应直觉。
 
@@ -292,7 +292,7 @@ $$
 | 四元数 | $w,x,y,z$ 四个数值框 | 只读，实时跟随 | 输出端 |
 | 旋转矩阵 $\bm{R}$ | $3\times3$ 表格 | 只读，实时跟随 | 输出端 |
 
-对应脚本位于 `joyarm_code/chapt/chapt2_pose_demo.py`，使用说明见脚本头部注释。
+对应脚本位于 `joyarm_code/chapt/chapt2/chapt2_pose_demo.py`，使用说明见脚本头部注释。
 
 
 ## 3 JoyArm 连杆建系与MDH参数
@@ -303,7 +303,7 @@ $$
 
 #### 3.1.1 关节与连杆的编号
 
-[图片占位：标了关节和连杆的机械臂实物图]()
+![JoyArm 关节与连杆标注实物图](images/chapt2_fkine/joyarm_joints_links.png)
 
 JoyArm 为 **6 DOF 串联旋转关节机械臂**（6R）：6 个旋转关节 ，相邻两关节间的刚性杆件为连杆，关节 $i$ 驱动的与其固连的连杆编号为 $i$。
 
@@ -331,7 +331,7 @@ JoyArm 为 **6 DOF 串联旋转关节机械臂**（6R）：6 个旋转关节 ，
 
 将上述建系规则应用到 JoyArm 机械臂，得到各连杆坐标系、基座系和工具系。下图标注各 $Z$ 轴（关节转轴）与 $X$ 轴（公垂线），是推导 MDH 参数表的依据。
 
-![图片占位：JoyArm 连杆坐标系 1-6 标注图（各关节轴、各连杆系、末端系、基座系）]()
+![JoyArm 连杆坐标系 1-6 标注图（各关节轴、各连杆系、末端系、基座系）](images/chapt2_fkine/joyarm_link_frames_mdh.svg)
 
 > 📌 建系结果**不唯一**（$Z$ 轴正负、$X$ 轴方向有多种合法选择），但最后的末端位姿 $^0_6\bm{T}$ 是唯一确定。
 
@@ -339,7 +339,7 @@ JoyArm 为 **6 DOF 串联旋转关节机械臂**（6R）：6 个旋转关节 ，
 
 #### 3.2.1 四个参数的几何含义
 
-[图片占位：连杆参数示意图]()
+![MDH 连杆参数示意图](images/chapt2_fkine/mdh_link_params.svg)
 
 相邻连杆系 $\{i-1\}$ 与 $\{i\}$ 的相对位姿由以下 4 个参数完全描述：
 
@@ -519,13 +519,13 @@ URDF 使用"父子连杆 + 关节偏移"的树状结构描述机器人几何结�
 
 JoyArm 机械臂在[URDF Studio](https://urdf.d-robotics.cc/)的可视化结果如下
 
-[图片占位：JoyArm URDF可视化]()
+![JoyArm URDF 可视化](images/chapt2_fkine/joyarm_urdf_visualization.png)
 
 URDF 几乎兼容所有的主流仿真器和机器人学计算库，它可以导入仿真器作为仿真的数字模型，也可加载进机器人学计算库进行机器人的规划和控制。
 
 #### 4.3.2 用库自动求解正运动学
 
-以 **URDF + Pinocchio** 计算正运动学，核心流程仅几行：
+以 **URDF + Pinocchio** 计算正运动学，核心流程如下：
 
 ```python
 import numpy as np
@@ -580,7 +580,7 @@ T_ee = pin.updateFramePlacement(model, data, model.getFrameId("frame_end_tcp")) 
 
 #### 5.2.1 实现方案
 
-脚本 `joyarm_code/chapt/chapt2_workspace.py` 完成如下流程（核心功能调用 `joyarm_core` 的 `JoyArm` 类与 Pinocchio 正解，离线运行无需连接硬件）：
+脚本 `joyarm_code/chapt/chapt2/chapt2_workspace.py` 完成如下流程（核心功能调用 `joyarm_core` 的 `JoyArm` 类与 Pinocchio 正解，离线运行无需连接硬件）：
 
 | 模块 | 功能 | 实现要点 |
 |:---:|:---:|:---:|

@@ -10,18 +10,18 @@
       纯平移 / 纯旋转(绕单轴) / 复合变换 / 连乘级联。
 
 【环境与运行】
-    # 0. 安装 uv（仅首次）
+    # 1. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 1. 创建虚拟环境并同步依赖
-    cd <仓库路径>/joyarm_code
+    # 2. 创建虚拟环境并同步依赖
+    cd ~/joyarm_code
     uv sync
     source .venv/bin/activate
     # 若 Linux 缺少 libxcb-cursor.so.0 ，则先安装：
-    sudo apt-get install -y libxcb-cursor0 
+    sudo apt-get install -y libxcb-cursor0
 
-    # 2. 运行本脚本
+    # 3. 运行本脚本
     cd ./chapt
     python chapt2_T_demo.py
 
@@ -58,9 +58,9 @@ from PySide6.QtWidgets import (
 # 全局常量
 # ----------------------------------------------------------------------------
 TRANS_MIN, TRANS_MAX = -2.0, 2.0        # 平移滑块范围 (m)
-ROT_MIN, ROT_MAX = -180, 180            # 旋转滑块范围 (度)
+ROT_MIN, ROT_MAX = -180, 180           # 旋转滑块范围 (度)
 SLIDER_STEPS = 400                      # 滑块离散步数（越大越平滑）
-AXIS_COLORS = ("#e6194b", "#3cb44b", "#2b6cb0")  # RGB 对应 X/Y/Z
+AXIS_COLORS = ("#e6194b", "#3cb44b", "#2b6cb0")   # RGB 对应 X/Y/Z
 PLOT_LIM = 2.4                          # 3D 坐标轴显示范围
 
 

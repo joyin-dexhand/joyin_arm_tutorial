@@ -74,5 +74,18 @@ arm.close()                          # 安全退出（失能 + 断开；亦可�
 ## 5. 运行教学章节示例
 
 ```bash
-cd joyarm_code/chapt && python chapt2_T_demo.py         # 运行章节示例（PySide6 GUI）
+cd joyarm_code
+python chapt/chapt2/chapt2_T_demo.py                    # 运行章节示例（PySide6 GUI）
+# 第三章：JoyArm 解析 IK 八组几何解、FK 回代与 MeshCat 红绿状态播放
+python chapt/chapt3/chapt3_ikine_demo.py
+# 第三章实践：按代码提示补全 IkineSolver.solve()，再运行校验与 MeshCat 对照
+python chapt/chapt3/chapt3_ikine_exercise.py
+# 第四章实践：公共框架提供固定轨迹，读者补全雅可比和末端负载映射
+python chapt/chapt4/chapt4_jacobian_demo.py
+python chapt/chapt4/chapt4_jacobian_exercise.py --meshcat
+# 第三至第六章综合实验：逆解 → 雅可比 → 轨迹规划 → 离线控制
+python chapt/common/motion_exercise.py
+# 使用 MeshCat 播放离线控制轨迹；选用读者实现时自动显示对应章节反馈
+# 第三章显示回代 TCP，第五章显示规划路径，第六章对比参考/实际路径；第四、六章同步输出实时指标
+python chapt/common/motion_exercise.py --meshcat
 ```
