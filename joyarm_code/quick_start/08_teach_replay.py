@@ -11,7 +11,7 @@
 # 【原理简介】
 #     拖动示教的核心是 DAMP 阻尼态：FSM 每周期下发 MIT 帧（kp=0、kd=阻尼系数 damping_kd、tau=重力补偿率 damping_k_gravity × 重力矩），电机如带阻尼的铰链般顺从外力可徒手拖动；
 #     录制端只读 joint_state_arm 后台缓存（后台线程持续维护、不额外占用总线），按绝对时刻卡准采样节奏，采样率稳定在 50 Hz；
-#     回放端逐路点 set_target_joint 写入目标帧：默认激活的 single_joint_hold_traj_planner 仅取帧内 q 直传控制器（忽略到达时刻 t），10 Hz 连续刷新目标即成轨迹流；
+#     回放端逐路点 set_target_joint 写入目标帧：默认激活的 single_joint_direct_traj_planner 把帧内 q/dq/ddq/tau 直传、忽略 t，10 Hz 连续刷新目标即成轨迹流；
 #     若用 set_traj_solver 切到三次多项式规划器 single_joint_cubic_traj_planner，则 t 生效、按到达时刻平滑插值跟帧。
 
 # 【安全须知】
@@ -133,7 +133,7 @@
 #         else:
 #             waypoints = record[::RECORD_HZ // REPLAY_HZ]  # 每 5 帧取 1 帧作路点（50 Hz → 10 Hz 抽样，约 40 个）
 #             print(f"开始回放：共 {len(waypoints)} 个路点，{REPLAY_HZ} Hz 下发……")
-#             # 默认 hold 规划器只取帧内 q 直传、忽略 t；t（当前时刻 + REPLAY_AHEAD）仅切到 cubic 规划器后生效
+#             # 默认 direct 规划器直传帧内关节域（回放路点仅填 q）、忽略 t；t（当前时刻 + REPLAY_AHEAD）仅切到 cubic 后生效
 #             for i, q_wp in enumerate(waypoints, start=1):
 #                 arm.set_target_joint(t=time.time() + REPLAY_AHEAD, q=q_wp)  # 写入单帧关节目标（原子通道）
 #                 if i % 10 == 0 or i == len(waypoints):    # 每 10 个路点（及最后一个）打印进度

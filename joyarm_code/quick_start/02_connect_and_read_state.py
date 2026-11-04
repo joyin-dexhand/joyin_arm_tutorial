@@ -68,6 +68,8 @@ def main() -> None:
         ok = arm.connect_end()                            # 连接 end
         print(f"connect_end 返回：{ok}；is_connected_end：{arm.is_connected_end}")
         print("（连接的三种结果：True=已连接、False=未连接、None=未知）")  # 三种结果说明
+        # arm.disconnect_arm()                              # 断开 arm 总线
+        # arm.disconnect_end()                              # 断开 end 总线
 
         print("=============== ② 可视化 ========================================= ")
         print("默认弹出原生监控窗口；无显示器 / 远程环境设 JOYARM_VIZ_NOWINDOW=1 可禁用")  # 弹窗与禁用法
@@ -136,7 +138,7 @@ def main() -> None:
         # ret_e = arm.disable_end()                         # 失能 end
         # print(f"disable_arm 返回：{ret_a}；disable_end 返回：{ret_e}")
         # arm.stop_state_viz()                              # 停可视化
-        # arm.close
+        # arm.close()                                       # 销毁安全退出（与 with 退出等效）
     print("=============== 结束自动收尾：机械臂已失能并断开 ==================== ")
 
 

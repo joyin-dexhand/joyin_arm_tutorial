@@ -14,4 +14,4 @@ REGISTRY: dict = {
     "pin_jacobian_solver": PinJacobianSolver,
 }
 
-__all__ = ["JacobianSolver", "PinJacobianSolver", "REGISTRY"]
+__all__ = ["JacobianSolver", "REGISTRY", "PinJacobianSolver"]

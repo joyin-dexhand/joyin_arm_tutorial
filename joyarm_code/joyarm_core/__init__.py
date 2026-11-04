@@ -82,8 +82,8 @@ from .robotics.fkine import FkineSolver, PinFkineSolver, MdhFkineSolver
 from .robotics.ikine import IkineSolver, PinIkineSolver, AnalyticIkineSolver
 from .robotics.jacobian import JacobianSolver, PinJacobianSolver
 from .robotics.dynamics import DynamicsSolver, PinDynamicsSolver
-from .robotics.trajectory import TrajPlanner, SingleJointHoldTrajPlanner, SingleJointCubicTrajPlanner
-from .robotics.control import Controller, JointPositionController
+from .robotics.trajectory import TrajPlanner, SingleJointDirectTrajPlanner, SingleJointCubicTrajPlanner
+from .robotics.control import Controller, JointPositionDirectController, JointDragTeachController
 
 # ---- 整机后端通信层 ----
 from . import backend
@@ -165,9 +165,10 @@ __all__ = [
     "AnalyticIkineSolver",
     "PinJacobianSolver",
     "PinDynamicsSolver",
-    "SingleJointHoldTrajPlanner",
+    "SingleJointDirectTrajPlanner",
     "SingleJointCubicTrajPlanner",
-    "JointPositionController",
+    "JointPositionDirectController",
+    "JointDragTeachController",
     # 通信层（整机后端）
     "backend",
     "Backend",

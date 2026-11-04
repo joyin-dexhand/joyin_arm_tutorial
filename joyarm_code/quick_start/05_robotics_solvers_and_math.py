@@ -105,10 +105,11 @@ def main() -> None:
         print(f"   set_dyn_solver('pin_dynamics_solver') 返回：{ret}；当前激活：{arm.get_activated_dyn_solver()}")
         ret = arm.set_traj_solver("single_joint_cubic_traj_planner") 
         print(f"   set_traj_solver('single_joint_cubic_traj_planner') 返回：{ret}；当前激活：{arm.get_activated_traj_solver()}")
-        ret = arm.set_ctrl_solver("joint_position_controller")
-        print(f"   set_ctrl_solver('joint_position_controller') 返回：{ret}；当前激活：{arm.get_activated_ctrl_solver()}")
+        ret = arm.set_ctrl_solver("joint_position_direct_controller")
+        print(f"   set_ctrl_solver('joint_position_direct_controller') 返回：{ret}；当前激活：{arm.get_activated_ctrl_solver()}")
 
         print("—— pin ↔ mdh 对比：同一当前位形的 solve_fkine 结果 ——")
+        print(f"   pin 缩减模型 pin_model：nq = {arm.pin_model.nq}（与 n_arm = {arm.n_arm} 关节数一致）")
         pose_pin = arm.solve_fkine()                      # pin 激活：URDF 模型 + pinocchio 计算
         arm.set_fkine_solver("mdh_fkine_solver")          # 切换到 MDH 解析式方式求解
         pose_mdh = arm.solve_fkine()                      # mdh 激活：cfg MDH 位姿矩阵连乘变换

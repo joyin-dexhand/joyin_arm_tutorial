@@ -137,9 +137,9 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `robotics/fkine/` | `FkineSolver(ABC)`（solve 单内核）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御；每算新建私有 pin.Data）✅ + `MdhFkineSolver`（fkine_solver_mdh.py：MDH 白盒 FK——config `arm_mdh` 逐关节连乘 + `T_linkn_endtcp` 右乘，仅末端帧；与 URDF 标定一致至 1e-13，解析 IK 复用其计算函数）✅ | Ch2 | ✅ |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 / solve_all 全解默认 `NotImplementedError`）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅ + `AnalyticIkineSolver`（ikine_solver_analytic.py：2/3/4 轴平行、5/6 轴相交构型解析解——枚举肩/肘/腕分支 ≤8 组候选、MDH FK 回代剔伪解去重、±2π 限位内归位；solve 软限位剔除后取距 q0 最近，solve_all 不剔越限且 frame 可缺省=末端帧；首次求解缓存 MDH/TCP 逆变换，按 arm 身份复用、配置变更须重建实例）✅ | Ch3 | ✅ |
 | `robotics/jacobian/` | `JacobianSolver(ABC)`（衍生量模板：jac/jac_pinv_damped）+ `PinJacobianSolver`（computeFrameJacobian，基座系）✅ | Ch4 | ✅ |
-| `robotics/trajectory/` | `TrajPlanner(ABC)`（plan/sample 两内核：目标单点/序列 → 轨迹存对象内、按绝对时间采样产帧）+ 双实现：`SingleJointHoldTrajPlanner`（单点直传：仅取单帧 q 恒定输出、dq/ddq=0；q 空/维度不符/多帧回退 q_home）与 `SingleJointCubicTrajPlanner`（单点三次多项式：当前 q/dq 起点 + 目标 q/dq 终点四约束，T=目标时刻−当前、τ 钳位超末保持；无效回退恒定 q_home、已过期直接恒定发布目标），config 默认激活直传 ✅ | Ch5 | ✅ |
+| `robotics/trajectory/` | `TrajPlanner(ABC)`（plan/sample 两内核：目标单点/序列 → 轨迹存对象内、按绝对时间采样产帧）+ 双实现：`SingleJointDirectTrajPlanner`（单帧关节域直传：q 锚定有效性，q/dq/ddq/tau 原样透传（缺失为 None）；无效回退 q_home）与 `SingleJointCubicTrajPlanner`（单点三次多项式：当前 q/dq 起点 + 目标 q/dq 终点四约束，T=目标时刻−当前、τ 钳位超末保持；无效回退恒定 q_home、已过期直接恒定发布目标），config 默认激活直传 ✅ | Ch5 | ✅ |
 | `robotics/dynamics/` | `DynamicsSolver(ABC)`（idyn/M/C/G 四内核）+ `PinDynamicsSolver`（rnea/crba 对称化/nonLinearEffects）✅ | Ch8 | ✅ |
-| `robotics/control/` | `Controller(ABC)`（step 内核 + `MODE` 类属性声明所需电机模式：基类缺省 MIT、子类覆写，FSM 在 MOTION 进入/维持时依此自愈模式与使能）+ `JointPositionController` 关节位置控制器（`MODE=POSITION`；step 跟踪当前帧 q 经 `send_position_arm` 下发，NaN/缺 q 拒绝下发）✅ | Ch6 | ✅ |
+| `robotics/control/` | `Controller(ABC)`（step 内核 + `MODE` 类属性声明所需电机模式：基类缺省 MIT、子类覆写，FSM 在 MOTION 进入/维持时依此自愈模式与使能）+ `JointPositionDirectController` 关节位置直传控制器（`MODE=POSITION`；step 跟踪当前帧 q 经 `send_position_arm` 下发，NaN/缺 q 拒绝下发）✅ + `JointDragTeachController` 关节 MIT 拖动示教控制器（`MODE=MIT`；重力补偿 tau=G(q)+阻尼 kd+刚度 kp 维持平衡点，平衡点按 threshold/step_rate 缓释跟随；四参数标量/序列注入、广播延迟首拍，dyn 未配置退化无重力补偿）✅ | Ch6 | ✅ |
 | `joyarm/joyarm.py` | `JoyArm` 主类：两阶段初始化（私有成员声明 → 按依赖序赋真值）+ cfg 全套自检（三段数值叶有限非空 + zero∈硬限位 + cfg↔URDF 硬校验）+ pin 缩减模型（锁定非 cfg 名单活动关节 → nq=n_arm）+ 硬件委托面（§3.3）+ 六域求解器与热切换 + 目标帧通道 + plan/ctrl 两线程 + 数学门面 9 方法（q/dq 维度校验、frame=0 合法直传）+ MotionFSM（六状态 + 路线表 + start/stop + 进入/维持自愈，失败保留状态，下拍重试（职责见约束13）；最终收尾禁止自愈后停线程再失能）+ SafetyEvent/safe_monitor（硬规则 + 自定义规则）+ 运行状态可视化（HTTP 轮询 + meshcat 依赖 + zmq 超时看门狗降级与 server 回收）+ `close()` 销毁路径；模块级 `load_config` 与私有周期线程机制 `_run_periodic`/`_PeriodicThread`（含 prepare() 预登记线程句柄；FSM/监视/可视化/运动线程共用，不入 utils） | — | ✅ |
 | `joyarm/__init__.py` | `JoyArmFactory`/`joyArm`/`listArm`/`load_config`（对象创建入口，四步校验失败语义见约束4；`listArm` 三条件过滤与失败消息共用实现） | — | ✅ |
 | `joyarm/joyarm.py` 内 `_VizWindow` | 监控页原生窗口封装类（JoyArm 成员 `_viz_window`：init 占位 None、start 时创建赋值、stop 终止；`launch()` 经 `python -c` 拉起子进程跑 `child_main()`——`QMainWindow`+`QWebEngineView` 内嵌 Chromium 加载三栏页，内置早夭看护（主动停止标志防误告警、stop 超时 kill 兜底）；零数据逻辑，数据仍来自 HTTP 服务；关窗即退出子进程） | — | ✅ |
@@ -158,7 +158,7 @@ JoyArm（单类组合根：_backend + 六域成员字典 + _cfg + FSM/监视/可
    │  运动数据流：应用线程 set_target_*（原子发布）→ plan 线程逐拍规划（存激活规划器内）
    │  → ctrl 线程逐拍 sample(time.time())→控制器 step→经 JoyArm 委托面下发 _backend
 Backend(ABC) ──▶ BackendRebotArmB601DM ✅（U2CAN 串口转 CAN 桥）
-六域 ABC + 内置默认实现（Pin 四域 + MDH FK + 解析 IK / single_joint 双规划器 hold+cubic / joint_position_controller）──▶
+六域 ABC + 内置默认实现（Pin 四域 + MDH FK + 解析 IK / single_joint 双规划器 direct+cubic / joint_position_direct + joint_drag_teach 双控制器）──▶
    章节自定义实现显式入表后并列选配（fkine Ch2 / ikine Ch3 / jacobian Ch4 /
    traj Ch5 / control Ch6/8/9 / dynamics Ch8）
 ```
@@ -210,10 +210,10 @@ JoyArm.close()    # stop_motion_fsm → stop_monitor → stop_state_viz → disa
 
 ```python
 FkineSolver / IkineSolver / JacobianSolver / DynamicsSolver / TrajPlanner / Controller   # ABC 契约 ✅
-TrajPlanner：纯计算——plan(arm, target)（目标单点/序列→轨迹存对象内、拷贝后原子发布）/ sample(t)（按绝对时间采样产帧）；内置双实现 SingleJointHoldTrajPlanner（单点直传恒定输出）/ SingleJointCubicTrajPlanner（单点三次多项式，详见 §3.1）✅
+TrajPlanner：纯计算——plan(arm, target)（目标单点/序列→轨迹存对象内、拷贝后原子发布）/ sample(t)（按绝对时间采样产帧）；内置双实现 SingleJointDirectTrajPlanner（单帧关节域直传）/ SingleJointCubicTrajPlanner（单点三次多项式，详见 §3.1）✅
 Controller：step(arm, target, jointstate) → bool（当前帧+JointState，算 cmd 并经 arm 下发）；门控在 JoyArm ctrl 线程（暂停开关/无帧跳拍）✅
 # 求解器用法二选一：实例.method(arm, ...)（arm 鸭子类型，课堂/单测）或 arm.* 门面（激活成员，应用）
-# 鸭子契约（内置实现）：pin 系求解器 arm.pin_model；MDH/解析算法 arm.get_config()（教学数据）；规划器 arm.home_arm（三次法另读 arm.get_state_arm() 取起点）；控制器 arm.send_position_arm；电机模式由控制器子类类属性 MODE 声明（基类缺省 MIT、JointPositionController=POSITION），起搏为 config 规格键 plan_hz/ctrl_hz（必配、JoyArm 剥离消费）
+# 鸭子契约（内置实现）：pin 系求解器 arm.pin_model；MDH/解析算法 arm.get_config()（教学数据）；规划器 arm.home_arm（三次法另读 arm.get_state_arm() 取起点）；控制器 arm.send_position_arm；电机模式由控制器子类类属性 MODE 声明（基类缺省 MIT、JointPositionDirectController=POSITION），起搏为 config 规格键 plan_hz/ctrl_hz（必配、JoyArm 剥离消费）
 ```
 
 #### Backend / 限位 / 数学 / 类型 API

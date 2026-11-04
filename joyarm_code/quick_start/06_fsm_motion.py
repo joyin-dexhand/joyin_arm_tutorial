@@ -5,19 +5,22 @@
 【功能概要】
     1. 连接 arm 总线，打印 traj / ctrl 求解器并选定规划器与控制器；
     2. start_motion_fsm 启动状态机，wait_for_motion_state 等待状态迁移完成；
-    3. set_target_joint 下发 home ± 0.15 rad 关节目标，get_target_trajframe 读回 TrajFrame；
+    3. set_target_joint 下发小幅目标（set_target_trajframe 通道），get_target_trajframe 读回；
     4. solve_fkine / solve_ikine 构造小位移笛卡尔目标，set_target_cart 写入并读回；
     5. set_event() 触发安全事件和期望控制状态，get_event() 读回当前事件；
-    6. stop_motion_fsm 收尾：危险性不高于 ZEROING 则先回零再失能，更危险的状况（阻尼和失能）则直接失能。
+    6. set_ctrl_solver 切换到拖动示教控制器（MIT 重力补偿 + 阻尼/刚度、平衡点缓释跟随），MOTION 态徒手拖动、松手即停；
+    7. stop_motion_fsm 收尾：危险性不高于 ZEROING 则先回零再失能，更危险的状况（阻尼和失能）则直接失能。
 
 【原理简介】
     运动状态机六状态：DISABLE / ZERO / HOME / MOTION / HOLD / DAMP。HOME 为中转站——ZERO 与 MOTION 之间切换须先经过 HOME；
     安全事件 SafetyEvent 危险性从轻到重：NORMAL < HOLDING < HOMING < ZEROING < DAMPING < DISABLE，FSM 按 STATE_FROM 映射表迁往安全事件对应的状态；
-    进入 MOTION 后另起 plan 线程（消费目标帧做规划）与 ctrl 线程（采样轨迹并下发指令），目标帧由 set_target_* 写入。三者互不阻塞。
+    进入 MOTION 后另起 plan 线程（消费目标帧做规划）与 ctrl 线程（采样轨迹并下发指令），目标帧由 set_target_* 写入。三者互不阻塞；
+    拖动示教：set_ctrl_solver 切换控制器后，FSM 自动把电机模式设置为控制器 MODE，控制律 tau = G(q) + kp·(q_eq − q) + kd·(0 − dq)。
 
 【安全须知】
     - 运行前清空机械臂工作半径内的人员与障碍物，全程准备好急停或断电手段
     - Ctrl+C 随时中断，with 退出自动安全收尾
+    - 拖动示教环节徒手轻缓拖动机械臂，禁止猛烈拉扯或强行超出关节限位
 
 【环境与运行】
     # 0. 安装 uv（仅首次）
@@ -33,7 +36,7 @@
     python quick_start/06_fsm_motion.py <型号>  # 如：rebot_arm_b601_dm
 
 【预期输出】
-    启动条件与求解器确认 → 关节/笛卡尔两段小幅运动与目标帧读回 → 安全事件切换 → 回零收尾；异常时提示原因并安全退出。
+    启动条件与求解器确认 → 关节/笛卡尔两段小幅运动与目标帧读回 → 安全事件切换 → 拖动示教（热切换控制器，MIT）→ 回零收尾；异常时提示原因并安全退出。
 ==============================================================================
 """
 
@@ -44,7 +47,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from joyarm_core import joyArm, listArm, MotionState, SafetyEvent, STATE_FROM, Pose
+from joyarm_core import joyArm, listArm, MotionState, SafetyEvent, STATE_FROM, Pose, TrajFrame
 
 
 # ============================================================
@@ -87,10 +90,10 @@ def main() -> None:
         ctrl_names = arm.get_ctrl_solvers()
         print(f"traj 求解器：{traj_names}（默认激活 {arm.get_activated_traj_solver()}）")
         print(f"ctrl 求解器：{ctrl_names}（默认激活 {arm.get_activated_ctrl_solver()}）")
-        ret = arm.set_traj_solver("single_joint_hold_traj_planner")   # 直传规划器
-        print(f"set_traj_solver('single_joint_hold_traj_planner') 返回：{ret}")
-        ret = arm.set_ctrl_solver("joint_position_controller")        # 直传控制器
-        print(f"set_ctrl_solver('joint_position_controller') 返回：{ret}")
+        ret = arm.set_traj_solver("single_joint_direct_traj_planner")   # 直传规划器
+        print(f"set_traj_solver('single_joint_direct_traj_planner') 返回：{ret}")
+        ret = arm.set_ctrl_solver("joint_position_direct_controller")    # 直传控制器
+        print(f"set_ctrl_solver('joint_position_direct_controller') 返回：{ret}")
 
         print("=============== ② 启动运动状态机 start_motion_fsm ==================== ")
         state = arm.joint_state_arm                       # 后台状态快照
@@ -126,6 +129,10 @@ def main() -> None:
             print(f"set_target_joint 写入后读回 TrajFrame：{arm.get_target_trajframe()}")
             time.sleep(2.0)  # 等待规划器消费目标帧并下发控制器
             print(f"到位判断 is_in_q_arm：{'是' if arm.is_in_q_arm(q_goal) else '否'}")
+            frame = TrajFrame(time=time.time(), q=q_goal) 
+            arm.set_target_trajframe(frame)                # 底层通道，set_target_joint/cart 的内部实现方式，deepcopy 后原子写入
+            print(f"set_target_trajframe 写入后读回 TrajFrame：{arm.get_target_trajframe()}")
+            time.sleep(2.0)  # 等待规划器消费目标帧并下发控制器
         else:
             print("未确认 yes：已跳过关节目标运动。")
 
@@ -142,13 +149,13 @@ def main() -> None:
             print(f"逆解 q = {fmt_arr(res.q)} rad（相对 home 偏差 {dev:.3f} rad）")
             yes = input("【确认】机械臂将运动到逆解位形并途经 home，输入 yes 执行，其他输入跳过：").strip() == "yes"
             if yes:
-                arm.set_target_joint(t=time.time()+2.0, q=res.q)  # 实际执行走关节通道
+                arm.set_target_joint(t=time.time()+2.0, q=res.q)        # 设置关节类目标，set_target_trajframe 的便利封装
                 print(f"set_target_joint 写入后读回 TrajFrame：{arm.get_target_trajframe()}")
                 time.sleep(2.0)  # 等待规划器消费目标帧并下发控制器
                 print(f"位姿验证 is_in_pose_arm = {'是' if arm.is_in_pose_arm(pose_goal) else '否'}")
-                # arm.set_target_cart(t=time.time()+2.0, pose=pose_goal)  # 笛卡尔目标写入
-                # time.sleep(2.0)  # 等待规划器消费目标帧并下发控制器
-                # print(f"set_target_cart 写入后读回 TrajFrame：{arm.get_target_trajframe()}")
+                arm.set_target_cart(t=time.time()+2.0, pose=pose_goal)  # 设置笛卡尔目标，set_target_trajframe 的便利封装
+                time.sleep(2.0)  # 等待规划器消费目标帧并下发控制器
+                print(f"set_target_cart 写入后读回 TrajFrame：{arm.get_target_trajframe()}")
             else:
                 print("未确认 yes：已跳过笛卡尔运动。")
 
@@ -165,7 +172,28 @@ def main() -> None:
                   f"当前态 = {arm.get_current_motion_state().name}，事件 = {arm.get_event().name}")
             time.sleep(2.0)
 
-        print("=============== ⑥ 状态机收尾 stop_motion_fsm ======================= ")
+        print("=============== ⑥ 拖动示教：set_ctrl_solver 热切换控制器 ================= ")
+        print("拖动示教控制器：MIT 模式，tau = G(q) 重力补偿 + kp 刚度维持平衡点 + kd 阻尼，平衡点按阈值/步进率缓释跟随（拖得动、松手停）")
+        yes = input("【确认】将热切换到拖动示教控制器，电机模式自动切 MIT，可徒手拖动机械臂，输入 yes 执行，其他输入跳过：").strip() == "yes"
+        if yes:
+            ret = arm.set_ctrl_solver("joint_drag_teach_controller")  # 运行中热切换：等在途 step 后换指针，模式自愈交 FSM 维持拍
+            print(f"set_ctrl_solver('joint_drag_teach_controller') 返回：{ret}；当前激活：{arm.get_activated_ctrl_solver()}")
+            if ret:
+                time.sleep(0.1)                     # 等 FSM 维持拍（50 Hz）把电机模式自愈为 MIT
+                print(f"电机模式 get_mode_arm：{arm.get_mode_arm()}；当前态 = {arm.get_current_motion_state().name}")
+                print(">>> 拖动运行中：徒手轻缓拖动机械臂，松手即在当前位置停稳；按 Ctrl+C 结束拖动……")
+                try:
+                    while True:
+                        time.sleep(0.2)             # 控制环在 FSM ctrl 线程（200 Hz）自主运行，主线程仅等待
+                except KeyboardInterrupt:            # 与 05 ⑤ 同款：本地吞 Ctrl+C，继续 ⑦ 收尾
+                    pass
+                print(f"拖动后当前关节角：{fmt_arr(np.asarray(arm.joint_state_arm.q, dtype=float))} rad")
+            else:
+                print("热切换失败：cfg robotics.control 未配置 joint_drag_teach_controller，跳过拖动演示。")
+        else:
+            print("未确认 yes：已跳过拖动示教演示。")
+
+        print("=============== ⑦ 状态机收尾 stop_motion_fsm ======================= ")
         print("规则：当前事件不重于 ZEROING → 先回零位（经 HOME）再失能；更严重（DAMPING/DISABLE）→ 直接失能停机")
         arm.stop_motion_fsm()
         print(f"FSM 已停止：当前态 = {arm.get_current_motion_state().name}，事件 = {arm.get_event().name}（收尾统一复位为 DISABLE）")

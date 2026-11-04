@@ -8,10 +8,12 @@
     2. 在本文件中 import 新子类，并在 `REGISTRY` 显式加一行注册（注册名 = 类名小写+下划线）；
 """
 from .controller import Controller
-from .controller_joint_position import JointPositionController
+from .controller_joint_position_direct import JointPositionDirectController
+from .controller_joint_drag_teach import JointDragTeachController
 
 REGISTRY: dict = {
-    "joint_position_controller": JointPositionController,
+    "joint_position_direct_controller": JointPositionDirectController,
+    "joint_drag_teach_controller": JointDragTeachController,
 }
 
-__all__ = ["Controller", "JointPositionController", "REGISTRY"]
+__all__ = ["Controller", "REGISTRY", "JointPositionDirectController", "JointDragTeachController"]

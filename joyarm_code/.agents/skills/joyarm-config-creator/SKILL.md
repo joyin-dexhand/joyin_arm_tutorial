@@ -48,8 +48,8 @@ JoyArm 是**配置驱动**的整机对象：`joyArm("<型号>")` 构造时按 `j
 | `ikine` | ikine | `pin_ikine_solver`、`analytic_ikine_solver` | 数值法：`damping`、`step_max`、`restarts` |
 | `jacobian` | jac | `pin_jacobian_solver` | —— |
 | `dynamics` | dyn | `pin_dynamics_solver` | —— |
-| `trajectory` | traj | `single_joint_hold_traj_planner`、`single_joint_cubic_traj_planner` | `plan_hz`（**必配**） |
-| `control` | ctrl | `joint_position_controller` | `ctrl_hz`（**必配**） |
+| `trajectory` | traj | `single_joint_direct_traj_planner`、`single_joint_cubic_traj_planner` | `plan_hz`（**必配**） |
+| `control` | ctrl | `joint_position_direct_controller`、`joint_drag_teach_controller` | `ctrl_hz`（**必配**）；drag_teach 另可选 `kd`/`kp`/`threshold`/`step_rate`（标量广播或 n_arm 列表，默认 1.0/10.0/0.05/0.1） |
 
 要点：
 
