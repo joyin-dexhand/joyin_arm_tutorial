@@ -9,8 +9,8 @@ from .fkine import FkineSolver, PinFkineSolver, MdhFkineSolver
 from .ikine import IkineSolver, PinIkineSolver, AnalyticIkineSolver
 from .jacobian import JacobianSolver, PinJacobianSolver
 from .dynamics import DynamicsSolver, PinDynamicsSolver
-from .trajectory import TrajPlanner, SingleJointHoldTrajPlanner, SingleJointCubicTrajPlanner
-from .control import Controller, JointPositionController
+from .trajectory import TrajPlanner, SingleJointDirectTrajPlanner, SingleJointCubicTrajPlanner
+from .control import Controller, JointPositionDirectController, JointDragTeachController
 
 __all__ = [
     "FkineSolver",
@@ -24,8 +24,9 @@ __all__ = [
     "DynamicsSolver",
     "PinDynamicsSolver",
     "TrajPlanner",
-    "SingleJointHoldTrajPlanner",
+    "SingleJointDirectTrajPlanner",
     "SingleJointCubicTrajPlanner",
     "Controller",
-    "JointPositionController",
+    "JointPositionDirectController",
+    "JointDragTeachController",
 ]

@@ -1,6 +1,6 @@
 """
 ==============================================================================
-控制律测试分析（Controller / JointPositionController）  (test 离线测试)
+控制律测试分析（Controller / JointPositionDirectController）  (test 离线测试)
 ==============================================================================
 【功能概要】
     离线测试脚本（无需硬件），对 robotics 六域之一的 control（控制律）做测试分析：
@@ -14,7 +14,7 @@
 【原理简介】
     control 域采用「基类定契约、子类实现」架构：Controller（ABC）只规定唯一接口
     step(arm, target, joint_state)——每控制拍调用一次，基于当前轨迹帧与关节状态
-    算出单步指令并经 arm 下发；JointPositionController 是默认实现：先校验轨迹帧
+    算出单步指令并经 arm 下发；JointPositionDirectController 是默认实现：先校验轨迹帧
     的 q（缺失或含 NaN/inf 一律抛 ValueError 拒绝下发），再把该 q 经
     send_position_arm 直发——跟踪闭环由电机内部位置环完成，本层不反馈、不裁剪。
     类属性 MODE 声明本控制律所需的电机控制模式；FSM 每拍自愈核对：只读一次实际
@@ -46,7 +46,7 @@ import numpy as np                                          # 数值计算（向
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 把 joyarm_code/ 加入 sys.path
 from joyarm_core import (                                   # 路径注入后再导入核心库
     Controller,                                             # 控制律基类（ABC，仅引用其 MODE 缺省值）
-    JointPositionController,                                # 默认实现：关节位置控制器（被测对象）
+    JointPositionDirectController,                          # 默认实现：关节位置直传控制器（被测对象）
     SingleJointCubicTrajPlanner,                            # cubic 三次多项式规划器（闭环仿真用）
 )
 from joyarm_core.utils.types import (                       # 共享数据类型与枚举
@@ -132,22 +132,23 @@ class StubArm:
 def show_contract_and_mode() -> bool:
     """① 打印 step 契约与 MODE 机制说明（基类缺省 / 子类声明 / FSM 自愈）。"""
     print("=" * 78)                                         # 大节分隔线
-    print("① control 域契约与 MODE 机制（Controller 基类 / JointPositionController 子类）")
+    print("① control 域契约与 MODE 机制（Controller 基类 / JointPositionDirectController 子类）")
     print("-" * 78)                                         # 小节分隔线
     print("1.1 step 契约（Controller 唯一抽象接口，子类必须实现）")  # 契约小节标题
     print("    step(arm, target, joint_state) -> bool")     # 契约签名
     print("    入参：arm 机械臂对象（指令经它下发）；target 当前轨迹帧 TrajFrame；")  # 入参说明
     print("        joint_state 当前关节状态 JointState；返回是否已成功下发本拍指令。")  # 入参与返回值
-    print("    JointPositionController 实现：校验 target.q → 经 arm.send_position_arm 直发。")  # 默认实现说明
+    print("    JointPositionDirectController 实现：校验 target.q → send_position_arm 直发。")  # 默认实现说明
     print("-" * 78)                                         # 小节分隔线
-    mode_ok = JointPositionController.MODE == ControlMode.POSITION  # 核验子类声明的电机模式
+    mode_ok = JointPositionDirectController.MODE == ControlMode.POSITION  # 核验子类声明的电机模式
     print("1.2 MODE 类属性——控制律声明的电机控制模式")
     print_table(                                            # 两级 MODE 对比表
         ["控制律类", "MODE 类属性", "含义"],                # 表头三列
         [["Controller（基类）", str(Controller.MODE), "缺省：子类未覆写时沿用"],  # 基类行：缺省 MIT
-         ["JointPositionController", str(JointPositionController.MODE), "覆写：位置跟随所需模式"]],  # 子类行：POSITION
-        [24, 21, 29])
-    print(f"    校验 JointPositionController.MODE == ControlMode.POSITION：{mode_ok}")  # 覆写校验结果
+         ["JointPositionDirectController", str(JointPositionDirectController.MODE),
+          "覆写：位置跟随所需模式"]],                      # 子类行：POSITION
+        [31, 21, 29])
+    print(f"    校验 JointPositionDirectController.MODE == ControlMode.POSITION：{mode_ok}")  # 覆写校验结果
     print("    机制：切换控制器时 JoyArm 校验 MODE 合法性；MOTION 态每拍 FSM 自愈——")  # 自愈机制第一句
     print("    只读一次实际模式，与 MODE 不一致先切模式、再核使能，失败下一拍重试。")  # 自愈机制第二句
     return mode_ok                                          # 供 ④ 结论表引用
@@ -160,7 +161,7 @@ def run_contract_tests() -> dict:
     """② 三条契约用例：StubArm 捕获下发序列，返回各用例结果供结论表使用。"""
     print("=" * 78)                                         # 大节分隔线
     print("② 契约测试：StubArm 捕获下发序列，逐条核对 step 的三条契约")
-    ctrl = JointPositionController()                        # 被测控制律（默认实现）
+    ctrl = JointPositionDirectController()                  # 被测控制律（默认实现）
     q_ok = np.array([0.25, -0.20, 0.15, -0.15, 0.20, -0.25])  # 有效目标：六元有限向量
 
     print("-" * 78)                                         # 小节分隔线
@@ -207,7 +208,7 @@ def run_contract_tests() -> dict:
 def run_closed_loop() -> dict:
     """③ 闭环仿真 50 拍：逐拍「规划器采样 → 控制器下发 → 桩推进」，返回结果。"""
     print("=" * 78)                                         # 大节分隔线
-    print("③ 离线闭环小仿真：cubic 规划器 + JointPositionController + 一阶跟随 StubArm")
+    print("③ 离线闭环小仿真：cubic 规划器 + JointPositionDirectController + 一阶跟随 StubArm")
     print("-" * 78)                                         # 小节分隔线
     q_goal = np.array([0.60, -0.45, 0.30, -0.30, 0.45, -0.60])  # 目标关节角：限位内、各关节幅值不同
     n_tick, t_traj, tol = 50, 0.9, 0.01                     # 拍数 / 轨迹时长 s / 到位容差 rad
@@ -221,7 +222,7 @@ def run_closed_loop() -> dict:
 
     stub = StubArm()                                        # 被控对象：一阶跟随（tau=0.08 s）
     planner = SingleJointCubicTrajPlanner()                 # 规划器：三次多项式到单点目标
-    ctrl = JointPositionController()                        # 控制器：直发位置参考（与 ② 同类）
+    ctrl = JointPositionDirectController()                  # 控制器：直发位置参考（与 ② 同类）
     ok_plan = planner.plan(stub, TrajFrame(time=time.time() + t_traj, q=q_goal))  # 规划：now 起 0.9 s 到达
     t0 = time.time()                                        # 仿真零点（sample 按绝对时间求值）
     q_refs, q_acts, oks = [], [], []                        # 每拍参考 / 实际 / step 返回的记录

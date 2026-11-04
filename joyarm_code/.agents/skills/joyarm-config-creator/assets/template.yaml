@@ -76,7 +76,13 @@ robotics:
   trajectory:
     - { name: single_joint_cubic_traj_planner, plan_hz: 10.0 } # 三次多项式
   control:
-    - { name: joint_position_controller, ctrl_hz: 200.0 } # 电机模式由控制器 MODE 类属性指定
+    - { name: joint_position_direct_controller, ctrl_hz: 200.0 } # 电机模式由控制器 MODE 类属性指定
+    - name: joint_drag_teach_controller # 拖动示教：MIT 重力补偿 + 阻尼/刚度，平衡点缓释跟随
+      ctrl_hz: 200.0
+      kd: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0] # 逐关节阻尼系数
+      kp: [10.0, 10.0, 10.0, 10.0, 10.0, 10.0] # 逐关节刚度系数（维持平衡点防漂移）
+      threshold: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05] # 平衡点更新阈值 rad
+      step_rate: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1] # 平衡点步进率（0~1）
 
 # -------------------------------------------------------------------
 # 通信层（backend）：arm 与 end 的硬件通讯（以 DM 实现为参照）

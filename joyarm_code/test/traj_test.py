@@ -5,24 +5,24 @@ trajectory 轨迹规划测试分析  (test 离线测试)
 【功能概要】
     面向 robotics 六域之一的 trajectory 轨迹规划域做离线测试分析（无需硬件，数秒跑完）：
       1. 查看轨迹域注册表 REGISTRY 与 joyArm 已加载/默认激活的规划器，打印 TrajFrame 轨迹帧字段表；
-      2. 测试 single_joint_hold_traj_planner（直传保持）：单帧目标恒输出、无效目标回退 home、
-         多帧告警去重、未规划先采样抛错；
+      2. 测试 single_joint_direct_traj_planner（单帧关节域直传）：单帧目标四域透传（缺失为
+         None）、无效目标回退 home 且三域置 None、多帧告警去重、未规划先采样抛错；
       3. 测试 single_joint_cubic_traj_planner（三次多项式）：[t0,t0+T] 均匀采样序列表、四边界
          约束校验、超末保持、过期目标恒定发布、多帧告警、未规划采样抛错；
-      4. 同一目标下双规划器采样序列并排对比，说明 hold 忽略目标时刻 t——这正是
+      4. 同一目标下双规划器采样序列并排对比，说明 direct 忽略目标时刻 t——这正是
          quick_start/06_fsm_motion.py 演示回放前切 cubic 的原因；
       5. 末尾打印分析结论表（两规划器行为逐项对照 + 断言统计；None 一律显「—」）。
 
 【原理简介】
     轨迹规划器把"带到达时刻的目标"加工成随时间平滑的轨迹：plan(arm, target) 结合机械臂当前
     状态算出轨迹并缓存于规划器内部，sample(t) 再按绝对时刻 t 取回该时刻的轨迹帧 TrajFrame。
-    - hold（直传保持）：plan 只取单帧目标的关节角 q（忽略 time/dq 等其余字段），任意时刻采样
-      恒输出该 q 且 dq/ddq 为 0，平滑与限速完全交给电机内部与 backend 承担；
+    - direct（单帧关节域直传）：plan 只取单帧目标（q 锚定有效性），任意时刻采样恒透传该帧
+      q/dq/ddq/tau（缺失域为 None，不补 0），平滑与限速完全交给电机内部与 backend 承担；
     - cubic（三次多项式）：由起点 (q0,dq0) 与终点 (q1,dq1) 的四个边界约束解析解
       q(τ)=c0+c1τ+c2τ²+c3τ³，其中 T=目标时刻−规划时刻、采样时 τ 钳位 [0,T]（超出保持末端
       状态），目标已过期则不规划多项式、直接恒定发布目标；
     - TrajFrame 为纯数据轨迹帧：time + 末端 pose/twist/accel/wrench + 关节 q/dq/ddq/tau 共
-      九个可选字段，本测试脚本只填 time/q/dq 三个（完整字段表见运行输出①）。
+      九个可选字段，本测试脚本只填 time/q/dq/tau 四个（完整字段表见运行输出①）。
     cubic 的规划起点取自 arm.get_state_arm()；离线未连接的真机该接口返回 None，故本测试脚本用
     接口同名的鸭子替身 StubArm 提供确定性起点（与 test/test_robotics.py 的做法一致）。
 
@@ -59,7 +59,7 @@ from joyarm_core import JointState, TrajFrame, joyArm  # 数据类 + 离线机�
 from joyarm_core.robotics.trajectory import (    # 轨迹域：注册表 + 基类 + 双规划器
     REGISTRY,                                    # 轨迹域注册表（注册名 → 规划器类）
     SingleJointCubicTrajPlanner,                 # cubic 三次多项式规划器（被测对象之一）
-    SingleJointHoldTrajPlanner,                  # hold 直传保持规划器（被测对象之二）
+    SingleJointDirectTrajPlanner,                # direct 单帧关节域直传规划器（被测对象之二）
     TrajPlanner,                                 # 规划器基类（继承关系核对用）
 )
 
@@ -129,7 +129,7 @@ def expect_raise(name: str, exc_type, fn) -> bool:
 
 
 def invalid_targets(n: int) -> list:
-    """构造五类无效目标（hold 与 cubic 同一判定口径）。
+    """构造五类无效目标（direct 与 cubic 同一判定口径）。
 
     :param n: 机械臂自由度（用于构造"维度不符"的 q）。
     :return: [(目标值, 说明文字), ...]，依次为 q 缺失 / q 空数组 / q 维度不符 / None / 空列表。
@@ -145,7 +145,7 @@ def invalid_targets(n: int) -> list:
 class StubArm:
     """鸭子替身机械臂：只实现两规划器 plan 所需的最小接口，名字与 JoyArm 公开接口同名。
 
-    hold 的 plan 只读 home_arm（定维与回退基准）；cubic 的 plan 另调 get_state_arm()
+    direct 的 plan 只读 home_arm（定维与回退基准）；cubic 的 plan 另调 get_state_arm()
     取规划起点 (q, dq)。离线未连接的真机 get_state_arm() 返回 None（cubic 将因取不到
     起点而抛 RuntimeError），故用本替身提供确定性的起点状态（同 test/test_robotics.py）。
     """
@@ -180,9 +180,9 @@ class _WarnCounter(logging.Handler):
 
 
 def main() -> None:
-    """离线主流程：① 测试环境 → ② hold 测试 → ③ cubic 测试 → ④ 双规划器对比 → ⑤ 分析结论。"""
+    """离线主流程：① 测试环境 → ② direct 测试 → ③ cubic 测试 → ④ 双规划器对比 → ⑤ 分析结论。"""
     counter = _WarnCounter()                                     # 告警捕获/计数器（两规划器共用）
-    for name in ("joyarm_core.traj_planner_single_joint_hold",   # hold 规划器源码的模块 logger 名
+    for name in ("joyarm_core.traj_planner_single_joint_direct",  # direct 规划器源码的模块 logger 名
                  "joyarm_core.traj_planner_single_joint_cubic"):  # cubic 规划器源码的模块 logger 名
         lg = logging.getLogger(name)                             # 取该模块 logger
         lg.setLevel(logging.WARNING)                             # 确保告警不被日志级别过滤
@@ -211,9 +211,9 @@ def main() -> None:
                  ["dq", "ndarray (n,)", "关节速度参考（rad/s）"],     # 字段 7：dq
                  ["ddq", "ndarray (n,)", "关节加速度参考（rad/s²）"],  # 字段 8：ddq
                  ["tau", "ndarray (n,)", "前馈力矩参考（N·m）"]])     # 字段 9：tau
-    print("   本测试脚本只填 time/q/dq 三个关节域字段：hold 忽略 time/dq，cubic 三者都用（见②③）。")  # 本脚本用法
+    print("   本测试脚本只填 time/q/dq/tau 关节域字段：direct 透传 q/dq/tau（time 仅回填采样时刻），cubic 用 time/q/dq（见②③）。")  # 本脚本用法
     sub("1.3 鸭子替身 StubArm：给 cubic 提供确定的规划起点")     # 小节标题
-    print("   hold 的 plan 只读 arm.home_arm；cubic 的 plan 另调 arm.get_state_arm() 取起点 (q,dq)。")  # 两规划器差异
+    print("   direct 的 plan 只读 arm.home_arm；cubic 的 plan 另调 arm.get_state_arm() 取起点 (q,dq)。")  # 两规划器差异
     print(f"   离线未连接的真机 get_state_arm() = {fmt(arm.get_state_arm())}（无快照，cubic 取不到起点），")  # 离线真机行为
     print("   故以接口同名的替身提供确定起点（做法同 test/test_robotics.py 的 StubArm）。")  # 替身动机
     stub = StubArm(arm.home_arm)                                 # 替身：home 与真机一致、状态可控
@@ -227,59 +227,63 @@ def main() -> None:
     frames_multi = [TrajFrame(time=time.time() + 1.0, q=stub.home_arm + 0.1),  # 多帧目标第一帧
                     TrajFrame(time=time.time() + 2.0, q=stub.home_arm + 0.2)]  # 第二帧（两帧即"多帧"）
 
-    # ================= ② hold 测试 =================
-    section("② single_joint_hold_traj_planner（直传保持）测试")
+    # ================= ② direct 测试 =================
+    section("② single_joint_direct_traj_planner（单帧关节域直传）测试")
     sub("2.1 未规划先采样 → RuntimeError")
-    p_fresh = SingleJointHoldTrajPlanner()                       # 新规划器：尚未 plan 过
-    expect_raise("hold：未 plan 先 sample 抛 RuntimeError", RuntimeError,
+    p_fresh = SingleJointDirectTrajPlanner()                     # 新规划器：尚未 plan 过
+    expect_raise("direct：未 plan 先 sample 抛 RuntimeError", RuntimeError,
                  lambda: p_fresh.sample(time.time()))            # 期望抛错而非返回默认帧
-    sub("2.2 单帧目标：plan 后任意时刻恒输出目标 q（time/dq/ddq 被忽略）")
-    p_hold = SingleJointHoldTrajPlanner()                        # hold 主测试实例
-    frame_goal = TrajFrame(time=time.time() + 5.0, q=q_goal,     # 故意填 time/dq/ddq——hold 应全部忽略
-                           dq=np.ones(n), ddq=np.ones(n))
-    ret = p_hold.plan(stub, frame_goal)                          # 规划：直传发布目标 q
-    fr_a = p_hold.sample(time.time())                            # 立即采样
-    fr_b = p_hold.sample(time.time() + 7.0)                      # 7 秒后采样（任意时刻）
-    print(f"   plan 返回 = {ret}；帧 time 字段仅回填各次采样时刻，q/dq/ddq 如下：")  # plan 结果说明
-    print_table(["采样时刻", "q（rad）", "dq（rad/s）", "ddq（rad/s²）"],  # 采样对比表四列
-                [["now", fmt(fr_a.q), fmt(fr_a.dq), fmt(fr_a.ddq)],  # 立即采样行
-                 ["now+7s", fmt(fr_b.q), fmt(fr_b.dq), fmt(fr_b.ddq)]])  # 7 秒后采样行
-    check("hold：任意时刻恒输出目标 q 且 dq/ddq 恒 0（time/dq/ddq 被忽略）",  # 断言：恒定输出
+    sub("2.2 单帧目标：plan 后任意时刻逐域透传（q/dq/tau 透传、ddq 缺失为 None）")
+    p_dir = SingleJointDirectTrajPlanner()                       # direct 主测试实例
+    frame_goal = TrajFrame(time=time.time() + 5.0, q=q_goal,     # 故意填 time/q/dq/tau——q 锚定有效性
+                           dq=np.ones(n), tau=np.ones(n))        # ddq 缺失（验证缺失域原样 None）
+    ret = p_dir.plan(stub, frame_goal)                           # 规划：四域原子发布
+    fr_a = p_dir.sample(time.time())                             # 立即采样
+    fr_b = p_dir.sample(time.time() + 7.0)                       # 7 秒后采样（任意时刻）
+    print(f"   plan 返回 = {ret}；帧 time 字段仅回填各次采样时刻，q/dq/ddq/tau 如下：")  # plan 结果说明
+    print_table(["采样时刻", "q（rad）", "dq（rad/s）", "ddq（rad/s²）", "tau（N·m）"],  # 采样对比表五列
+                [["now", fmt(fr_a.q), fmt(fr_a.dq), fmt(fr_a.ddq), fmt(fr_a.tau)],  # 立即采样行
+                 ["now+7s", fmt(fr_b.q), fmt(fr_b.dq), fmt(fr_b.ddq), fmt(fr_b.tau)]])  # 7 秒后采样行
+    check("direct：任意时刻逐域透传（q/dq/tau 恒为目标值、ddq 缺失为 None）",  # 断言：恒定透传
           ret is True and np.allclose(fr_a.q, q_goal) and np.allclose(fr_b.q, q_goal)  # 条件一：两次采样 q 均为目标
-          and np.allclose(fr_a.dq, 0.0) and np.allclose(fr_a.ddq, 0.0))  # 条件二：速度/加速度恒 0
+          and np.allclose(fr_a.dq, 1.0) and np.allclose(fr_b.dq, 1.0)  # 条件二：dq 原样透传
+          and np.allclose(fr_a.tau, 1.0) and fr_a.ddq is None and fr_b.ddq is None)  # 条件三：tau 透传、ddq 缺失
     keep0 = q_goal[0]                                            # 记录目标首关节原值
     q_goal[0] = keep0 + 9.9                                      # 外部原地修改已发布的目标（试发布隔离性）
-    check("hold：目标发布为拷贝，外部原地修改不影响采样",
-          np.allclose(p_hold.sample(time.time()).q[0], keep0))   # 采样应仍是原值
+    check("direct：目标发布为拷贝，外部原地修改不影响采样",
+          np.allclose(p_dir.sample(time.time()).q[0], keep0))    # 采样应仍是原值
     q_goal[0] = keep0                                            # 恢复目标值（③④ 继续用同一目标）
-    sub("2.3 无效目标（q 缺失/空/维度不符/目标空）：一律回退恒定 home，plan 仍返回 True")
+    sub("2.3 无效目标（q 缺失/空/维度不符/目标空）：回退恒定 home 且三域置 None，plan 仍返回 True")
     rows, all_ok = [], True                                      # 表格行积累器 / 总判定
     for bad, why in invalid_targets(n):                          # 五类无效目标（与 ③ 同口径）
-        ok = p_hold.plan(stub, bad) is True                      # plan 恒成功（直传无离线失败路径）
-        fr = p_hold.sample(time.time())                          # 采样（应恒为 home）
-        hit = ok and np.allclose(fr.q, stub.home_arm)            # 回退到 home 才算通过
+        ok = p_dir.plan(stub, bad) is True                       # plan 恒成功（直传无离线失败路径）
+        fr = p_dir.sample(time.time())                           # 采样（应恒为 home）
+        none3 = fr.dq is None and fr.ddq is None and fr.tau is None  # 三域应一并置 None
+        hit = ok and np.allclose(fr.q, stub.home_arm) and none3  # 回退 home 且三域 None 才算通过
         all_ok = all_ok and hit                                  # 汇总本小节判定
-        rows.append([why, "True" if ok else "—", fmt(fr.q), "✅" if hit else "❌"])  # 本行结果入表
-    print_table(["无效目标", "plan 返回", "采样 q（rad）", "判定"], rows)  # 无效目标结果表
-    check("hold：五类无效目标均回退恒定 home", all_ok)           # 断言：五类全回退
+        rows.append([why, "True" if ok else "—", fmt(fr.q), "是" if none3 else "否",  # 本行结果入表
+                     "✅" if hit else "❌"])                      # 行判定
+    print_table(["无效目标", "plan 返回", "采样 q（rad）", "dq/ddq/tau 均 None", "判定"], rows)  # 无效目标结果表
+    check("direct：五类无效目标均回退恒定 home 且 dq/ddq/tau 置 None", all_ok)  # 断言：五类全回退
     sub("2.4 多帧目标：告警一次并回退 home；单帧规划后告警去重复位")  # 小节标题
-    p_m = SingleJointHoldTrajPlanner()                           # 新实例：告警去重标志为初始 False
+    p_m = SingleJointDirectTrajPlanner()                         # 新实例：告警去重标志为初始 False
     counter.messages.clear()                                     # 清零计数，只观察本小节的告警
     for _ in range(3):                                           # 同一多帧目标重复规划 3 次
         p_m.plan(stub, frames_multi)                             # 每次都因不支持多帧而回退 home
-    check("hold：同一多帧目标重复 plan 3 次仅告警 1 次（去重）", len(counter.messages) == 1)
-    check("hold：多帧目标回退恒定 home",
-          np.allclose(p_m.sample(time.time()).q, stub.home_arm))  # 采样应恒为 home
+    check("direct：同一多帧目标重复 plan 3 次仅告警 1 次（去重）", len(counter.messages) == 1)
+    fr_m = p_m.sample(time.time())                               # 多帧回退后的采样
+    check("direct：多帧目标回退恒定 home 且三域置 None",
+          np.allclose(fr_m.q, stub.home_arm) and fr_m.dq is None and fr_m.tau is None)  # 采样恒 home
     counter.messages.clear()                                     # 再清零，验证复位语义
     p_m.plan(stub, TrajFrame(q=q_goal))                          # 有效单帧规划 → 复位去重标志
     mid = len(counter.messages)                                  # 应为 0（单帧规划不告警）
     p_m.plan(stub, frames_multi)                                 # 再遇多帧 → 复位后应再次告警
-    check("hold：单帧规划复位告警去重（再遇多帧会再次告警）", mid == 0 and len(counter.messages) == 1)
+    check("direct：单帧规划复位告警去重（再遇多帧会再次告警）", mid == 0 and len(counter.messages) == 1)
     print(f"   告警消息样例：{counter.messages[-1][:56]}…")      # 展示源码内置告警文案的开头
 
     # ================= ③ cubic 测试 =================
     section("③ single_joint_cubic_traj_planner（三次多项式）测试")
-    sub("3.1 未规划先采样 → RuntimeError（与 hold 同）")
+    sub("3.1 未规划先采样 → RuntimeError（与 direct 同）")
     p_fresh2 = SingleJointCubicTrajPlanner()                     # 新规划器：尚未 plan 过
     expect_raise("cubic：未 plan 先 sample 抛 RuntimeError", RuntimeError,
                  lambda: p_fresh2.sample(time.time()))           # 期望抛错
@@ -336,7 +340,7 @@ def main() -> None:
     check("cubic：过期目标恒定发布目标 q1（dq 恒 0）",           # 断言：过期目标恒定发布
           ret_e is True and np.allclose(fr_e0.q, q_goal) and np.allclose(fr_e9.q, q_goal)  # 条件一：立即/远期 q 均为目标
           and np.allclose(fr_e9.dq, 0.0))                        # 条件二：dq 恒 0
-    sub("3.6 无效目标：与 hold 同口径的五类无效 → 回退恒定 home（零系数退化段）")
+    sub("3.6 无效目标：与 direct 同口径的五类无效 → 回退恒定 home（零系数退化段）")
     p_bad = SingleJointCubicTrajPlanner()                        # 新实例：干净规划状态
     ok_all = True                                                # 五类无效目标的总判定
     for bad, why in invalid_targets(n):                          # 复用②的同一口径
@@ -346,7 +350,7 @@ def main() -> None:
         ok_all = ok_all and hit                                  # 汇总本小节判定
         print(f"   {why}：plan={ret_b}，采样 q=home、dq=0 → {'✅' if hit else '❌'}")  # 单类无效结果
     check("cubic：五类无效目标均回退恒定 home（dq 恒 0）", ok_all)
-    sub("3.7 多帧目标：告警一次并回退恒定 home（与 hold 同语义）")
+    sub("3.7 多帧目标：告警一次并回退恒定 home（与 direct 同语义）")
     p_m2 = SingleJointCubicTrajPlanner()                         # 新实例：干净告警标志
     counter.messages.clear()                                     # 清零计数，只观察本小节的告警
     ret_m = p_m2.plan(stub, frames_multi)                        # 两帧目标 → 告警 + 退化段回退
@@ -360,47 +364,48 @@ def main() -> None:
                  lambda: p_v.plan(stub, TrajFrame(q=q_goal)))    # 手写 TrajFrame 漏填 time 的典型误用
 
     # ================= ④ 双规划器对比 =================
-    section("④ 同一目标双规划器并排对比：hold 忽略目标时刻 t")
+    section("④ 同一目标双规划器并排对比：direct 忽略目标时刻 t")
     stub.set_state(q0, dq0)                                      # 与 ③ 相同的起点状态（指代无歧义）
-    p_h2 = SingleJointHoldTrajPlanner()                          # 对比用 hold 实例
+    p_d2 = SingleJointDirectTrajPlanner()                        # 对比用 direct 实例
     p_c2 = SingleJointCubicTrajPlanner()                         # 对比用 cubic 实例
     t_cmp = time.time()                                          # 对比锚定时刻（在两个 plan 之前捕获）
     tgt = TrajFrame(time=t_cmp + T_DEMO, q=q_goal, dq=dq1)       # 同一目标帧：T_DEMO 秒后到达 q_goal
-    p_h2.plan(stub, tgt)                                         # hold 规划：只取 q、忽略 time/dq
+    p_d2.plan(stub, tgt)                                         # direct 规划：透传 q/dq、忽略 time
     p_c2.plan(stub, tgt)                                         # cubic 规划：解三次多项式（T 生效）
-    rows_c, hold_const = [], True                                # 对比表行积累器 / hold 恒定性判定
+    rows_c, direct_const = [], True                              # 对比表行积累器 / direct 恒定性判定
     for tau in np.linspace(0.0, T_DEMO, N_SAMPLE + 1):           # 同一 τ 网格并排采样
-        fh = p_h2.sample(t_cmp + float(tau))                     # hold 采样（恒为目标 q）
+        fh = p_d2.sample(t_cmp + float(tau))                     # direct 采样（恒为目标帧）
         fc = p_c2.sample(t_cmp + float(tau))                     # cubic 采样（沿多项式平滑过渡）
-        hold_const = hold_const and np.allclose(fh.q, q_goal)    # 逐行验证 hold 恒为目标
+        direct_const = direct_const and np.allclose(fh.q, q_goal) \
+            and np.allclose(fh.dq, dq1)                          # 逐行验证 direct 恒透传 q/dq
         rows_c.append([f"{tau:.2f}", f"{fh.q[0]:+.3f}", f"{fh.dq[0]:+.3f}",
                        f"{fc.q[0]:+.3f}", f"{fc.dq[0]:+.3f}"])   # 以关节 J1 为代表列（其余同理）
-    fh = p_h2.sample(t_cmp + T_DEMO + 1.0)                       # 越末一行：hold 仍恒定
+    fh = p_d2.sample(t_cmp + T_DEMO + 1.0)                       # 越末一行：direct 仍恒定
     fc = p_c2.sample(t_cmp + T_DEMO + 1.0)                       # 越末一行：cubic 钳位保持末端
     rows_c.append(["钳位→T", f"{fh.q[0]:+.3f}", f"{fh.dq[0]:+.3f}",
                    f"{fc.q[0]:+.3f}", f"{fc.dq[0]:+.3f}"])       # 越末行（τ 钳位到 T）
     print("   同一目标帧、同一 τ 网格并排采样（以关节 J1 为代表，其余关节同理）：")  # 对比表标题
-    print_table(["τ(s)", "hold q(J1)", "hold dq(J1)", "cubic q(J1)", "cubic dq(J1)"], rows_c)  # 对比表
-    check("对比：hold 全程恒为目标 q（目标时刻 t 被忽略），cubic 于 τ=T 精确到达",  # 断言：恒定 vs 到达
-          hold_const and np.allclose(fc.q, q_goal) and np.allclose(fc.dq, dq1))
-    print("   - hold 的 plan 只取单帧 q：目标到达时刻 t（与 dq）不参与计算，采样一步到位、dq 恒 0；")  # hold 行为一
+    print_table(["τ(s)", "direct q(J1)", "direct dq(J1)", "cubic q(J1)", "cubic dq(J1)"], rows_c)  # 对比表
+    check("对比：direct 全程恒透传目标帧 q/dq（目标时刻 t 被忽略），cubic 于 τ=T 精确到达",  # 断言：恒定 vs 到达
+          direct_const and np.allclose(fc.q, q_goal) and np.allclose(fc.dq, dq1))
+    print("   - direct 的 plan 只取单帧关节域：目标到达时刻 t 不参与计算，采样一步到位、q/dq 原样透传；")  # direct 行为一
     print("   - cubic 的 plan 以 T = t − 规划时刻 解三次多项式：采样沿 [0,T] 平滑过渡，τ=T 精确到达。")  # cubic 行为
     print("   - quick_start/06_fsm_motion.py 的回放以 10 Hz 逐点下发 set_target_joint(t=当前时刻+0.15, q=路点)：")  # 与 06 例程的关联
-    print("     默认激活 hold 时 t 被忽略，回放退化为位置直传流（速度仅由电机 vlim 兜底）；")  # hold 回放行为
+    print("     默认激活 direct 时 t 被忽略，回放退化为位置直传流（dq 缺省 None，速度仅由电机 vlim 兜底）；")  # direct 回放行为
     print("     切到 single_joint_cubic_traj_planner 后 T 才生效、路点按到达时刻逐段三次平滑——")  # cubic 回放行为
     print("     这正是 quick_start/06_fsm_motion.py 演示回放前将 traj 域切到 cubic 规划器的原因。")  # 关联结论
 
     # ================= ⑤ 分析结论 =================
     section("⑤ 分析结论")                                        # 大节标题
-    print_table(["测试项", "hold（直传保持）", "cubic（三次多项式）"],  # 结论表三列
-                [["单帧目标", "任意时刻恒输出目标 q（忽略 time/dq/ddq）", "[t0,t0+T] 三次多项式平滑过渡，τ=T 精确到达"],  # 行 1
+    print_table(["测试项", "direct（单帧关节域直传）", "cubic（三次多项式）"],  # 结论表三列
+                [["单帧目标", "任意时刻逐域透传 q/dq/ddq/tau（缺失 None）", "[t0,t0+T] 三次多项式平滑过渡，τ=T 精确到达"],  # 行 1
                  ["目标时刻 t", "忽略（不参与 plan 计算）", "决定 T = t − 规划时刻 与过渡节奏"],  # 行 2
-                 ["无效目标", "回退恒定 home，plan 仍返回 True", "零系数退化段恒保持 home，plan 仍返回 True"],  # 行 3
+                 ["无效目标", "回退恒定 home 且三域置 None，plan 仍返回 True", "零系数退化段恒保持 home，plan 仍返回 True"],  # 行 3
                  ["过期目标", "无时间概念，行为与单帧相同", "不规划多项式，恒定发布目标 q1（dq=0）"],  # 行 4
-                 ["超末采样", "恒为目标 q", "τ 钳位到 T，保持末端状态 (q1, dq1)"],  # 行 5
+                 ["超末采样", "恒为目标帧（四域不变）", "τ 钳位到 T，保持末端状态 (q1, dq1)"],  # 行 5
                  ["多帧目标", "告警一次 + 回退 home，单帧规划后复位", "同左（同一语义）"],  # 行 6
                  ["未规划先采样", "RuntimeError", "RuntimeError"],  # 行 7
-                 ["适用场景", "高频位置流直传（限速交电机与 backend）", "带到达时刻的单段平滑运动"]])  # 行 8
+                 ["适用场景", "高频目标帧直传流（限速交电机与 backend）", "带到达时刻的单段平滑运动"]])  # 行 8
     ok_n = sum(1 for _, ok in RESULTS if ok)                     # 通过的断言数
     total = len(RESULTS)                                         # 断言总数
     print(f"\n   断言统计：{ok_n}/{total} 项通过" + (" ✅ 全部通过" if ok_n == total else " ❌ 存在未通过项"))  # 统计行
