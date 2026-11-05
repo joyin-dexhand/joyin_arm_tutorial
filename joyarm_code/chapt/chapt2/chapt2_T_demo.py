@@ -23,7 +23,7 @@
     sudo apt-get install -y libxcb-cursor0
 
     # 2. 运行本脚本
-    python ./chapt/chapt2_T_demo.py
+    python ./chapt/chapt2/chapt2_T_demo.py
 
     # 输入数值简单实例：T = 绕 Z 轴旋转 90° + 平移 (0.5, 0, 0)，P = (0.5, 0.5, 0.5)
     T = [[ 0, -1, 0, 0.5],
@@ -33,8 +33,7 @@
     特点：{B} 的 x 轴转到 {A} 的 y 方向、y 轴转到 -x 方向、z 轴不变，原点沿 x 平移 0.5 m；
     点 P 被换算到 {A} 下 (0.0, 0.5, 0.5)，可在 3D 场景与结果区核对。
 
-    # 注：RPY / 四元数的表示原理详见第二章 §2.1 / §2.3；矩阵 <-> RPY / 四元数的转换
-    #     由核心库 joyarm_core.utils.transforms 提供（R = R_Z·R_Y·R_X，标准 RPY 约定）。
+    # 注：RPY / 四元数的原理详见第二章 §2.1 / §2.3；转换由 joyarm_core.utils.transforms 提供（R = R_Z·R_Y·R_X，标准 RPY 约定）。
 
 ==============================================================================
 """

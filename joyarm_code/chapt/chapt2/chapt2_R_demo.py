@@ -24,7 +24,7 @@
     sudo apt-get install -y libxcb-cursor0
 
     # 2. 运行本脚本
-    python ./chapt/chapt2_R_demo.py
+    python ./chapt/chapt2/chapt2_R_demo.py
 
     # 数值简单实例：RPY = (0, 0, 90)（单位：度），即绕 Z 轴转 90°
       特点：{B} 的 x 轴转到 {A} 的 y 方向、y 轴转到 -x 方向、z 轴不变；
