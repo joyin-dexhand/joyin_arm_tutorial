@@ -11,6 +11,11 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
+# Python 工具缓存 / 打包产物
+.ruff_cache/
+.mypy_cache/
+dist/
+
 # ROS2 colcon 工作空间构建产物
 joyarm_code/joyarm_ros2_ws/build/
 joyarm_code/joyarm_ros2_ws/install/

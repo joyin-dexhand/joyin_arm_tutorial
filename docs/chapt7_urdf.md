@@ -759,7 +759,7 @@ $$
 | `joint3` | `revolute` | -3.14～0 rad | 5 rad/s | 30 N·m |
 | `joint4` | `revolute` | -1.57～1.57 rad | 8 rad/s | 9 N·m |
 | `joint5` | `revolute` | -1.57～1.57 rad | 8 rad/s | 9 N·m |
-| `joint6` | `revolute` | -3.14～3.14 rad | 8 rad/s | 9 N·m |
+| `joint6` | `revolute` | -1.57～1.57 rad | 8 rad/s | 9 N·m |
 | `joint_end1` | `revolute` | -5.49～0 rad | 8 rad/s | 1.5 N·m |
 | `joint_end_fingerright` | `prismatic` | -0.04625～0 m | 0.06736 m/s | 178.15 N |
 | `joint_end_fingerleft` | `prismatic` | -0.04625～0 m | 0.06736 m/s | 178.15 N |

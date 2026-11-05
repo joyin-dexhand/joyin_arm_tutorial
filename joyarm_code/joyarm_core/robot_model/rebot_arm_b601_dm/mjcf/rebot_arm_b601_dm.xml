@@ -39,7 +39,7 @@
               <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="link5"/>
               <body name="link6" pos="0.00076939 -1.1537e-05 0" quat="0.707141 0.707073 0 0">
                 <inertial pos="-8.44572e-05 -1.62979e-06 0.0656355" quat="0.501871 0.49664 0.497904 0.503553" mass="0.502" diaginertia="0.000670806 0.000479703 0.00038643"/>
-                <joint name="joint6" range="-3.14 3.14" actuatorfrcrange="-9 9"/>
+                <joint name="joint6" range="-1.57 1.57" actuatorfrcrange="-9 9"/>
                 <geom type="mesh" rgba="0.64706 0.61961 0.58824 1" mesh="link6"/>
                 <geom pos="0 0 0.032692" quat="0.499998 0.5 -0.5 0.500002" type="mesh" rgba="0.69804 0.69804 0.69804 1" mesh="link_end0"/>
                 <body name="link_end1" pos="-1.7815e-07 0 0.081192" quat="0.499998 0.5 -0.5 0.500002">
