@@ -54,7 +54,7 @@ nav:
   - 基础篇:
       - 第一章 机器人与机械臂初识: chapt1_intro.md
       - 第二章 空间位姿与位置正运动学: chapt2_fkine.md
-      - 第三章 机械臂逆运动学: chapt3_ikine.md
+      - 第三章 位置逆运动学: chapt3_ikine.md
       - 第四章 速度运动学与静力学: chapt4_jacobian.md
       - 第五章 轨迹生成: chapt5_trajectory.md
       - 第六章 运动控制: chapt6_control.md
