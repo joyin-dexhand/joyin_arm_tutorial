@@ -1,6 +1,6 @@
 """
 ==============================================================================
-平面 2R 逆运动学可视化  (第三章 §2.2.1、§2.3.1)
+平面 2R 逆运动学可视化  (第三章 §2)
 ==============================================================================
 【功能概要】
     拖动目标点坐标与两段连杆长度，切换查看肘上、肘下两组逆解；
@@ -8,18 +8,17 @@
     本脚本只演示平面 2R 几何，不连接 JoyArm，也不实现 6R 求解器。
 
 【环境与运行】
-    # 1. 安装 Python 3.10/3.11 和 uv（仅首次）
+    # 0. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 2. 在仓库的 joyarm_code/ 目录创建环境并安装依赖
-    cd joyarm_code
+    # 1. 创建虚拟环境并同步依赖
+    cd <仓库路径>/joyarm_code
     uv sync
-    source .venv/bin/activate                                  # Linux/macOS
     # Windows PowerShell:  .venv/Scripts/Activate.ps1
 
-    # 3. 从 joyarm_code/ 目录运行
-    python chapt/chapt3/chapt3_2r_demo.py
+    # 2. 运行本脚本
+    uv run python chapt/chapt3/chapt3_2r_demo.py
 
 【命令行参数】
     无。用窗口下方的滑块调节 x、y、l1、l2，左下角切换肘形。

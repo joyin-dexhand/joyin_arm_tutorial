@@ -1,6 +1,6 @@
 """
 ==============================================================================
-JoyArm 位置逆运动学三维演示  (第三章 §6)
+JoyArm 位置逆运动学三维演示  (第三章 §3)
 ==============================================================================
 【功能概要】
     离线演示同一目标位姿的 8 组解析逆解（无需连接硬件）：
@@ -10,10 +10,16 @@ JoyArm 位置逆运动学三维演示  (第三章 §6)
       4. 机械臂用绿色表示限位内解，用红色表示超出硬限位的几何解。
 
 【环境与运行】
-    cd ~/joyin_arm_tutorial/joyarm_code
+    # 0. 安装 uv（仅首次）
+    curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
+    # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
+
+    # 1. 创建虚拟环境并同步依赖
+    cd <仓库路径>/joyarm_code
     uv sync
-    source .venv/bin/activate
-    python chapt/chapt3/chapt3_ikine_demo.py
+
+    # 2. 运行本脚本
+    uv run python chapt/chapt3/chapt3_ikine_demo.py
 
 【命令行参数】
     --speed 0.5   以 0.5 倍速度播放

@@ -10,13 +10,13 @@
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
   · 正文按 ## → ### → #### 展开，顶级 ## 之间不加分隔线。
-  · 💡 建议补一节「## 5 本章实践：JoyArm 力控制（如接触面恒力跟踪）」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt9_force_demo.py。
+  · 💡 建议补一节「## 5 本章实践：JoyArm 力控制（如接触面恒力跟踪）」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt9/chapt9_force_demo.py。
 【全局写作规范】（详见 AGENTS.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 数学：行内 $...$、独立 $$...$$，阻抗/导纳方程用 \bm{F}、\bm{x}、刚度/阻尼 $K_d, B_d, M_d$。
-  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt9_force_demo.py`，使用说明见脚本头部注释。」
+  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt9/chapt9_force_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm_core/：control / dynamics / joyarm / jacobian / fkine。
   · 图示：配图放 docs/images/chapt9_force/。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意（接触/碰撞安全）。
@@ -69,6 +69,6 @@
 ## 5 本章实践：JoyArm 力控制
 
 <!-- ✍️ 本节写作要点：
-  · 目标：用脚本把本章力控制方法在 JoyArm 上跑通（如接触面恒力跟踪）。对应脚本位于 `joyarm_code/chapt/chapt9_force_demo.py`，使用说明见脚本头部注释。
+  · 目标：用脚本把本章力控制方法在 JoyArm 上跑通（如接触面恒力跟踪）。对应脚本位于 `joyarm_code/chapt/chapt9/chapt9_force_demo.py`，使用说明见脚本头部注释。
   · 结构建议：问题与目标 → 脚本流程（力控外环 + 位置/速度内环）→ 运行结果（配 ![图片占位：力控运行效果]()）。
 -->

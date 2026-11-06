@@ -24,7 +24,7 @@ trajectory 轨迹规划测试分析  (test 离线测试)
     - TrajFrame 为纯数据轨迹帧：time + 末端 pose/twist/accel/wrench + 关节 q/dq/ddq/tau 共
       九个可选字段，本测试脚本只填 time/q/dq/tau 四个（完整字段表见运行输出①）。
     cubic 的规划起点取自 arm.get_state_arm()；离线未连接的真机该接口返回 None，故本测试脚本用
-    接口同名的鸭子替身 StubArm 提供确定性起点（与 test/test_robotics.py 的做法一致）。
+    接口同名的鸭子替身 StubArm 提供确定性起点。
 
 【环境与运行】
     # 0. 安装 uv（仅首次）
@@ -147,7 +147,7 @@ class StubArm:
 
     direct 的 plan 只读 home_arm（定维与回退基准）；cubic 的 plan 另调 get_state_arm()
     取规划起点 (q, dq)。离线未连接的真机 get_state_arm() 返回 None（cubic 将因取不到
-    起点而抛 RuntimeError），故用本替身提供确定性的起点状态（同 test/test_robotics.py）。
+    起点而抛 RuntimeError），故用本替身提供确定性的起点状态。
     """
 
     def __init__(self, home_arm) -> None:
@@ -215,7 +215,7 @@ def main() -> None:
     sub("1.3 鸭子替身 StubArm：给 cubic 提供确定的规划起点")     # 小节标题
     print("   direct 的 plan 只读 arm.home_arm；cubic 的 plan 另调 arm.get_state_arm() 取起点 (q,dq)。")  # 两规划器差异
     print(f"   离线未连接的真机 get_state_arm() = {fmt(arm.get_state_arm())}（无快照，cubic 取不到起点），")  # 离线真机行为
-    print("   故以接口同名的替身提供确定起点（做法同 test/test_robotics.py 的 StubArm）。")  # 替身动机
+    print("   故以接口同名的替身 StubArm 提供确定起点（替身定义见本文件下方 StubArm 类）。")  # 替身动机
     stub = StubArm(arm.home_arm)                                 # 替身：home 与真机一致、状态可控
     q0 = stub.home_arm.copy()                                    # 规划起点位形：home
     dq0 = np.full(n, DQ0_DEMO)                                   # 规划起点速度：全关节 0.05 rad/s

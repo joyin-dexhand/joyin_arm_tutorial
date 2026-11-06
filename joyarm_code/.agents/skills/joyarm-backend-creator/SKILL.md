@@ -23,12 +23,12 @@ JoyArm 自上而下分三层，上层只面向抽象基类编程，型号差异�
 
 ## 2. 七步接入新硬件后端
 
-以第三方新型号 `<型号>`（如 `my_arm_v1`）为例；命令均在 `joyarm_code/` 目录下执行，七步与 [assets/backend_template.py](assets/backend_template.py) 文件头 docstring 一一对应。官方型号仅把 backend 文件名/注册名/类名中的 `<型号>` 换成 `<版本>`，其余步骤完全相同；config 文件名始终用完整型号名（如官方 `config/joyarm_dm.yaml`）：
+以第三方新型号 `<型号>`（如 `my_arm_v1`）为例；命令均在 `joyarm_code/` 目录下执行，七步与 [assets/backend_template.py](assets/backend_template.py) 文件头 docstring 一一对应。官方型号仅把 backend 文件名/注册名/类名中的 `<型号>` 换成 `<版本>`，其余步骤完全相同；config 文件名始终用完整型号名：
 
 | 来源 | 型号名 | backend 文件/注册名 | 类名 | 示例 |
 |:---:|:---:|:---:|:---:|:---:|
 | 第三方 | `<型号>` | `backend_<型号>` | `Backend<型号>` | `my_arm_v1` → `backend_my_arm_v1` / `BackendMyArmV1` |
-| 官方 | `joyarm_<版本>` | `backend_<版本>` | `Backend<版本>` | `joyarm_dm` → `backend_dm` / `BackendDm` |
+| 官方 | `joyarm_<版本>` | `backend_<版本>` | `Backend<版本>` | `joyarm_v1` → `backend_v1` / `BackendV1` |
 
 ### 2.1 第 1 步：拷贝模板、改名
 
@@ -150,4 +150,4 @@ python joyarm_core/backend/backend_verify.py --sub=backend_<型号> --step=all  
 
 安全机制：编号按风险递进；中危交互确认（`--yes` 跳过）；**高危（使能/写参数/运动发送/清错）强制交互输入 yes，`--yes` 不放行，非终端自动 SKIP**；38 设置零点为极高危，仅显式 `--step=38` 且二次确认才执行。退出码：全 PASS/SKIP = 0，任一 FAIL = 1，用法错误 = 2。
 
-基类契约的完整回归测试另见 `joyarm_code/test/test_backend_base.py`（由工作流统一运行，日常接入不必手动执行）。
+基类契约的离线自检见本 skill 的 [scripts/backend_check.py](scripts/backend_check.py)（模板与基类内核集校验，日常接入不必手动执行）。

@@ -11,19 +11,18 @@ JoyArm 工作空间蒙特卡洛采样与可视化  (第二章 §5)
     采样完成后在浏览器打开提示的 URL，旋转/缩放观察点云包络。
 
 【环境与运行】
-    # 1. 安装 uv（仅首次）
+    # 0. 安装 uv（仅首次）
     curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-    # 2. 创建虚拟环境并同步依赖
+    # 1. 创建虚拟环境并同步依赖
     cd ~/joyarm_code
     uv sync
-    source .venv/bin/activate
 
-    # 3. 运行本脚本（在 joyarm_code/ 目录下）
-    python chapt/chapt2/chapt2_workspace.py                     # 默认 1 万采样点
-    python chapt/chapt2/chapt2_workspace.py --n 100000          # 更精细的包络
-    python chapt/chapt2/chapt2_workspace.py --headless          # 仅采样不保持可视化（冒烟测试用）
+    # 2. 运行本脚本（在 joyarm_code/ 目录下）
+    uv run python chapt/chapt2/chapt2_workspace.py                     # 默认 1 万采样点
+    uv run python chapt/chapt2/chapt2_workspace.py --n 100000          # 更精细的包络
+    uv run python chapt/chapt2/chapt2_workspace.py --headless          # 仅采样不保持可视化（冒烟测试用）
 
 【命令行参数】
     --n        采样点数（默认 10000；建议先 1e4 跑通，再 1e5~1e6 取精细包络）

@@ -10,13 +10,13 @@
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
   · 正文按 ## → ### → #### 展开，顶级 ## 之间不加分隔线。
-  · 末节固定为「## 4 本章实践：JoyArm 基于动力学的控制实现」，对应脚本 joyarm_code/chapt/chapt8_dyn_demo.py。
+  · 末节固定为「## 4 本章实践：JoyArm 基于动力学的控制实现」，对应脚本 joyarm_code/chapt/chapt8/chapt8_dyn_demo.py。
 【全局写作规范】（详见 AGENTS.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
   · 数学：行内 $...$、独立 $$...$$，动力学方程 $\bm{M}(q)\ddot{q}+\bm{C}(q,\dot{q})\dot{q}+\bm{g}(q)=\bm{\tau}$；矩阵用 \bm{}。
-  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt8_dyn_demo.py`，使用说明见脚本头部注释。」
+  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt8/chapt8_dyn_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm_core/：dynamics（动力学）/ control / fkine / joyarm。
   · 图示：配图放 docs/images/chapt8_dyn/，未就绪用 ![图片占位：描述]()；控制/递推流程可用 mermaid。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
@@ -65,6 +65,6 @@
 <!-- ✍️ 本节写作要点：
   · 目标：在 JoyArm 上实现动力学前馈/计算力矩控制并验证（对比纯运动学控制的跟踪误差）。
   · 建议结构：加载 URDF 动力学参数 → 实现 CTC → 同一轨迹下对比跟踪误差曲线 → 讨论。
-  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt8_dyn_demo.py`，使用说明见脚本头部注释。」
+  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt8/chapt8_dyn_demo.py`，使用说明见脚本头部注释。」
   · 可加 > 💡：动力学控制对高速/重载场景收益最大，低速轻载时运动学控制已够用。
 -->

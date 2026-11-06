@@ -1,4 +1,4 @@
-# 第七章 构型结构设计与 URDF 导出
+# 第七章 构型结构设计与URDF导出
 
 > 📌 **概述**：本章介绍机械臂构型、结构与关节电机的设计考虑，再说明 CAD 装配信息如何对应 URDF 中的连杆、关节和坐标关系。最后在 SolidWorks 中建立参考几何体，完成模型导出与检查，为后续正逆运动学计算和仿真准备一致的模型。
 
@@ -277,11 +277,9 @@ URDF 本身不负责求解逆运动学或控制电机；它提供的是这些程
 
 `continuous` 不表示“转动范围恰好为一圈”，而是没有角度上、下限。即使电机本身可以连续旋转，只要机构或线缆限制了实际转角，就应使用 `revolute` 并填写对应限位。`fixed` 表示两个 link 之间没有相对运动；父 link 运动时，子 link 仍会随它一起运动。
 
-
-
 <div style="display: flex; align-items: center; gap: 16px;">
-  <img src="../images/chapt7_urdf/move.png" alt="关节类型" style="width: calc(50% - 8px); aspect-ratio: 4 / 3; object-fit: cover; object-position: center;" />
-  <img src="../images/chapt7_urdf/link_and_joint.jpeg" alt="连杆与关节的关系" style="width: calc(50% - 8px); aspect-ratio: 4 / 3; object-fit: cover; object-position: center;" />
+  <img src="images/chapt7_urdf/move.png" alt="关节类型" style="width: calc(50% - 8px); aspect-ratio: 4 / 3; object-fit: cover; object-position: center;" />
+  <img src="images/chapt7_urdf/link_and_joint.jpeg" alt="连杆与关节的关系" style="width: calc(50% - 8px); aspect-ratio: 4 / 3; object-fit: cover; object-position: center;" />
 </div>
 
 例如 `joint3` 连接 `link2` 与 `link3`：靠近基座的一侧是父连杆 `parent`，下一侧是子连杆 `child`。按这个关系继续连接，例如六轴本体可以形成以下运动链：
@@ -472,7 +470,7 @@ SW2URDF 用于将 SolidWorks 装配体转换为 URDF 模型。安装前，在[�
 
 | 步骤 | 说明 | 操作图片 |
 |:---:|:---:|:---:|
-| 1. 获取插件 | 在https://wiki.ros.org/sw_urdf_exporter  中找到下载入口，下载 `SW2URDFSetup.exe`。下载前应确认插件版本与所用 SolidWorks 版本兼容。 | ![图片占位：从网站获取 SW2URDF 插件](images/chapt7_urdf/sw_urdf_download_1.png) |
+| 1. 获取插件 | 在https://wiki.ros.org/sw_urdf_exporter  中找到下载入口，下载 `SW2URDFSetup.exe`。下载前应确认插件版本与所用 SolidWorks 版本兼容。 | ![从网站获取 SW2URDF 插件](images/chapt7_urdf/sw_urdf_download_1.png) |
 | 2. 本地安装 | 关闭 SolidWorks，运行下载的安装程序，按照安装向导完成安装。 | ![在本地安装 SW2URDF 插件](images/chapt7_urdf/sw_urdf_download_2.png) |
 | 3. 在 SolidWorks 中激活 | 重新打开 SolidWorks，依次进入“工具 → 插件（Add-Ins）”，找到 SolidWorks to URDF Exporter，并勾选“活动插件”。如需启动时自动加载，可同时勾选“启动”。 | ![在 SolidWorks 中激活 SW2URDF 插件](images/chapt7_urdf/sw_urdf_download_3.png) |
 
@@ -484,7 +482,7 @@ SW2URDF 用于将 SolidWorks 装配体转换为 URDF 模型。安装前，在[�
 
 按第 4.2 节的方法划分实体零件：夹爪固定本体归入 `link_end`，电机7转子及驱动齿轮归入 `link_end1`，两侧手指和对应齿条分别归入 `link_end_finger1/2`。检查每个实体只属于一个 link。
 
-![夹爪实体零件分组](images/chapt7_urdf/assembly_gripper_link_groups.png)
+![图片占位：夹爪实体零件分组]()
 
 **本阶段检查：** 总装能够完整重建；零位可以恢复；每个实体部件只有一个归属。夹爪按第 5.5.2 节分为固定本体、旋转驱动部件和两侧平移手指，不全部并入 `link6`。
 
@@ -703,8 +701,8 @@ TCP 对应夹持物体时的约定中心。保持夹爪闭合零位，按有效�
 | 2. 添加电机7驱动节点 | 选择父节点 `link_end`，添加 `link_end1`；关节为 `joint_end1`、类型为 `revolute`，选择同名坐标系及 `axis_joint_end1`，分配转子与齿轮。 | ![添加电机7驱动节点](images/chapt7_urdf/urdf_config_link_end1.png) |
 | 3. 添加第一侧手指 | 在 `link_end` 下添加 `link_end_finger1`；关节为 `joint_end_pris1`、类型为 `prismatic`，选择同名坐标系及 `axis_joint_end_pris1`，分配手指与齿条。 | ![添加第一侧手指](images/chapt7_urdf/urdf_config_finger1.png) |
 | 4. 添加第二侧手指 | 在 `link_end` 下添加 `link_end_finger2`；关节为 `joint_end_pris2`、类型为 `prismatic`，选择同名坐标系及 `axis_joint_end_pris2`，分配另一侧手指与齿条。 | ![添加第二侧手指](images/chapt7_urdf/urdf_config_finger2.png) |
-| 5. 添加夹持中心参考系 | 插件中跳过该空参考节点；导出后按第 5.6 节“导出后补充工具参考系”手动添加。 | ![在导出的 URDF 中添加夹持中心参考系](images/chapt7_urdf/urdf_config_frame_end_tcp.png) |
-| 6. 添加闭合指尖参考系 | 插件中跳过该空参考节点；导出后按第 5.6 节“导出后补充工具参考系”手动添加。 | ![在导出的 URDF 中添加闭合指尖参考系](images/chapt7_urdf/urdf_config_frame_end_fingertip.png) |
+| 5. 添加夹持中心参考系 | 插件中跳过该空参考节点；导出后按第 5.6 节“导出后补充工具参考系”手动添加。 | ![图片占位：在导出的 URDF 中添加夹持中心参考系]() |
+| 6. 添加闭合指尖参考系 | 插件中跳过该空参考节点；导出后按第 5.6 节“导出后补充工具参考系”手动添加。 | ![图片占位：在导出的 URDF 中添加闭合指尖参考系]() |
 
 夹爪分支的运动树如下，节点按配套模型实名书写（与教程命名的对照见第 5.1.1 节）：
 
@@ -728,7 +726,7 @@ link6
 
 | 步骤 | 说明 | 操作图片 |
 |:---:|:---:|:---:|
-| 设置两侧手指的 mimic | 在关节属性界面中依次配置两侧平移关节：勾选“Mimic Other Joint”，关联 `joint_end1`，设置倍率 `0.00842` 和偏置 `0`。 | ![在 SW2URDF 关节属性界面设置手指 mimic](images/chapt7_urdf/urdf_gripper_mimic_settings.png) |
+| 设置两侧手指的 mimic | 在关节属性界面中依次配置两侧平移关节：勾选“Mimic Other Joint”，关联 `joint_end1`，设置倍率 `0.00842` 和偏置 `0`。 | ![图片占位：在 SW2URDF 关节属性界面设置手指 mimic]() |
 
 **本阶段检查：** 六轴本体连续连接；夹爪分支的父子关系、运动轴和 `mimic` 配置正确；两个工具参考节点留待导出后手动添加。保存导出配置。
 

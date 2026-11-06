@@ -1,18 +1,27 @@
-"""第四章实践：实现雅可比模块，并计算末端负载对应的关节负载。
-
-功能概要：
+"""
+==============================================================================
+第四章实践：实现雅可比模块，并计算末端负载对应的关节负载  (第四章 §5)
+==============================================================================
+【功能概要】
     任务 1：继承 JacobianSolver，在 jac() 中补全 Pinocchio 帧雅可比计算；
     任务 2：根据末端外载荷和雅可比矩阵，计算静力平衡所需的关节力矩。
     第四章公共框架负责固定轨迹、结果检查和 MeshCat 显示。
 
-环境与运行：
-    cd ~/joyin_arm_tutorial/joyarm_code
+【环境与运行】
+    # 0. 安装 uv（仅首次）
+    curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
+    # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
+
+    # 1. 创建虚拟环境并同步依赖
+    cd <仓库路径>/joyarm_code
     uv sync
-    source .venv/bin/activate
-    python chapt/chapt4/chapt4_jacobian_exercise.py
-    python chapt/chapt4/chapt4_jacobian_exercise.py --meshcat
+
+    # 2. 运行本脚本
+    uv run python chapt/chapt4/chapt4_jacobian_exercise.py
+    uv run python chapt/chapt4/chapt4_jacobian_exercise.py --meshcat
 
     第三至第六章全部完成后，可在 chapt/common/motion_exercise.py 中进行综合实验。
+==============================================================================
 """
 from __future__ import annotations
 

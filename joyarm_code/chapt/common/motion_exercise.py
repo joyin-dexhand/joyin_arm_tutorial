@@ -1,7 +1,8 @@
 """
+==============================================================================
 第三至第六章公共实践流程：目标位姿 → 逆解 → 雅可比 → 轨迹 → 控制
-
-功能概要：
+==============================================================================
+【功能概要】
     使用同一个 JoyArm 离线任务串联第三至第六章的四个算法模块。公共流程负责
     准备模型与目标、连接模块、检查结果、模拟控制执行并输出报告；各章只替换
     对应的算法子类。
@@ -10,20 +11,27 @@
     保留了官方实现和读者实现两种选择：启用其中一行，并注释另一行。选用
     读者实现时，流程还会启用该章专属的日志或 MeshCat 可视化反馈。
 
-环境与运行：
-    cd ~/joyin_arm_tutorial/joyarm_code
+【环境与运行】
+    # 0. 安装 uv（仅首次）
+    curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
+    # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
+
+    # 1. 创建虚拟环境并同步依赖
+    cd <仓库路径>/joyarm_code
     uv sync
-    source .venv/bin/activate
-    python chapt/common/motion_exercise.py
+
+    # 2. 运行本脚本
+    uv run python chapt/common/motion_exercise.py
 
     显示关节轨迹与控制跟踪曲线：
-    python chapt/common/motion_exercise.py --plot
+    uv run python chapt/common/motion_exercise.py --plot
 
     使用 MeshCat 播放离线控制得到的实际关节轨迹：
-    python chapt/common/motion_exercise.py --meshcat
+    uv run python chapt/common/motion_exercise.py --meshcat
 
-说明：
+【说明】
     本流程默认离线运行，不连接机械臂，也不向真实电机下发指令。
+==============================================================================
 """
 from __future__ import annotations
 

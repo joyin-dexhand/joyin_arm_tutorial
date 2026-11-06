@@ -28,10 +28,9 @@
 #     # 1. 创建虚拟环境并同步依赖
 #     cd <仓库路径>/joyarm_code
 #     uv sync
-#     source .venv/bin/activate
-
+#
 #     # 2. 运行本脚本（需连接对应的机械臂）
-#     python quick_start/09_pick_and_place.py <型号>  # 如：rebot_arm_b601_dm
+#     uv run python quick_start/09_pick_and_place.py <型号>  # 如：rebot_arm_b601_dm
 
 # 【预期输出】
 #     ① 准备 → ② 规划（含上方点 / 抓取点的偏移与偏离 home 幅值）→ ③ 抓取 → ④ 收尾 四段日志；
@@ -63,7 +62,7 @@
 # def parse_model() -> str:
 #     """解析必填的命令行型号参数；缺失时打印用法并列出可用型号（listArm），以退出码 1 结束。"""
 #     if len(sys.argv) != 2:                                       # 必须恰好携带 1 个型号参数
-#         print(f"用法：python quick_start/09_pick_and_place.py <型号>")  # 缺参：先打印用法
+#         print(f"用法：uv run python quick_start/09_pick_and_place.py <型号>")  # 缺参：先打印用法
 #         listArm()                                                # 顺带列出全部可用型号
 #         sys.exit(1)                                              # 退出码 1，不进入演示
 #     return sys.argv[1].strip()                                   # 型号名

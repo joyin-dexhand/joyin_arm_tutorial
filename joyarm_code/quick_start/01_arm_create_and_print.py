@@ -20,11 +20,10 @@
     # 1. 创建虚拟环境并同步依赖
     cd <仓库路径>/joyarm_code
     uv sync
-    source .venv/bin/activate
 
     # 2. 运行本脚本（全程离线，无需硬件）
-    python quick_start/01_arm_create_and_print.py <型号>    # 如 rebot_arm_b601_dm
-    python quick_start/01_arm_create_and_print.py          # 不带参数则交互输入型号
+    uv run python quick_start/01_arm_create_and_print.py <型号>    # 如 rebot_arm_b601_dm
+    uv run python quick_start/01_arm_create_and_print.py          # 不带参数则交互输入型号
 
 【预期输出】
     可用型号列表与判断规则 → 选定型号 → 分节打印：对象摘要表、关节数与关节名、硬/软限位四表、特征位形与 tcp 限位、运行频率与六域激活求解器。

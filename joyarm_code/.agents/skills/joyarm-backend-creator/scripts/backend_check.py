@@ -63,7 +63,7 @@ CONFIG_DIR = JOYARM_CODE / "joyarm_core" / "config"               # 型号 yaml 
 # ---- 结果三态标记（与 backend_verify.py 的能力三分法一致） ----
 PASS, FAIL, SKIP = "PASS", "FAIL", "SKIP"
 
-# 29 个抽象内核的示例入参（与 backend.py 抽象方法签名一一对应；参照 test_backend_base.py 模板冒烟用例）
+# 29 个抽象内核的示例入参（与 backend.py 抽象方法签名一一对应）
 KERNEL_ARGS = {
     "_connect_arm": ("/dev/null", "demo"), "_connect_end": ("/dev/null", "demo"),          # 连接：通道 + 协议
     "_disconnect_arm": (), "_disconnect_end": (),                                          # 断连：无参
@@ -133,8 +133,7 @@ def print_rows(rows: list) -> None:
 def check_registered(name: str) -> list:
     """第一级检查：--backend 指定的注册名——可取到、是 Backend 子类、两种离线构造自检。
 
-    构造自检参照 test/test_backend_base.py 的做法：空 cfg `{}` 与型号 yaml 的
-    `backend:` 段均可离线构造（基类构造只解析配置、不做任何总线 I/O）。
+    构造自检：空 cfg `{}` 与型号 yaml 的 `backend:` 段均可离线构造（基类构造只解析配置、不做任何总线 I/O）。
 
     :param name: backend 注册名（REGISTRY 键，如 "backend_rebot_arm_b601_dm"）。
     :return: (检查项, 结果, 证据) 三元组列表。
@@ -190,8 +189,7 @@ def check_registered(name: str) -> list:
 def check_template() -> tuple:
     """第二级检查：backend_template.py 按路径加载——29 桩齐全、桩消息格式、集合对齐。
 
-    参照 test_backend_base.py 模板冒烟用例的思路：先加载模板并实例化（abc 强制
-    29 个抽象方法全部被定义），再逐桩调用核对 NotImplementedError 消息格式，
+    先加载模板并实例化（abc 强制 29 个抽象方法全部被定义），再逐桩调用核对 NotImplementedError 消息格式，
     最后与本脚本的核对表做集合对齐（防基类内核增删/改名后模板与核对表漂移）。
 
     :return: (概要检查行列表, [(分组标题, 分组行列表), ...]) 二元组。

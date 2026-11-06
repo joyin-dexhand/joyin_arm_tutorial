@@ -28,10 +28,9 @@
 #     # 1. 创建虚拟环境并同步依赖
 #     cd <仓库路径>/joyarm_code
 #     uv sync
-#     source .venv/bin/activate
-
+#
 #     # 2. 运行本脚本（需连接对应的机械臂）
-#     python quick_start/08_teach_replay.py <型号>  # 如：rebot_arm_b601_dm
+#     uv run python quick_start/08_teach_replay.py <型号>  # 如：rebot_arm_b601_dm
 
 # 【预期输出】
 #     连接结果与 FSM 状态迁移 → 录制进度与帧数 → 回放路点进度与终点关节角；
@@ -64,7 +63,7 @@
 # def parse_model() -> str:
 #     """解析必填的命令行型号参数；缺失时打印用法并列出可用型号（listArm），以退出码 1 结束。"""
 #     if len(sys.argv) != 2:                              # 必须恰好携带 1 个型号参数
-#         print(f"用法：python quick_start/08_teach_replay.py <型号>")  # 缺参：先打印用法
+#         print(f"用法：uv run python quick_start/08_teach_replay.py <型号>")  # 缺参：先打印用法
 #         listArm()                                       # 顺带列出全部可用型号
 #         sys.exit(1)                                     # 退出码 1，不进入演示
 #     return sys.argv[1].strip()                          # 型号名

@@ -12,13 +12,13 @@
   · 正文按 ## → ### → #### 展开，顶级 ## 之间不加分隔线。
   · 💡 建议在 §1 之前补一段"## 0 末端执行器统一接口与自识别架构"（或并入概述后的引导段）：
     讲清统一接口规范 + 磁吸快拆 + 自动识别（识别码/电信号握手）总览，配架构框图（mermaid）。
-    另可补「## 7 本章实践：末端执行器热插拔与自识别验证」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt13_endeffector_demo.py。
+    另可补「## 7 本章实践：末端执行器热插拔与自识别验证」对齐全教程"节末实践"惯例，对应脚本 joyarm_code/chapt/chapt13/_endeffector_demo.py。
 【全局写作规范】（详见 AGENTS.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
-  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt13_endeffector_demo.py`，使用说明见脚本头部注释。」
-  · 可复用核心库 joyarm_code/joyarm_core/：gripper（夹爪）/ arm（末端挂载接口）。
+  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt13/chapt13_endeffector_demo.py`，使用说明见脚本头部注释。」
+  · 可复用核心库 joyarm_code/joyarm_core/：joyarm（末端操作经 JoyArm 的 *_end 方法）。
   · 图示：配图放 docs/images/chapt13_endeffector/（各末端实物 + 接口/识别示意），未就绪用 ![图片占位：描述]()。
   · callout：> 💡 直觉/口诀  ｜  > 📌 重要说明/跨章引用  ｜  > ⚠️ 警告/注意。
   · 跨章引用用相对链接（如 [使用篇·末端执行器](end.md) 操作、[第十五章](chapt15_project.md) 综合项目）。
@@ -77,6 +77,6 @@
 ## 7 本章实践：末端执行器热插拔与自识别验证
 
 <!-- ✍️ 本节写作要点：
-  · 目标：用脚本验证末端执行器的统一接口与自识别（热插拔后自动识别末端类型）。对应脚本位于 `joyarm_code/chapt/chapt13_endeffector_demo.py`，使用说明见脚本头部注释。
+  · 目标：用脚本验证末端执行器的统一接口与自识别（热插拔后自动识别末端类型）。对应脚本位于 `joyarm_code/chapt/chapt13/chapt13_endeffector_demo.py`，使用说明见脚本头部注释。
   · 结构建议：热插拔流程 → 自识别结果 → 运行结果（配 ![图片占位：末端自识别效果]()）。
 -->

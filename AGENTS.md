@@ -11,9 +11,6 @@
 项目事实与长期约束以仓库文件为准，不依赖某个 Codex 账号或历史对话：
 
 - 本文件与 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)：长期规则、架构约束和维护边界；
-- [`PLANS.md`](./PLANS.md)：当前目标、优先级、完成条件和待确认事项；
-- [`DECISIONS.md`](./DECISIONS.md)：已确认的重要决策索引，只记录“为何如此”并链接权威细节；
-- [`WORKLOG.md`](./WORKLOG.md)：阶段性进展、验证证据和交接信息，不把计划写成已完成事实；
 - Git 历史与当前工作树：代码和文档的实际状态，优先级高于聊天摘要。
 
 开始新任务或更换账号后，先读取以上文件和 `git status`；发现记录与仓库事实冲突时，以可验证的当前文件为准，并同步修正记录。
@@ -29,7 +26,6 @@ joyin_arm_tutorial/
 │   ├── stylesheets/      #   extra.css（表格居中等）、mermaid.css
 │   └── javascripts/      #   image-viewer.js、mathjax.js
 ├── joyarm_code/          # ★ 配套代码库（用户向见其 README.md；架构/约定/维护规则见其 AGENTS.md）
-├── output/               # 脚本产出的分析图（如 fk_trajectory）
 ├── mkdocs.yml            # ★ 站点配置（主题、扩展、nav 目录树）
 ├── .github/workflows/    # deploy.yml：推 main 自动构建发布到 gh-pages
 ├── AGENTS.md             # 本文件：教程站点部分的项目记忆
@@ -50,7 +46,6 @@ joyin_arm_tutorial/
 | **应用篇** | `chapt11~15_<主题>.md` | 第 11~15 章 | 状态监测、示教遥操作、末端执行器、用户接口、综合项目 |
 
 - 例：`chapt2_fkine.md` = 第二章 空间位姿与位置正运动学。完整映射见 `mkdocs.yml` 的 `nav` 段。
-- 配图目录与正文文件同名：`docs/images/<正文文件名>/`。
 - 跨章引用一律用相对链接（如 `[第三章](chapt3_ikine.md)`），勿用绝对路径。
 
 ## 构建与部署
@@ -82,10 +77,17 @@ joyin_arm_tutorial/
 - 教程内容与代码、文档均要求**结构化有条理**，**不允许思维跳跃**，需对**新手友好**
 - 面向教程受众时统一称“读者”；操作步骤优先省略称呼，直接说明动作。除专业术语外，不用“学生”“学习者”或“用户”泛指读者
 - 每章（对应一个独立 md 文件）不设"本章小结"，用**概要**总结全章（类似论文摘要）：概要不设标题等级，直接紧随章标题后（第二行），用 `> 📌 **概述**：……` 引用块形式；正文按 H2 → H3 → H4 展开，最后一节通常为"本章实践"（对应程序脚本位于 `joyarm_code/chapt/` ）
+- 站点首页 `index.md` 豁免"概要块 + H2 编号"规范（非教程章）
+- 第一章（机器人与机械臂初识）无"本章实践"节，属允许的特例
+
+### 配图
+
+- 配图目录与正文文件同名：`docs/images/<正文文件名>/`
+- 图片文件名用小写英文蛇形命名
 
 ### 教程各章对应的脚本文件
 
-- 各章脚本存放于 `joyarm_code/chapt/<章序_功能>.py`（如 `chapt2_T_demo.py`），仅作一次性教学示例，**优先调用**核心库 `joyarm_code/joyarm_core/` 的功能，单向依赖（`chapt` 依赖 `joyarm_core`）。
+- 各章脚本按章存放于嵌套目录 `joyarm_code/chapt/chapt<N>/<章序_功能>.py`（如 `joyarm_code/chapt/chapt2/chapt2_T_demo.py`），跨章共用模块放 `joyarm_code/chapt/common/`；仅作一次性教学示例，**优先调用**核心库 `joyarm_code/joyarm_core/` 的功能，单向依赖（`chapt` 依赖 `joyarm_core`）。
 - 脚本文件头部前几行必须添加使用说明段落注释：功能概要，以及新建/激活环境、安装 Python 与依赖、切换目录、运行脚本等步骤。
 - 代码规范（命名 / 注释 / 结构）与代码库维护规则见 [`joyarm_code/AGENTS.md`](./joyarm_code/AGENTS.md)，本文件不展开。
 

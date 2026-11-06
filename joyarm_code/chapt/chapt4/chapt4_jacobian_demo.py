@@ -1,11 +1,27 @@
-"""第四章交互演示：雅可比速度映射、奇异性与静力学。
+"""
+==============================================================================
+第四章交互演示：雅可比速度映射、奇异性与静力学  (第四章 §2~§4)
+==============================================================================
+【功能概要】
+    嵌入 MeshCat 的 JoyArm 交互 GUI（URDF/STL 真实外观，初始化失败自动回退
+    连杆视图），配合第二~四节的“在 Demo 中观察”使用：
+      1. 关节滑块拖动，实时显示雅可比矩阵与逐关节速度贡献；
+      2. 预设奇异位形与阻尼伪逆对比，直观看到奇异时关节速度爆炸；
+      3. 可调末端载荷，观察静力平衡下的关节力矩映射。
 
-运行：
-    cd ~/joyin_arm_tutorial/joyarm_code
-    uv sync && source .venv/bin/activate
-    python chapt/chapt4/chapt4_jacobian_demo.py
+【环境与运行】
+    # 0. 安装 uv（仅首次）
+    curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
+    # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
-默认打开 GUI；自动验证可用 ``--headless --case all``。
+    # 1. 创建虚拟环境并同步依赖
+    cd <仓库路径>/joyarm_code
+    uv sync
+
+    # 2. 运行本脚本（默认打开 GUI；无图形环境可自动验证）
+    uv run python chapt/chapt4/chapt4_jacobian_demo.py
+    uv run python chapt/chapt4/chapt4_jacobian_demo.py --headless --case all
+==============================================================================
 """
 from __future__ import annotations
 
@@ -86,7 +102,7 @@ def main() -> None:
     if args.headless:
         print_headless(arm, args.case)
         return
-    from chapt.chapt4._jacobian_demo_gui import run_gui
+    from chapt.chapt4._jacobian_demo_gui import run_gui  # 延迟导入：--headless 分支已 return，不装 Qt 也能跑自动验证
     run_gui(arm, REGULAR_Q, JOINT_VELOCITY, EXTERNAL_WRENCH)
 
 

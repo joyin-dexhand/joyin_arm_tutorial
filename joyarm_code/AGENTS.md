@@ -9,7 +9,7 @@
 
 > 以下为 joyarm_core 架构**持久化约束**：代码演进不得违背；如需变更约束，须先经人工显式确认后再更新本节。
 
-1. **组合根·单类**：`joyarm/` 的 `JoyArm` 是组合根，基于 config 具体型号配置对其他层功能（backend、robot_model 资产、robotics 各求解器）做**可更换式组合**——能力委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**机械臂新型号 = `config/<型号>.yaml` + `robot_model/<型号>/` 资产 + `backend/backend_*.py`**（backend `REGISTRY` 一行；型号与整机后端 1:1，注册命名因来源而异——第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`；型号名不强制 `joyarm_` 前缀）。
+1. **组合根·单类**：`joyarm/` 的 `JoyArm` 是组合根，基于 config 具体型号配置对其他层功能（backend、robot_model 资产、robotics 各求解器）做**可更换式组合**——能力委托私有子成员，`JoyArm` 只提供公共门面（`arm.*`）。**机械臂新型号 = `config/<型号>.yaml` + `robot_model/<型号>/` 资产 + `backend/backend_*.py`**（backend `REGISTRY` 一行；型号与整机后端 1:1，注册命名因来源而异——第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`，型号名不强制 `joyarm_` 前缀）。
 2. **接口先行**：robotics 六域（fkine/ikine/jacobian/dynamics/trajectory/control）= **ABC 接口 + 子类算法实现 + `REGISTRY`注册**（config 选配启用）——均为**纯计算内核、无线程**；自定义算法在所在域 `REGISTRY` 显式加一行注册（import 类 + 表中一行）即接入（**子类名 = 前缀 + 基类名，如 `PinFkineSolver`；注册名 = 类名小写+下划线，如 `pin_fkine_solver`**）。加载链：**工厂 → JoyArm → config → 指定的各子成员**；域未配置即无成员（对应门面调用显性 `RuntimeError`），**配置的注册名无效/实例化失败即构造失败（硬失败，`ValueError`）**。backend = 基类(backend)定义功能接口 + 子类（backend_*）实现具体型号功能，`backend_*` 与 `<型号>` 一一对应（注册命名因来源而异：第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`；约束1）。
 3. **通用兼容**：`JoyArm` 兼容所有带末端执行器的 5R/6R/7R 臂；末端功能兼容多种执行器（契约见 `backend/backend.py` 的 `*_end` 方法族）。
 4. **失败语义（抛异常，不返 None）**：工厂 `joyArm(model)` 四步固定顺序校验（①config 存在且解析为非空 dict → ②`backend.name` ∈ `REGISTRY` → ③robot_model 四路径齐全 → ④`JoyArm` 构造自检），任一步失败**抛携带具体原因的异常**（消息附可用型号列表 = `listArm()` 结果）；`JoyArm` 直用为**硬失败**——config 必需（缺失/自检不通过即抛）、backend 必配、robotics 配置的成员必须全部创建成功（约束2）。
@@ -56,7 +56,7 @@ joyarm_code/
 │       └── rebot_arm_b601_dm.yaml           #     正式型号配置
 ├── joyarm_ros2_ws/                  # ROS2 colcon 工作空间（规划，Ch10 落地时创建；见 §1.4）
 ├── chapt/                           # 章节教学示例脚本（一次性；基础设施优先复用 joyarm_core，章节算法可自行实现）
-├── test/                            # 测试套件（test_backend_base.py：Backend 基类 Dummy 全内核模拟；test_robotics.py：robotics 六域；test_joyarm.py：JoyArm FSM 离线回归；{fkine,ikine,jac,dyn,traj,ctrl}_test.py：六域离线测试分析；joyarm_test.py：手动冒烟脚本）
+├── test/                            # 测试套件（{fkine,ikine,jac,dyn,traj,ctrl}_test.py：六域离线测试分析；joyarm_test.py：手动冒烟脚本）
 ├── quick_start/                     # 快速上手（01~09 例程；CLI/GUI 入口规划见 §2.3）
 ├── .agents/skills/                  # 新型号创建四 skill（joyarm-config-creator：assets 模板 template.yaml；joyarm-urdf-creator：references 机械臂URDF格式规范.md；joyarm-backend-creator：assets 模板 backend_template.py；joyarm-arm-creator：整机验收；各含 SKILL.md + scripts/xx_check.py 自检脚本）
 ├── pyproject.toml                   # 工程配置（可编辑安装 joyarm_core）
@@ -73,7 +73,7 @@ joyarm_code/
 
 ### 1.3 配置（yaml 分段 + 限位语义）
 
-`config/<model>.yaml` 三段：`joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层 + 硬限位四键）。**型号唯一标识 = yaml 文件名**（= 工厂入参；URDF 目录 `robot_model/<型号>/` 同名）；backend 与机械臂型号 1:1（注册命名因来源而异：第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`）；三段数值叶一律须有限且非空（null/NaN/inf 构造期硬失败）：
+`config/<model>.yaml` 三段：`joyarm`（设备模型）/ `robotics`（六域算法选型）/ `backend`（通信层 + 硬限位四键）。**型号唯一标识 = yaml 文件名**（= 工厂入参；URDF 目录 `robot_model/<型号>/` 同名）；backend 与机械臂型号 1:1（注册命名因来源而异：第三方 `backend_<型号>`，官方 `backend_<版本>` ↔ `joyarm_<版本>`，现型号 `rebot_arm_b601_dm` 为历史命名例外）；三段数值叶一律须有限且非空（null/NaN/inf 构造期硬失败）：
 
 ```yaml
 joyarm: {frame_end, arm_mdh, T_linkn_endtcp, joint_limits_soft_arm/end, tcp_limits, home_arm/end, MotionFSM, arrival_tol, runtime}   # 软限位四键直值 {q_min,q_max,dq_max,tau_max}（q_min/q_max 必配、缺键拒绝构造，dq_max/tau_max 缺键回退 ±∞；标量广播或 n/n_end 元列表，须位于硬限位内；供上层状态判断，不参与指令裁剪）；zero=全零（构造期校验在各关节硬限位内）、neutral=软限位中点（代码固定，不经 config）；home 逐关节须在软限位内；arm_mdh（6×4：α/a/d/θ）/T_linkn_endtcp 为教学数据（约束8）；tcp_limits.workspace_box 为 (3,2) 每行 [min,max]（兼容旧 (2,3) 布局），v_lin_max/v_ang_max/f_max/t_max 须 >0；MotionFSM 四键 {fsm_hz(缺省50), damping_kd(必配，DAMP 态 MIT kd，标量广播或 n 元列表), damping_k_gravity(必配，DAMP 态重力补偿率 [0,1]，1=完全补偿；dynamics 域未配置时退化纯阻尼), monitor_hz(缺省=fsm_hz)}；arrival_tol 缺省 0.05/1e-3/1e-2；runtime.move_wait_timeout 缺省 10.0（stop_motion_fsm 回零等待超时；同段其余键暂无消费方）
@@ -129,6 +129,10 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/types.py` | 枚举（ControlMode/MotionState/SafetyEvent）+ 数据类（Pose/TrajFrame/JointState/Wrench/Twist/Accel/JointLimits/TcpLimits/IKResult/ComplianceParams 等） | Ch2 | ✅ |
 | `utils/transforms.py` | 23 个纯 numpy 函数（rpy/rodrigues/quat/T 族/slerp…） | Ch2 | ✅ |
 | `utils/limits.py` | 限位助手：硬/软/tcp 限位构建 + 指令裁剪 + 限位内采样（签名见 §3.3） | Ch11 | ✅ |
+| `chapt/chapt2/chapt2_T_demo.py` | 位姿变换可视化演示（PySide6 GUI + matplotlib 3D：齐次变换矩阵对坐标系与点的变换） | Ch2 | ✅ |
+| `chapt/chapt2/chapt2_R_demo.py` | 四种姿态表示转换可视化演示（PySide6 GUI + matplotlib 3D：RPY/轴角/四元数/旋转矩阵互转） | Ch2 | ✅ |
+| `chapt/chapt2/chapt2_workspace.py` | JoyArm 工作空间蒙特卡洛采样与 MeshCat 动态可视化 | Ch2 | ✅ |
+| `chapt/chapt3/chapt3_2r_demo.py` | 平面 2R 逆运动学可视化演示（拖动目标点，肘上/肘下两组逆解对比） | Ch3 | ✅ |
 | `chapt/chapt3/chapt3_ikine_demo.py` | 离线教学：FK 构造单一目标 → 解析 IK 八组几何解与限位/回代检查 → MeshCat 依次播放全部构型并对照目标/当前 TCP | Ch3 | ✅ |
 | `chapt/chapt3/chapt3_ikine_exercise.py` | 实践主文件：预留 `IkineSolver.solve()` 实现区，读者使用 Pinocchio FK/雅可比接口完成 JoyArm 固定阻尼数值逆解 | Ch3 | ✅ |
 | `chapt/chapt3/_ikine_exercise_support.py` | 第三章实践固定框架：提供连续目标、上一解续作初值、FK 回代、库内求解器对照、结果表格与 MeshCat 路径播放 | Ch3 | ✅ |
@@ -141,7 +145,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `backend/backend.py` | `Backend(ABC)` 整机契约：三段式（公开薄委托 → 族通用 `_impl`（守卫/裁剪/验证/保活线程）→ 29 个抽象内核：24 单 joint + 4 总线级 + 1 整组动作）；三模式发送（cfg `default_mode` 可配、缺省 MIT，connect 自动 best-effort 设定）；动态数据读取：`get_mode_*`/`get_state_*` **读时刷新**；`joint_state_*` 只读快照 @property（被动直读槽位、不触发读帧，供监视器/可视化等无需实时者）；`is_connected_*`/`is_enabled_*` 三值标志 @property；无 `mode_*` 直读属性；`send_mit_*` 签名 `(q, dq=None, tau=None, kp=None, kd=None)`（`q` 必填；`dq`/`tau` 缺省置 `zeros(n)` 不广播；`kp`/`kd` 缺省取 cfg MIT 增益成员；三指令校验全在 `*_impl`、公开接口零校验）；cfg 预解析硬限位/发送默认/POS_VEL 四增益（切 POSITION/VELOCITY 随写寄存器）/baud/协议标识三键/两运行键（state_refresh_hz、write_settle）；`cfg` @property 返 MappingProxyType 只读视图、`joint_limits_*` 数组 writeable=False 零拷贝；成员变量全私有化；运行期 warn/info 直接输出 | Ch2 | ✅ |
 | `backend/backend_rebot_arm_b601_dm.py` | `BackendRebotArmB601DM`（DM 7 电机经 U2CAN 串口转 CAN 桥，模块私有 `_DMMotor`/`_DMBus`：RX 收取线程纯收取默认 1000Hz（cfg `rx_hz`，上限 5000）、状态快照单一 tuple 原子换入、状态读非阻塞（新鲜直返/陈旧发 0xCC 即返当前快照、t 如实带旧帧时刻不上抛，新鲜度由上层按 t 判定）；模式寄存器 RID10 MIT/VEL/Torque_Pos=1/3/4（POSITION 走 0x300+id pos_force 帧）、切 POSITION/VELOCITY 随写 4 增益（RID25-28，NaN 跳过）；反馈帧含双温度（data[6]=T_MOS、data[7]=T_Rotor）；全操作内核验证+重试（参数 0x55 回显核对/0x33 应答、使能/失能/设零/清错 0xFC/FD/FE/FB 新状态帧核对 err，应答按电机+RID+时刻配对防洗白）；僵尸总线重连先关再重建、断连清扫无主总线；组帧/解码与厂商库比特级一致；无 save；末端离散动作 open/home/close/position（-5.0/-3.0/0.0 rad/kwarg `position` 透传：自动切 POSITION 随写增益 + cfg vlim/flim 发送默认 + 位置经基类管道裁硬限位） | Ch6/13 | ✅ |
 | `backend/backend_rebot_arm_b601_dm_mujoco.py` | `BackendRebotArmB601DMMujoco` DM 机械臂 MuJoCo 仿真后端桩（与 `backend_rebot_arm_b601_dm` 同型号配套；文件待创建，实现后 REGISTRY 注册 `backend_rebot_arm_b601_dm_mujoco`） | — | 🟡 |
-| `.agents/skills/joyarm-backend-creator/assets/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError，桩消息前缀自动取 `self._name`（cfg `backend.name` 注册名，未传回退占位前缀 `backend_<型号>.py`，复制后无需手改）+ 逐方法实现指引注释 + 统一 `:param:/:return:/:raises:` 契约块（类型/单位/范围/维度与基类已做校验）+ 全量私有成员台账（直接消费 / 按需借用 / 勿动分档）+ 最小可用子集说明：必实现 14（连接/断连/使能/失能/读状态/读模式/设模式 ×2 族）、按需 15（参数读写/设零/三模式发送/离散动作/清错），不支持的能力保留桩由基类转 warn 降级；复制为 `backend/backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入；含 DM 类关节电机/Feetech 类舵机双家族差异指引（覆盖混合硬件 arm 电机 + end 舵机、无 end 型号适配）、联调自检清单与「实现后 docstring 改写为型号介绍说明」指引（七步接入），受 test_69 冒烟保护：29 桩全量消息格式校验（含前缀随 name 自动切换）+ 基类内核集漂移守护 | — | ✅ |
+| `.agents/skills/joyarm-backend-creator/assets/backend_template.py` | `BackendTemplate` 子类实现模板（29 个抽象方法全 NotImplementedError，桩消息前缀自动取 `self._name`（cfg `backend.name` 注册名，未传回退占位前缀 `backend_<型号>.py`，复制后无需手改）+ 逐方法实现指引注释 + 统一 `:param:/:return:/:raises:` 契约块（类型/单位/范围/维度与基类已做校验）+ 全量私有成员台账（直接消费 / 按需借用 / 勿动分档）+ 最小可用子集说明：必实现 14（连接/断连/使能/失能/读状态/读模式/设模式 ×2 族）、按需 15（参数读写/设零/三模式发送/离散动作/清错），不支持的能力保留桩由基类转 warn 降级；复制为 `backend/backend_<型号>.py` 用，不入 REGISTRY、不被 `__init__` 导入；含 DM 类关节电机/Feetech 类舵机双家族差异指引（覆盖混合硬件 arm 电机 + end 舵机、无 end 型号适配）、联调自检清单与「实现后 docstring 改写为型号介绍说明」指引（七步接入），接入自检跑 `scripts/backend_check.py`（29 桩全量消息格式校验（含前缀随 name 自动切换）+ 基类内核集漂移守护） | — | ✅ |
 | `backend/backend_verify.py` | Backend 子类真机验收 CLI（上层视角只调基类公开面；00~50 六组分项 = 初始化/连接/只读/控制/运动/清错，PASS/SKIP/FAIL 三分 + 高危交互确认；`--param`/`--action` 适配子类） | — | ✅ |
 | `robotics/fkine/` | `FkineSolver(ABC)`（solve 单内核）+ `PinFkineSolver`（forwardKinematics+updateFramePlacement，含帧名哨兵防御；每算新建私有 pin.Data）✅ + `MdhFkineSolver`（fkine_solver_mdh.py：MDH 白盒 FK——config `arm_mdh` 逐关节连乘 + `T_linkn_endtcp` 右乘，仅末端帧；与 URDF 标定一致至 1e-13，解析 IK 复用其计算函数）✅ | Ch2 | ✅ |
 | `robotics/ikine/` | `IkineSolver(ABC)`（solve 单解 / solve_all 全解默认 `NotImplementedError`）+ `PinIkineSolver`（LM 自适应阻尼 + 多起点重启，不可达返 success=False）✅ + `AnalyticIkineSolver`（ikine_solver_analytic.py：2/3/4 轴平行、5/6 轴相交构型解析解——枚举肩/肘/腕分支 ≤8 组候选、MDH FK 回代剔伪解去重、±2π 限位内归位；solve 软限位剔除后取距 q0 最近，solve_all 不剔越限且 frame 可缺省=末端帧；首次求解缓存 MDH/TCP 逆变换，按 arm 身份复用、配置变更须重建实例）✅ | Ch3 | ✅ |
@@ -153,8 +157,9 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `joyarm/__init__.py` | `JoyArmFactory`/`joyArm`/`listArm`/`load_config`（对象创建入口，四步校验失败语义见约束4；`listArm` 三条件过滤与失败消息共用实现） | — | ✅ |
 | `joyarm/joyarm.py` 内 `_VizWindow` | 监控页原生窗口封装类（JoyArm 成员 `_viz_window`：init 占位 None、start 时创建赋值、stop 终止；`launch()` 经 `python -c` 拉起子进程跑 `child_main()`——`QMainWindow`+`QWebEngineView` 内嵌 Chromium 加载三栏页，内置早夭看护（主动停止标志防误告警、stop 超时 kill 兜底）；零数据逻辑，数据仍来自 HTTP 服务；关窗即退出子进程） | — | ✅ |
 | `config/rebot_arm_b601_dm.yaml` | 型号 YAML 三段（结构与限位语义见 §1.3） | — | ✅ |
-| `quick_start/01~09_*.py` | 快速上手例程 9 个：01 对象创建 · 02 连接与状态读取 · 03 标零与参数 · 04 直通电机指令 · 05 在线计算与求解器 · 06 FSM 运动 · 07 安全监视 · 08 拖动示教回放 · 09 综合抓取 | 使用篇 | ✅ |
+| `quick_start/01~09_*.py` | 快速上手例程 9 个：01 对象创建 · 02 连接与状态读取 · 03 标零与参数 · 04 直通电机指令 · 05 在线计算与求解器 · 06 FSM 运动 · 07 安全监视 · 08 拖动示教回放（🟡 整文件暂注释待实现）· 09 综合抓取（🟡 整文件暂注释待实现） | 使用篇 | 01~07 ✅ / 08~09 🟡 |
 | `test/{fkine,ikine,jac,dyn,traj,ctrl}_test.py` | 六域离线测试分析 6 个：fkine · ikine · jacobian · dynamics · trajectory · control | 使用篇 | ✅ |
+| `test/joyarm_test.py` | JoyArm 手动冒烟脚本（FSM 真机逐状态转移序列等） | 使用篇 | ✅ |
 | `.agents/skills/joyarm-{config,urdf,backend,arm}-creator/` | 新型号创建四 skill（各含 SKILL.md + scripts/xx_check.py 自检脚本）：joyarm-config-creator（assets 模板 template.yaml + 完整性检查）· joyarm-urdf-creator（references 机械臂URDF格式规范.md + 资产检查）· joyarm-backend-creator（assets 模板 backend_template.py + 接入自检）· joyarm-arm-creator（整机集成四步校验） | 使用篇 | ✅ |
 
 ### 3.2 组装与数据流

@@ -1,23 +1,31 @@
 """
-第三章实践：使用 Pinocchio 实现 JoyArm 数值逆运动学求解器
-
-功能概要：
+==============================================================================
+第三章实践：使用 Pinocchio 实现 JoyArm 数值逆运动学求解器  (第三章 §6)
+==============================================================================
+【功能概要】
     继承 ``IkineSolver``，使用 Pinocchio 的正运动学和雅可比接口，在
     ``solve()`` 中实现单起点阻尼最小二乘逆运动学。实践中只调用 Pinocchio
     获取雅可比，不需要推导或手工构造雅可比矩阵。
 
-实践任务：
+【实践任务】
     阅读并独立完成 ``PracticePinIkineSolver.solve()`` 中标出的
     “实践实现区”。目标位姿、连续初值、回代校验和显示由辅助框架提供。
 
-环境与运行：
-    cd ~/joyin_arm_tutorial/joyarm_code
+【环境与运行】
+    # 0. 安装 uv（仅首次）
+    curl -LsSf https://astral.sh/uv/install.sh | sh            # Linux
+    # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
+
+    # 1. 创建虚拟环境并同步依赖
+    cd <仓库路径>/joyarm_code
     uv sync
-    source .venv/bin/activate
-    python chapt/chapt3/chapt3_ikine_exercise.py
+
+    # 2. 运行本脚本
+    uv run python chapt/chapt3/chapt3_ikine_exercise.py
 
     只查看终端结果、不启动 MeshCat：
-    python chapt/chapt3/chapt3_ikine_exercise.py --headless
+    uv run python chapt/chapt3/chapt3_ikine_exercise.py --headless
+==============================================================================
 """
 from __future__ import annotations
 
@@ -34,10 +42,7 @@ if str(PROJECT_DIR) not in sys.path:
 
 from joyarm_core import IKResult, IkineSolver
 
-try:
-    from ._ikine_exercise_support import run_exercise
-except ImportError:
-    from _ikine_exercise_support import run_exercise
+from chapt.chapt3._ikine_exercise_support import run_exercise
 
 
 def _frame_id(model, frame) -> int:

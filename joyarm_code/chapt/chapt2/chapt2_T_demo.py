@@ -18,12 +18,11 @@
     # 1. 创建虚拟环境并同步依赖
     cd ~/joyarm_code
     uv sync
-    source .venv/bin/activate
     # 若 Linux 缺少 libxcb-cursor.so.0 ，则先安装：
     sudo apt-get install -y libxcb-cursor0
 
     # 2. 运行本脚本
-    python ./chapt/chapt2/chapt2_T_demo.py
+    uv run python chapt/chapt2/chapt2_T_demo.py
 
     # 输入数值简单实例：T = 绕 Z 轴旋转 90° + 平移 (0.5, 0, 0)，P = (0.5, 0.5, 0.5)
     T = [[ 0, -1, 0, 0.5],

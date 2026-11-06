@@ -10,12 +10,12 @@
   · 第 1 行：H1 章标题（章号用汉字）；第 3 行须是「> 📌 **概述**：……」blockquote 摘要
     （不加标题级别，一句话式概括全章、加粗关键词、点明各节逻辑流、点出末节实践）。
   · 正文按 ## → ### → #### 展开，顶级 ## 之间不加分隔线。
-  · 末节固定为「## 5 本章实践：JoyArm 综合任务部署与联调」，对应脚本 joyarm_code/chapt/chapt15_project_demo.py。
+  · 末节固定为「## 5 本章实践：JoyArm 综合任务部署与联调」，对应脚本 joyarm_code/chapt/chapt15/chapt15_project_demo.py。
 【全局写作规范】（详见 AGENTS.md）
   · 简洁、清晰、对新手友好，避免跳跃。
   · 表格一律 `:---:` 居中（每列都写），无需向用户确认。
   · 标题编号：H2 阿拉伯数字每章从 1 重新编号；H3 为"父H2.序号"；章号用汉字。
-  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt15_project_demo.py`，使用说明见脚本头部注释。」
+  · 代码：优先用"脚本引用句式"——「对应脚本位于 `joyarm_code/chapt/chapt15/chapt15_project_demo.py`，使用说明见脚本头部注释。」
   · 可复用核心库 joyarm_code/joyarm_core/：joyarm / fkine / ikine / jacobian / trajectory / control /
     dynamics（几乎全库参与；teleop / vision 管线规划在 joyarm_core/apps/，监测在 ROS2 节点）。
   · 图示：配图放 docs/images/chapt15_project/；系统分层/数据流用 mermaid ```mermaid``` 围栏。
@@ -64,6 +64,6 @@
 <!-- ✍️ 本节写作要点：
   · 目标：在真机或仿真中跑通整个闭环任务，给出可复现的联调步骤与排错指引。
   · 原文已有一句"在真机或仿真中完成联调"，建议展开成"联调步骤表"（步骤|操作|预期结果|常见问题|对应工具/章节）。
-  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt15_project_demo.py`，使用说明见脚本头部注释。」
+  · 主体为脚本实践，用脚本引用句式给出「对应脚本位于 `joyarm_code/chapt/chapt15/chapt15_project_demo.py`，使用说明见脚本头部注释。」
   · 收尾用 > 💡 或概述性段落（替代小结）：综合项目的难点不在单点，而在各层接口与时序协同——这是从"学"到"用"的关键一跃。
 -->
