@@ -1,0 +1,44 @@
+/* ============================================================
+   Mermaid 流程图主题自适应配色
+   说明：用 CSS 变量让首尾节点在亮/暗模式下各有合适的
+        "背景 + 文字" 配色，避免浅底浅字导致暗色模式看不清
+   ============================================================ */
+
+/* 起始节点：浅蓝（亮色） / 深蓝（暗色） */
+.md-typeset .mermaid-start > rect,
+.md-typeset .mermaid-start > polygon {
+  fill: #e1f5fe;
+  stroke: #0288d1;
+}
+.md-typeset .mermaid-start text {
+  fill: #01579b;
+}
+
+/* 结束节点：浅绿（亮色） / 深绿（暗色） */
+.md-typeset .mermaid-end > rect,
+.md-typeset .mermaid-end > polygon {
+  fill: #c8e6c9;
+  stroke: #388e3c;
+}
+.md-typeset .mermaid-end text {
+  fill: #1b5e20;
+}
+
+/* ---------- 暗色模式覆盖 ---------- */
+[data-md-color-scheme="slate"] .md-typeset .mermaid-start > rect,
+[data-md-color-scheme="slate"] .md-typeset .mermaid-start > polygon {
+  fill: #01579b;
+  stroke: #4fc3f7;
+}
+[data-md-color-scheme="slate"] .md-typeset .mermaid-start text {
+  fill: #ffffff;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .mermaid-end > rect,
+[data-md-color-scheme="slate"] .md-typeset .mermaid-end > polygon {
+  fill: #1b5e20;
+  stroke: #81c784;
+}
+[data-md-color-scheme="slate"] .md-typeset .mermaid-end text {
+  fill: #ffffff;
+}

@@ -1,0 +1,24 @@
+digraph cascade_control {
+    graph [rankdir=LR, bgcolor="white", pad="0.45", nodesep="1.00", ranksep="0.32", splines=ortho];
+    node [shape=box, style="filled", fillcolor="white", color="black", penwidth=1.5, fontname="sans-serif", fontsize=14, margin="0.15,0.10"];
+    edge [color="black", penwidth=1.4, arrowsize=0.75, fontname="sans-serif", fontsize=12];
+
+    qd [shape=plain, label="目标位置 q_d"];
+    sp [shape=circle, fixedsize=true, width=0.38, label="Σ", margin=0];
+    pc [label="位置控制器"];
+    vd [shape=plain, label="目标速度"];
+    sv [shape=circle, fixedsize=true, width=0.38, label="Σ", margin=0];
+    vc [label="速度控制器"];
+    id [shape=plain, label="目标电流"];
+    si [shape=circle, fixedsize=true, width=0.38, label="Σ", margin=0];
+    cc [label="电流控制器"];
+    itap [shape=point, fixedsize=true, width=0.08, label="", fillcolor="black"];
+    plant [label="驱动器、电机\n与关节"];
+    qtap [shape=point, fixedsize=true, width=0.08, label="", fillcolor="black"];
+    q [shape=plain, label="实际位置 q"];
+
+    qd -> sp -> pc -> vd -> sv -> vc -> id -> si -> cc -> itap -> plant -> qtap -> q;
+    qtap -> sp [xlabel="q  −", constraint=false, tailport=s, headport=s];
+    qtap -> sv [xlabel="q̇  −", constraint=false, tailport=s, headport=n];
+    itap -> si [xlabel="i  −", constraint=false, tailport=s, headport=s];
+}

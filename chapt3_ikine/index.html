@@ -1,0 +1,2309 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://joyin-dexhand.github.io/joyin_arm_tutorial/chapt3_ikine/">
+      
+      
+        <link rel="prev" href="../chapt2_fkine/">
+      
+      
+        <link rel="next" href="../chapt4_jacobian/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>第三章 位置逆运动学 - JoyArm 机械臂教程</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#_1" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href=".." title="JoyArm 机械臂教程" class="md-header__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            JoyArm 机械臂教程
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              第三章 位置逆运动学
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至暗色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切换至暗色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至亮色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切换至亮色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="JoyArm 机械臂教程" class="md-nav__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    JoyArm 机械臂教程
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    使用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick_start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速上手
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../motor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    关节电机
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../arm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    机械臂整臂
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../end/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    末端执行器
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    基础篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    基础篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt1_intro/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第一章 机器人与机械臂初识
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt2_fkine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第二章 空间位姿与位置正运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第三章 位置逆运动学
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第三章 位置逆运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 位置逆运动学的可解性
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 位置逆运动学的可解性">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 工作空间与可达点
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 逆运动学解的个数
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-2r" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 平面 2R 机械臂的解析解
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 平面 2R 机械臂的解析解">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 几何关系与解析结果
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 代数法如何得到相同结论
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 JoyArm 连续三轴平行构型的解析解法
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3 JoyArm 连续三轴平行构型的解析解法">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 构型特征与解耦思想
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-q_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 求 \(q_1\)：腕部参考点的水平投影
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-phiq_5q_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 姿态子问题：先解出 \(\phi,q_5,q_6\)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-phi-q_2q_3q_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 位置子问题：由 \(\phi\) 解出 \(q_2,q_3,q_4\)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 与球形腕构型对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-6r" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 拓展：末三轴相交的 6R 机械臂
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 机械臂逆运动学的数值解法
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 机械臂逆运动学的数值解法">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 数值逆解在做什么
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 如何表示位姿误差
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 如何修正关节角
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 初值与奇异
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 与解析解的关系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-pinocchio-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6 本章实践：使用 Pinocchio 实现 JoyArm 逆运动学
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6 本章实践：使用 Pinocchio 实现 JoyArm 逆运动学">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 实践任务与接口
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-pinocchio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 使用 Pinocchio 完成迭代
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 运行与校验
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt4_jacobian/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第四章 速度运动学与静力学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt5_trajectory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第五章 轨迹生成
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt6_control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第六章 运动控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进阶篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    进阶篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt7_urdf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第七章 构型结构设计与URDF导出
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt8_dyn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第八章 动力学及控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt9_force/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第九章 力控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt10_ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十章 ROS2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    应用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    应用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt11_safety/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十一章 状态监测与安全软防护
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt12_teleop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十二章 示教和遥操作
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt13_endeffector/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十三章 末端执行器
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt14_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十四章 用户接口
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt15_project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十五章 JoyArm 综合实践项目
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 位置逆运动学的可解性
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 位置逆运动学的可解性">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 工作空间与可达点
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 逆运动学解的个数
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-2r" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 平面 2R 机械臂的解析解
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 平面 2R 机械臂的解析解">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 几何关系与解析结果
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 代数法如何得到相同结论
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 JoyArm 连续三轴平行构型的解析解法
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3 JoyArm 连续三轴平行构型的解析解法">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 构型特征与解耦思想
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-q_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 求 \(q_1\)：腕部参考点的水平投影
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-phiq_5q_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 姿态子问题：先解出 \(\phi,q_5,q_6\)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-phi-q_2q_3q_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 位置子问题：由 \(\phi\) 解出 \(q_2,q_3,q_4\)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 与球形腕构型对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-6r" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 拓展：末三轴相交的 6R 机械臂
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 机械臂逆运动学的数值解法
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 机械臂逆运动学的数值解法">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 数值逆解在做什么
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 如何表示位姿误差
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 如何修正关节角
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 初值与奇异
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 与解析解的关系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-pinocchio-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6 本章实践：使用 Pinocchio 实现 JoyArm 逆运动学
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6 本章实践：使用 Pinocchio 实现 JoyArm 逆运动学">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 实践任务与接口
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-pinocchio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 使用 Pinocchio 完成迭代
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 运行与校验
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="_1">第三章 位置逆运动学</h1>
+<blockquote>
+<p>📌 <strong>概述</strong>：本章研究由末端目标位姿反求关节角的问题。先用平面 2R 机械臂说明可达性和多解，再介绍 JoyArm 的解析解与通用数值解，最后通过正运动学回代验证结果。</p>
+</blockquote>
+<h2 id="1">1 位置逆运动学的可解性</h2>
+<p>正运动学根据已知关节变量计算末端位姿；逆运动学则根据给定的末端位置或位姿，反求机械臂的关节变量。逆运动学求解前，首先需要判断目标是否可达；只有目标位于机械臂的工作空间内，逆解才可能存在。</p>
+<blockquote>
+<p>📌 <strong>记号约定</strong>：本章记 <span class="arithmatex">\(\mathcal{Q}\)</span> 为<strong>关节空间</strong>，即关节变量 <span class="arithmatex">\(\bm q\)</span> 的允许取值范围；<span class="arithmatex">\(\mathbb{R}^3\)</span> 为<strong>三维实数空间</strong>，即所有形如 <span class="arithmatex">\((x,y,z)\)</span> 的位置坐标构成的集合；<span class="arithmatex">\(\mathcal{W}_{\mathrm{R}}\)</span>、<span class="arithmatex">\(\mathcal{W}_{\mathrm{D}}\)</span> 分别表示可达、灵巧工作空间。其余记号沿用<a href="../chapt2_fkine/">第二章</a>。</p>
+</blockquote>
+<h3 id="11">1.1 工作空间与可达点</h3>
+<p>机械臂末端执行器在关节运动范围内能够到达的全部空间位置，称为<strong>可达工作空间</strong>（reachable workspace）。</p>
+<p>例如，对于两连杆平面 <span class="arithmatex">\(2R\)</span> 机械臂，连杆长度分别为 <span class="arithmatex">\(l_1\)</span> 和 <span class="arithmatex">\(l_2\)</span>，末端到基座原点的距离记为：</p>
+<div class="arithmatex">\[
+r=\sqrt{x_{\mathrm d}^2+y_{\mathrm d}^2}
+\]</div>
+<p>在不考虑关节限位时，目标点可达的条件为：</p>
+<div class="arithmatex">\[
+|l_1-l_2|\leq r\leq l_1+l_2
+\]</div>
+<p>这说明末端只能到达一个环形区域：距离过远时，两根连杆无法伸到目标点；距离过近时，连杆即使完全折叠也无法到达目标点。</p>
+<p>同时需要注意：目标位置可达，不代表任意姿态都可达，能够以任意姿态到达的位置叫作灵巧工作空间，它通常小于可达工作空间。本章只需要知道这一差别，不展开计算。</p>
+<h3 id="12">1.2 逆运动学解的个数</h3>
+<p>目标可达不代表关节角唯一，机械臂可能以不同的肩部、肘部、腕部姿态达到同一个末端目标。满足目标位姿的全部关节角可以写成一个解集，如下：</p>
+<div class="arithmatex">\[
+\mathcal{Q}_{\mathrm d}
+=
+\left\{
+\bm q\in\mathcal Q
+\mid
+f(\bm q)={}^0_e\bm T_{\mathrm d}
+\right\}
+\]</div>
+<p>这个集合可能为空、只包含一组解，也可能包含多组解。多解主要由机械臂的构型、关节周期性和冗余自由度共同产生。比如说肘部可以采用肘上或肘下构型，腕部也可能出现翻转前后的两组姿态。</p>
+<p>以经典的 PUMA 560 为例，同一个末端位姿可以由多组关节角实现：</p>
+<p><img alt="同一末端位姿对应的多组关节解（PUMA 560）" src="../images/chapt3_ikine/multiple_ik_solutions.png" /></p>
+<p>当目标靠近工作空间边界或奇异位形时，有些解会重合或消失；再加上关节限位，一些数学上成立的解也会被排除。所以，程序不光要算出候选解，还得从中挑出一组真正适合运动的解，一般会优先选离当前关节角近、不超限位、又远离奇异位形的那些。</p>
+<h2 id="2-2r">2 平面 2R 机械臂的解析解</h2>
+<p>逆运动学就是已知末端目标，反推关节角。如果目标只有末端位置，叫位置逆运动学；位置和姿态都要满足，叫完整位姿逆运动学。解析法利用代数或几何关系直接得到关节角；数值法则从初值开始迭代逼近目标（见<a href="#5">第 5 节</a>）。</p>
+<p>平面 2R 机械臂能够同时说明解析法的两个基本思路。设两段连杆长度为 <span class="arithmatex">\(l_1,l_2\)</span>，关节角为 <span class="arithmatex">\(q_1,q_2\)</span>，目标位置为 <span class="arithmatex">\(\bm p_{\mathrm d}=(x_{\mathrm d},y_{\mathrm d})\)</span>：</p>
+<p><img alt="平面 2R 机械臂的几何关系与两组构型解" src="../images/chapt3_ikine/twoR_algebra_geometry.svg" /></p>
+<h3 id="21">2.1 几何关系与解析结果</h3>
+<p>基座、肘关节和目标点构成一个三角形。记目标到基座的距离为</p>
+<div class="arithmatex">\[
+r=\sqrt{x_{\mathrm d}^2+y_{\mathrm d}^2}
+\]</div>
+<p>对三角形使用余弦定理，可以直接得到肘关节角：</p>
+<div class="arithmatex">\[
+q_2=\pm\arccos\!\left(\frac{r^2-l_1^2-l_2^2}{2l_1l_2}\right)
+\tag{1}
+\]</div>
+<p>正、负两支分别对应肘上和肘下两种构型。选定 <span class="arithmatex">\(q_2\)</span> 后，肩关节角为</p>
+<div class="arithmatex">\[
+q_1=\operatorname{atan2}(y_{\mathrm d},x_{\mathrm d})
+-\operatorname{atan2}\!\bigl(l_2\sin q_2,\;l_1+l_2\cos q_2\bigr)
+\tag{2}
+\]</div>
+<p>第一项确定目标方位，第二项根据肘部弯曲程度修正第一根连杆的方向。当 <span class="arithmatex">\(r=l_1+l_2\)</span> 或 <span class="arithmatex">\(r=|l_1-l_2|\)</span> 时，两组解重合；当 <span class="arithmatex">\(r\)</span> 超出这一范围时，目标不可达。</p>
+<h3 id="22">2.2 代数法如何得到相同结论</h3>
+<p>代数法把正运动学展开为标量方程，再通过消元和回代得到式（1）、式（2）。它与几何法给出相同结果，只是观察问题的角度不同：几何法直接使用三角形关系，代数法更容易逐步转化为程序。</p>
+<details class="tutorial-details">
+<summary>详细推导：消去 q₁ 并回代</summary>
+<p>平面 2R 的正运动学方程为</p>
+<div class="arithmatex">\[
+\begin{cases}
+x_{\mathrm d}=l_1\cos q_1+l_2\cos(q_1+q_2)\\[4pt]
+y_{\mathrm d}=l_1\sin q_1+l_2\sin(q_1+q_2)
+\end{cases}
+\]</div>
+<p>将两式平方后相加，可以消去 <span class="arithmatex">\(q_1\)</span>：</p>
+<div class="arithmatex">\[
+r^2=x_{\mathrm d}^2+y_{\mathrm d}^2
+=l_1^2+l_2^2+2l_1l_2\cos q_2
+\]</div>
+<p>因此</p>
+<div class="arithmatex">\[
+\cos q_2=\frac{r^2-l_1^2-l_2^2}{2l_1l_2}
+\]</div>
+<p>反余弦的正负两支给出式（1）。选定 <span class="arithmatex">\(q_2\)</span> 后，用和角公式展开正运动学方程，并按 <span class="arithmatex">\(\cos q_1\)</span>、<span class="arithmatex">\(\sin q_1\)</span> 整理：</p>
+<div class="arithmatex">\[
+\cos q_1=\frac{(l_1+l_2\cos q_2)x_{\mathrm d}+(l_2\sin q_2)y_{\mathrm d}}{D}
+\]</div>
+<div class="arithmatex">\[
+\sin q_1=\frac{(l_1+l_2\cos q_2)y_{\mathrm d}-(l_2\sin q_2)x_{\mathrm d}}{D}
+\]</div>
+<p>其中 <span class="arithmatex">\(D=l_1^2+l_2^2+2l_1l_2\cos q_2=r^2\)</span>。把两式分别作为纵、横分量送入 <span class="arithmatex">\(\operatorname{atan2}\)</span>，即可得到式（2）。使用 <span class="arithmatex">\(\operatorname{atan2}\)</span> 而不是 <span class="arithmatex">\(\arctan\)</span>，可以保留象限信息，避免漏解。</p>
+</details>
+<p>实际推导经常混合使用两种方法：先利用构型把空间问题化为平面几何，再用代数公式计算各个解支。2R 方程较少，可以逐次消元得到闭式解；通用 6R 的解析推导通常十分复杂，工程中常利用连续平行轴、球形腕等结构获得易实现的闭式解，其余构型更常采用数值方法。</p>
+<p>对应的交互演示位于 <code>joyarm_code/chapt/chapt3/chapt3_2r_demo.py</code>。移动目标点可以观察肘上、肘下、边界两解重合以及目标不可达等情况。</p>
+<h2 id="3-joyarm">3 JoyArm 连续三轴平行构型的解析解法</h2>
+<p>能够获得易实现闭式解的一类经典构型是<strong>连续三轴平行</strong>——连续三个关节轴线相互平行，臂部在其中一段上"折叠"。<strong>JoyArm 正属此类</strong>：其第 2、3、4 轴相互平行，第 5、6 轴相交。下面用忽略侧向偏置和腕部固定长度的简化几何讲解求解顺序，并假设各关节的零位偏角均为 0；具体机械臂的求解式仍须按实际连杆参数确定。</p>
+<h3 id="31">3.1 构型特征与解耦思想</h3>
+<p>观察本节机械臂构型可以看到：<span class="arithmatex">\(\hat{Z}_2\parallel\hat{Z}_3\parallel\hat{Z}_4\)</span> 。当 <span class="arithmatex">\(q_1\)</span> 固定时，这三个关节带动机械臂在同一个平面内运动。它们既能改变机械臂的弯曲形状，也会共同改变末段连杆在平面内的朝向。</p>
+<p>对于本节采用的轴线方向，三个关节对末段朝向的共同作用可以合并为一个角：</p>
+<div class="arithmatex">\[
+\phi=-q_2+q_3+q_4
+\]</div>
+<p>式中的正负号取决于各关节轴的方向和坐标系定义，换一台机械臂后不一定相同。</p>
+<p><span class="arithmatex">\(\phi\)</span> 表示末段连杆在运动平面内的合成朝向，但它不能单独确定腕部参考点的位置。即使 <span class="arithmatex">\(\phi\)</span> 相同，不同的 <span class="arithmatex">\(q_2,q_3,q_4\)</span> 组合仍然可以形成不同的臂形，使腕部参考点落在不同位置。<span class="arithmatex">\(\phi\)</span> 已知后，我们只能确定末段连杆在目标位置中占据的方向和投影；扣除这部分投影，剩余位置才能化为平面 2R 问题。</p>
+<blockquote>
+<p>📌 <strong>求解顺序提示</strong>：先由目标腕部位置确定 <span class="arithmatex">\(q_1\)</span>，再由目标姿态解出合角 <span class="arithmatex">\(\phi\)</span> 与腕角 <span class="arithmatex">\(q_5,q_6\)</span>，最后利用目标位置和已知的 <span class="arithmatex">\(\phi\)</span> 反推 <span class="arithmatex">\(q_2,q_3,q_4\)</span>（见 <a href="#33-phiq_5q_6">3.3</a> 与 <a href="#34-phi-q_2q_3q_4">3.4</a>）。这与球形腕（<a href="#4-6r">第 4 节</a>）“前三轴定位置、后三轴定姿态”的解耦方式不同。</p>
+</blockquote>
+<p><img alt="连续三轴平行构型的分步求解演示" src="../images/chapt3_ikine/recording_2026-10-16_15-12-55_2x.webp" /></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">动画过程</th>
+<th style="text-align: center;">观察重点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">橙、紫、青三条直线分别显示第 2、3、4 关节轴线，半透明蓝色区域显示三条平行轴共同形成的运动平面</td>
+<td style="text-align: center;">黄色箭头表示 <span class="arithmatex">\(\phi\)</span> 对应的末段朝向；绿色球表示当前腕部参考点 <span class="arithmatex">\(O_5\)</span>，红色球表示目标位置</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">根据目标腕部位置求解 <span class="arithmatex">\(q_1\)</span>，由第 1 关节带动运动平面转向目标方位</td>
+<td style="text-align: center;"><span class="arithmatex">\(q_1\)</span> 决定机械臂运动平面的空间朝向，使后续位置求解可以在该平面内进行</td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">根据目标姿态求解 <span class="arithmatex">\(\phi,q_5,q_6\)</span>，实线 RGB 坐标轴逐渐与半透明目标坐标轴重合</td>
+<td style="text-align: center;">此时末端姿态已经与目标一致，但绿色腕部参考点 <span class="arithmatex">\(O_5\)</span> 尚未到达红色目标位置</td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">保持 <span class="arithmatex">\(\phi,q_5,q_6\)</span> 不变，联动 <span class="arithmatex">\(q_2,q_3,q_4\)</span> 调整机械臂臂形</td>
+<td style="text-align: center;">末端姿态保持不变，绿色腕部参考点逐渐移动到红色目标位置，完成位置与姿态的解耦求解</td>
+</tr>
+</tbody>
+</table>
+<p>因此，本节采用的求解顺序是：</p>
+<div class="arithmatex">\[
+q_1
+\quad\longrightarrow\quad
+(\phi,q_5,q_6)
+\quad\longrightarrow\quad
+(q_2,q_3,q_4)
+\]</div>
+<p>球形腕可以把位置和姿态分别交给前三轴与后三轴；连续三轴平行构型则需要先从目标姿态中取得后续位置求解所需的 <span class="arithmatex">\(\phi\)</span>，再完成平面内的位置计算。</p>
+<h3 id="32-q_1">3.2 求 <span class="arithmatex">\(q_1\)</span>：腕部参考点的水平投影</h3>
+<p>先看腕部参考点与第 1 轴之间没有侧向偏置的简化情况。设腕部参考点 <span class="arithmatex">\(O_5\)</span> 与末端系原点重合，其目标位置为 <span class="arithmatex">\({}^0\bm p_{O_5}=(x_5,y_5,z_5)\)</span>。从上方看，<span class="arithmatex">\(O_5\)</span> 的水平投影方向就是第 1 轴的转角，因此</p>
+<div class="arithmatex">\[
+q_1=\operatorname{atan2}(y_5,x_5)
+\]</div>
+<p>若机械臂存在侧向偏置，<span class="arithmatex">\(q_1\)</span> 就不能只由一个方位角得到，还需要把偏置形成的三角关系计入，并检查相差 <span class="arithmatex">\(180°\)</span> 的另一肩部分支。若 <span class="arithmatex">\((x_5,y_5)=(0,0)\)</span>，水平投影本身也无法确定 <span class="arithmatex">\(q_1\)</span>，此时需要结合目标姿态或选定参考角继续求解。</p>
+<h3 id="33-phiq_5q_6">3.3 姿态子问题：先解出 <span class="arithmatex">\(\phi,q_5,q_6\)</span></h3>
+<p>第 2、3、4 轴都会改变末段朝向，但只根据目标姿态，还不能确定三个关节各自的转角。求解时先把它们对姿态的共同作用合并为平面朝向角 <span class="arithmatex">\(\phi\)</span>：</p>
+<div class="arithmatex">\[
+\phi=-q_2+q_3+q_4
+\]</div>
+<p>这样一来，姿态子问题中只剩三个待求量：<span class="arithmatex">\(\phi\)</span>、<span class="arithmatex">\(q_5\)</span> 和 <span class="arithmatex">\(q_6\)</span>。先从目标姿态求出这三个量，下一节再结合目标位置，把 <span class="arithmatex">\(\phi\)</span> 分解为具体的 <span class="arithmatex">\(q_2,q_3,q_4\)</span>。</p>
+<p>具体做法是先去掉已经求出的第 1 轴转动和基座固定扭转。设目标末端姿态为 <span class="arithmatex">\({}^0_6\bm R\)</span>，把这两部分合记为</p>
+<div class="arithmatex">\[
+\bm B=\bm R_Z(q_1)\bm R_X(-\tfrac{\pi}{2})
+\]</div>
+<p>则约化后的姿态为 <span class="arithmatex">\(\bm Q=\bm B^{\top}{}^0_6\bm R\)</span>。此时 <span class="arithmatex">\(\bm Q\)</span> 只包含“平面合角 + 后两轴”的旋转：</p>
+<div class="arithmatex">\[
+\bm Q=
+\underbrace{\bm R_Z(\phi)}_{\text{第 2～4 轴的合成朝向}}
+\bm R_X(\alpha_4)
+\underbrace{\bm R_Z(q_5)}_{\text{第 5 轴}}
+\bm R_X(\alpha_5)
+\underbrace{\bm R_Z(q_6)}_{\text{第 6 轴}}
+\]</div>
+<p>理解到这里，就已经掌握了本节的主要思路：<strong>先不区分 <span class="arithmatex">\(q_2,q_3,q_4\)</span>，而把它们对姿态的作用压缩成一个 <span class="arithmatex">\(\phi\)</span></strong>。</p>
+<details class="tutorial-details">
+<summary>拓展：从姿态矩阵提取三个角</summary>
+<p>下面给出程序中提取三个角的方式，用来说明上述分解如何落地。它只适用于本节采用的扭角配置，尤其用到了 <span class="arithmatex">\(\alpha_5=\pi/2\)</span> 且 <span class="arithmatex">\(\sin\alpha_4\ne0\)</span>；更换机械臂构型后，需要重新展开对应的姿态矩阵。先由 <span class="arithmatex">\(\bm Q\)</span> 的 <span class="arithmatex">\((2,2)\)</span> 元素求 <span class="arithmatex">\(q_5\)</span>：</p>
+<div class="arithmatex">\[
+\cos q_5=-\frac{Q_{22}}{\sin\alpha_4},\qquad
+q_5=\operatorname{atan2}\!\bigl(\pm\sqrt{1-\cos^2q_5},\;\cos q_5\bigr)
+\]</div>
+<p>正负号给出两组腕部翻转分支。选定一组 <span class="arithmatex">\(q_5\)</span> 后，再依次求 <span class="arithmatex">\(\phi\)</span> 和 <span class="arithmatex">\(q_6\)</span>：</p>
+<div class="arithmatex">\[
+\phi=\operatorname{atan2}(Q_{12},Q_{02})
+-\operatorname{atan2}\!\bigl(-\cos\alpha_4\cos q_5,\;\sin q_5\bigr)
+\]</div>
+<div class="arithmatex">\[
+q_6=\operatorname{atan2}(R_{10},R_{00})
+\]</div>
+<p>其中 <span class="arithmatex">\(\bm R=\bigl[\bm R_Z(\phi)\bm R_X(\alpha_4)\bm R_Z(q_5)\bm R_X(\alpha_5)\bigr]^{\top}\bm Q\)</span>，也就是从 <span class="arithmatex">\(\bm Q\)</span> 中继续去掉已经求出的 <span class="arithmatex">\(\phi\)</span> 和 <span class="arithmatex">\(q_5\)</span>，剩下的旋转用于求 <span class="arithmatex">\(q_6\)</span>。</p>
+<p>当 <span class="arithmatex">\(|\sin q_5|\to0\)</span>，即 <span class="arithmatex">\(q_5=0\)</span> 或 <span class="arithmatex">\(180°\)</span> 时，<span class="arithmatex">\(\phi\)</span> 与 <span class="arithmatex">\(q_6\)</span> 只以组合角 <span class="arithmatex">\((\phi\pm q_6)\)</span> 出现，无法单独确定。此时按 <a href="#12">1.2 节</a> 的思路取一个代表解：固定 <span class="arithmatex">\(q_6\)</span> 的参考值（代码用 <span class="arithmatex">\(q_6^{\text{ref}}\)</span>，默认取初值），再由组合角反求 <span class="arithmatex">\(\phi\)</span>。</p>
+</details>
+<blockquote>
+<p>📌 <strong>要点</strong>：这是三轴平行构型与球形腕最大的不同——<strong>姿态方程顺带解出了位置子问题所需的 <span class="arithmatex">\(\phi\)</span></strong>，而不是"位置定腕心 → 姿态定腕角"。</p>
+</blockquote>
+<h3 id="34-phi-q_2q_3q_4">3.4 位置子问题：由 <span class="arithmatex">\(\phi\)</span> 解出 <span class="arithmatex">\(q_2,q_3,q_4\)</span></h3>
+<p>求出 <span class="arithmatex">\(q_1\)</span> 后，第 2、3、4 轴的运动可以看成一个平面问题。把腕部参考点 <span class="arithmatex">\(O_5\)</span> 变换到这个平面内：</p>
+<div class="arithmatex">\[
+{}^1\bm p_{O_5}={}^0_1\bm R^{\top}\bigl({}^0\bm p_{O_5}-{}^0\bm p_1\bigr)
+\]</div>
+<p>在本节的简化几何中，<span class="arithmatex">\(O_5\)</span> 在第 1 系中的平面坐标记为</p>
+<div class="arithmatex">\[
+x={}^1 p_{O_5,x},\qquad z={}^1 p_{O_5,z}
+\]</div>
+<p>这里沿用 <a href="#2-2r">第 2 节</a> 的平面 2R 定义：两段连杆长度仍记为 <span class="arithmatex">\(l_1,l_2\)</span>。由于它们对应当前机械臂的第 2、3 关节，两个关节角相应记为 <span class="arithmatex">\(q_2,q_3\)</span>；其中 <span class="arithmatex">\(q_2\)</span> 是第一段连杆相对平面 <span class="arithmatex">\(x\)</span> 轴的转角，<span class="arithmatex">\(q_3\)</span> 是第二段连杆相对第一段连杆的转角。肩部、肘部和 <span class="arithmatex">\(O_5\)</span> 构成一个三角形，因此可以先用余弦定理求出 <span class="arithmatex">\(q_3\)</span>：</p>
+<p><img alt="连续三轴平行构型的平面几何关系" src="../images/chapt3_ikine/parallel_axes_planar_geometry.svg" /></p>
+<div class="arithmatex">\[
+\cos q_3=\frac{x^2+z^2-l_1^2-l_2^2}{2l_1l_2}
+\]</div>
+<p>反余弦给出的正负两组结果对应肘上和肘下两种构型。选定 <span class="arithmatex">\(q_3\)</span> 后，再根据目标点的方向求肩关节 <span class="arithmatex">\(q_2\)</span>：</p>
+<div class="arithmatex">\[
+q_2=
+\underbrace{\operatorname{atan2}(z,x)}_{\text{目标点的方向}}
+-\underbrace{\operatorname{atan2}\!\bigl(l_2\sin q_3,\;l_1+l_2\cos q_3\bigr)}_{\text{连杆弯曲带来的修正角}}
+\]</div>
+<p>此时 <span class="arithmatex">\(q_2,q_3\)</span> 已经使腕部参考点到达目标位置，但末段朝向还不一定等于 3.3 节求出的 <span class="arithmatex">\(\phi\)</span>。最后用 <span class="arithmatex">\(q_4\)</span> 补足剩余角度：</p>
+<div class="arithmatex">\[
+q_4=\phi+q_2-q_3
+\]</div>
+<p>因此，这一步可以概括为：用三角形确定 <span class="arithmatex">\(q_2,q_3\)</span>，再用 <span class="arithmatex">\(q_4\)</span> 补足末段朝向。</p>
+<p>上面的公式为了突出求解顺序，省略了固定偏置、零位偏角和解支管理。工程代码中的对应关系如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">简化公式或步骤</th>
+<th style="text-align: center;">工程代码中的对应处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">将 TCP 目标换算为第 6 坐标系目标</td>
+<td style="text-align: center;"><code>_target_link6()</code> 去除 TCP 与第 6 坐标系之间的固定变换</td>
+</tr>
+<tr>
+<td style="text-align: center;"><span class="arithmatex">\(q_1=\operatorname{atan2}(y_5,x_5)\)</span></td>
+<td style="text-align: center;"><code>_solve_q1()</code> 同时计入侧向偏置、关节零位和两个肩部分支</td>
+</tr>
+<tr>
+<td style="text-align: center;">由约化姿态求 <span class="arithmatex">\(\phi,q_5,q_6\)</span></td>
+<td style="text-align: center;"><code>_reduced_orientation()</code> 与 <code>_solve_phi_q56()</code> 计入 MDH 扭角、腕部翻转分支和腕部奇异</td>
+</tr>
+<tr>
+<td style="text-align: center;">由平面几何求 <span class="arithmatex">\(q_2,q_3,q_4\)</span></td>
+<td style="text-align: center;"><code>_solve_q234()</code> 先扣除固定投影与零位偏角，再枚举肘部解支</td>
+</tr>
+<tr>
+<td style="text-align: center;">组合并选取最终关节角</td>
+<td style="text-align: center;"><code>solve_all()</code> 处理 <span class="arithmatex">\(2\pi\)</span> 周期、关节限位、正运动学回代、去重与排序</td>
+</tr>
+</tbody>
+</table>
+<p>这些函数位于 <code>joyarm_code/joyarm_core/robotics/ikine/ikine_solver_analytic.py</code>。阅读代码时可以沿表中顺序，将每一步与本节公式逐项对应。</p>
+<h3 id="35">3.5 与球形腕构型对比</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">维度</th>
+<th style="text-align: center;">JoyArm 连续三轴平行（§3）</th>
+<th style="text-align: center;">球形腕（§4）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><strong>求解顺序</strong></td>
+<td style="text-align: center;"><strong>先姿态、后位置</strong></td>
+<td style="text-align: center;">先位置、后姿态</td>
+</tr>
+<tr>
+<td style="text-align: center;">位置子问题</td>
+<td style="text-align: center;">已知 <span class="arithmatex">\(\phi\)</span> 后，平面 2R 解 <span class="arithmatex">\((q_2,q_3,q_4)\)</span></td>
+<td style="text-align: center;">前 3 轴 → 腕心（3 未知量）</td>
+</tr>
+<tr>
+<td style="text-align: center;">姿态子问题</td>
+<td style="text-align: center;">先解 <span class="arithmatex">\((\phi,q_5,q_6)\)</span>（含平面合角）</td>
+<td style="text-align: center;">后 3 轴正交 → ZYZ 欧拉角</td>
+</tr>
+<tr>
+<td style="text-align: center;">解的组数</td>
+<td style="text-align: center;">最多 8</td>
+<td style="text-align: center;">最多 8</td>
+</tr>
+<tr>
+<td style="text-align: center;">典型机型</td>
+<td style="text-align: center;">JoyArm 等三轴平行肘式臂</td>
+<td style="text-align: center;">多数工业 6R（如 PUMA 类）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>一句话总结</strong>：连续三轴平行的解析解 = <strong>用平行轴的合角把位置压到平面 + 用相交腕轴定姿态</strong>。它与球形腕殊途同归——都是"利用构型特征解耦"，这也是 <a href="#5">第 5 节</a> 数值法之外的解析解通用套路。本节公式采用简化几何；JoyArm 的具体实现见 <code>joyarm_code/joyarm_core/robotics/ikine/ikine_solver_analytic.py</code>。</p>
+</blockquote>
+<h2 id="4-6r">4 拓展：末三轴相交的 6R 机械臂</h2>
+<p>除连续三轴平行构型外，工程中另一类常见的可解析构型是<strong>末三轴相交</strong>的 6R 机械臂，也称为球形腕。第 4、5、6 关节轴线交于腕心 <span class="arithmatex">\(W\)</span>；后三轴转动会改变末端姿态，却不会改变腕心位置。因此，完整逆解可以拆成两个子问题：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">子问题</th>
+<th style="text-align: center;">待求量</th>
+<th style="text-align: center;">核心思路</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">位置子问题</td>
+<td style="text-align: center;"><span class="arithmatex">\(q_1,q_2,q_3\)</span></td>
+<td style="text-align: center;">由目标位姿反推腕心，再由前三轴把腕心移动到目标位置</td>
+</tr>
+<tr>
+<td style="text-align: center;">姿态子问题</td>
+<td style="text-align: center;"><span class="arithmatex">\(q_4,q_5,q_6\)</span></td>
+<td style="text-align: center;">消去前三轴姿态后，对剩余旋转作 ZYZ 欧拉角分解</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="球形腕的位置与姿态解耦演示" src="../images/chapt3_ikine/recording_2026-10-16_14-12-38_2x.webp" /></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">动画过程</th>
+<th style="text-align: center;">观察重点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">第 4、5、6 关节同时转动，末端姿态不断变化</td>
+<td style="text-align: center;">绿色腕心始终保持不动，体现末三轴相交的几何性质</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">第 1、2、3 关节开始运动</td>
+<td style="text-align: center;">前三轴负责改变腕心位置，将绿色腕心移向红色目标点</td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">腕心与目标点重合，前三轴停止运动</td>
+<td style="text-align: center;">腕心定位完成，位置子问题结束</td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">第 4、5、6 关节继续调整末端姿态</td>
+<td style="text-align: center;">实线 RGB 坐标轴与半透明目标坐标轴重合，姿态子问题结束</td>
+</tr>
+</tbody>
+</table>
+<details class="tutorial-details">
+<summary>详细推导：腕心定位与 ZYZ 姿态分解</summary>
+<p><strong>1. 由目标位姿反推腕心</strong></p>
+<p>设目标位姿为 <span class="arithmatex">\({}^0_6\bm T\)</span>，末端坐标系原点到腕心的固定偏置在 <span class="arithmatex">\(\{6\}\)</span> 中为 <span class="arithmatex">\({}^6\bm p_W\)</span>，则腕心在基座系中的位置为</p>
+<div class="arithmatex">\[
+{}^0\bm p_W={}^0_6\bm R\,{}^6\bm p_W+{}^0\bm p_6
+\]</div>
+<p>先用目标姿态把固定偏置转到基座系，再加上目标末端位置，就能得到目标腕心位置。</p>
+<p><strong>2. 由腕心求 <span class="arithmatex">\(q_1,q_2,q_3\)</span></strong></p>
+<p>记 <span class="arithmatex">\({}^0\bm p_W=(x_W,y_W,z_W)\)</span>。在没有侧向偏置的简化构型中，第一关节角由腕心的水平投影确定：</p>
+<div class="arithmatex">\[
+q_1=\operatorname{atan2}(y_W,x_W)
+\quad\text{（另一个候选方向相差 }180^\circ\text{）}
+\]</div>
+<p>将腕心变换到第 1 坐标系，并扣除肩部固定偏置后，平面内目标坐标记为 <span class="arithmatex">\((x,z)\)</span>。问题化为第 2 节的平面 2R 逆解：</p>
+<div class="arithmatex">\[
+\gamma=\frac{x^2+z^2-l_1^2-l_2^2}{2l_1l_2},\qquad
+q_3=\pm\arccos(\gamma)
+\]</div>
+<div class="arithmatex">\[
+q_2=\operatorname{atan2}(z,x)
+-\operatorname{atan2}\!\bigl(l_2\sin q_3,\;l_1+l_2\cos q_3\bigr)
+\]</div>
+<p>只有 <span class="arithmatex">\(\gamma\in[-1,1]\)</span> 时才有实数解。其他球形腕机械臂仍然先求腕心，但前三轴的具体公式必须根据实际尺寸和轴线布局推导。</p>
+<p><strong>3. 消去前三轴并分解腕部姿态</strong></p>
+<p>前三轴求出后，<span class="arithmatex">\({}^0_3\bm R\)</span> 已知，因此</p>
+<div class="arithmatex">\[
+{}^3_6\bm R=({}^0_3\bm R)^{\top}{}^0_6\bm R
+\]</div>
+<p>对常见的正交球形腕，剩余姿态可写成 ZYZ 欧拉角形式：</p>
+<div class="arithmatex">\[
+{}^3_6\bm R=\bm R_Z(q_4)\bm R_Y(q_5)\bm R_Z(q_6)
+\]</div>
+<p>设 <span class="arithmatex">\({}^3_6\bm R=[r_{ij}]\)</span>，一组角度可以由下式提取：</p>
+<div class="arithmatex">\[
+q_5=\operatorname{atan2}\!\bigl(\sqrt{r_{13}^2+r_{23}^2},\,r_{33}\bigr)
+\]</div>
+<div class="arithmatex">\[
+q_4=\operatorname{atan2}(r_{23},r_{13}),\qquad
+q_6=\operatorname{atan2}(r_{32},-r_{31})
+\]</div>
+<p>当 <span class="arithmatex">\(\sin q_5=0\)</span> 时，<span class="arithmatex">\(q_4\)</span> 与 <span class="arithmatex">\(q_6\)</span> 只以组合角出现，无法分别确定。此时需要固定其中一个角，再求另一个代表解。</p>
+</details>
+<p>位置子问题通常产生肩部和肘部解支，姿态子问题还会产生腕部翻转解支，因此经典球形腕最多可能组合出</p>
+<div class="arithmatex">\[
+2\times2\times2=8
+\]</div>
+<p>组候选解。目标不可达、关节限位、奇异性和正运动学回代误差会继续剔除部分候选，因此有效解通常少于 8 组。这里的“最多 8 组”描述的是经典构型下的候选上限，并不意味着任意 6R 机械臂都固定具有 8 组逆解。</p>
+<h2 id="5">5 机械臂逆运动学的数值解法</h2>
+<p>第 3、4 节的解析解依赖特定构型。对于没有闭式解的机械臂，可以从一组初始关节角出发，不断修正关节角，使末端逐步靠近目标位姿。这就是数值逆运动学。实际使用时，雅可比和关节修正量由 Pinocchio 计算。这里重点说明数值逆解的迭代过程。</p>
+<h3 id="51">5.1 数值逆解在做什么</h3>
+<p>数值逆解没有一步到位的公式，而是反复执行下面四步：</p>
+<ol>
+<li>给定一组初始关节角 <span class="arithmatex">\(\bm q_0\)</span>；</li>
+<li>用正运动学计算当前末端位姿；</li>
+<li>比较当前位姿与目标位姿，得到误差；</li>
+<li>根据误差计算关节修正量，更新关节角。</li>
+</ol>
+<p>更新后的关节角会再次进入正运动学。如果误差已经足够小，就返回当前结果；否则继续迭代。</p>
+<p>数值逆解就是先给出一组关节角，再根据末端偏差反复修正。</p>
+<h3 id="52">5.2 如何表示位姿误差</h3>
+<p>末端位姿同时包含位置和姿态。位置可以直接相减：</p>
+<div class="arithmatex">\[
+\bm e_p(\bm q)=\bm p_{\mathrm d}-\bm p(\bm q)
+\]</div>
+<p>姿态不能直接用两个旋转矩阵相减。这里用“从当前姿态转到目标姿态所需的最小旋转”表示姿态误差：</p>
+<div class="arithmatex">\[
+\bm e_R(\bm q)
+=
+\log_3\!\bigl(\bm R_{\mathrm d}\bm R(\bm q)^{\top}\bigr)
+\]</div>
+<p><span class="arithmatex">\(\log_3\)</span> 把两个姿态之间的相对旋转变成三维旋转向量。将位置误差和姿态误差合在一起，得到六维误差：</p>
+<div class="arithmatex">\[
+\bm e(\bm q)=
+\begin{bmatrix}
+\bm e_p(\bm q)\\
+\bm e_R(\bm q)
+\end{bmatrix}
+\]</div>
+<p>求解器用下面的残差判断是否收敛：</p>
+<div class="arithmatex">\[
+\varepsilon(\bm q)
+=
+\|\bm e_p(\bm q)\|_2
++
+\|\bm e_R(\bm q)\|_2
+\]</div>
+<p>当 <span class="arithmatex">\(\varepsilon(\bm q)&lt;\mathrm{tol}\)</span> 时，就认为当前关节角已经满足目标位姿。</p>
+<h3 id="53">5.3 如何修正关节角</h3>
+<p>雅可比矩阵 <span class="arithmatex">\(\bm J\)</span> 描述“关节角发生微小变化时，末端位姿会怎样变化”。反过来利用这个关系，就能根据末端误差估计关节修正量，记为 <span class="arithmatex">\(\Delta\bm q\)</span>。求解器使用阻尼伪逆限制奇异附近过大的修正，以少量末端误差换取更稳定的迭代。</p>
+<details class="tutorial-details">
+<summary>拓展：阻尼伪逆公式与阻尼参数</summary>
+<p>关节修正量可以写成</p>
+<div class="arithmatex">\[
+\Delta\bm q=\bm J_{\lambda}^{+}\bm e
+\]</div>
+<p>一种常用的阻尼伪逆形式为</p>
+<div class="arithmatex">\[
+\bm J_{\lambda}^{+}
+=\bm J^T
+\left(\bm J\bm J^T+\lambda^2\bm I\right)^{-1}
+\]</div>
+<p>普通伪逆在奇异位形附近可能产生很大的关节修正量；阻尼参数 <span class="arithmatex">\(\lambda\)</span> 用来压小这些不稳定的修正。<span class="arithmatex">\(\lambda\)</span> 较小时，求解器更积极地靠近目标；<span class="arithmatex">\(\lambda\)</span> 较大时，关节修正更保守，但末端误差也可能增大。</p>
+<p>Levenberg–Marquardt（LM）方法会根据本次修正是否让误差下降，自动调整 <span class="arithmatex">\(\lambda\)</span>。阻尼伪逆只能缓和数值放大，不能消除机械臂几何结构本身的奇异性。其进一步推导属于奇异值分解、最小二乘与正则化内容。</p>
+</details>
+<p>得到修正量后，更新关节角并限制在关节范围内：</p>
+<div class="arithmatex">\[
+\bm q_{k+1}
+=
+\operatorname{clip}\!\bigl(
+\bm q_k+\Delta\bm q_k
+\bigr)
+\]</div>
+<p>雅可比的具体构造和奇异性将在<a href="../chapt4_jacobian/">第四章</a>中介绍。实际运行时，Pinocchio 会计算正运动学、雅可比和关节修正量，不需要使用者手工展开这些矩阵。</p>
+<h3 id="54">5.4 初值与奇异</h3>
+<p>数值解依赖初值 <span class="arithmatex">\(\bm q_0\)</span>。初值靠近目标解时，通常只需少量迭代；初值较远时，求解可能变慢、落入另一组解，或者无法收敛。</p>
+<p>奇异位形附近，某些方向上的末端运动需要很大的关节变化。阻尼可以减轻修正量突然放大的问题，但不能保证每次都成功。求解过程中还需要限制单步修正量，并把关节角钳在硬限位内。</p>
+<h3 id="55">5.5 与解析解的关系</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">维度</th>
+<th style="text-align: center;">解析解（§3、§4）</th>
+<th style="text-align: center;">数值解（本节）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">适用构型</td>
+<td style="text-align: center;">依赖特殊几何</td>
+<td style="text-align: center;">任意构型</td>
+</tr>
+<tr>
+<td style="text-align: center;">解的性质</td>
+<td style="text-align: center;">可枚举多组候选解</td>
+<td style="text-align: center;">通常返回一组局部解</td>
+</tr>
+<tr>
+<td style="text-align: center;">计算方式</td>
+<td style="text-align: center;">直接计算</td>
+<td style="text-align: center;">从初值反复迭代</td>
+</tr>
+<tr>
+<td style="text-align: center;">初值依赖</td>
+<td style="text-align: center;">通常不依赖</td>
+<td style="text-align: center;">明显依赖</td>
+</tr>
+<tr>
+<td style="text-align: center;">奇异附近</td>
+<td style="text-align: center;">需要单独处理</td>
+<td style="text-align: center;">可用阻尼缓和</td>
+</tr>
+<tr>
+<td style="text-align: center;">失败处理</td>
+<td style="text-align: center;">检查可达性与候选分支</td>
+<td style="text-align: center;">调整初值或随机重启</td>
+</tr>
+</tbody>
+</table>
+<p>连续轨迹中通常把上一时刻的关节角作为下一时刻的初值，这样既能减少迭代次数，也能降低解分支突然跳变的概率。</p>
+<p>实际使用以 <code>PinIkineSolver</code> 为主，其实现位于 <code>joyarm_code/joyarm_core/robotics/ikine/ikine_solver_pin.py</code>。使用者只需要给出目标位姿、目标帧和初值 <span class="arithmatex">\(\bm q_0\)</span>，必要时再设置 <code>tol</code>、<code>iters</code>；求解器内部完成正运动学、雅可比、LM 迭代和随机重启，并返回 <code>IKResult(success, q, err, n_iter)</code>。解析解对应同目录的 <code>AnalyticIkineSolver</code>；<code>solve</code> 返回距离 <span class="arithmatex">\(\bm q_0\)</span> 最近的一组解，<code>solve_all</code> 返回全部有效候选解。</p>
+<h2 id="6-pinocchio-joyarm">6 本章实践：使用 Pinocchio 实现 JoyArm 逆运动学</h2>
+<p>本实践把第 5 节介绍的数值逆解流程写成一个标准求解器。目标位姿、连续初值、正运动学回代、参考结果和三维显示均已给出，实践重点只有一个：继承 <code>IkineSolver</code>，在子类的 <code>solve()</code> 中使用 Pinocchio 完成 JoyArm 数值逆解。整个实验离线运行，无需连接机械臂。</p>
+<h3 id="61">6.1 实践任务与接口</h3>
+<p>对应脚本位于 <code>joyarm_code/chapt/chapt3/chapt3_ikine_exercise.py</code>，使用说明见脚本头部注释。脚本已经定义 <code>PracticePinIkineSolver</code> 子类，并在 <code>solve()</code> 中标出实践实现区。</p>
+<p>实践实现区默认抛出 <code>NotImplementedError</code>。先根据区内提示补全迭代求解过程，再运行后续校验与 MeshCat 对照。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">已提供内容</th>
+<th style="text-align: center;">需要完成的内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>IkineSolver</code> 基类和 <code>solve()</code> 接口</td>
+<td style="text-align: center;">创建 Pinocchio 计算数据并读取目标帧</td>
+</tr>
+<tr>
+<td style="text-align: center;">JoyArm 模型、三个相邻目标位姿</td>
+<td style="text-align: center;">计算当前位姿和六维位姿误差</td>
+</tr>
+<tr>
+<td style="text-align: center;">连续目标求解流程</td>
+<td style="text-align: center;">调用 Pinocchio 获取雅可比并计算关节修正量</td>
+</tr>
+<tr>
+<td style="text-align: center;">回代校验和库内参考结果</td>
+<td style="text-align: center;">限制步长、更新关节角并判断收敛</td>
+</tr>
+<tr>
+<td style="text-align: center;">结果表格和 MeshCat 路径播放</td>
+<td style="text-align: center;">返回统一的 <code>IKResult</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>solve()</code> 的输入包含目标位姿、目标帧、初始关节角、收敛阈值和最大迭代次数；输出统一为 <code>IKResult</code>。求解成功时，<code>success=True</code>，并在 <code>q</code>、<code>err</code> 和 <code>n_iter</code> 中分别记录关节角、末端残差和迭代次数。达到最大迭代次数仍未收敛时，应返回迭代过程中的最优结果，并令 <code>success=False</code>。</p>
+<h3 id="62-pinocchio">6.2 使用 Pinocchio 完成迭代</h3>
+<p>首先从 <code>arm.pin_model</code> 取得 Pinocchio 模型，为本次求解创建私有的 <code>pin.Data</code>，并把目标帧名转换为帧编号。每轮迭代调用 <code>pin.forwardKinematics()</code> 和 <code>pin.updateFramePlacement()</code> 得到当前末端位姿，再计算六维误差：</p>
+<div class="arithmatex">\[
+\bm e
+=
+\begin{bmatrix}
+\bm p_{\mathrm d}-\bm p\\
+\log_3\!\left(\bm R_{\mathrm d}\bm R^T\right)
+\end{bmatrix}
+\]</div>
+<p>当位置误差范数与姿态误差范数之和小于 <code>tol</code> 时，认为求解收敛。尚未收敛时，调用 <code>pin.computeFrameJacobian()</code> 获取当前雅可比，并用第 5 节给出的阻尼修正关系计算关节增量：</p>
+<div class="arithmatex">\[
+\Delta\bm q
+=
+\bm J^T
+\left(
+\bm J\bm J^T+\lambda^2\bm I
+\right)^{-1}
+\bm e
+\]</div>
+<p>随后限制 <span class="arithmatex">\(\|\Delta\bm q\|\)</span>，避免单步修正过大；通过 <code>pin.integrate()</code> 更新关节角，并把结果裁剪到 JoyArm 的硬限位内。新的关节角进入下一轮迭代。</p>
+<blockquote>
+<p>📌 <strong>与第四章的边界</strong>：本实践把 <code>pin.computeFrameJacobian()</code> 当作库接口使用，不要求推导或手工构造雅可比矩阵。雅可比各列的物理意义、计算方法和奇异性分析将在<a href="../chapt4_jacobian/">第四章</a>展开。</p>
+</blockquote>
+<p>本实践只实现单起点和固定阻尼。库内 <code>PinIkineSolver</code> 还包含自适应阻尼与失败重启，用于作为工程实现对照，不属于本次实践任务。</p>
+<h3 id="63">6.3 运行与校验</h3>
+<p>进入代码库并运行无界面实验：</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>joyarm_code
+uv<span class="w"> </span>sync
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>chapt/chapt3/chapt3_ikine_exercise.py<span class="w"> </span>--headless
+</code></pre></div>
+<p>程序依次求解三个相邻目标。第一个目标使用给定的起始关节角，后续目标使用上一目标的解作为初值。终端分别输出实践求解器与库内参考求解器的结果，包括关节角、限位状态、位置误差和姿态误差。</p>
+<p>去掉 <code>--headless</code> 后，MeshCat 会先播放实践求解器路径，再播放参考求解器路径：</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>chapt/chapt3/chapt3_ikine_exercise.py
+</code></pre></div>
+<p>判断实现是否正确时，应检查所有目标是否求解成功、关节角是否位于限位内，以及正运动学回代后的末端误差是否满足阈值。实践求得的关节角不必与参考解完全相同，因为同一末端位姿可能对应多组逆解。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.expand"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+        <script src="../javascripts/image-viewer.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

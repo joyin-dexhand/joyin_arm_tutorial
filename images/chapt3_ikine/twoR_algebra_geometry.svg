@@ -1,0 +1,502 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1000"
+   height="500"
+   viewBox="0 0 1000 500"
+   role="img"
+   aria-label="平面 2R 机械臂的几何关系、投影分解与肘上肘下两组解"
+   version="1.1"
+   id="svg1248"
+   sodipodi:docname="twoR_algebra_geometry.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1252">
+    <rect
+       x="469.06508"
+       y="551.42192"
+       width="12.113741"
+       height="16.012549"
+       id="rect2085" />
+  </defs>
+  <sodipodi:namedview
+     id="namedview1250"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.6942278"
+     inkscape:cx="354.14363"
+     inkscape:cy="227.24216"
+     inkscape:window-width="2494"
+     inkscape:window-height="1531"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1248" />
+  <title
+     id="title1124">平面 2R 机械臂的几何关系与两组构型解</title>
+  <style
+     id="style1126">text{font-family:'Noto Sans CJK SC','Microsoft YaHei',sans-serif;font-size:20px;fill:#263442}.title{font-size:25px;font-weight:700}.small{font-size:19px}.comp{font-size:16px}.blue{fill:#236ab0}.red{fill:#dc493a}</style>
+  <rect
+     width="100%"
+     height="100%"
+     rx="16"
+     fill="#fff"
+     id="rect1128" />
+  <text
+     x="35"
+     y="42"
+     class="title"
+     id="text1130">平面 2R 机械臂的几何关系与两组构型解</text>
+  <rect
+     x="28"
+     y="64"
+     width="459"
+     height="392"
+     rx="12"
+     fill="#f4f7fa"
+     id="rect1132"
+     style="fill:#f2f2f2" />
+  <rect
+     x="515"
+     y="64"
+     width="460"
+     height="392"
+     rx="12"
+     fill="#f4f7fa"
+     id="rect1134"
+     style="fill:#f2f2f2" />
+  <g
+     id="panel-a-content"
+     transform="matrix(0.98200596,0,0,0.99513139,35.416338,-1.7679684)">
+    <line
+       x1="88"
+       y1="352"
+       x2="352"
+       y2="352"
+       stroke="#a8b6c3"
+       stroke-width="1.6"
+       stroke-dasharray="6, 6"
+       id="line1136" />
+    <line
+       x1="120"
+       y1="396"
+       x2="120"
+       y2="150"
+       stroke="#a8b6c3"
+       stroke-width="1.6"
+       stroke-dasharray="6, 6"
+       id="line1138" />
+    <line
+       x1="120"
+       y1="352"
+       x2="255.89999"
+       y2="352"
+       stroke="#4a5b6d"
+       stroke-width="8"
+       stroke-linecap="butt"
+       id="line1140" />
+    <line
+       x1="255.89999"
+       y1="352"
+       x2="287"
+       y2="352"
+       stroke="#8fa0b1"
+       stroke-width="8"
+       stroke-linecap="butt"
+       id="line1142" />
+    <line
+       x1="120"
+       y1="352"
+       x2="120"
+       y2="288.60001"
+       stroke="#4a5b6d"
+       stroke-width="8"
+       stroke-linecap="butt"
+       id="line1144" />
+    <line
+       x1="120"
+       y1="288.60001"
+       x2="120"
+       y2="172.7"
+       stroke="#8fa0b1"
+       stroke-width="8"
+       stroke-linecap="butt"
+       id="line1146" />
+    <line
+       x1="255.89999"
+       y1="288.60001"
+       x2="255.89999"
+       y2="352"
+       stroke="#c9d6e2"
+       stroke-width="1.5"
+       stroke-dasharray="6, 6"
+       id="line1148" />
+    <line
+       x1="120"
+       y1="288.60001"
+       x2="255.89999"
+       y2="288.60001"
+       stroke="#c9d6e2"
+       stroke-width="1.5"
+       stroke-dasharray="6, 6"
+       id="line1150" />
+    <line
+       x1="287"
+       y1="172.7"
+       x2="287"
+       y2="352"
+       stroke="#c9d6e2"
+       stroke-width="1.5"
+       stroke-dasharray="6, 6"
+       id="line1152" />
+    <line
+       x1="120"
+       y1="172.7"
+       x2="287"
+       y2="172.7"
+       stroke="#c9d6e2"
+       stroke-width="1.5"
+       stroke-dasharray="6, 6"
+       id="line1154" />
+    <line
+       x1="255.89999"
+       y1="346"
+       x2="255.89999"
+       y2="358"
+       stroke="#8fa0b1"
+       stroke-width="1.4"
+       id="line1156" />
+    <line
+       x1="287"
+       y1="346"
+       x2="287"
+       y2="358"
+       stroke="#8fa0b1"
+       stroke-width="1.4"
+       id="line1158" />
+    <line
+       x1="114"
+       y1="288.60001"
+       x2="126"
+       y2="288.60001"
+       stroke="#8fa0b1"
+       stroke-width="1.4"
+       id="line1160" />
+    <line
+       x1="114"
+       y1="172.7"
+       x2="126"
+       y2="172.7"
+       stroke="#8fa0b1"
+       stroke-width="1.4"
+       id="line1162" />
+    <line
+       x1="120"
+       y1="352"
+       x2="255.89999"
+       y2="288.60001"
+       stroke="#4a5b6d"
+       stroke-width="11"
+       stroke-linecap="round"
+       id="line1164"
+       style="fill:#f2f2f2" />
+    <line
+       x1="255.89999"
+       y1="288.60001"
+       x2="287"
+       y2="172.7"
+       stroke="#8fa0b1"
+       stroke-width="11"
+       stroke-linecap="round"
+       id="line1166" />
+    <polyline
+       points="166.0,352.0 166.0,351.3 166.0,350.7 166.0,350.0 165.9,349.3 165.9,348.7 165.8,348.0 165.8,347.3 165.7,346.7 165.6,346.0 165.5,345.3 165.4,344.7 165.3,344.0 165.2,343.4 165.0,342.7 164.9,342.0 164.8,341.4 164.6,340.7 164.4,340.1 164.3,339.4 164.1,338.8 163.9,338.2 163.7,337.5 163.5,336.9 163.2,336.3 163.0,335.6 162.7,335.0 162.5,334.4 162.2,333.8 162.0,333.2 161.7,332.6"
+       fill="none"
+       stroke="#c79a4a"
+       stroke-width="2"
+       id="polyline1168"
+       transform="translate(20.104961,-3.7009143)" />
+    <polyline
+       points="292.2,271.7 291.7,270.7 291.2,269.6 290.6,268.6 290.0,267.6 289.4,266.6 288.7,265.7 288.0,264.7 287.3,263.8 286.6,262.9 285.8,262.0 285.0,261.2 284.2,260.3 283.4,259.5 282.5,258.7 281.7,258.0 280.8,257.2 279.8,256.5 278.9,255.8 277.9,255.2 276.9,254.6 275.9,254.0 274.9,253.4 273.9,252.9 272.9,252.4 271.8,251.9 270.7,251.4 269.6,251.0 268.5,250.6 267.4,250.3 266.3,250.0"
+       fill="none"
+       stroke="#c79a4a"
+       stroke-width="2"
+       id="polyline1170"
+       transform="matrix(0.66827379,0,0,0.86722848,91.856436,35.151773)" />
+    <circle
+       cx="120"
+       cy="352"
+       r="14"
+       fill="#ffffff"
+       stroke="#334155"
+       stroke-width="3"
+       id="circle1172" />
+    <circle
+       cx="255.89999"
+       cy="288.60001"
+       r="11"
+       fill="#ffffff"
+       stroke="#334155"
+       stroke-width="3"
+       id="circle1174" />
+    <line
+       x1="223.86882"
+       y1="304.13266"
+       x2="343.1781"
+       y2="242.67709"
+       stroke="#a8b6c3"
+       stroke-width="1.16047"
+       stroke-dasharray="6, 6"
+       id="line138-6" />
+    <circle
+       cx="287"
+       cy="172.7"
+       r="13"
+       fill="#dc493a"
+       stroke="#b3382c"
+       stroke-width="3"
+       id="circle1176" />
+    <circle
+       cx="120"
+       cy="352"
+       r="4"
+       fill="#334155"
+       stroke="#334155"
+       stroke-width="0"
+       id="circle1178" />
+    <circle
+       cx="255.89999"
+       cy="288.60001"
+       r="4"
+       fill="#334155"
+       stroke="#334155"
+       stroke-width="0"
+       id="circle1180" />
+    <text
+       x="58"
+       y="100"
+       class="small"
+       id="text1182">① 几何定义与投影分解</text>
+    <text
+       x="90"
+       y="386"
+       class="small"
+       id="text1184">基座 O</text>
+    <text
+       x="190.33095"
+       y="272.80426"
+       class="small"
+       id="text1186">肘关节</text>
+    <text
+       x="307"
+       y="158.7"
+       class="small red"
+       id="text1188">末端</text>
+    <text
+       x="307"
+       y="180.7"
+       class="comp"
+       fill="#dc493a"
+       id="text1190">(x_d, y_d)</text>
+    <text
+       x="132"
+       y="322.29999"
+       class="blue"
+       id="text1192">l₁</text>
+    <text
+       x="247.92534"
+       y="227.6393"
+       class="blue"
+       id="text1194">l₂</text>
+    <text
+       x="184"
+       y="332"
+       class="small"
+       id="text1196">q₁</text>
+    <text
+       x="281.89999"
+       y="262.60001"
+       class="small"
+       id="text1198">q₂</text>
+    <text
+       x="112"
+       y="293.60001"
+       class="comp"
+       fill="#4a5b6d"
+       text-anchor="end"
+       id="text1200">l₁sin q₁</text>
+    <text
+       x="112"
+       y="235.7"
+       class="comp"
+       fill="#8fa0b1"
+       text-anchor="end"
+       id="text1202">l₂sin(q₁+q₂)</text>
+    <text
+       x="188"
+       y="378.60001"
+       class="comp"
+       fill="#4a5b6d"
+       text-anchor="middle"
+       id="text1204">l₁cos q₁</text>
+    <text
+       x="271.5"
+       y="378.60001"
+       class="comp"
+       fill="#8fa0b1"
+       text-anchor="middle"
+       id="text1206">l₂cos(q₁+q₂)</text>
+    <text
+       x="295"
+       y="340"
+       class="comp"
+       fill="#236ab0"
+       id="text1208">x_d</text>
+    <text
+       x="126"
+       y="176.7"
+       class="comp"
+       fill="#236ab0"
+       id="text1210">y_d</text>
+  </g>
+  <g
+     id="panel-b-content">
+    <line
+       x1="615.0"
+       y1="330.0"
+       x2="785.0"
+       y2="180.0"
+       stroke="#236ab0"
+       stroke-width="2.4"
+       stroke-dasharray="8 5"
+       id="line1213" />
+    <line
+       x1="615.0"
+       y1="330.0"
+       x2="761.5"
+       y2="297.7"
+       stroke="#334155"
+       stroke-width="10"
+       stroke-linecap="round"
+       id="line1215" />
+    <line
+       x1="761.5"
+       y1="297.7"
+       x2="785.0"
+       y2="180.0"
+       stroke="#334155"
+       stroke-width="10"
+       stroke-linecap="round"
+       id="line1217" />
+    <circle
+       cx="761.5"
+       cy="297.7"
+       r="10"
+       fill="white"
+       stroke="#334155"
+       stroke-width="3"
+       id="circle1219" />
+    <line
+       x1="615.0"
+       y1="330.0"
+       x2="665.3"
+       y2="188.7"
+       stroke="#8fa0b1"
+       stroke-width="10"
+       stroke-linecap="round"
+       stroke-dasharray="8 6"
+       id="line1221" />
+    <line
+       x1="665.3"
+       y1="188.7"
+       x2="785.0"
+       y2="180.0"
+       stroke="#8fa0b1"
+       stroke-width="10"
+       stroke-linecap="round"
+       stroke-dasharray="8 6"
+       id="line1223" />
+    <circle
+       cx="665.3"
+       cy="188.7"
+       r="10"
+       fill="white"
+       stroke="#8fa0b1"
+       stroke-width="3"
+       id="circle1225" />
+    <circle
+       cx="615.0"
+       cy="330.0"
+       r="13"
+       fill="white"
+       stroke="#334155"
+       stroke-width="3"
+       id="circle1227" />
+    <circle
+       cx="785.0"
+       cy="180.0"
+       r="13"
+       fill="#dc493a"
+       stroke="#b3382c"
+       stroke-width="3"
+       id="circle1229" />
+    <circle
+       cx="615.0"
+       cy="330.0"
+       r="4"
+       fill="#334155"
+       stroke="#334155"
+       stroke-width="0"
+       id="circle1231" />
+    <text
+       x="560.0"
+       y="100.0"
+       class="small"
+       id="text1233">② 同一目标点的两组解（肘上 / 肘下）</text>
+    <text
+       x="585.0"
+       y="364.0"
+       class="small"
+       id="text1235">基座 O</text>
+    <text
+       x="803.0"
+       y="170.0"
+       class="small red"
+       id="text1237">目标点</text>
+    <text
+       x="696.0"
+       y="243.0"
+       class="blue"
+       id="text1239">r</text>
+    <text
+       x="779.5"
+       y="327.7"
+       class="small"
+       fill="#334155"
+       id="text1241">肘下（q₂&gt;0）</text>
+    <text
+       x="555.3"
+       y="174.7"
+       class="small"
+       fill="#8fa0b1"
+       id="text1243">肘上（q₂&lt;0）</text>
+  </g>
+  <text
+     x="8.1441078"
+     y="480.98886"
+     class="small"
+     id="text1246">左：x_d、y_d 分别是两段连杆在坐标轴上的投影之和；右：目标点固定时肘关节有两个可能位置，对应 q₂ 的正负两解。</text>
+  <text
+     xml:space="preserve"
+     id="text2083"
+     style="fill:#fff6d5;white-space:pre;shape-inside:url(#rect2085)" />
+</svg>
