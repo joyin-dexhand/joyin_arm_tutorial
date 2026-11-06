@@ -1,18 +1,40 @@
 """JoyArm 解析逆运动学：枚举肩、腕、肘分支，并通过 MDH 正运动学回代验证。
 
 适用于第2/3/4轴平行、第5/6轴相交的六转动关节构型。
-MDH 正运动学与单节变换复用 fkine_solver_mdh 模块。
+MDH 单节变换与连乘为本模块私有实现，与 fkine 求解器解耦。
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from ..fkine.fkine_solver_mdh import _fkine_mdh, _mdh_transform
 from .ikine_solver import IkineSolver
 from ...utils.types import IKResult, Pose
 
 __all__ = ["AnalyticIkineSolver"]
+
+
+def _mdh_transform(row: np.ndarray, q: float) -> np.ndarray:
+    """MDH 参数表一行 [α, a, d, θ0] + 关节角 q → 相邻连杆位姿矩阵 (4, 4)。"""
+    alpha, a, d, theta_offset = row
+    theta = theta_offset + q
+
+    sa, ca = np.sin(alpha), np.cos(alpha)
+    st, ct = np.sin(theta), np.cos(theta)
+    return np.array([
+        [ct,      -st,       0.0,  a],
+        [st * ca,  ct * ca,  -sa, -sa * d],
+        [st * sa,  ct * sa,   ca,  ca * d],
+        [0.0,      0.0,       0.0, 1.0],
+    ])
+
+
+def _fkine_mdh(mdh: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """MDH 连乘正运动学：自基座逐节左乘 _mdh_transform，返回 (4, 4) 位姿矩阵。"""
+    T = np.eye(4)
+    for row, qi in zip(mdh, q):
+        T = T @ _mdh_transform(row, qi)
+    return T
 
 
 def _target_link6(target: Pose, T_e6: np.ndarray) -> np.ndarray:
