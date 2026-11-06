@@ -595,156 +595,90 @@ T_0e = pin.updateFramePlacement(model, data, model.getFrameId("frame_end_tcp")) 
 
 ## 5 本章实践：正运动学求解器实现与工作空间绘制分析
 
-本节把第 4 节的两种正运动学解法落地为程序：先在核心库中封装成可切换的求解器并学会调用（5.1~5.2），再用蒙特卡洛采样绘制并分析 JoyArm 的工作空间（5.3~5.5），回答"目标点够不够得到"。全程离线计算，无需连接机械臂。
-
 ### 5.1 正运动学求解器的算法实现
 
-核心库把正运动学求解封装在 robotics/fkine 里——一个基类规定接口，多个子类各自实现算法；本章实现两个子类，分别对应 §4.2 的 MDH 连乘与 §4.3 的 URDF + Pinocchio。
+正运动学求解算法封装在 robotics/fkine 里，一个基类规定接口，多个子类实现各自算法。
 
-#### 5.1.1 求解器接口：基类 FkineSolver
+#### 5.1.1 基类接口： FkineSolver
 
-基类只规定一个方法 `solve(arm, q, frame) → Pose`——**给定关节角，求某一帧的位姿**。输入与输出如下：
+基类只规定了 `solve(arm, q, frame) → Pose`方法，输入参数与返回值如下：
 
-| 输入 / 输出 | 名称 | 说明 |
+| 输入/返回 | 名称 | 说明 |
 |:---:|:---:|:---:|
-| 输入 | `arm` | 机械臂对象（提供配置与 URDF 模型） |
+| 输入 | `arm` | 机械臂对象 |
 | 输入 | `q` | `(n,)` 关节角，rad |
-| 输入 | `frame` | 目标帧名，如 `"frame_end_tcp"`（末端 TCP 系） |
+| 输入 | `frame` | 末端 frame 名，如 `"frame_end_tcp"` |
 | 返回 | `Pose` | `position`：`(3,)` 位置；`orientation`：`(4,)` 四元数 $(w,x,y,z)$；`.T`：$4\times4$ 位姿矩阵 |
 
-基类写成代码只需几行：
+#### 5.1.2 子求解器：MDH 法位姿矩阵连乘
 
-```python
-from abc import ABC, abstractmethod
-
-class FkineSolver(ABC):
-    """正运动学求解器接口：所有子类只须实现一个 solve 方法。"""
-
-    @abstractmethod
-    def solve(self, arm, q, frame):
-        """给定关节角 q（rad），求 frame 帧在基座系下的位姿（Pose）。"""
-```
-
-#### 5.1.2 MDH 版求解器
-
-MDH 版是 4.2 节连乘公式的直接翻译，共五步：
+MDH 版是 4.2 节连乘公式的直接实现：
 
 | 步骤 | 操作 | 得到 |
 |:---:|:---:|:---:|
-| 1 | 读 MDH 参数表与末端偏移 | config 的 `arm_mdh`（$n\times4$）与 `T_linkn_endtcp` |
-| 2 | 逐行代入 [4.1.1 节](#411) 展开式 | 相邻连杆位姿矩阵 $^{i-1}_i\bm{T}$ |
-| 3 | 按 [4.2 节](#42) 自基座连乘 | $^0_n\bm{T}$ |
-| 4 | 右乘末端工具系偏移 | $^0_e\bm{T}={}^0_n\bm{T}\,{}^n_e\bm{T}$ |
-| 5 | 转为 `Pose` 返回 | 位置 + 四元数 |
+| 1 | 读 MDH 参数表与末端偏移 | cfg.joyarm 的 `arm_mdh` 与 `T_linkn_endtcp` |
+| 2 | 逐行代入相邻连杆位姿矩阵表达式 | 相邻连杆位姿矩阵 $^{i-1}_i\bm{T}$ |
+| 3 | 位姿矩阵自基座系连乘 | $^0_e\bm{T}={}^0_n\bm{T}\,{}^n_e\bm{T}$ |
+| 4 | 转为 `Pose` 返回 | 位置 + 四元数 |
 
-精简实现（一个求单节矩阵的小函数 + 求解器类）：
+完整实现位于 `joyarm_code/joyarm_core/robotics/fkine/fkine_solver_mdh.py`。
 
-```python
-import numpy as np
-from joyarm_core import Pose
+#### 5.1.3 子求解器：Pinocchio 库调用
 
-def mdh_transform(row, q):
-    """MDH 参数表一行 [α, a, d, θ0] + 关节角 q → 相邻连杆位姿矩阵（4.1.1 节展开式）。"""
-    alpha, a, d, t0 = row
-    sa, ca, st, ct = np.sin(alpha), np.cos(alpha), np.sin(t0 + q), np.cos(t0 + q)
-    return np.array([[ct, -st, 0, a],
-                     [st * ca, ct * ca, -sa, -sa * d],
-                     [st * sa, ct * sa,  ca,  ca * d],
-                     [0, 0, 0, 1]])
+Pin 版调用 Pinochio 库函数完成求解：
 
-class MdhFkineSolver(FkineSolver):
-    """MDH 连乘版：逐行求相邻矩阵、自基座连乘，再右乘末端偏移。"""
+| 步骤 | 操作 | 得到 |
+|:---:|:---:|:---:|
+| 1 | `forwardKinematics` 沿运动链逐关节传递位姿 | 各连杆系相对基座的位姿 |
+| 2 | `updateFramePlacement` 取出末端 frame 位姿，转为 `Pose` 返回 | 位置 + 四元数 |
 
-    def solve(self, arm, q, frame):
-        cfg = arm.get_config()["joyarm"]                    # arm_mdh 参数表 + 末端偏移
-        T = np.eye(4)
-        for row, qi in zip(cfg["arm_mdh"], q):              # ② 逐行代入 → ③ 连乘
-            T = T @ mdh_transform(row, qi)
-        return Pose.from_T(T @ np.asarray(cfg["T_linkn_endtcp"]))  # ④ 右乘 → ⑤ 转 Pose
-```
-
-完整实现位于 `joyarm_code/joyarm_core/robotics/fkine/fkine_solver_mdh.py`，在上述逻辑之外另含参数缓存与维度、帧检查（仅支持末端帧）。
-
-#### 5.1.3 Pinocchio 版求解器
-
-Pin 版与 [4.3.2 节](#432) 同理：`forwardKinematics` 沿运动链逐关节传递位姿，`updateFramePlacement` 取出目标帧结果：
-
-```python
-import numpy as np
-import pinocchio as pin
-from joyarm_core import Pose
-
-class PinFkineSolver(FkineSolver):
-    """Pinocchio 版：沿运动链逐关节传递位姿，取出目标帧结果。"""
-
-    def solve(self, arm, q, frame):
-        model, data = arm.pin_model, arm.pin_model.createData()
-        pin.forwardKinematics(model, data, np.asarray(q, dtype=float))    # 正运动学
-        return Pose.from_T(pin.updateFramePlacement(                      # 取目标帧位姿
-            model, data, model.getFrameId(frame)).homogeneous)
-```
-
-完整实现位于 `joyarm_code/joyarm_core/robotics/fkine/fkine_solver_pin.py`，含帧名合法性检查，支持模型内任意帧。
+完整实现位于 `joyarm_code/joyarm_core/robotics/fkine/fkine_solver_pin.py`。
 
 #### 5.1.4 注册与配置
 
-两个子类写好后，在包的注册表 `REGISTRY` 里各登记一行（注册名 = 类名小写 + 下划线），config 再按名单加载：
+子类实现后，需要在 `robotics/fkine/__init__.py` 的注册表 `REGISTRY` 登记（注册名 = 类名小写 + 下划线）：
 
 ```python
 REGISTRY = {
-    "pin_fkine_solver": PinFkineSolver,  # 默认实现：URDF 通用
-    "mdh_fkine_solver": MdhFkineSolver,  # MDH 解析实现
+    "pin_fkine_solver": PinFkineSolver,  
+    "mdh_fkine_solver": MdhFkineSolver,  
 }
 ```
+
+注册等级后，`config/` 再按名加载：
 
 ```yaml
 robotics:
   fkine:
-    - { name: pin_fkine_solver }  # 列表首位 = 默认激活
+    - { name: pin_fkine_solver }  # 列表首位默认激活
     - { name: mdh_fkine_solver }
 ```
 
-两版求解器对比如下：
+### 5.2 正运动学求解器的调用与测试
 
-| 对比项 | MDH 版 | Pinocchio 版 |
-|:---:|:---:|:---:|
-| 数据来源 | config 的 MDH 参数表 | URDF 模型 |
-| 支持的帧 | 仅末端帧 | 任意帧（`link3`、`frame_end_tcp` 等） |
-| 适用场景 | 教学演示、与手推公式对照 | 通用计算（默认激活） |
-| 特点 | 公式白盒、过程可见 | 高效通用、无需维护公式 |
+#### 5.2.1 正运动学求解的调用方式
 
-### 5.2 正运动学求解器的调用
-
-创建机械臂对象时按 config 加载全部 fkine 求解器，`arm.solve_fkine` 自动转给当前激活的那个。离线调用示例（无需连接硬件）：
+创建机械臂对象时按 config 配置加载全部 fkine 求解器，`arm.solve_fkine` 自动委托被激活的求解器进行计算。调用示例：
 
 ```python
 import numpy as np
 from joyarm_core import joyArm
 
 arm = joyArm("rebot_arm_b601_dm")               # 离线创建对象，不连接硬件
-print(arm.get_fkine_solvers())                  # ['mdh_fkine_solver', 'pin_fkine_solver']
-print(arm.get_activated_fkine_solver())         # pin_fkine_solver（config 名单首位）
-q = np.array([0.0, -1.0, -1.0, 0.3, 0.0, 0.0])  # home 位形（config 的 home_arm）
-pose = arm.solve_fkine(q)                       # frame 缺省为末端帧 frame_end_tcp
-print(pose.position)                            # [ 0.3447 -0.0065  0.3442]
-print(pose.orientation)                         # [ 0.9887 -0.0023  0.1494 -0.0152]（w,x,y,z）
-print(pose.T)                                   # 4×4 位姿矩阵（左上姿态、右上位置）
-print(arm.solve_fkine(q, "link3").position)     # [-0.1226  0.      0.3623]（可求任意中间帧）
-arm.set_fkine_solver("mdh_fkine_solver")        # 切换激活求解器（返回 True）
-print(arm.solve_fkine(q).position)              # [ 0.3447 -0.0065  0.3442]（与上面一致）
-arm.close()
+print(arm.get_fkine_solvers())                  # 加载的全部 fkine_solver
+print(arm.get_activated_fkine_solver())         # 当前激活的求解器
+pose = arm.solve_fkine(arm.zero_arm)            # 进行位置正运动学计算
+print(pose.position)                            # 位置（x,y,z）
+print(pose.orientation)                         # 姿态四元数
+print(pose.T)                                   # 位姿矩阵
+arm.set_fkine_solver("mdh_fkine_solver")        # 切换求解器
+print(arm.solve_fkine().position)               # MDH 版的求解结果，q 缺省取机械臂的实时关节角
+arm.close()                                     # 机械臂停机
 ```
 
-常用方法一览：
+#### 5.2.2 正运动学求解器的测试验证
 
-| 方法 | 作用 |
-|:---:|:---:|
-| `get_fkine_solvers()` | 列出已加载的全部求解器注册名 |
-| `get_activated_fkine_solver()` | 查询当前激活的求解器注册名 |
-| `set_fkine_solver(name)` | 切换激活求解器，成功返回 `True` |
-| `solve_fkine(q, frame=None)` | 正运动学求解；`frame` 缺省为末端帧（pin 版可传任意帧，MDH 版仅末端帧） |
 
-> 💡 两版求末端位姿的结果一致（末端位置差约 $10^{-13}$ m）——想换算法，改 config 名单或调用 `set_fkine_solver` 即可，调用代码一行不用动。
 
 ### 5.3 工作空间及求解思路
 
@@ -770,7 +704,6 @@ arm.close()
 | 1 | 在各关节角范围内均匀随机采样 $\theta_i$ | 覆盖关节空间全部可达构型 |
 | 2 | 对每组采样调用 `arm.solve_fkine(q)` 求末端位置 $(p_x,p_y,p_z)$ | 关节空间映射到笛卡尔空间 |
 | 3 | 收集末端位置点构成点云 | 包络即近似工作空间 |
-| 4 | 可视化点云（3D 散点 / 投影截面） | 直观看出形状与尺寸 |
 
 > 💡 采样数越多、点云越密、边界越清晰。本章脚本默认取 $2\times10^5$ 组样本。
 
@@ -784,7 +717,7 @@ $$V \approx N\,h^3$$
 
 ### 5.4 工作空间绘制方法
 
-用脚本把 5.3 节的思路"画"出来：硬限位内随机撒 $N$ 组关节角，逐组调用 `arm.solve_fkine` 求末端位置，点云边算边画、逐批刷新，结束后打印分析数据。流程与每步调用的核心库功能如下：
+用脚本把 5.3 节的思路"画"出来：点云边算边画、逐批刷新，结束后打印分析数据。流程与每步调用的核心库功能如下：
 
 | 步骤 | 操作 | 调用的核心库功能 |
 |:---:|:---:|:---:|
@@ -794,15 +727,13 @@ $$V \approx N\,h^3$$
 | ④ | 分批求末端位置并刷新画面（每批估一次体积） | `arm.solve_fkine(q)` |
 | ⑤ | 打印分析数据（范围 / 臂展 / 体积 / 占比 / 耗时） | —— |
 
-画面自左向右共三幅子图（3D 视图、俯视图、侧视图），各元素的作用与画法：
+画面自左向右共三幅子图——3D 视图、俯视图（$X\text{-}Y$ 投影，看水平覆盖范围）、侧视图（$X\text{-}Z$ 投影，看竖直覆盖范围），投影均等比例。各元素的作用与画法：
 
 | 元素 | 作用 | 可视化 |
 |:---:|:---:|:---:|
 | 点云 | 工作空间本体（全部采样点的末端位置） | 三幅子图同画，点色 = 到基座距离（紫色近、黄色远） |
 | 机械臂骨架 | home 位形下的参考姿态 | 基座 → 各关节 → 末端的黑色折线 |
 | 末端坐标系 | home 位形下的末端朝向 | 末端原点处的红绿蓝三根轴（长 0.1 m） |
-| 俯视图（X-Y） | 水平方向的覆盖范围 | 点云投影到 $X\text{-}Y$ 平面，等比例 |
-| 侧视图（X-Z） | 竖直方向的覆盖范围 | 点云投影到 $X\text{-}Z$ 平面，等比例 |
 
 脚本顶部的可调常量如下（改数字即可调参）：
 
@@ -842,7 +773,7 @@ python ./chapt/chapt2_workspace.py rebot_arm_b601_dm
 
 #### 5.5.2 JoyArm 工作空间分析
 
-先交代条件：下列数据取自脚本默认参数的一次运行——型号 `rebot_arm_b601_dm`，硬限位内均匀采样 $N=2\times10^5$ 组（随机种子 0），求解器 `pin_fkine_solver`。
+下列数据取自脚本默认参数的一次运行：型号 `rebot_arm_b601_dm`，硬限位内均匀采样 $N=2\times10^5$ 组（随机种子 0），求解器 `pin_fkine_solver`。
 
 | 指标 | 数值 | 说明 |
 |:---:|:---:|:---:|
