@@ -73,7 +73,7 @@
       <inertia ixx="0.000684690" ixy="-0.000003268" ixz="-0.000061685" iyy="0.017240403" iyz="0.000002921" izz="0.017039728" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="3.141592653589793 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh filename="../meshes/link2.STL" />
       </geometry>
@@ -82,7 +82,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="3.141592653589793 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
         <mesh filename="../meshes/link2.STL" />
       </geometry>
@@ -124,7 +124,7 @@
 
   <!-- ============================ joint3 =========================== -->
   <joint name="joint3" type="revolute">
-    <origin xyz="0.264 0 0" rpy="3.141592653589793 0 -2.9226" />
+    <origin xyz="0.264 0 0" rpy="3.141592653589793 0 -2.92257466236989" />
     <parent link="link2" />
     <child link="link3" />
     <axis xyz="0 0 1" />
@@ -158,7 +158,7 @@
   <!-- ============================ joint4 =========================== -->
   <joint name="joint4" type="revolute">
    <!--  <origin xyz="0.24854 0 0" rpy="0 -0.030795 0.21913" />-->
-    <origin xyz="0.24854 0 0" rpy="0 0 0.21913" />
+    <origin xyz="0.24853722101099 0 0" rpy="0 0 0.219017991220261" />
     <parent link="link3" />
     <child link="link4" />
     <axis xyz="0 0 1" />
@@ -191,7 +191,7 @@
 
   <!-- ============================ joint5 =========================== -->
   <joint name="joint5" type="revolute">
-    <origin xyz="0.078283 0.0024911 -0.0016418" rpy="1.571 1.54 -3.1416" />
+    <origin xyz="0.0783077451693111 0.00250000000016312 0" rpy="1.57079632679454 1.5707963267949 -3.1415926" />
     <parent link="link4" />
     <child link="link5" />
     <axis xyz="0 0 1" />
@@ -262,7 +262,7 @@
 
   <!-- ============================ joint_end0 =========================== -->
   <joint name="joint_end0" type="fixed">
-    <origin xyz="0 0 0.032692" rpy="1.5708 -1.5708 0" />
+    <origin xyz="0 0 0.0236922548306099" rpy="1.57079632679489 -1.5707963267949 0" />
     <parent link="link6" />
     <child link="link_end0" />
   </joint>
@@ -293,7 +293,7 @@
 
   <!-- ============================ joint_end1 =========================== -->
   <joint name="joint_end1" type="revolute">
-    <origin xyz="0.0485 0 0" rpy="0 0 0" />
+    <origin xyz="0.05749999999998 0 0" rpy="0 0 0" />
     <parent link="link_end0" />
     <child link="link_end1" />
     <axis xyz="1 0 0" />
@@ -326,7 +326,7 @@
 
   <!-- ============================ joint_end_fingerright =========================== -->
   <joint name="joint_end_fingerright" type="prismatic">
-    <origin xyz="0.0859 2.7531E-05 -1.3031E-05" rpy="0 0 0" />
+    <origin xyz="0.0949 0 -1.2977E-05" rpy="0 0 0" />
     <parent link="link_end0" />
     <child link="link_end_fingerright" />
     <axis xyz="0 1 -0.00014746" />
@@ -360,7 +360,7 @@
 
   <!-- ============================ joint_end_fingerleft =========================== -->
   <joint name="joint_end_fingerleft" type="prismatic">
-    <origin xyz="0.0859 -2.7531E-05 1.3031E-05" rpy="0 0 0" />
+    <origin xyz="0.0949 0 -1.2977E-05" rpy="0 0 0" />
     <parent link="link_end0" />
     <child link="link_end_fingerleft" />
     <axis xyz="0 -1 0.00014746" />
@@ -371,7 +371,7 @@
   <!-- ==================== frame_end_tcp / joint_frame_end_tcp ==================== -->
   <link name="frame_end_tcp" />
   <joint name="joint_frame_end_tcp" type="fixed">
-    <origin xyz="0.12510 0 0" rpy="0 0 0" />
+    <origin xyz="0.117620014536282 0 0" rpy="0 0 0" />
     <parent link="link_end0" />
     <child link="frame_end_tcp" />
   </joint>
@@ -379,7 +379,7 @@
   <!-- ================ frame_end_fingertip / joint_frame_end_fingertip ============= -->
   <link name="frame_end_fingertip" />
   <joint name="joint_frame_end_fingertip" type="fixed">
-    <origin xyz="0.15071 0 -0.00001" rpy="0 0 0" />
+    <origin xyz="0.159710014536282 0 0" rpy="0 0 0" />
     <parent link="link_end0" />
     <child link="frame_end_fingertip" />
   </joint>
