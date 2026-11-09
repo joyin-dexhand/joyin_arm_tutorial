@@ -1,6 +1,6 @@
 """
 ==============================================================================
-雅可比测试分析（JacobianSolver 基类）  (test 离线测试)
+雅可比测试分析
 ==============================================================================
 【功能概要】
     无需连接硬件，离线测试 jacobian 域求解器（基类 JacobianSolver → pin_jacobian_solver）：
@@ -29,8 +29,7 @@
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 1. 创建虚拟环境并同步依赖
-    cd <仓库路径>/joyarm_code
-    uv sync
+    cd <仓库路径>/joyarm_code && uv sync
     source .venv/bin/activate
 
     # 2. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需机械臂硬件）

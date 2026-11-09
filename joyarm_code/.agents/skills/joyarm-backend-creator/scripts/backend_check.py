@@ -27,8 +27,7 @@
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 1. 创建虚拟环境并同步依赖
-    cd <仓库路径>/joyarm_code
-    uv sync
+    cd <仓库路径>/joyarm_code && uv sync
     source .venv/bin/activate
 
     # 2. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需硬件）

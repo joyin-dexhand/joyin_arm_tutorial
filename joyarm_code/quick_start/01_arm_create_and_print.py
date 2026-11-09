@@ -18,8 +18,7 @@
     irm https://astral.sh/uv/install.ps1 | iex          # Windows PowerShell
 
     # 1. 创建虚拟环境并同步依赖
-    cd <仓库路径>/joyarm_code
-    uv sync
+    cd <仓库路径>/joyarm_code && uv sync
 
     # 2. 运行本脚本（全程离线，无需硬件）
     uv run python quick_start/01_arm_create_and_print.py <型号>    # 如 rebot_arm_b601_dm

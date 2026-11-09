@@ -26,8 +26,7 @@
 #     irm https://astral.sh/uv/install.ps1 | iex          # Windows PowerShell
 
 #     # 1. 创建虚拟环境并同步依赖
-#     cd <仓库路径>/joyarm_code
-#     uv sync
+#     cd <仓库路径>/joyarm_code && uv sync
 #
 #     # 2. 运行本脚本（需连接对应的机械臂）
 #     uv run python quick_start/08_teach_replay.py <型号>  # 如：rebot_arm_b601_dm

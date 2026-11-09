@@ -131,7 +131,7 @@ SDK（`arm.xx`）→ `joyarm_core/`；ROS2 → `joyarm_ros2_ws/src/`（规划）
 | `utils/limits.py` | 限位助手：硬/软/tcp 限位构建 + 指令裁剪 + 限位内采样（签名见 §3.3） | Ch11 | ✅ |
 | `chapt/chapt2/chapt2_T_demo.py` | 位姿变换可视化演示（PySide6 GUI + matplotlib 3D：齐次变换矩阵对坐标系与点的变换） | Ch2 | ✅ |
 | `chapt/chapt2/chapt2_R_demo.py` | 四种姿态表示转换可视化演示（PySide6 GUI + matplotlib 3D：RPY/轴角/四元数/旋转矩阵互转） | Ch2 | ✅ |
-| `chapt/chapt2/chapt2_workspace.py` | JoyArm 工作空间蒙特卡洛采样与 MeshCat 动态可视化 | Ch2 | ✅ |
+| `chapt/chapt2/chapt2_workspace.py` | JoyArm 工作空间蒙特卡洛采样与 matplotlib 可视化 | Ch2 | ✅ |
 | `chapt/chapt3/chapt3_2r_demo.py` | 平面 2R 逆运动学可视化演示（拖动目标点，肘上/肘下两组逆解对比） | Ch3 | ✅ |
 | `chapt/chapt3/chapt3_ikine_demo.py` | 离线教学：FK 构造单一目标 → 解析 IK 八组几何解与限位/回代检查 → MeshCat 依次播放全部构型并对照目标/当前 TCP | Ch3 | ✅ |
 | `chapt/chapt3/chapt3_ikine_exercise.py` | 实践主文件：预留 `IkineSolver.solve()` 实现区，读者使用 Pinocchio FK/雅可比接口完成 JoyArm 固定阻尼数值逆解 | Ch3 | ✅ |

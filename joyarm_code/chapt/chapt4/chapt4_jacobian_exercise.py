@@ -13,8 +13,7 @@
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 1. 创建虚拟环境并同步依赖
-    cd <仓库路径>/joyarm_code
-    uv sync
+    cd <仓库路径>/joyarm_code && uv sync
 
     # 2. 运行本脚本
     uv run python chapt/chapt4/chapt4_jacobian_exercise.py

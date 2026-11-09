@@ -1,6 +1,6 @@
 """
 ==============================================================================
-dynamics 动力学测试分析  (test 离线测试)
+dynamics 测试分析
 ==============================================================================
 【功能概要】
     离线测试脚本（无需硬件）：围绕 DynamicsSolver 基类的四个接口，测试分析动力学求解器：
@@ -26,8 +26,7 @@ dynamics 动力学测试分析  (test 离线测试)
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 1. 创建虚拟环境并同步依赖
-    cd <仓库路径>/joyarm_code
-    uv sync
+    cd <仓库路径>/joyarm_code && uv sync
     source .venv/bin/activate
 
     # 2. 运行本脚本（离线脚本，无需连接机械臂硬件）

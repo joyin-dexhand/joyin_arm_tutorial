@@ -1,6 +1,6 @@
 """
 ==============================================================================
-trajectory 轨迹规划测试分析  (test 离线测试)
+trajectory 轨迹规划测试分析
 ==============================================================================
 【功能概要】
     面向 robotics 六域之一的 trajectory 轨迹规划域做离线测试分析（无需硬件，数秒跑完）：
@@ -32,8 +32,7 @@ trajectory 轨迹规划测试分析  (test 离线测试)
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 1. 创建虚拟环境并同步依赖
-    cd <仓库路径>/joyarm_code
-    uv sync
+    cd <仓库路径>/joyarm_code && uv sync
     source .venv/bin/activate
 
     # 2. 运行本脚本（在 joyarm_code/ 目录下；离线脚本，无需连接机械臂硬件）

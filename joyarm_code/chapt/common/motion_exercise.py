@@ -17,8 +17,9 @@
     # Windows PowerShell:  irm https://astral.sh/uv/install.ps1 | iex
 
     # 1. 创建虚拟环境并同步依赖
-    cd <仓库路径>/joyarm_code
-    uv sync
+    cd <仓库路径>/joyarm_code && uv sync
+    # 若 Linux 缺少 libxcb-cursor.so.0 ，则先安装：
+    sudo apt-get install -y libxcb-cursor0
 
     # 2. 运行本脚本
     uv run python chapt/common/motion_exercise.py
