@@ -1,0 +1,16 @@
+digraph joint_closed_loop {
+    graph [rankdir=LR, bgcolor="white", pad="0.45", nodesep="1.00", ranksep="0.32", splines=ortho];
+    node [shape=box, style="filled", fillcolor="white", color="black", penwidth=1.5, fontname="sans-serif", fontsize=14, margin="0.18,0.12"];
+    edge [color="black", penwidth=1.4, arrowsize=0.75, fontname="sans-serif", fontsize=12];
+
+    r [shape=plain, label="目标角度 q_d"];
+    sum [shape=circle, fixedsize=true, width=0.40, label="Σ", margin=0];
+    pid [label="PID 控制器"];
+    u [shape=plain, label="驱动指令 u"];
+    plant [label="电机与关节"];
+    tap [shape=point, fixedsize=true, width=0.08, label="", fillcolor="black"];
+    y [shape=plain, label="实际角度 q"];
+
+    r -> sum -> pid -> u -> plant -> tap -> y;
+    tap -> sum [xlabel="负反馈  −", constraint=false, tailport=s, headport=n];
+}

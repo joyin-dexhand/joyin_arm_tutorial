@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="330" viewBox="0 0 1000 330" role="img" aria-labelledby="title desc">
+<title id="title">相邻轴交替垂直与连续三轴平行</title><desc id="desc">局部轴线示意。左图第二、四轴垂直纸面，第三轴位于纸面内并竖直。右图第二、三、四轴均垂直纸面。灰线只示意连接顺序。</desc>
+<rect width="1000" height="330" rx="12" fill="#f8fafc"/>
+<g font-family="sans-serif" fill="#182b49" text-anchor="middle">
+<text x="250" y="38" font-size="23">相邻轴交替垂直</text><text x="750" y="38" font-size="23">连续三轴平行</text>
+<g stroke="#94a3b8" stroke-width="12" fill="none"><path d="M90 180 L250 180 L410 180"/><path d="M590 180 L750 180 L910 180"/></g>
+<g stroke="#2563eb" stroke-width="3" fill="white"><circle cx="90" cy="180" r="17"/><circle cx="410" cy="180" r="17"/><circle cx="590" cy="180" r="17"/><circle cx="750" cy="180" r="17"/><circle cx="910" cy="180" r="17"/></g>
+<g fill="#2563eb"><circle cx="90" cy="180" r="5"/><circle cx="410" cy="180" r="5"/><circle cx="590" cy="180" r="5"/><circle cx="750" cy="180" r="5"/><circle cx="910" cy="180" r="5"/></g>
+<path d="M250 225 V105" stroke="#d97706" stroke-width="4"/><path d="M250 92 L242 109 L258 109 Z" fill="#d97706"/>
+<g font-size="18"><text x="90" y="255">joint2</text><text x="250" y="255">joint3</text><text x="410" y="255">joint4</text><text x="590" y="255">joint2</text><text x="750" y="255">joint3</text><text x="910" y="255">joint4</text></g>
+<path d="M500 65 V265" stroke="#cbd5e1"/>
+<text x="500" y="307" font-size="17">⊙ 表示轴线垂直纸面；箭头表示轴线位于纸面内。灰线仅表示连接顺序。</text>
+</g></svg>

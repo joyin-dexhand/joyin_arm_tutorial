@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+  <title id="title">整机速度运动学控制框图</title>
+  <desc id="desc">目标末端速度经过雅可比逆或阻尼伪逆、关节速度控制器和机械臂，当前关节角同时反馈到速度求和点和雅可比计算模块。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000"/>
+    </marker>
+    <style>
+      .box { fill: #fff; stroke: #000; stroke-width: 2; }
+      .line { fill: none; stroke: #000; stroke-width: 2; marker-end: url(#arrow); }
+      .branch { fill: none; stroke: #000; stroke-width: 2; }
+      .label { fill: #000; font-family: sans-serif; font-size: 18px; text-anchor: middle; dominant-baseline: middle; }
+      .small { fill: #000; font-family: sans-serif; font-size: 16px; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="300" fill="#fff"/>
+
+  <text class="label" x="105" y="100">目标末端速度 v_d</text>
+  <path class="line" d="M 190 100 H 220"/>
+
+  <rect class="box" x="220" y="65" width="155" height="70"/>
+  <text class="label" x="297.5" y="88">雅可比逆</text>
+  <text class="label" x="297.5" y="113">或阻尼伪逆</text>
+
+  <path class="line" d="M 375 100 H 465"/>
+  <text class="small" x="420" y="86">目标关节速度 q̇_d</text>
+
+  <circle class="box" cx="490" cy="100" r="24"/>
+  <text class="label" x="490" y="100">Σ</text>
+  <text class="small" x="476" y="75">−</text>
+
+  <path class="line" d="M 514 100 H 555"/>
+  <rect class="box" x="555" y="65" width="175" height="70"/>
+  <text class="label" x="642.5" y="100">关节速度控制器</text>
+
+  <path class="line" d="M 730 100 H 770"/>
+  <rect class="box" x="770" y="65" width="100" height="70"/>
+  <text class="label" x="820" y="100">机械臂</text>
+
+  <path class="branch" d="M 870 100 H 910"/>
+  <circle cx="910" cy="100" r="5" fill="#000"/>
+  <path class="line" d="M 910 100 H 1080"/>
+  <text class="label" x="1000" y="82">当前关节角 q</text>
+
+  <path class="line" d="M 910 100 V 30 H 490 V 76"/>
+  <text class="small" x="700" y="23">速度反馈</text>
+
+  <path class="branch" d="M 910 100 V 245 H 400"/>
+  <path class="line" d="M 400 245 H 375"/>
+  <rect class="box" x="220" y="210" width="155" height="70"/>
+  <text class="label" x="297.5" y="245">计算 J(q)</text>
+
+  <path class="line" d="M 297.5 210 V 135"/>
+</svg>
