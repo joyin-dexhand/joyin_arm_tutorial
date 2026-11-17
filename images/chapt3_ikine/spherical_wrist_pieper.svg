@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1000"
+   height="500"
+   viewBox="0 0 1000 500"
+   role="img"
+   aria-label="球形腕 6R：末三轴交于腕心，解耦为位置与姿态两个子问题"
+   version="1.1"
+   id="svg2709"
+   sodipodi:docname="spherical_wrist_pieper.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2713" />
+  <sodipodi:namedview
+     id="namedview2711"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="1.888"
+     inkscape:cx="645.65678"
+     inkscape:cy="341.1017"
+     inkscape:window-width="2494"
+     inkscape:window-height="1531"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer-frame" />
+  <title
+     id="title2649">球形腕 6R 的 Pieper 解耦</title>
+  <desc
+     id="desc2651">末三轴交于腕心 W；位置子问题由前 3 轴定 W，姿态子问题由后 3 轴的 ZYZ 欧拉角分解得到。</desc>
+  <style
+     id="style2653">text{font-family:'Noto Sans CJK SC','Microsoft YaHei',sans-serif;font-size:20px;fill:#263442}.title{font-size:25px;font-weight:700}.small{font-size:19px}.comp{font-size:16px}.blue{fill:#236ab0}.red{fill:#dc493a}</style>
+  <rect
+     id="bg"
+     width="100%"
+     height="100%"
+     rx="16"
+     fill="#fff" />
+  <g
+     inkscape:groupmode="layer"
+     inkscape:label="标题与面板"
+     id="layer-frame">
+    <text
+       x="35"
+       y="42"
+       class="title"
+       id="main-title">球形腕 6R：末三轴交于腕心 → 解耦</text>
+    <rect
+       x="28"
+       y="64"
+       width="459"
+       height="392"
+       rx="12"
+       fill="#f4f7fa"
+       id="panel-a"
+       style="fill:#f2f2f2" />
+    <rect
+       x="515"
+       y="64"
+       width="460"
+       height="392"
+       rx="12"
+       fill="#f4f7fa"
+       id="panel-b"
+       style="fill:#f2f2f2" />
+    <text
+       x="35"
+       y="484"
+       class="small"
+       id="caption">左：第 4、5、6 关节轴交于腕心 W，姿态变化不移动 W；右：据此把逆解拆成位置、姿态两个子问题。</text>
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     inkscape:label="① 末三轴相交"
+     id="layer-panel-a">
+    <text
+       x="58"
+       y="100"
+       class="small"
+       id="title-a">① 末三轴相交（球形腕）</text>
+    <circle
+       id="wrist-center"
+       cx="239.09529"
+       cy="293.58408"
+       r="7"
+       fill="#dc493a"
+       stroke="#b3382c"
+       stroke-width="2.5" />
+    <text
+       id="label-W"
+       x="249.84306"
+       y="323.22232"
+       class="small red">腕心 W</text>
+    <line
+       id="axis-Z4"
+       x1="88.371117"
+       y1="294.68719"
+       x2="388.37112"
+       y2="294.68719"
+       stroke="#334155"
+       stroke-width="3"
+       stroke-linecap="round" />
+    <line
+       id="axis-Z5"
+       x1="238.37112"
+       y1="444.68719"
+       x2="238.37112"
+       y2="144.68719"
+       stroke="#236ab0"
+       stroke-width="3"
+       stroke-linecap="round" />
+    <line
+       id="axis-Z6"
+       x1="130.37112"
+       y1="402.68719"
+       x2="346.37112"
+       y2="186.68719"
+       stroke="#7a5cae"
+       stroke-width="3"
+       stroke-linecap="round"
+       stroke-dasharray="9, 6" />
+    <text
+       id="lbl-Z4"
+       x="388.37112"
+       y="320.68719"
+       class="small"
+       fill="#334155">Z₄</text>
+    <text
+       id="lbl-Z5"
+       x="216.37112"
+       y="144.68719"
+       class="small"
+       fill="#236ab0">Z₅</text>
+    <text
+       id="lbl-Z6"
+       x="334.37112"
+       y="176.68719"
+       class="small"
+       fill="#7a5cae">Z₆</text>
+    <text
+       x="70.371117"
+       y="278.68719"
+       class="small"
+       fill="#334155"
+       id="text2670">关节 4</text>
+    <text
+       x="245.27242"
+       y="132.00415"
+       class="small"
+       fill="#236ab0"
+       id="text2672">关节 5</text>
+    <text
+       x="358.68713"
+       y="192.29713"
+       class="small"
+       fill="#7a5cae"
+       id="text2674">关节 6</text>
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     inkscape:label="② 解耦"
+     id="layer-panel-b">
+    <text
+       id="title-b"
+       x="560.0"
+       y="100.0"
+       class="small">解耦：位置子问题 + 姿态子问题</text>
+    <rect
+       x="524.02496"
+       y="132.79724"
+       width="180"
+       height="110"
+       rx="10"
+       fill="#ffffff"
+       stroke="#334155"
+       stroke-width="2.5"
+       id="rect2678" />
+    <text
+       x="614.02496"
+       y="166.79724"
+       class="small"
+       fill="#334155"
+       text-anchor="middle"
+       id="text2680">前 3 轴 q₁,q₂,q₃</text>
+    <text
+       x="614.02496"
+       y="198.79724"
+       class="comp"
+       fill="#5a6b7a"
+       text-anchor="middle"
+       id="text2682">定腕心位置 W</text>
+    <rect
+       x="784.02496"
+       y="132.79724"
+       width="180"
+       height="110"
+       rx="10"
+       fill="#ffffff"
+       stroke="#236ab0"
+       stroke-width="2.5"
+       id="rect2684" />
+    <text
+       x="874.02496"
+       y="166.79724"
+       class="small"
+       fill="#236ab0"
+       text-anchor="middle"
+       id="text2686">后 3 轴 q₄,q₅,q₆</text>
+    <text
+       x="874.02496"
+       y="198.79724"
+       class="comp"
+       fill="#5a6b7a"
+       text-anchor="middle"
+       id="text2688">定末端姿态</text>
+    <line
+       x1="704.02496"
+       y1="172.79724"
+       x2="784.02496"
+       y2="172.79724"
+       stroke="#8fa0b1"
+       stroke-width="2.5"
+       stroke-dasharray="7, 5"
+       id="line2690" />
+    <path
+       d="m 784.26633,172.28813 -10,-6 v 12 z"
+       fill="#8fa0b1"
+       id="path2692" />
+    <text
+       x="744.02496"
+       y="160.79724"
+       class="comp"
+       fill="#8fa0b1"
+       text-anchor="middle"
+       id="text2694">先解</text>
+    <text
+       x="744.02496"
+       y="198.79724"
+       class="comp"
+       fill="#8fa0b1"
+       text-anchor="middle"
+       id="text2696">后解</text>
+    <text
+       x="560.0"
+       y="300.0"
+       class="comp"
+       fill="#5a6b7a"
+       id="text2698">① 由目标位姿 T 反推腕心 W</text>
+    <text
+       x="560.0"
+       y="328.0"
+       class="comp"
+       fill="#5a6b7a"
+       id="text2700">② 前 3 轴解出 (q₁,q₂,q₃) → 得到 R₀₃</text>
+    <text
+       x="560.0"
+       y="356.0"
+       class="comp"
+       fill="#5a6b7a"
+       id="text2702">③ 求 R₃₆ = R₀₃ᵀ R</text>
+    <text
+       x="560.0"
+       y="384.0"
+       class="comp"
+       fill="#5a6b7a"
+       id="text2704">④ 对 R₃₆ 作 ZYZ 欧拉角分解 → (q₄,q₅,q₆)</text>
+    <text
+       x="560.0"
+       y="420.0"
+       class="comp"
+       fill="#236ab0"
+       id="text2706">⑤ 两组肘形 × 两组腕形 → 最多 8 组解</text>
+  </g>
+</svg>

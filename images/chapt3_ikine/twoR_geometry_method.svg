@@ -1,0 +1,408 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1000"
+   height="500"
+   viewBox="0 0 1000 500"
+   role="img"
+   aria-label="2R 机械臂几何解法：三角形与余弦定理、两组构型"
+   version="1.1"
+   id="svg1709"
+   sodipodi:docname="twoR_geometry_method.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1713">
+    <rect
+       x="162.097"
+       y="201.16776"
+       width="71.885756"
+       height="23.62738"
+       id="rect2373" />
+  </defs>
+  <sodipodi:namedview
+     id="namedview1711"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="2.6700352"
+     inkscape:cx="410.10695"
+     inkscape:cy="200.74642"
+     inkscape:window-width="2494"
+     inkscape:window-height="1531"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer-frame" />
+  <title
+     id="title1654">2R 机械臂的几何解法</title>
+  <desc
+     id="desc1656">把 2R 臂投影为三角形，用余弦定理求 q₂，再由方位角与夹角求 q₁。</desc>
+  <style
+     id="style1658">text{font-family:'Noto Sans CJK SC','Microsoft YaHei',sans-serif;font-size:20px;fill:#263442}.title{font-size:25px;font-weight:700}.small{font-size:19px}.comp{font-size:15px}.blue{fill:#236ab0}.red{fill:#dc493a}</style>
+  <rect
+     id="bg"
+     width="100%"
+     height="100%"
+     rx="16"
+     fill="#fff" />
+  <g
+     inkscape:groupmode="layer"
+     inkscape:label="标题与面板"
+     id="layer-frame">
+    <text
+       x="35"
+       y="42"
+       class="title"
+       id="main-title">2R 机械臂的几何解法：三角形 + 余弦定理</text>
+    <rect
+       x="28"
+       y="64"
+       width="459"
+       height="392"
+       rx="12"
+       fill="#f4f7fa"
+       id="panel-a"
+       style="fill:#f2f2f2" />
+    <polyline
+       id="arc-alpha-9"
+       points="209.3,320.0 208.9,319.4 208.5,318.8 208.2,318.1 207.8,317.5 207.4,316.9 207.0,316.3 206.6,315.7 206.2,315.1 205.8,314.5 205.4,313.9 205.0,313.3 204.6,312.8 204.1,312.2 203.7,311.6 203.3,311.0 202.8,310.5 202.4,309.9 201.9,309.3 201.5,308.8 201.0,308.2 200.5,307.7 200.0,307.1 199.6,306.6 199.1,306.1 198.6,305.5 198.1,305.0 197.6,304.5 197.1,304.0 196.6,303.5 196.1,302.9"
+       fill="none"
+       stroke="#b3382c"
+       stroke-width="2"
+       transform="matrix(0.26090968,-3.1592175,1.5082777,0.54649784,-262.59614,748.49473)"
+       inkscape:transform-center-x="-15.726626"
+       inkscape:transform-center-y="-9.2780975" />
+    <rect
+       x="515"
+       y="64"
+       width="460"
+       height="392"
+       rx="12"
+       fill="#f4f7fa"
+       id="panel-b"
+       style="fill:#f2f2f2" />
+    <text
+       x="35"
+       y="484"
+       class="small"
+       id="caption">左：两连杆与 r 构成三角形；右：同一目标点的肘上 / 肘下两组构型。</text>
+    <text
+       xml:space="preserve"
+       style="fill:#f2f2f2"
+       x="247.76271"
+       y="268.56213"
+       id="text2369"><tspan
+         sodipodi:role="line"
+         id="tspan2367"></tspan></text>
+    <text
+       xml:space="preserve"
+       id="text2371"
+       style="fill:#f2f2f2;white-space:pre;shape-inside:url(#rect2373)" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     inkscape:label="① 三角形与余弦定理"
+     id="layer-panel-a">
+    <line
+       id="axis-x"
+       x1="96.0"
+       y1="360.0"
+       x2="400.0"
+       y2="360.0"
+       stroke="#a8b6c3"
+       stroke-width="1.6"
+       stroke-dasharray="6 6" />
+    <line
+       id="axis-y"
+       x1="140.0"
+       y1="404.0"
+       x2="140.0"
+       y2="150.0"
+       stroke="#a8b6c3"
+       stroke-width="1.6"
+       stroke-dasharray="6 6" />
+    <line
+       id="link-1"
+       x1="140.0"
+       y1="360.0"
+       x2="269.9"
+       y2="285.0"
+       stroke="#4a5b6d"
+       stroke-width="11"
+       stroke-linecap="round" />
+    <line
+       id="link-2"
+       x1="269.9"
+       y1="285.0"
+       x2="320.6"
+       y2="176.2"
+       stroke="#8fa0b1"
+       stroke-width="11"
+       stroke-linecap="round" />
+    <line
+       id="tri-r"
+       x1="140.0"
+       y1="360.0"
+       x2="320.6"
+       y2="176.2"
+       stroke="#236ab0"
+       stroke-width="3"
+       stroke-linecap="round"
+       stroke-dasharray="8 6" />
+    <polyline
+       id="arc-q1"
+       points="190.0,360.0 190.0,359.1 190.0,358.3 189.9,357.4 189.9,356.5 189.8,355.6 189.7,354.8 189.6,353.9 189.5,353.0 189.4,352.2 189.2,351.3 189.1,350.5 188.9,349.6 188.7,348.8 188.5,347.9 188.3,347.1 188.1,346.2 187.8,345.4 187.6,344.5 187.3,343.7 187.0,342.9 186.7,342.1 186.4,341.3 186.0,340.5 185.7,339.7 185.3,338.9 184.9,338.1 184.6,337.3 184.1,336.5 183.7,335.8 183.3,335.0"
+       fill="none"
+       stroke="#c79a4a"
+       stroke-width="2" />
+    <polyline
+       id="arc-alpha"
+       points="209.3,320.0 208.9,319.4 208.5,318.8 208.2,318.1 207.8,317.5 207.4,316.9 207.0,316.3 206.6,315.7 206.2,315.1 205.8,314.5 205.4,313.9 205.0,313.3 204.6,312.8 204.1,312.2 203.7,311.6 203.3,311.0 202.8,310.5 202.4,309.9 201.9,309.3 201.5,308.8 201.0,308.2 200.5,307.7 200.0,307.1 199.6,306.6 199.1,306.1 198.6,305.5 198.1,305.0 197.6,304.5 197.1,304.0 196.6,303.5 196.1,302.9"
+       fill="none"
+       stroke="#b3382c"
+       stroke-width="2" />
+    <polyline
+       id="arc-q2"
+       points="308.0,263.0 307.6,262.2 307.1,261.5 306.6,260.7 306.1,260.0 305.6,259.2 305.0,258.5 304.5,257.8 303.9,257.1 303.4,256.4 302.8,255.7 302.2,255.1 301.6,254.4 300.9,253.8 300.3,253.2 299.6,252.6 299.0,252.0 298.3,251.4 297.6,250.8 296.9,250.2 296.2,249.7 295.5,249.2 294.7,248.7 294.0,248.2 293.2,247.7 292.5,247.2 291.7,246.8 290.9,246.3 290.1,245.9 289.3,245.5 288.5,245.1"
+       fill="none"
+       stroke="#8a6d3b"
+       stroke-width="2" />
+    <circle
+       id="joint-base"
+       cx="140.0"
+       cy="360.0"
+       r="14"
+       fill="white"
+       stroke="#334155"
+       stroke-width="3" />
+    <circle
+       id="joint-elbow"
+       cx="269.9"
+       cy="285.0"
+       r="11"
+       fill="white"
+       stroke="#334155"
+       stroke-width="3" />
+    <circle
+       id="joint-end"
+       cx="320.6"
+       cy="176.2"
+       r="13"
+       fill="#dc493a"
+       stroke="#b3382c"
+       stroke-width="3" />
+    <circle
+       cx="140.0"
+       cy="360.0"
+       r="4"
+       fill="#334155"
+       stroke="#334155"
+       stroke-width="0"
+       id="circle1677" />
+    <circle
+       cx="269.9"
+       cy="285.0"
+       r="4"
+       fill="#334155"
+       stroke="#334155"
+       stroke-width="0"
+       id="circle1679" />
+    <text
+       id="title-a"
+       x="58.0"
+       y="100.0"
+       class="small">① 三角形与余弦定理</text>
+    <text
+       id="label-base"
+       x="110.0"
+       y="394.0"
+       class="small">基座 O</text>
+    <text
+       id="label-elbow"
+       x="263.89999"
+       y="315"
+       class="small">肘关节A</text>
+    <text
+       id="label-end"
+       x="338.60001"
+       y="166.2"
+       class="small red">末端E (x_d, y_d)</text>
+    <text
+       id="label-l1"
+       x="218.12827"
+       y="339.64459"
+       class="blue">l₁</text>
+    <text
+       id="label-l2"
+       x="309.3"
+       y="226.6"
+       class="blue">l₂</text>
+    <text
+       id="label-r"
+       x="200.3"
+       y="290.1"
+       class="blue">r</text>
+    <text
+       id="label-q1"
+       x="193.78227"
+       y="349.49176"
+       class="small">q₁</text>
+    <text
+       id="label-alpha"
+       x="207.80559"
+       y="305.76611"
+       class="small"
+       fill="#b3382c">δ</text>
+    <text
+       id="label-q2"
+       x="305.14862"
+       y="250.70746"
+       class="small">q₂</text>
+    <text
+       xml:space="preserve"
+       style="fill:#000000"
+       x="243.55513"
+       y="276.62909"
+       id="text2383"><tspan
+         sodipodi:role="line"
+         id="tspan2381"
+         x="243.55513"
+         y="276.62909">β</tspan></text>
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     inkscape:label="② 三角形两解"
+     id="layer-panel-b">
+    <line
+       id="sol-r"
+       x1="610.0"
+       y1="340.0"
+       x2="790.0"
+       y2="190.0"
+       stroke="#236ab0"
+       stroke-width="2.4"
+       stroke-dasharray="8 5" />
+    <line
+       id="sol-down-1"
+       x1="610.0"
+       y1="340.0"
+       x2="755.9"
+       y2="305.0"
+       stroke="#334155"
+       stroke-width="10"
+       stroke-linecap="round" />
+    <line
+       id="sol-down-2"
+       x1="755.9"
+       y1="305.0"
+       x2="790.0"
+       y2="190.0"
+       stroke="#334155"
+       stroke-width="10"
+       stroke-linecap="round" />
+    <circle
+       id="sol-down-elbow"
+       cx="755.9"
+       cy="305.0"
+       r="10"
+       fill="white"
+       stroke="#334155"
+       stroke-width="3" />
+    <line
+       id="sol-up-1"
+       x1="610.0"
+       y1="340.0"
+       x2="670.7"
+       y2="202.8"
+       stroke="#8fa0b1"
+       stroke-width="10"
+       stroke-linecap="round"
+       stroke-dasharray="8 6" />
+    <line
+       id="sol-up-2"
+       x1="670.7"
+       y1="202.8"
+       x2="790.0"
+       y2="190.0"
+       stroke="#8fa0b1"
+       stroke-width="10"
+       stroke-linecap="round"
+       stroke-dasharray="8 6" />
+    <circle
+       id="sol-up-elbow"
+       cx="670.7"
+       cy="202.8"
+       r="10"
+       fill="white"
+       stroke="#8fa0b1"
+       stroke-width="3" />
+    <circle
+       id="sol-base"
+       cx="610.0"
+       cy="340.0"
+       r="13"
+       fill="white"
+       stroke="#334155"
+       stroke-width="3" />
+    <circle
+       id="sol-target"
+       cx="790.0"
+       cy="190.0"
+       r="13"
+       fill="#dc493a"
+       stroke="#b3382c"
+       stroke-width="3" />
+    <circle
+       cx="610.0"
+       cy="340.0"
+       r="4"
+       fill="#334155"
+       stroke="#334155"
+       stroke-width="0"
+       id="circle1701" />
+    <text
+       id="title-b"
+       x="560.0"
+       y="100.0"
+       class="small">② 三角形两解（肘上 / 肘下）</text>
+    <text
+       id="sol-label-base"
+       x="580.0"
+       y="374.0"
+       class="small">基座 O</text>
+    <text
+       id="sol-label-target"
+       x="808.0"
+       y="180.0"
+       class="small red">目标点</text>
+    <text
+       id="sol-label-down"
+       x="773.9"
+       y="335.0"
+       class="small"
+       fill="#334155">肘向下</text>
+    <text
+       id="sol-label-up"
+       x="584.7"
+       y="188.8"
+       class="small"
+       fill="#8fa0b1">肘向上</text>
+    <line
+       x1="269.81906"
+       y1="285.0463"
+       x2="378.80591"
+       y2="222.03534"
+       stroke="#a8b6c3"
+       stroke-width="1.06509"
+       stroke-dasharray="6, 6"
+       id="line138-6" />
+  </g>
+</svg>

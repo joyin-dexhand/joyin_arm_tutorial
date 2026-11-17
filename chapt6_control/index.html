@@ -1,0 +1,2988 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://joyin-dexhand.github.io/joyin_arm_tutorial/chapt6_control/">
+      
+      
+        <link rel="prev" href="../chapt5_trajectory/">
+      
+      
+        <link rel="next" href="../chapt7_urdf/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>第六章 运动控制 - JoyArm 机械臂教程</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#_1" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href=".." title="JoyArm 机械臂教程" class="md-header__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            JoyArm 机械臂教程
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              第六章 运动控制
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至暗色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切换至暗色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至亮色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切换至亮色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="JoyArm 机械臂教程" class="md-nav__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    JoyArm 机械臂教程
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    使用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick_start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速上手
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../motor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    关节电机
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../arm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    机械臂整臂
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../end/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    末端执行器
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    基础篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    基础篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt1_intro/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第一章 机器人与机械臂初识
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt2_fkine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第二章 空间位姿与位置正运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt3_ikine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第三章 位置逆运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt4_jacobian/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第四章 速度运动学与静力学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt5_trajectory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第五章 轨迹生成
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第六章 运动控制
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第六章 运动控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 从运动目标到电机指令
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 从运动目标到电机指令">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 运动控制的完整链路
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 规划与控制的分工
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 控制周期与反馈闭环
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 单关节电机控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 单关节电机控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 关节状态与控制量
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 位置、速度与力矩控制模式
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.2 位置、速度与力矩控制模式">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#221" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.1 位置模式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#222" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.2 速度模式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#223-mit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.3 力矩与 MIT 模式
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-pid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 串级闭环与 PID 控制
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 通信、同步与失联保护
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 关节空间运动控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3 关节空间运动控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 关节目标与关节轨迹
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 关节位置跟踪
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-movej" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 MoveJ
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-homezero-neutral" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Home、Zero 与 Neutral
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 到位判断
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 笛卡尔位置运动控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4 笛卡尔位置运动控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 从末端目标到关节目标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 逆运动学解的连续选择
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-movej" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 面向末端目标的 MoveJ
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-movel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 MoveL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-movej-movel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 MoveJ 与 MoveL 对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 笛卡尔速度运动控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 笛卡尔速度运动控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 雅可比速度映射
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 末端速度到关节速度
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 加入位姿误差反馈
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 速度目标的执行
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 奇异性与阻尼伪逆
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6 位置控制与速度控制的关系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6 JoyArm 中的运动控制机制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6 JoyArm 中的运动控制机制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 主要组成
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 数据流
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 规划器
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 控制器
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#65-motionfsm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5 MotionFSM 状态
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#66" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6 高级运动接口与底层目标通道
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7 本章实践：JoyArm 关节运动控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7 本章实践：JoyArm 关节运动控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 实验任务
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 运行方法
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 目标生成与运动流程
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 数据与输出文件
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 验收指标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#76" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.6 结果分析
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#77" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.7 安全边界
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进阶篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    进阶篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt7_urdf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第七章 构型结构设计与URDF导出
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt8_dyn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第八章 动力学及控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt9_force/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第九章 力控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt10_ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十章 ROS2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    应用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    应用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt11_safety/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十一章 状态监测与安全软防护
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt12_teleop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十二章 示教和遥操作
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt13_endeffector/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十三章 末端执行器
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt14_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十四章 用户接口
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt15_project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十五章 JoyArm 综合实践项目
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 从运动目标到电机指令
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 从运动目标到电机指令">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 运动控制的完整链路
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 规划与控制的分工
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 控制周期与反馈闭环
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 单关节电机控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 单关节电机控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 关节状态与控制量
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 位置、速度与力矩控制模式
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.2 位置、速度与力矩控制模式">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#221" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.1 位置模式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#222" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.2 速度模式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#223-mit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2.3 力矩与 MIT 模式
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-pid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 串级闭环与 PID 控制
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 通信、同步与失联保护
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 关节空间运动控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3 关节空间运动控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 关节目标与关节轨迹
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 关节位置跟踪
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-movej" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 MoveJ
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-homezero-neutral" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Home、Zero 与 Neutral
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#35" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.5 到位判断
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 笛卡尔位置运动控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4 笛卡尔位置运动控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 从末端目标到关节目标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 逆运动学解的连续选择
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-movej" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 面向末端目标的 MoveJ
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-movel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 MoveL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-movej-movel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 MoveJ 与 MoveL 对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 笛卡尔速度运动控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 笛卡尔速度运动控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 雅可比速度映射
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 末端速度到关节速度
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 加入位姿误差反馈
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 速度目标的执行
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 奇异性与阻尼伪逆
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6 位置控制与速度控制的关系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6 JoyArm 中的运动控制机制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6 JoyArm 中的运动控制机制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 主要组成
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 数据流
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 规划器
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 控制器
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#65-motionfsm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5 MotionFSM 状态
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#66" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6 高级运动接口与底层目标通道
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7 本章实践：JoyArm 关节运动控制
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7 本章实践：JoyArm 关节运动控制">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 实验任务
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 运行方法
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 目标生成与运动流程
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 数据与输出文件
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 验收指标
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#76" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.6 结果分析
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#77" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.7 安全边界
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="_1">第六章 运动控制</h1>
+<blockquote>
+<p>📌 <strong>概述</strong>：本章把前几章得到的运动学关系与参考轨迹转化为机械臂能够执行的控制指令。首先建立“目标—规划—控制—执行—反馈”的完整链路，再介绍单关节控制、关节空间运动控制、笛卡尔位置与速度控制，最后结合 JoyArm 的规划器、控制器、运动状态机和通信后端完成关节运动实践。</p>
+<p>📖 <strong>章节边界</strong>：本章以<a href="../chapt2_fkine/">第二章</a>的正运动学、<a href="../chapt3_ikine/">第三章</a>的逆运动学与连续逆解、<a href="../chapt4_jacobian/">第四章</a>的雅可比矩阵以及<a href="../chapt5_trajectory/">第五章</a>的时间参数化轨迹为基础，重点说明这些结果怎样进入控制链路，不再重复其详细推导与实现。质量、惯量和重力等动力学因素留到<a href="../chapt8_dyn/">第八章</a>，机械臂与环境之间的作用力留到<a href="../chapt9_force/">第九章</a>，拖动示教的完整任务留到<a href="../chapt12_teleop/">第十二章</a>。</p>
+</blockquote>
+<h2 id="1">1 从运动目标到电机指令</h2>
+<p>机械臂运动不仅要确定终点，还要明确运动过程，并根据实际状态及时修正偏差。前五章主要回答“机械臂应该怎样运动”，本章重点回答“怎样让机械臂真正按照参考轨迹运动”。</p>
+<h3 id="11">1.1 运动控制的完整链路</h3>
+<p>机械臂从接收运动目标到产生实际运动，需要依次经过规划、控制和执行。驱动器与传感器再将实际状态返回控制器，使控制器能够持续修正运动偏差。</p>
+<p><img alt="机械臂从运动目标、参考轨迹到控制指令和实际运动的反馈闭环" src="../images/chapt6_control/motion_control_closed_loop.png" /></p>
+<p>这条链路包含四个连续环节：</p>
+<ol>
+<li><strong>给出目标</strong>：确定机械臂最终要到达的关节角或末端位姿。</li>
+<li><strong>生成参考</strong>：规划器根据起点、终点和运动约束生成参考轨迹。</li>
+<li><strong>计算指令</strong>：控制器结合参考轨迹与实际反馈计算控制指令。</li>
+<li><strong>执行与反馈</strong>：驱动器带动电机运动，并返回实际位置、速度和力矩等状态。</li>
+</ol>
+<p>其中，目标和参考轨迹沿链路向下传递，实际状态沿反馈通道返回控制器。由此形成“前向执行、反向反馈”的闭环结构。</p>
+<h3 id="12">1.2 规划与控制的分工</h3>
+<p>规划与控制解决的是两个连续但不同的问题：<strong>规划决定机械臂应该怎样运动，控制使机械臂尽量按照规划结果运动。</strong></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">对比项</th>
+<th style="text-align: center;">规划</th>
+<th style="text-align: center;">控制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">核心问题</td>
+<td style="text-align: center;">应该怎样运动</td>
+<td style="text-align: center;">怎样跟上参考轨迹</td>
+</tr>
+<tr>
+<td style="text-align: center;">输入</td>
+<td style="text-align: center;">运动目标和约束</td>
+<td style="text-align: center;">参考轨迹和实际反馈</td>
+</tr>
+<tr>
+<td style="text-align: center;">输出</td>
+<td style="text-align: center;">参考位置、速度和加速度</td>
+<td style="text-align: center;">位置、速度或力矩指令</td>
+</tr>
+</tbody>
+</table>
+<p>规划器生成参考轨迹，控制器结合反馈跟踪参考轨迹。简单点到点运动可以只向驱动器发送目标位置；需要约束运动时间、速度或多关节同步关系时，则应显式规划轨迹。</p>
+<h3 id="13">1.3 控制周期与反馈闭环</h3>
+<p>一个完整控制周期通常包括：</p>
+<ol>
+<li>读取关节状态及其时间戳。</li>
+<li>判断反馈是否有效、是否超时。</li>
+<li>从规划器中采样当前参考状态。</li>
+<li>根据参考状态与实际状态计算控制指令。</li>
+<li>执行位置、速度、力矩和单周期增量检查。</li>
+<li>向关节驱动器发送指令。</li>
+<li>等待下一控制周期。</li>
+</ol>
+<p>控制效果不仅取决于标称控制频率，还与实际周期、通信延迟、周期抖动、反馈时间戳和失联保护有关。如果反馈已经过期，即使数值看起来正常，也不能继续作为当前状态使用。</p>
+<p>明确完整控制链路后，下面从直接驱动机械臂的单关节控制讲起。</p>
+<h2 id="2">2 单关节电机控制</h2>
+<p>机械臂的每个关节通常由一体化关节模组驱动。关节模组把电机、减速器、编码器、驱动器等部件集成在一起；部分产品还带有力矩传感器。上位机发送位置、速度或力矩指令，模组内部控制器根据传感器反馈调节电流，使关节按照指令运动。</p>
+<h3 id="21">2.1 关节状态与控制量</h3>
+<p>关节控制最常使用的位置、速度和力矩：</p>
+<div class="arithmatex">\[
+q,\qquad \dot q,\qquad \tau.
+\]</div>
+<p>驱动器还可能返回电流、电机温度、MOS 温度、错误码、使能状态和当前控制模式。控制过程中需要区分：</p>
+<ul>
+<li><strong>目标值（target）</strong>：控制器期望关节达到的状态。</li>
+<li><strong>测量值（ref）</strong>：编码器或驱动器实际反馈的状态。</li>
+<li><strong>控制误差（err）</strong>：目标值与测量值之差。</li>
+</ul>
+<h3 id="22">2.2 位置、速度与力矩控制模式</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">控制模式</th>
+<th style="text-align: center;">主要指令</th>
+<th style="text-align: center;">主要反馈</th>
+<th style="text-align: center;">特点</th>
+<th style="text-align: center;">典型用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">位置模式</td>
+<td style="text-align: center;">目标角度 <span class="arithmatex">\(q_d\)</span></td>
+<td style="text-align: center;">关节角度 <span class="arithmatex">\(q\)</span></td>
+<td style="text-align: center;">使用直观，便于实现定点和轨迹跟踪</td>
+<td style="text-align: center;"><code>MoveJ</code>、回 Home、预设姿态</td>
+</tr>
+<tr>
+<td style="text-align: center;">速度模式</td>
+<td style="text-align: center;">目标角速度 <span class="arithmatex">\(\dot q_d\)</span></td>
+<td style="text-align: center;">关节角速度 <span class="arithmatex">\(\dot q\)</span></td>
+<td style="text-align: center;">便于连续调节运动方向与快慢</td>
+<td style="text-align: center;">遥操作、视觉伺服</td>
+</tr>
+<tr>
+<td style="text-align: center;">力矩模式</td>
+<td style="text-align: center;">目标力矩 <span class="arithmatex">\(\tau_d\)</span></td>
+<td style="text-align: center;">电流或关节力矩 <span class="arithmatex">\(\tau\)</span></td>
+<td style="text-align: center;">可直接调节作用力，对模型和安全保护要求较高</td>
+<td style="text-align: center;">阻尼、重力补偿、柔顺控制</td>
+</tr>
+</tbody>
+</table>
+<h4 id="221">2.2.1 位置模式</h4>
+<p>位置模式输入目标角度 <span class="arithmatex">\(q_d\)</span>，驱动器内部完成位置闭环。它最容易使用，但上位机通常不能直接决定实际输出力矩。</p>
+<h4 id="222">2.2.2 速度模式</h4>
+<p>速度模式输入目标角速度 <span class="arithmatex">\(\dot q_d\)</span>。速度指令需要持续发送，通信中断后必须及时停止，同时还要检查位置限位，防止关节持续向同一方向运动。</p>
+<h4 id="223-mit">2.2.3 力矩与 MIT 模式</h4>
+<p>典型 MIT 控制指令可以写成</p>
+<div class="arithmatex">\[
+\tau_{\mathrm{cmd}}
+=K_p(q_d-q)+K_d(\dot q_d-\dot q)+\tau_{\mathrm{ff}}.
+\]</div>
+<p>其中，<span class="arithmatex">\(K_p\)</span> 决定位置刚度，<span class="arithmatex">\(K_d\)</span> 提供速度阻尼，<span class="arithmatex">\(\tau_{\mathrm{ff}}\)</span> 为前馈力矩。通过改变这些参数，同一接口可以实现位置保持、阻尼、重力补偿和拖动示教。</p>
+<blockquote>
+<p>⚠️ 力矩模式直接影响机械臂与环境之间的作用力。实际设备必须同时设置关节限位、速度限制、力矩限制、急停和通信超时保护。</p>
+</blockquote>
+<h3 id="23-pid">2.3 串级闭环与 PID 控制</h3>
+<p>位置模式并不表示电机内部只控制位置。典型驱动器采用串级控制：位置环输出速度目标，速度环输出电流或力矩目标，最内层电流环驱动电机。越靠内的控制环，运行频率通常越高。</p>
+<p><img alt="位置环、速度环和电流环组成的串级控制框图" src="../images/chapt6_control/cascade_control_v2.png" /></p>
+<p>三个控制环从外到内逐级生成下一层的目标：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">控制环</th>
+<th style="text-align: center;">输入目标</th>
+<th style="text-align: center;">主要反馈</th>
+<th style="text-align: center;">输出给下一层</th>
+<th style="text-align: center;">主要作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">位置环</td>
+<td style="text-align: center;">目标角度 <span class="arithmatex">\(q_d\)</span></td>
+<td style="text-align: center;">实际角度 <span class="arithmatex">\(q\)</span></td>
+<td style="text-align: center;">目标角速度 <span class="arithmatex">\(\dot q_d\)</span></td>
+<td style="text-align: center;">减小位置误差</td>
+</tr>
+<tr>
+<td style="text-align: center;">速度环</td>
+<td style="text-align: center;">目标角速度 <span class="arithmatex">\(\dot q_d\)</span></td>
+<td style="text-align: center;">实际角速度 <span class="arithmatex">\(\dot q\)</span></td>
+<td style="text-align: center;">目标电流或力矩</td>
+<td style="text-align: center;">调节运动快慢并提供阻尼</td>
+</tr>
+<tr>
+<td style="text-align: center;">电流环</td>
+<td style="text-align: center;">目标电流 <span class="arithmatex">\(i_d\)</span></td>
+<td style="text-align: center;">实际电流 <span class="arithmatex">\(i\)</span></td>
+<td style="text-align: center;">PWM 或电压指令</td>
+<td style="text-align: center;">快速建立电磁力矩</td>
+</tr>
+</tbody>
+</table>
+<p>因此，上位机发送目标角度后，驱动器并不是立即把电机“拉到”目标位置，而是先由位置环根据位置误差生成速度目标，再由速度环生成电流或力矩目标，最后由电流环驱动电机。负载变化或受到外部扰动时，反馈会改变各环误差，控制器随即更新后续指令。</p>
+<p>以单关节位置控制为例，位置误差与 PID 控制律分别为</p>
+<div class="arithmatex">\[
+e(t)=q_d(t)-q(t),
+\]</div>
+<div class="arithmatex">\[
+u(t)=K_p e(t)+K_i\int_0^t e(\xi)\,\mathrm{d}\xi+K_d\dot e(t).
+\]</div>
+<ul>
+<li><strong>比例项（<span class="arithmatex">\(K_p e(t)\)</span>）</strong>根据当前误差立即修正；增益过大可能引起超调和振荡。</li>
+<li><strong>积分项（<span class="arithmatex">\(K_i\int_0^t e(\xi)\,\mathrm{d}\xi\)</span>）</strong>累积历史误差，可减小稳态误差，但过强时容易产生积分饱和。</li>
+<li><strong>微分项（<span class="arithmatex">\(K_d\dot e(t)\)</span>）</strong>反映误差变化趋势，可增加阻尼，但对测量噪声较敏感。</li>
+</ul>
+<p><img alt="单关节 PID 闭环控制框图" src="../images/chapt6_control/joint_closed_loop.png" /></p>
+<p>PID 是单个控制环根据误差计算输出的一种方法，串级控制则描述多个控制环怎样嵌套。位置环、速度环和电流环可以采用不同形式的 P、PI 或 PID 控制，并不要求三个环使用完全相同的控制律。通常先调响应最快的电流环，再调速度环，最后调位置环；如果内环尚未稳定，直接提高外环增益容易引起超调和振荡。</p>
+<p>实际调参不能只追求响应快，还要同时观察上升时间、超调量、稳定时间、稳态误差、振荡和噪声。工程实现还需要处理输出限幅、积分饱和和微分噪声：控制量达到上限后应限制积分继续累积，微分项通常需要滤波。机械臂负载、减速器摩擦和结构柔性变化后，原有参数也可能需要调整。</p>
+<h3 id="24">2.4 通信、同步与失联保护</h3>
+<p>上位机需要通过通信链路向各关节发送指令并读取状态。CAN、RS-485 和 EtherCAT 位于通信体系的不同层次：CAN 定义总线通信机制，RS-485 主要定义电气接口，Modbus RTU 等协议可以运行在 RS-485 之上。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">通信方式</th>
+<th style="text-align: center;">主要特点</th>
+<th style="text-align: center;">典型拓扑</th>
+<th style="text-align: center;">适用场景</th>
+<th style="text-align: center;">注意事项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">CAN / CAN FD</td>
+<td style="text-align: center;">多节点仲裁、抗干扰能力强；CAN FD 可提高数据负载和速率</td>
+<td style="text-align: center;">总线型</td>
+<td style="text-align: center;">移动机器人、中小型机械臂</td>
+<td style="text-align: center;">终端电阻、波特率和节点 ID 必须一致</td>
+</tr>
+<tr>
+<td style="text-align: center;">RS-485</td>
+<td style="text-align: center;">差分传输、布线简单，常承载 Modbus RTU 或厂商协议</td>
+<td style="text-align: center;">总线型</td>
+<td style="text-align: center;">低成本执行器、传感器</td>
+<td style="text-align: center;">实时性取决于上层协议和轮询方式</td>
+</tr>
+<tr>
+<td style="text-align: center;">EtherCAT</td>
+<td style="text-align: center;">周期通信和时钟同步能力强</td>
+<td style="text-align: center;">逻辑环形、物理链式</td>
+<td style="text-align: center;">高性能工业运动控制</td>
+<td style="text-align: center;">对主站、从站和网络配置要求较高</td>
+</tr>
+</tbody>
+</table>
+<p>选择通信方式时，应同时考虑控制周期、节点数量、报文长度、同步精度、布线环境和开发成本。通信中断后，应停止使用旧反馈，并根据风险进入保持、阻尼或失能状态。</p>
+<p>单关节闭环解决了一个关节怎样跟踪目标；要完成机械臂运动，还需要让多个关节按照统一的轨迹和时间基准协调执行。</p>
+<h2 id="3">3 关节空间运动控制</h2>
+<p>关节空间运动控制直接规定各关节随时间变化的参考状态，解决多个关节怎样按照同一时间基准协调运动，是机械臂点到点运动和预设动作最常用的方式。</p>
+<h3 id="31">3.1 关节目标与关节轨迹</h3>
+<p>单个目标 <span class="arithmatex">\(\bm q_{\mathrm{goal}}\)</span> 只规定终点；第五章生成的</p>
+<div class="arithmatex">\[
+\bm q_d(t),\qquad \dot{\bm q}_d(t),\qquad \ddot{\bm q}_d(t)
+\]</div>
+<p>还规定中间运动过程。控制器应按固定周期采样当前参考状态，而不是一次性把相距很远的目标直接发送给电机。</p>
+<h3 id="32">3.2 关节位置跟踪</h3>
+<p>关节位置误差为</p>
+<div class="arithmatex">\[
+\bm e_q=\bm q_d-\bm q.
+\]</div>
+<p>使用驱动器内部位置环时，上位机可以周期发送 <span class="arithmatex">\(\bm q_d(t)\)</span>；由上位机计算控制量时，还可以根据位置误差和速度误差形成 PD 控制。</p>
+<h3 id="33-movej">3.3 <code>MoveJ</code></h3>
+<p><code>MoveJ</code> 在关节空间生成并执行轨迹，使各关节从当前位置平滑运动到目标关节角：</p>
+<ul>
+<li>各关节协调开始和到达。</li>
+<li>目标需要满足关节位置、速度和加速度限制。</li>
+<li>适合点到点运动、回 Home 和预设姿态。</li>
+<li>末端中间路径通常不是直线。</li>
+</ul>
+<h3 id="34-homezero-neutral">3.4 Home、Zero 与 Neutral</h3>
+<ul>
+<li><strong>Zero</strong>：关节坐标零位，主要用于标定和坐标定义。</li>
+<li><strong>Home</strong>：机械臂启动、停机或任务准备时使用的安全姿态。</li>
+<li><strong>Neutral</strong>：软限位中点，不一定适合作为实际运动目标。</li>
+</ul>
+<p>移动到零位与重新标定零点是两种不同操作。普通任务通常使用 <code>move_home()</code>，不应把 <code>move_zero()</code> 当作默认回位方式。</p>
+<blockquote>
+<p>🖼️ <strong>配图占位：Home、Zero 与 Neutral 位形对比</strong></p>
+<p>建议并排显示同一机械臂的三种位形，并标出各位形的主要用途。建议文件名：<code>home_zero_neutral_comparison.svg</code>。</p>
+</blockquote>
+<h3 id="35">3.5 到位判断</h3>
+<p>指令发送完成不等于机械臂已经到位。基本位置条件为</p>
+<div class="arithmatex">\[
+|q_i-q_{d,i}|&lt;\varepsilon_i.
+\]</div>
+<p>工程实现还应检查反馈是否新鲜、关节速度是否已经下降、是否连续多个周期满足容差、是否超时以及是否出现故障。</p>
+<h2 id="4">4 笛卡尔位置运动控制</h2>
+<p>笛卡尔位置运动控制以末端位置和姿态作为输入，再通过逆运动学转换为关节目标。从系统层级看，任务层给出末端目标，整机控制层计算协调一致的关节目标，关节控制层再使各关节跟踪目标。整机控制并不替代单关节控制，而是在其外层完成目标转换。</p>
+<p>本节说明逆运动学结果怎样进入轨迹规划和关节控制链路。</p>
+<h3 id="41">4.1 从末端目标到关节目标</h3>
+<p>设机械臂正运动学为</p>
+<div class="arithmatex">\[
+\bm T=f(\bm q).
+\]</div>
+<p>对于目标位姿 <span class="arithmatex">\(\bm T_d\)</span>，逆运动学求解满足</p>
+<div class="arithmatex">\[
+f(\bm q_d)=\bm T_d
+\]</div>
+<p>的目标关节角。完整控制链路如下图所示：</p>
+<p><img alt="目标末端位姿经逆运动学和关节位置控制转换为实际末端位姿" src="../images/chapt6_control/position_kinematic_control_v2.svg" /></p>
+<h3 id="42">4.2 逆运动学解的连续选择</h3>
+<p>候选解需要依次检查有效性、可达性、关节限位、肩肘腕构型、与当前关节角的距离，以及相邻采样点是否保持同一逆解分支。如果相邻目标选择不同分支，关节目标可能突然跳变；奇异位形附近，末端的小幅运动也可能要求关节快速变化。</p>
+<h3 id="43-movej">4.3 面向末端目标的 <code>MoveJ</code></h3>
+<p>如果只对目标末端位姿求一次逆运动学，再从当前关节角运动到终点关节角，那么该运动仍属于 <code>MoveJ</code>。它保证终点末端位姿，但不保证中间末端路径为直线。</p>
+<h3 id="44-movel">4.4 <code>MoveL</code></h3>
+<p><code>MoveL</code> 先在笛卡尔空间对位置和姿态进行插值，再对每个采样位姿连续求逆运动学。它能够使末端沿近似直线运动，但需要额外处理连续逆解、不可达、关节限位和奇异性。姿态插值应使用旋转矩阵、四元数或旋转向量，不能直接对欧拉角逐项线性插值。</p>
+<p>第三章实践只验证“笛卡尔几何路径 → 连续逆解 → 正运动学回代”这一运动学过程；路径的速度、加速度和到达时间等时间参数化属于第五章。只有几何路径与时间规律都确定并交由控制器执行后，才构成完整的 <code>MoveL</code>。</p>
+<h3 id="45-movej-movel">4.5 <code>MoveJ</code> 与 <code>MoveL</code> 对比</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">对比项</th>
+<th style="text-align: center;"><code>MoveJ</code></th>
+<th style="text-align: center;"><code>MoveL</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">规划空间</td>
+<td style="text-align: center;">关节空间</td>
+<td style="text-align: center;">笛卡尔空间</td>
+</tr>
+<tr>
+<td style="text-align: center;">主要目标</td>
+<td style="text-align: center;">关节平滑到达</td>
+<td style="text-align: center;">末端沿指定路径运动</td>
+</tr>
+<tr>
+<td style="text-align: center;">中间末端路径</td>
+<td style="text-align: center;">通常不是直线</td>
+<td style="text-align: center;">接近直线</td>
+</tr>
+<tr>
+<td style="text-align: center;">计算复杂度</td>
+<td style="text-align: center;">较低</td>
+<td style="text-align: center;">较高</td>
+</tr>
+<tr>
+<td style="text-align: center;">主要风险</td>
+<td style="text-align: center;">末端路径不可预期</td>
+<td style="text-align: center;">连续逆解、不可达与奇异</td>
+</tr>
+<tr>
+<td style="text-align: center;">典型场景</td>
+<td style="text-align: center;">点到点、回 Home</td>
+<td style="text-align: center;">插入、涂胶、直线接近</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>🖼️ <strong>配图占位：<code>MoveJ</code> 与 <code>MoveL</code> 末端路径对比</strong></p>
+<p>建议在同一组起点和终点之间，分别绘制 <code>MoveJ</code> 的弯曲末端路径与 <code>MoveL</code> 的直线路径，并用若干中间姿态表示运动过程。建议文件名：<code>movej_movel_path_comparison.svg</code>。</p>
+</blockquote>
+<p>笛卡尔位置控制适合描述“末端到哪里”；对于遥操作、视觉伺服等连续跟踪任务，还需要进一步描述“末端此刻向哪里运动、运动多快”。</p>
+<h2 id="5">5 笛卡尔速度运动控制</h2>
+<p>笛卡尔速度运动控制直接建立末端速度与关节速度之间的关系，适合末端连续跟踪、遥操作和视觉伺服等任务。</p>
+<p>本节使用雅可比矩阵构造速度控制关系，说明末端速度怎样转化为关节速度、怎样加入位姿误差反馈，以及关节速度最终怎样由驱动器执行。</p>
+<h3 id="51">5.1 雅可比速度映射</h3>
+<p>末端速度旋量 <span class="arithmatex">\(\bm v\)</span> 与关节速度 <span class="arithmatex">\(\dot{\bm q}\)</span> 满足</p>
+<div class="arithmatex">\[
+\bm v=\bm J(\bm q)\dot{\bm q},
+\]</div>
+<p>其中，<span class="arithmatex">\(\bm J(\bm q)\)</span> 为雅可比矩阵。控制器需要根据当前关节角周期更新雅可比矩阵。</p>
+<h3 id="52">5.2 末端速度到关节速度</h3>
+<p>一般可以使用伪逆计算关节速度：</p>
+<div class="arithmatex">\[
+\dot{\bm q}_d=\bm J^\dagger(\bm q)\bm v_d.
+\]</div>
+<p>方阵且可逆时可以使用逆矩阵；一般机械臂更常使用伪逆。冗余机械臂还可以利用零空间完成避限位或改善姿态等次要任务。</p>
+<p><img alt="整机速度运动学控制框图" src="../images/chapt6_control/velocity_kinematic_control_v2.svg" /></p>
+<h3 id="53">5.3 加入位姿误差反馈</h3>
+<p>只发送前馈速度时，模型误差、离散积分误差和外部扰动会逐渐累积。可以加入位姿误差反馈：</p>
+<div class="arithmatex">\[
+\bm v_c=\bm v_d+\bm K_p\bm e,
+\]</div>
+<div class="arithmatex">\[
+\dot{\bm q}_d=\bm J^\dagger(\bm q)\bm v_c.
+\]</div>
+<p>位置误差可以直接相减，姿态误差应使用旋转矩阵、旋转向量或四元数计算，不能直接把欧拉角逐项相减。位置、姿态误差和目标速度还必须表达在同一参考坐标系中。</p>
+<h3 id="54">5.4 速度目标的执行</h3>
+<p>驱动器支持速度模式时，可以直接发送关节速度目标。如果驱动器只提供位置模式，可以离散积分得到下一周期位置：</p>
+<div class="arithmatex">\[
+\bm q_{k+1}=\bm q_k+\dot{\bm q}_{d,k}\Delta t.
+\]</div>
+<p>实际实现必须使用真实控制周期 <span class="arithmatex">\(\Delta t\)</span>，并限制关节速度、单周期位置增量和积分后的关节位置。</p>
+<h3 id="55">5.5 奇异性与阻尼伪逆</h3>
+<p>机械臂接近奇异位形时，雅可比矩阵的某些奇异值趋近于零，普通伪逆可能把很小的末端速度放大为很大的关节速度。常用的阻尼最小二乘伪逆为</p>
+<div class="arithmatex">\[
+\bm J_{\lambda}^{\dagger}
+=\bm J^{\mathsf{T}}\left(\bm J\bm J^{\mathsf{T}}+\lambda^2\bm I\right)^{-1}.
+\]</div>
+<p>阻尼越大，关节速度越平稳，但末端跟踪误差也可能增大。阻尼伪逆不能消除几何奇异性，因此仍需设置关节速度上限，并在必要时减速或停止。</p>
+<h3 id="56">5.6 位置控制与速度控制的关系</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">对比项</th>
+<th style="text-align: center;">位置运动学控制</th>
+<th style="text-align: center;">速度运动学控制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">主要输入</td>
+<td style="text-align: center;">目标末端位姿</td>
+<td style="text-align: center;">目标末端速度与位姿误差</td>
+</tr>
+<tr>
+<td style="text-align: center;">核心计算</td>
+<td style="text-align: center;">逆运动学</td>
+<td style="text-align: center;">雅可比逆、伪逆或阻尼伪逆</td>
+</tr>
+<tr>
+<td style="text-align: center;">下层指令</td>
+<td style="text-align: center;">关节位置</td>
+<td style="text-align: center;">关节速度，或积分后的关节位置</td>
+</tr>
+<tr>
+<td style="text-align: center;">优点</td>
+<td style="text-align: center;">结构直接，适合定点与离线轨迹</td>
+<td style="text-align: center;">可连续修正误差，适合在线跟踪</td>
+</tr>
+<tr>
+<td style="text-align: center;">主要风险</td>
+<td style="text-align: center;">多解、不连续、目标不可达</td>
+<td style="text-align: center;">奇异处速度放大、积分漂移</td>
+</tr>
+<tr>
+<td style="text-align: center;">典型场景</td>
+<td style="text-align: center;">搬运、抓取、预设动作</td>
+<td style="text-align: center;">遥操作、视觉伺服、路径跟踪</td>
+</tr>
+</tbody>
+</table>
+<p>两类方法不是互斥关系。<code>MoveL</code> 可以通过连续逆运动学实现，也可以通过雅可比速度控制实现；即使下层电机只支持位置模式，上层仍可通过速度积分实现笛卡尔速度控制。</p>
+<p>笛卡尔位置与速度控制把前面学过的运动学关系放回完整控制链路，并为后续遥操作、视觉伺服和力控制建立接口概念。本章实践选择最基础、最容易安全验证的关节位置控制。</p>
+<p>以上内容介绍了机械臂运动控制的通用方法，下面将这些方法映射到 JoyArm 的规划器、控制器、状态机和通信后端。</p>
+<h2 id="6-joyarm">6 JoyArm 中的运动控制机制</h2>
+<p>JoyArm 把目标、轨迹、控制、状态管理和硬件通信分成不同组件，使同一套运动流程能够组合不同的规划器、控制器和机械臂型号。</p>
+<h3 id="61">6.1 主要组成</h3>
+<ul>
+<li><code>TrajFrame</code>：保存目标或参考轨迹帧。</li>
+<li><code>TrajPlanner</code>：接收目标并生成、采样轨迹。</li>
+<li><code>Controller</code>：把参考轨迹帧转换为电机指令。</li>
+<li><code>MotionFSM</code>：管理运动状态和本体控制权限。</li>
+<li><code>Backend</code>：实现具体型号的通信与电机指令。</li>
+<li><code>safe_monitor</code>：判断安全事件，由 FSM 执行对应动作。</li>
+</ul>
+<p>这些组件与第 1 节通用控制链路的对应关系如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">通用环节</th>
+<th style="text-align: center;">JoyArm 组件</th>
+<th style="text-align: center;">主要职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">运动目标</td>
+<td style="text-align: center;"><code>TrajFrame</code>、目标帧通道</td>
+<td style="text-align: center;">保存并发布关节目标或笛卡尔目标</td>
+</tr>
+<tr>
+<td style="text-align: center;">轨迹规划</td>
+<td style="text-align: center;"><code>TrajPlanner</code></td>
+<td style="text-align: center;">根据目标生成并按时刻采样参考轨迹</td>
+</tr>
+<tr>
+<td style="text-align: center;">控制计算</td>
+<td style="text-align: center;"><code>Controller</code></td>
+<td style="text-align: center;">结合参考帧与关节反馈生成电机指令</td>
+</tr>
+<tr>
+<td style="text-align: center;">状态管理</td>
+<td style="text-align: center;"><code>MotionFSM</code></td>
+<td style="text-align: center;">管理回位、运动、保持、阻尼和失能状态</td>
+</tr>
+<tr>
+<td style="text-align: center;">安全判断</td>
+<td style="text-align: center;"><code>safe_monitor</code></td>
+<td style="text-align: center;">检查故障、失联及自定义安全规则</td>
+</tr>
+<tr>
+<td style="text-align: center;">执行与反馈</td>
+<td style="text-align: center;"><code>Backend</code></td>
+<td style="text-align: center;">与具体电机通信，下发指令并读取关节状态</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62">6.2 数据流</h3>
+<div class="highlight"><pre><span></span><code>set_target_joint / set_target_cart
+              ↓
+目标帧通道
+              ↓
+TrajPlanner.plan()
+              ↓
+TrajPlanner.sample()
+              ↓
+Controller.step()
+              ↓
+JoyArm 公开下发接口
+              ↓
+Backend
+              ↓
+关节电机
+</code></pre></div>
+<p>应用代码只负责设置目标。规划线程周期检查目标版本，只在收到新目标时调用规划器生成轨迹；控制线程按控制周期采样当前轨迹、读取关节反馈并执行控制器，Backend 再把统一指令转换为具体型号的通信报文。</p>
+<h3 id="63">6.3 规划器</h3>
+<p>JoyArm 当前提供两类单关节目标规划器：</p>
+<ul>
+<li><strong>直传规划器</strong>：把目标帧中的关节参考直接提供给控制器。</li>
+<li><strong>三次多项式规划器</strong>：根据起点、终点和到达时间生成平滑关节轨迹。</li>
+</ul>
+<p><code>plan_hz</code> 决定规划线程检查新目标的频率。写入新目标后，规划器只生成一次对应轨迹；在目标再次变化前，控制线程持续调用 <code>sample()</code> 获取当前时刻的参考帧，不会周期性重建同一条三次轨迹。目标时间 <code>t</code> 在不同规划器中的含义可能不同，使用时应以规划器契约为准。</p>
+<h3 id="64">6.4 控制器</h3>
+<ul>
+<li><code>JointPositionDirectController</code>：读取轨迹帧中的关节角，通过位置模式下发。</li>
+<li><code>JointDragTeachController</code>：使用 MIT 模式、重力补偿、阻尼和缓释平衡点实现拖动示教。</li>
+</ul>
+<p>第六章实践主要使用位置控制器。</p>
+<h3 id="65-motionfsm">6.5 MotionFSM 状态</h3>
+<ul>
+<li><code>DISABLE</code>：机械臂失能。</li>
+<li><code>ZERO</code>：回到零位并失能。</li>
+<li><code>HOME</code>：运动到 Home 位形。</li>
+<li><code>MOTION</code>：正常执行规划和控制。</li>
+<li><code>HOLD</code>：保持当前位置。</li>
+<li><code>DAMP</code>：进入阻尼保护。</li>
+</ul>
+<p>FSM 运行后，本体运动指令由控制线程统一下发，外部直接发送本体电机指令会被拦截。<code>DAMP</code> 使用阻尼和可选的部分重力补偿降低运动风险，但它不等同于完整拖动示教。</p>
+<h3 id="66">6.6 高级运动接口与底层目标通道</h3>
+<p>当前底层运动方式为：</p>
+<div class="highlight"><pre><span></span><code><span class="n">arm</span><span class="o">.</span><span class="n">set_target_joint</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span>
+<span class="n">arm</span><span class="o">.</span><span class="n">is_in_q_arm</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+</code></pre></div>
+<p>面向普通任务可以进一步封装为：</p>
+<div class="highlight"><pre><span></span><code><span class="n">arm</span><span class="o">.</span><span class="n">move_j</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">arm</span><span class="o">.</span><span class="n">move_home</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<p>高级接口负责目标校验、等待到位和超时处理，底层仍复用目标帧、规划器、控制器与 FSM，不应重新建立另一套运动机制。</p>
+<p>明确各软件组件及其数据流后，下面通过关节运动实验验证目标、规划、控制、执行和反馈组成的完整链路。</p>
+<h2 id="7-joyarm">7 本章实践：JoyArm 关节运动控制</h2>
+<p>本章实践使用 JoyArm 已有的三次关节轨迹规划器、关节位置控制器和 MotionFSM，依次完成单关节小幅运动与多关节 <code>MoveJ</code>。脚本记录目标终点、实际关节位置、实际关节速度、终点剩余误差、反馈帧龄和状态机状态，并自动生成 CSV 与关节曲线图。</p>
+<p>实践重点是验证“目标—规划—控制—执行—反馈”怎样在 JoyArm 中形成完整运行链路。</p>
+<h3 id="71">7.1 实验任务</h3>
+<ol>
+<li>选择 <code>single_joint_cubic_traj_planner</code> 三次轨迹规划器。</li>
+<li>选择 <code>joint_position_direct_controller</code> 关节位置控制器。</li>
+<li>连接机械臂，等待新鲜反馈并检查两组小幅目标。</li>
+<li>启动 MotionFSM，等待状态迁移至 <code>MOTION</code>。</li>
+<li>从 Home 出发，执行单关节运动并返回 Home。</li>
+<li>从 Home 出发，执行多关节 <code>MoveJ</code> 并再次返回 Home。</li>
+<li>停止监视器和 MotionFSM，完成回零、失能与断连。</li>
+<li>保存原始数据和曲线图，分析到位误差、速度峰值、反馈帧龄与采样周期。</li>
+</ol>
+<h3 id="72">7.2 运行方法</h3>
+<p>先同步项目环境：</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>joyarm_code
+uv<span class="w"> </span>sync
+</code></pre></div>
+<p>连接机械臂并运行实践脚本：</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>chapt/chapt6/chapt6_control_demo.py<span class="w"> </span>rebot_arm_b601_dm
+</code></pre></div>
+<p>默认每段运动时间为 3 s，记录频率为 50 Hz，结果保存在当前目录。可以通过参数修改：</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>chapt/chapt6/chapt6_control_demo.py<span class="w"> </span>rebot_arm_b601_dm<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--duration<span class="w"> </span><span class="m">4</span>.0<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--sample-hz<span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-dir<span class="w"> </span>results
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">参数</th>
+<th style="text-align: center;">含义</th>
+<th style="text-align: center;">默认值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>model</code></td>
+<td style="text-align: center;">机械臂型号</td>
+<td style="text-align: center;">必填</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>--duration</code></td>
+<td style="text-align: center;">每段运动的规划时间</td>
+<td style="text-align: center;"><code>3.0</code> s</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>--sample-hz</code></td>
+<td style="text-align: center;">教学数据记录频率</td>
+<td style="text-align: center;"><code>50</code> Hz</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>--output-dir</code></td>
+<td style="text-align: center;">CSV 和图片保存目录</td>
+<td style="text-align: center;">当前目录</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <code>--sample-hz</code> 是主线程记录数据的频率，不是控制器的实际运行频率。规划器和控制器分别按照型号配置中的 <code>plan_hz</code> 与 <code>ctrl_hz</code> 运行。</p>
+</blockquote>
+<h3 id="73">7.3 目标生成与运动流程</h3>
+<p>脚本以 Home 为共同起点。单关节实验只改变一个关节：</p>
+<div class="arithmatex">\[
+q_{\mathrm{goal},i}=q_{\mathrm{home},i}+\Delta q_i,
+\]</div>
+<p>其余关节保持 Home 角度。多关节实验同时改变若干关节，并由同一个目标到达时刻约束各关节协调运动。每个偏移量根据 Home 到软限位两侧的可用空间自动选择，单关节最大偏移不超过 <span class="arithmatex">\(0.15\ \mathrm{rad}\)</span>。</p>
+<p>每段运动只向目标通道写入一帧终点与绝对到达时刻。规划线程检测到目标版本变化后生成一次三次参考轨迹，控制线程周期采样这条轨迹并通过位置控制器下发；主线程只负责读取反馈和记录数据，不直接向电机发送位置指令。</p>
+<p>启动时应观察状态机按以下路径进入正常运动状态：</p>
+<div class="highlight"><pre><span></span><code>DISABLE → HOME → MOTION
+</code></pre></div>
+<p>实验结束后，脚本停止监视器和 MotionFSM，由状态机完成安全收尾。</p>
+<h3 id="74">7.4 数据与输出文件</h3>
+<p>CSV 文件名为 <code>chapt6_joint_control_&lt;时间戳&gt;.csv</code>，每一行对应一帧教学采样数据：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">数据</th>
+<th style="text-align: center;">含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>t_s</code>、<code>phase</code></td>
+<td style="text-align: center;">实验相对时间和当前运动阶段</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>q_goal_*</code></td>
+<td style="text-align: center;">当前阶段的目标终点关节角</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>q_*</code>、<code>dq_*</code></td>
+<td style="text-align: center;">实际反馈关节角和关节速度</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>endpoint_error_*</code></td>
+<td style="text-align: center;">目标终点与实际位置之差，即终点剩余误差</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>frame_age_ms</code></td>
+<td style="text-align: center;">记录时刻与反馈时间戳之差</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>motion_state</code></td>
+<td style="text-align: center;">MotionFSM 当前状态</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>safety_event</code></td>
+<td style="text-align: center;">当前安全事件</td>
+</tr>
+</tbody>
+</table>
+<p>PNG 文件名为 <code>chapt6_joint_control_&lt;时间戳&gt;.png</code>。每个关节单独占一个子图，蓝色实线表示实际位置反馈，橙色虚线表示当前阶段的目标终点，竖直虚线表示运动阶段切换。</p>
+<p>当前公开 API 不提供规划器每个控制周期的内部参考帧，因此图中的橙色虚线不是三次参考轨迹。它只表示本阶段最终要到达的关节角；实际反馈曲线是否平滑，可以用于观察整个规划与控制链路的综合效果，但不能单独分离规划误差和控制跟踪误差。</p>
+<h3 id="75">7.5 验收指标</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">验收项</th>
+<th style="text-align: center;">判断依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">目标有效</td>
+<td style="text-align: center;">自动生成的目标位于软限位内且不含非有限值</td>
+</tr>
+<tr>
+<td style="text-align: center;">状态机就绪</td>
+<td style="text-align: center;">15 s 内进入 <code>MOTION</code> 状态</td>
+</tr>
+<tr>
+<td style="text-align: center;">反馈有效</td>
+<td style="text-align: center;">状态持续更新，反馈维度正确，帧龄无异常增大</td>
+</tr>
+<tr>
+<td style="text-align: center;">到位完成</td>
+<td style="text-align: center;">规划时间结束后，连续 5 个记录点满足 <code>is_in_q_arm()</code></td>
+</tr>
+<tr>
+<td style="text-align: center;">运动连续</td>
+<td style="text-align: center;">实际位置曲线连续，速度无无法解释的尖峰或持续振荡</td>
+</tr>
+<tr>
+<td style="text-align: center;">安全停止</td>
+<td style="text-align: center;">实验结束后 MotionFSM 完成停止、回零和失能流程</td>
+</tr>
+</tbody>
+</table>
+<p>脚本按阶段打印最大终点剩余误差、末帧终点剩余误差、最大反馈速度和采样帧数，同时打印记录周期的均值、标准差以及最大反馈帧龄。最大终点剩余误差通常出现在运动开始时，不能作为控制器跟踪误差；判断到位质量时应重点观察末帧终点剩余误差。严格的轨迹跟踪误差应由规划器瞬时参考值与实际反馈之差计算。</p>
+<h3 id="76">7.6 结果分析</h3>
+<p>结果分析按照“位置—速度—时序—状态”的顺序进行：</p>
+<ol>
+<li><strong>检查最终位置</strong>：实际反馈应在运动结束后进入目标容差，并保持稳定。</li>
+<li><strong>检查运动连续性</strong>：位置曲线不应出现不连续跳变，速度曲线不应出现反复的大幅正负切换。</li>
+<li><strong>比较单关节与多关节运动</strong>：多关节应从同一时段开始变化，并在接近的时刻进入目标容差。</li>
+<li><strong>检查反馈时序</strong>：若最大帧龄持续增大，先排查通信和状态刷新，不继续解释控制效果。</li>
+<li><strong>检查状态机</strong>：正常采样阶段应保持 <code>MOTION</code> 和 <code>NORMAL</code>；出现其他状态或事件时，应结合日志查明触发原因。</li>
+</ol>
+<blockquote>
+<p>🖼️ <strong>实验结果占位：目标终点与六关节位置反馈曲线</strong></p>
+<p>真机实验完成后，从脚本生成的图片中选择一张代表性结果放在此处，并在图下说明运动时长、末帧误差、最大反馈速度和最大反馈帧龄。建议文件名：<code>joint_control_experiment_result.png</code>。</p>
+</blockquote>
+<p>常见现象及排查方向如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">现象</th>
+<th style="text-align: center;">优先检查</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">位置曲线在起步时突然跳变</td>
+<td style="text-align: center;">是否误用了直传规划器、目标时间是否已经过期</td>
+</tr>
+<tr>
+<td style="text-align: center;">到达目标后持续振荡</td>
+<td style="text-align: center;">位置环增益、速度环阻尼、负载和结构柔性</td>
+</tr>
+<tr>
+<td style="text-align: center;">多关节到达时间差异明显</td>
+<td style="text-align: center;">目标时间、规划器是否统一、个别关节是否触发限速</td>
+</tr>
+<tr>
+<td style="text-align: center;">实际速度出现孤立尖峰</td>
+<td style="text-align: center;">反馈差分、通信丢帧、时间戳和机械传动冲击</td>
+</tr>
+<tr>
+<td style="text-align: center;">到位判断反复变化</td>
+<td style="text-align: center;">容差是否过小、反馈噪声、关节是否仍在低速运动</td>
+</tr>
+<tr>
+<td style="text-align: center;">反馈帧龄突然增大</td>
+<td style="text-align: center;">总线负载、状态刷新线程、串口或 CAN 通信</td>
+</tr>
+</tbody>
+</table>
+<h3 id="77">7.7 安全边界</h3>
+<p>脚本只执行软限位内的小幅关节运动，并在启动前要求人工输入 <code>yes</code>。这不能替代急停、硬限位和现场监护。首次运行应使用空载机械臂，降低运动速度，确保机械臂周围无人且路径无遮挡；如果出现异常噪声、剧烈振荡、通信中断或错误码，应立即急停或断电，不应为了获得完整曲线继续实验。</p>
+<p>配套脚本：<code>joyarm_code/chapt/chapt6/chapt6_control_demo.py</code>。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.expand"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../javascripts/image-viewer.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

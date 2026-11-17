@@ -1,0 +1,3890 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://joyin-dexhand.github.io/joyin_arm_tutorial/chapt2_fkine/">
+      
+      
+        <link rel="prev" href="../chapt1_intro/">
+      
+      
+        <link rel="next" href="../chapt3_ikine/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>第二章 空间位姿与位置正运动学 - JoyArm 机械臂教程</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/mermaid.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#_1" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href=".." title="JoyArm 机械臂教程" class="md-header__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            JoyArm 机械臂教程
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              第二章 空间位姿与位置正运动学
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至暗色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切换至暗色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="切换至亮色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切换至亮色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="JoyArm 机械臂教程" class="md-nav__button md-logo" aria-label="JoyArm 机械臂教程" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    JoyArm 机械臂教程
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    使用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quick_start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速上手
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../motor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    关节电机
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../arm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    机械臂整臂
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../end/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    末端执行器
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    基础篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    基础篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt1_intro/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第一章 机器人与机械臂初识
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第二章 空间位姿与位置正运动学
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第二章 空间位姿与位置正运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 空间位姿及矩阵表示
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 空间位姿及矩阵表示">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 什么是空间位姿
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.1 什么是空间位姿">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#111" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1.1 位姿：三维位置 + 三维姿态
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1.2 为什么是六维
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1.3 必须指定参考系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 空间位姿的数学表示
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.2 空间位姿的数学表示">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121-a_bbmt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.1 位姿矩阵 \(^A_B\bm{T}\)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.2 位姿矩阵的两个用途
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.3 位姿矩阵的逆矩阵
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 位姿变换可视化演示
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 空间位姿其他常见表示及其转换关系
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 空间位姿其他常见表示及其转换关系">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 欧拉角和固定角
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.1 欧拉角和固定角">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#211" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.1 三个基本旋转矩阵
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#212-z-y-x" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.2 内旋欧拉角（Z-Y-X 顺序）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#213-x-y-z-rpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.3 外旋固定角（X-Y-Z，即 RPY 角）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#214" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.4 为何两者表达式相同
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#215" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.5 万向节死锁问题
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 轴角表示
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 四元数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 四种姿态表示法对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 四种姿态表示法的转换
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.6 四种姿态表示转换的可视化演示
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-joyarm-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 JoyArm 连杆建系与MDH参数
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3 JoyArm 连杆建系与MDH参数">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 连杆建系步骤
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.1 连杆建系步骤">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#311" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.1 关节与连杆的编号
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#312-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.2 MDH 建系步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#313-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.3 JoyArm 的连杆系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 MDH 参数表
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.2 MDH 参数表">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#321" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2.1 四个参数的几何含义
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#322-joyarm-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2.2 JoyArm 的 MDH 参数表
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 JoyArm 位置正运动学求解
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4 JoyArm 位置正运动学求解">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 相邻连杆系间的位姿矩阵
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.1 相邻连杆系间的位姿矩阵">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#411" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1.1 位姿矩阵通用表达式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#412-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1.2 JoyArm 各相邻连杆位姿矩阵
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 完整正运动学
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 URDF + 库的正运动学求解方法
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.3 URDF + 库的正运动学求解方法">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#431-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3.1 URDF：机械臂的"数字孪生"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#432" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3.2 用库自动求解正运动学
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 本章实践：正运动学求解器实现与工作空间绘制分析
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 本章实践：正运动学求解器实现与工作空间绘制分析">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 正运动学求解器的算法实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.1 正运动学求解器的算法实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#511-fkinesolver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.1 基类接口： FkineSolver
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#512-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.2 子求解器：MDH 法位姿矩阵连乘
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#513-pinocchio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.3 子求解器：Pinocchio 库调用
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#514" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.4 注册与配置
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 正运动学求解器的调用与测试
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.2 正运动学求解器的调用与测试">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#521" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2.1 正运动学求解的调用方式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#522" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2.2 正运动学求解器的测试验证
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 工作空间及求解思路
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.3 工作空间及求解思路">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#531" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.1 什么是工作空间
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#532" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.2 求解思路：蒙特卡洛采样
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#533" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.3 体积估算：体素计数
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 工作空间绘制方法
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 工作空间用途与分析
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.5 工作空间用途与分析">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#551" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5.1 工作空间用途
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#552-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5.2 JoyArm 工作空间分析
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt3_ikine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第三章 位置逆运动学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt4_jacobian/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第四章 速度运动学与静力学
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt5_trajectory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第五章 轨迹生成
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt6_control/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第六章 运动控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    进阶篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    进阶篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt7_urdf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第七章 构型结构设计与URDF导出
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt8_dyn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第八章 动力学及控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt9_force/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第九章 力控制
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt10_ros2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十章 ROS2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    应用篇
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    应用篇
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt11_safety/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十一章 状态监测与安全软防护
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt12_teleop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十二章 示教和遥操作
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt13_endeffector/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十三章 末端执行器
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt14_ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十四章 用户接口
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapt15_project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    第十五章 JoyArm 综合实践项目
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1 空间位姿及矩阵表示
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1 空间位姿及矩阵表示">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 什么是空间位姿
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.1 什么是空间位姿">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#111" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1.1 位姿：三维位置 + 三维姿态
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1.2 为什么是六维
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1.3 必须指定参考系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 空间位姿的数学表示
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.2 空间位姿的数学表示">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121-a_bbmt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.1 位姿矩阵 \(^A_B\bm{T}\)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.2 位姿矩阵的两个用途
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2.3 位姿矩阵的逆矩阵
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 位姿变换可视化演示
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2 空间位姿其他常见表示及其转换关系
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2 空间位姿其他常见表示及其转换关系">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 欧拉角和固定角
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2.1 欧拉角和固定角">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#211" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.1 三个基本旋转矩阵
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#212-z-y-x" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.2 内旋欧拉角（Z-Y-X 顺序）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#213-x-y-z-rpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.3 外旋固定角（X-Y-Z，即 RPY 角）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#214" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.4 为何两者表达式相同
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#215" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1.5 万向节死锁问题
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 轴角表示
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 四元数
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 四种姿态表示法对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.5 四种姿态表示法的转换
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.6 四种姿态表示转换的可视化演示
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-joyarm-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3 JoyArm 连杆建系与MDH参数
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3 JoyArm 连杆建系与MDH参数">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 连杆建系步骤
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.1 连杆建系步骤">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#311" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.1 关节与连杆的编号
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#312-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.2 MDH 建系步骤
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#313-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1.3 JoyArm 的连杆系
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 MDH 参数表
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.2 MDH 参数表">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#321" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2.1 四个参数的几何含义
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#322-joyarm-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2.2 JoyArm 的 MDH 参数表
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4 JoyArm 位置正运动学求解
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4 JoyArm 位置正运动学求解">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 相邻连杆系间的位姿矩阵
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.1 相邻连杆系间的位姿矩阵">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#411" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1.1 位姿矩阵通用表达式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#412-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1.2 JoyArm 各相邻连杆位姿矩阵
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 完整正运动学
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 URDF + 库的正运动学求解方法
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4.3 URDF + 库的正运动学求解方法">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#431-urdf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3.1 URDF：机械臂的"数字孪生"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#432" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3.2 用库自动求解正运动学
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5 本章实践：正运动学求解器实现与工作空间绘制分析
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5 本章实践：正运动学求解器实现与工作空间绘制分析">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 正运动学求解器的算法实现
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.1 正运动学求解器的算法实现">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#511-fkinesolver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.1 基类接口： FkineSolver
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#512-mdh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.2 子求解器：MDH 法位姿矩阵连乘
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#513-pinocchio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.3 子求解器：Pinocchio 库调用
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#514" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1.4 注册与配置
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 正运动学求解器的调用与测试
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.2 正运动学求解器的调用与测试">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#521" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2.1 正运动学求解的调用方式
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#522" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2.2 正运动学求解器的测试验证
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 工作空间及求解思路
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.3 工作空间及求解思路">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#531" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.1 什么是工作空间
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#532" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.2 求解思路：蒙特卡洛采样
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#533" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3.3 体积估算：体素计数
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 工作空间绘制方法
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 工作空间用途与分析
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.5 工作空间用途与分析">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#551" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5.1 工作空间用途
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#552-joyarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5.2 JoyArm 工作空间分析
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="_1">第二章 空间位姿与位置正运动学</h1>
+<blockquote>
+<p>📌 <strong>概述</strong>：本章将建立机械臂的正运动学模型，求解给定各关节角时的机械臂末端空间位姿（三维位置+三维姿态）。
+正运动学建模前，首先需知悉位姿的数学表示形式——位姿矩阵 <span class="arithmatex">\(^A_B\bm{T}\)</span>，以及 RPY、轴角、四元数等常见的等价表示与转换关系；然后采用改进的 DH法（MDH法）为机械臂各连杆建系并将真实机械臂结构关系转化为统一的 MDH 参数表，进而得到相邻连杆系间的位姿矩阵<span class="arithmatex">\(^{i-1}_i\bm{T}\)</span>，经链式连乘便可求得机械臂的<strong>位置正运动学方程</strong>（已知各关节角，求末端位姿）；最后封装正运动学求解算法并通过 JoyArm 调用，对各关节角经蒙特卡洛法随机采样后代入正运动学关系，绘制并分析末端工作空间（机械臂末端可触达的空间范围）。</p>
+</blockquote>
+<h2 id="1">1 空间位姿及矩阵表示</h2>
+<p>在进行正运动学建模前，首先需建立位姿的概念及其数学表示形式：被描述的物体相对于某参考系的三维空间位置和三维姿态朝向。</p>
+<h3 id="11">1.1 什么是空间位姿</h3>
+<h4 id="111">1.1.1 位姿：三维位置 + 三维姿态</h4>
+<p>想象机械臂要抓取桌上的某个物体，那么就需要知道被抓取的这个物品的：</p>
+<ul>
+<li><strong>位置（Position）</strong>：被抓取物体在哪里。</li>
+<li><strong>姿态（Orientation）</strong>：被抓取物体的形状朝向如何。</li>
+</ul>
+<p>故而让机械臂执行某项任务，必须先精确描述目标<strong>在哪里、朝哪个方向</strong>——这就是<strong>空间位姿</strong>。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">概念</th>
+<th style="text-align: center;">英文</th>
+<th style="text-align: center;">回答的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">位置</td>
+<td style="text-align: center;">Position</td>
+<td style="text-align: center;">在哪里？</td>
+</tr>
+<tr>
+<td style="text-align: center;">姿态</td>
+<td style="text-align: center;">Orientation</td>
+<td style="text-align: center;">朝哪个方向？</td>
+</tr>
+<tr>
+<td style="text-align: center;">位姿</td>
+<td style="text-align: center;">Pose</td>
+<td style="text-align: center;">“位置 + 姿态”完整状态</td>
+</tr>
+</tbody>
+</table>
+<h4 id="112">1.1.2 为什么是六维</h4>
+<ul>
+<li><strong>位置 3 维</strong>：三维空间中一个点的位置需 <span class="arithmatex">\((x, y, z)\)</span> 三个坐标表示 —— 前后、左右、上下。</li>
+<li><strong>姿态 3 维</strong>：朝向可分解为"绕三个轴各转一定角度" —— 如人的：左右歪头、左右转头、上下低头抬头。</li>
+</ul>
+<blockquote>
+<p>💡 <strong>空间六维位姿 <span class="arithmatex">\(\Leftrightarrow\)</span> 关节六个电机</strong>。这正是 <strong>6R 机械臂</strong>成为"黄金标配"的原因：六个关节电机具有 6 个独立控制量，恰好对应位姿的 6 个维度。</p>
+</blockquote>
+<h4 id="113">1.1.3 必须指定参考系</h4>
+<p>位姿是<strong>相对</strong>的，脱离参考系谈位姿没有意义（同一物体相对桌子、地面等不同参考系的位姿必然不同）。在机械臂实际开发应用中，通常以基座系或工作台系作为默认的全局参考系。</p>
+<p>若记参照物固连的坐标系为 <span class="arithmatex">\(\{A\}\)</span>，被描述物体固连的坐标系为 <span class="arithmatex">\(\{B\}\)</span>，则 <span class="arithmatex">\(\{B\}\)</span> 相对于 <span class="arithmatex">\(\{A\}\)</span> 的位姿记作 “<span class="arithmatex">\(^A_B\bm{T}\)</span>” ，读作 “B 相对 A 的位姿变换（Translation）”。</p>
+<h3 id="12">1.2 空间位姿的数学表示</h3>
+<h4 id="121-a_bbmt">1.2.1 位姿矩阵 <span class="arithmatex">\(^A_B\bm{T}\)</span></h4>
+<p>位姿的数学表示形式，最基础和常用的是 <span class="arithmatex">\(4\times 4\)</span>的 <strong>齐次变换矩阵 <span class="arithmatex">\(^A_B\bm{T}\)</span></strong> 。</p>
+<p>每个坐标系均由<strong>一个原点</strong>和<strong>三条互相垂直的单位轴</strong>构成。若设 <span class="arithmatex">\(\{A\}\)</span> 三轴为 <span class="arithmatex">\(\hat{X}_A, \hat{Y}_A, \hat{Z}_A\)</span>，<span class="arithmatex">\(\{B\}\)</span> 三轴为 <span class="arithmatex">\(\hat{X}_B, \hat{Y}_B, \hat{Z}_B\)</span>，<span class="arithmatex">\(\{B\}\)</span> 原点在 <span class="arithmatex">\(\{A\}\)</span> 中的位置为 <span class="arithmatex">\(^A\bm p_B\)</span>，那么 <span class="arithmatex">\(\{B\}\)</span> 相对 <span class="arithmatex">\(\{A\}\)</span> 的位姿 <span class="arithmatex">\(^A_B\bm{T}\)</span> 由两部分刻画：</p>
+<ul>
+<li>**姿态 <span class="arithmatex">\(^A_B\bm{R}\)</span> **：<span class="arithmatex">\(\{B\}\)</span> 系的三个单位轴在 <span class="arithmatex">\(\{A\}\)</span> 中的坐标表示。</li>
+<li>**位置 <span class="arithmatex">\(^A\bm p_B\)</span> **：<span class="arithmatex">\(\{B\}\)</span> 系的原点在 <span class="arithmatex">\(\{A\}\)</span> 中的位置坐标。</li>
+</ul>
+<p>将 <span class="arithmatex">\(^A_B\bm{R}\)</span> 与 <span class="arithmatex">\(^A\bm p_B\)</span> 合并表示，即<strong>齐次变换矩阵</strong> <span class="arithmatex">\(^A_B\bm{T}\)</span>：</p>
+<div class="arithmatex">\[
+^A_B\bm{T} = 
+\begin{bmatrix} 
+^A_B\bm{R}          &amp; ^A\bm p_B \\ 
+\bm{0}_{1\times3}   &amp; 1 
+\end{bmatrix} 
+= \begin{bmatrix} 
+\vert       &amp; \vert         &amp; \vert             &amp; \vert \\ 
+^A\hat{X}_B &amp; ^A\hat{Y}_B   &amp; ^A\hat{Z}_B       &amp; ^A\bm p_B \\ 
+\vert       &amp; \vert         &amp; \vert             &amp; \vert \\ 
+0           &amp; 0             &amp; 0                 &amp; 1 
+\end{bmatrix}
+= \begin{bmatrix} 
+r_{11}      &amp; r_{12}        &amp; r_{13}        &amp; p_x \\ 
+r_{21}      &amp; r_{22}        &amp; r_{23}        &amp; p_y \\ 
+r_{31}      &amp; r_{32}        &amp; r_{33}        &amp; p_z \\ 
+0           &amp; 0             &amp; 0             &amp; 1 
+\end{bmatrix}
+\]</div>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">分块</th>
+<th style="text-align: center;">大小</th>
+<th style="text-align: center;">含义</th>
+<th style="text-align: center;">对应物理量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">左上 <span class="arithmatex">\(^A_B\bm{R}\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(3\times3\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\{B\}\)</span> 系三单位轴列向量在 <span class="arithmatex">\(\{A\}\)</span> 系中的坐标</td>
+<td style="text-align: center;"><strong>姿态</strong></td>
+</tr>
+<tr>
+<td style="text-align: center;">右上 <span class="arithmatex">\(^A\bm p_B\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(3\times1\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\{B\}\)</span> 系原点在 <span class="arithmatex">\(\{A\}\)</span> 系中的坐标</td>
+<td style="text-align: center;"><strong>位置</strong></td>
+</tr>
+<tr>
+<td style="text-align: center;">左下</td>
+<td style="text-align: center;"><span class="arithmatex">\(1\times3\)</span> 全 0</td>
+<td style="text-align: center;">齐次形式占位</td>
+<td style="text-align: center;">——</td>
+</tr>
+<tr>
+<td style="text-align: center;">右下</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">齐次坐标比例因子</td>
+<td style="text-align: center;">固定为 1</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>为什么用 <span class="arithmatex">\(4\times4\)</span>？</strong> —— 把"旋转"和"平移"统一成<strong>一次矩阵乘法</strong>：三维坐标下平移是加法，而旋转是乘法，混算繁琐；<span class="arithmatex">\(4\times4\)</span> 只需矩阵相乘。</p>
+<p>💡 旋转矩阵 <span class="arithmatex">\(^A_B\bm{R}\)</span> 有9个变量，但坐标系三轴均为单位轴（3个约束）且两两垂直（3个约束），故独立变量数为 9-3-3 = 3，这便是前面提到的姿态的三个维度。</p>
+</blockquote>
+<h4 id="122">1.2.2 位姿矩阵的两个用途</h4>
+<p><strong>用途 1：坐标变换</strong>——把点从一个系换算到另一个系。若点 <span class="arithmatex">\(P\)</span> 在 <span class="arithmatex">\(\{B\}\)</span> 中坐标为 <span class="arithmatex">\(^B\!P\)</span>，那么在 <span class="arithmatex">\(\{A\}\)</span> 中：</p>
+<div class="arithmatex">\[
+^A\!P = {}^A_B\bm{T}\;{}^B\!P
+\]</div>
+<p><strong>用途 2：位姿复合</strong>——串联多个相对位姿。若 <span class="arithmatex">\(\{B\}\)</span> 相对 <span class="arithmatex">\(\{A\}\)</span> 为 <span class="arithmatex">\(^A_B\bm{T}\)</span>，<span class="arithmatex">\(\{C\}\)</span> 相对 <span class="arithmatex">\(\{B\}\)</span> 为 <span class="arithmatex">\(^B_C\bm{T}\)</span>，则 <span class="arithmatex">\(\{C\}\)</span> 相对 <span class="arithmatex">\(\{A\}\)</span>：</p>
+<div class="arithmatex">\[
+^A_C\bm{T} = {}^A_B\bm{T}\;{}^B_C\bm{T}
+\]</div>
+<p>这正是正运动学的灵魂：<strong>末端系相对基座系的位姿 = 一串相邻连杆变换矩阵的连乘</strong>。</p>
+<blockquote>
+<p>📌 <strong>记忆</strong>：连乘时矩阵上下标"<strong>斜对角相同，则可约去</strong>" —— <span class="arithmatex">\(^A_{\boxed{B}}\bm{T}\cdot{}^{\boxed{B}}_C\bm{T}= {}^A_C\bm{T}\)</span>。字母链对齐，便不会写错顺序。</p>
+</blockquote>
+<h4 id="123">1.2.3 位姿矩阵的逆矩阵</h4>
+<p>位姿是相对的：知道"<span class="arithmatex">\(\{B\}\)</span> 相对 <span class="arithmatex">\(\{A\}\)</span>"，便同时知道了"<span class="arithmatex">\(\{A\}\)</span> 相对 <span class="arithmatex">\(\{B\}\)</span>"——后者即前者的<strong>逆矩阵</strong>。表达式：</p>
+<div class="arithmatex">\[
+{}^B_A\bm{T} = (^A_B\bm{T})^{-1} =
+\begin{bmatrix}
+(^A_B\bm{R})^\top &amp; -(^A_B\bm{R})^\top\,{}^A\bm p_B \\
+\bm{0}_{1\times3} &amp; 1
+\end{bmatrix}
+\]</div>
+<p><strong>几何意义</strong>（各分块与正向矩阵一一对应）：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">分块</th>
+<th style="text-align: center;">逆矩阵取值</th>
+<th style="text-align: center;">含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">姿态</td>
+<td style="text-align: center;"><span class="arithmatex">\({}^B_A\bm{R} = (^A_B\bm{R})^\top\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\{A\}\)</span> 系三单位轴在 <span class="arithmatex">\(\{B\}\)</span> 系中的坐标</td>
+</tr>
+<tr>
+<td style="text-align: center;">位置</td>
+<td style="text-align: center;"><span class="arithmatex">\({}^B\bm p_A = -(^A_B\bm{R})^\top\,{}^A\bm p_B\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\{A\}\)</span> 系原点在 <span class="arithmatex">\(\{B\}\)</span> 系中的坐标</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 位置列<strong>不是</strong>简单取负 <span class="arithmatex">\(-{}^A\bm p_B\)</span>——必须先左乘 <span class="arithmatex">\((^A_B\bm{R})^\top\)</span> 把 <span class="arithmatex">\(^A\bm p_B\)</span> 换算到 <span class="arithmatex">\(\{B\}\)</span> 系再取负。</p>
+</blockquote>
+<p><strong>用途 1：坐标反变换</strong>——把点从 <span class="arithmatex">\(\{A\}\)</span> 系换算回 <span class="arithmatex">\(\{B\}\)</span> 系：</p>
+<div class="arithmatex">\[
+{}^B\!P = {}^B_A\bm{T}\;{}^A\!P = (^A_B\bm{T})^{-1}\;{}^A\!P
+\]</div>
+<p><strong>用途 2：位姿链倒推</strong>——从位姿复合式两端解出未知的中间环节。如已知 <span class="arithmatex">\(\{B\}\)</span>、<span class="arithmatex">\(\{C\}\)</span> 各自相对 <span class="arithmatex">\(\{A\}\)</span> 的位姿，求 <span class="arithmatex">\(\{C\}\)</span> 相对 <span class="arithmatex">\(\{B\}\)</span>：</p>
+<div class="arithmatex">\[
+{}^B_C\bm{T} = (^A_B\bm{T})^{-1}\;{}^A_C\bm{T}
+\]</div>
+<blockquote>
+<p>💡 <strong>程序实现</strong>：直接套用上方公式，比通用求逆方法更快更稳。库方法：Pinocchio <code>T.inverse()</code>、Spatial Math <code>T.inv()</code>。</p>
+</blockquote>
+<h3 id="13">1.3 位姿变换可视化演示</h3>
+<p>用 Python 脚本演示位姿矩阵 <span class="arithmatex">\(^A_B\bm{T}\)</span> 如何同时驱动<strong>坐标系</strong>与<strong>位置点</strong>：全局参考系 <span class="arithmatex">\(\{A\}\)</span> 固定不动，固连系 <span class="arithmatex">\(\{B\}\)</span> 被 <span class="arithmatex">\(^A_B\bm{T}\)</span> 搬移，定义在 <span class="arithmatex">\(\{B\}\)</span> 中的点 <span class="arithmatex">\(P\)</span>（<span class="arithmatex">\(^B\!P=[x,y,z,1]^T\)</span>）也随之被换算到 <span class="arithmatex">\(\{A\}\)</span> 系中——坐标变换 <span class="arithmatex">\(^A\!P={}^A_B\bm{T}\,{}^B\!P\)</span> 的直观呈现。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">元素</th>
+<th style="text-align: center;">作用</th>
+<th style="text-align: center;">可视化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">固定参考系 <span class="arithmatex">\(\{A\}\)</span></td>
+<td style="text-align: center;">观察基准，不移动</td>
+<td style="text-align: center;">原点 + RGB虚线单位轴</td>
+</tr>
+<tr>
+<td style="text-align: center;">固连系 <span class="arithmatex">\(\{B\}\)</span></td>
+<td style="text-align: center;">被 <span class="arithmatex">\(^A_B\bm{T}\)</span> 驱动</td>
+<td style="text-align: center;">原点 + RGB实线坐标轴</td>
+</tr>
+<tr>
+<td style="text-align: center;">点 <span class="arithmatex">\(P\)</span></td>
+<td style="text-align: center;">定义在 <span class="arithmatex">\(\{B\}\)</span> 下的点</td>
+<td style="text-align: center;">黑色点标记 + 灰色虚线（<span class="arithmatex">\(\{B\}\)</span>原点<span class="arithmatex">\(\to P\)</span>）+ 橙色虚线（<span class="arithmatex">\(\{A\}\)</span>原点<span class="arithmatex">\(\to P\)</span>）</td>
+</tr>
+</tbody>
+</table>
+<p>界面操作：在右侧面板输入 <span class="arithmatex">\(^A_B\bm{T}\)</span> 与 <span class="arithmatex">\(^B\!P\)</span> 的 <span class="arithmatex">\(x,y,z\)</span>，然后点击<strong>开始计算</strong>：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">结果项</th>
+<th style="text-align: center;">含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><span class="arithmatex">\(P\)</span> 相对 <span class="arithmatex">\(B\)</span> 位置</td>
+<td style="text-align: center;">即输入的 <span class="arithmatex">\(^B\!P\)</span></td>
+</tr>
+<tr>
+<td style="text-align: center;"><span class="arithmatex">\(P\)</span> 相对 <span class="arithmatex">\(A\)</span> 位置</td>
+<td style="text-align: center;"><span class="arithmatex">\(^A\!P={}^A_B\bm{T}\,{}^B\!P\)</span> 的结果</td>
+</tr>
+<tr>
+<td style="text-align: center;"><span class="arithmatex">\(B\)</span> 相对 <span class="arithmatex">\(A\)</span> 位置</td>
+<td style="text-align: center;"><span class="arithmatex">\(^A\bm p_B\)</span>，即矩阵右上位置列</td>
+</tr>
+<tr>
+<td style="text-align: center;"><span class="arithmatex">\(B\)</span> 相对 <span class="arithmatex">\(A\)</span> 姿态</td>
+<td style="text-align: center;">矩阵左上 <span class="arithmatex">\(3\times3\)</span> 旋转块及换算得到的 RPY 角 与四元数（详见 §2）</td>
+</tr>
+</tbody>
+</table>
+<p>修改 <span class="arithmatex">\(^A_B\bm{T}\)</span> 各分量，可观察三类典型变换：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">变换类型</th>
+<th style="text-align: center;"><span class="arithmatex">\(^A_B\bm{T}\)</span> 的修改部分</th>
+<th style="text-align: center;">效果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">纯平移</td>
+<td style="text-align: center;">右上位置列 <span class="arithmatex">\((p_x,p_y,p_z)\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\{B\}\)</span> 与 <span class="arithmatex">\(P\)</span> 一起平移、三色轴方向不变</td>
+</tr>
+<tr>
+<td style="text-align: center;">纯旋转（绕单轴）</td>
+<td style="text-align: center;">左上 <span class="arithmatex">\(3\times3\)</span> 旋转块</td>
+<td style="text-align: center;"><span class="arithmatex">\(\{B\}\)</span> 原地转动、<span class="arithmatex">\(P\)</span> 随之绕 <span class="arithmatex">\(\{B\}\)</span> 原点转</td>
+</tr>
+<tr>
+<td style="text-align: center;">复合变换</td>
+<td style="text-align: center;">同时改位置与姿态</td>
+<td style="text-align: center;"><span class="arithmatex">\(\{B\}\)</span> 边移边转、<span class="arithmatex">\(P\)</span> 跟随到新位置</td>
+</tr>
+</tbody>
+</table>
+<p>对应脚本位于 <code>joyarm_code/chapt/chapt2/chapt2_T_demo.py</code>，使用说明见脚本头部注释。</p>
+<blockquote>
+<p>💡 建议先手改矩阵数字或点坐标，预测 <span class="arithmatex">\(\{B\}\)</span> 和 <span class="arithmatex">\(P\)</span> 在 <span class="arithmatex">\(\{A\}\)</span> 的位置，再点击"开始计算"核对结果，建立"矩阵数字"与"空间运动"的直觉；若左上 <span class="arithmatex">\(3\times3\)</span> 旋转矩阵不满足正交约束（三轴须单位长且两两垂直），程序会自动归一正交化并提示。</p>
+</blockquote>
+<h2 id="2">2 空间位姿其他常见表示及其转换关系</h2>
+<p>位姿矩阵 <span class="arithmatex">\(\bm{T}\)</span> 中的旋转矩阵 <span class="arithmatex">\(\bm{R}\)</span> 有 <strong>9 个元素</strong>（实际 3 个独立量），实际应用中（尤其涉及数据传输或存储时）常采用更紧凑的形式来表示姿态。本节介绍最经典常用的<strong>RPY（与欧拉角）、轴角、四元数</strong>三种。</p>
+<h3 id="21">2.1 欧拉角和固定角</h3>
+<p>任何姿态都可通过"绕三个坐标轴分别依次旋转"得到。旋转的方式有两种：绕原坐标系旋转（外旋）和绕旋转后的新坐标系旋转（内旋）。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">类型</th>
+<th style="text-align: center;">绕谁的轴</th>
+<th style="text-align: center;">常见别称</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><strong>内旋欧拉角</strong></td>
+<td style="text-align: center;">绕新<strong>运动</strong>坐标系 <span class="arithmatex">\(\{B\}\)</span> 的轴（每次转动后更新）</td>
+<td style="text-align: center;">Intrinsic / Euler</td>
+</tr>
+<tr>
+<td style="text-align: center;"><strong>外旋固定角</strong></td>
+<td style="text-align: center;">绕原<strong>固定</strong>参考系 <span class="arithmatex">\(\{A\}\)</span> 的轴（始终不变）</td>
+<td style="text-align: center;">Extrinsic / Fixed-angle / RPY</td>
+</tr>
+</tbody>
+</table>
+<h4 id="211">2.1.1 三个基本旋转矩阵</h4>
+<div class="arithmatex">\[
+\bm{R}_X(\gamma)=\begin{bmatrix}1&amp;0&amp;0\\0&amp;c\gamma&amp;-s\gamma\\0&amp;s\gamma&amp;c\gamma\end{bmatrix},\quad
+\bm{R}_Y(\beta)=\begin{bmatrix}c\beta&amp;0&amp;s\beta\\0&amp;1&amp;0\\-s\beta&amp;0&amp;c\beta\end{bmatrix},\quad
+\bm{R}_Z(\alpha)=\begin{bmatrix}c\alpha&amp;-s\alpha&amp;0\\s\alpha&amp;c\alpha&amp;0\\0&amp;0&amp;1\end{bmatrix}
+\]</div>
+<p>上式符号含义如下：</p>
+<ul>
+<li><span class="arithmatex">\(\bm{R}_X(\gamma),\bm{R}_Y(\beta),\bm{R}_Z(\alpha)\)</span>：分别绕 <span class="arithmatex">\(\hat{X},\hat{Y},\hat{Z}\)</span> 轴旋转的基本旋转矩阵，括号内的 <span class="arithmatex">\(\gamma,\beta,\alpha\)</span> 为对应的旋转角度；</li>
+<li><span class="arithmatex">\(c\cdot=\cos(\cdot)\)</span>、<span class="arithmatex">\(s\cdot=\sin(\cdot)\)</span>：三角函数简写，如 <span class="arithmatex">\(c\gamma=\cos\gamma\)</span>（下同）。</li>
+</ul>
+<p>后面的复合旋转矩阵或姿态矩阵，便是这三个基本旋转矩阵按不同规则复合的结果。</p>
+<h4 id="212-z-y-x">2.1.2 内旋欧拉角（Z-Y-X 顺序）</h4>
+<p><strong>内旋</strong>指每一步都绕<strong>当前（已经转动过的）坐标系 <span class="arithmatex">\(\{B\}\)</span></strong> 的轴旋转。令 <span class="arithmatex">\(\{B\}\)</span> 初始时与 <span class="arithmatex">\(\{A\}\)</span> 重合，按 Z-Y-X 顺序旋转的过程：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">绕哪根轴</th>
+<th style="text-align: center;">转角</th>
+<th style="text-align: center;">直观动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">当前 <span class="arithmatex">\(\hat{Z}_B\)</span>（重合于 <span class="arithmatex">\(\hat{Z}_A\)</span>）</td>
+<td style="text-align: center;"><span class="arithmatex">\(\alpha\)</span></td>
+<td style="text-align: center;">偏航 Yaw：如人的左右扭头</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">转动后的 <span class="arithmatex">\(\hat{Y}_B\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\beta\)</span></td>
+<td style="text-align: center;">俯仰 Pitch：如人的上下点头</td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">再转动后的 <span class="arithmatex">\(\hat{X}_B\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\gamma\)</span></td>
+<td style="text-align: center;">横滚 Roll：如人的左右歪头</td>
+</tr>
+</tbody>
+</table>
+<p>关键点：<strong>每绕"运动轴"旋转一次，矩阵从右侧乘入（B系侧）</strong>。因此三次旋转连乘为：</p>
+<div class="arithmatex">\[
+^A_B\bm{R}_{内旋ZYX}(\alpha,\beta,\gamma)=\bm{R}_Z(\alpha)\,\bm{R}_Y(\beta)\,\bm{R}_X(\gamma)
+\]</div>
+<blockquote>
+<p>💡 直观理解：设 ${}^A_B R = {}^0_1 R \cdot {}^1_2 R \cdot {}^2_3 R $，初始时三矩阵为单位阵（A系B系重合），第一次旋转后 <span class="arithmatex">\({}^0_1 R\)</span> 不再为单位阵，然后是 <span class="arithmatex">\({}^1_2 R\)</span> 和 <span class="arithmatex">\({}^2_3 R\)</span> 不再为单位阵。</p>
+</blockquote>
+<h4 id="213-x-y-z-rpy">2.1.3 外旋固定角（X-Y-Z，即 RPY 角）</h4>
+<p><strong>外旋</strong>指每一步都绕<strong>固定参考系 <span class="arithmatex">\(\{A\}\)</span></strong> 的轴旋转，轴的方向始终不变。令 <span class="arithmatex">\(\{B\}\)</span> 初始时与 <span class="arithmatex">\(\{A\}\)</span> 重合，按 X-Y-Z 顺序旋转的过程：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">绕哪根轴</th>
+<th style="text-align: center;">转角</th>
+<th style="text-align: center;">直观动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">固定系 <span class="arithmatex">\(\hat{X}_A\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\gamma\)</span></td>
+<td style="text-align: center;">横滚 Roll</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">固定系 <span class="arithmatex">\(\hat{Y}_A\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\beta\)</span></td>
+<td style="text-align: center;">俯仰 Pitch</td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">固定系 <span class="arithmatex">\(\hat{Z}_A\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\alpha\)</span></td>
+<td style="text-align: center;">偏航 Yaw</td>
+</tr>
+</tbody>
+</table>
+<p>这就是常说的 <strong>RPY（Roll-Pitch-Yaw）角</strong>。</p>
+<p>关键点：<strong>每绕"固定轴"转一次，矩阵从左侧乘入（A系侧）</strong>。因此三次旋转连乘为：</p>
+<div class="arithmatex">\[
+^A_B\bm{R}_{外旋XYZ}(\gamma,\beta,\alpha)=\bm{R}_Z(\alpha)\,\bm{R}_Y(\beta)\,\bm{R}_X(\gamma)
+\]</div>
+<blockquote>
+<p>💡 直观理解：设 $ {}^A_B R = {}^0_1 R \cdot {}^1_2 R \cdot {}^2_3 R $ ，初始时三矩阵为单位阵（A系B系重合），第一次旋转后 <span class="arithmatex">\({}^2_3 R\)</span> 不再为单位阵，然后是 <span class="arithmatex">\({}^1_2 R\)</span> 和 <span class="arithmatex">\({}^0_1 R\)</span> 不再为单位阵。</p>
+</blockquote>
+<h4 id="214">2.1.4 为何两者表达式相同</h4>
+<p>原因在于矩阵相乘时"内旋后乘"与"外旋前乘"互为对偶。从绕轴、乘法、连乘顺序、数学表达、直观理解上逐一对比：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">对比维度</th>
+<th style="text-align: center;"><strong>内旋</strong>（欧拉角）</th>
+<th style="text-align: center;"><strong>外旋</strong>（固定角 / RPY）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">绕哪根轴</td>
+<td style="text-align: center;">绕<strong>运动</strong>系 <span class="arithmatex">\(\{B\}\)</span> 自身轴（每次转动后更新）</td>
+<td style="text-align: center;">绕<strong>固定</strong>系 <span class="arithmatex">\(\{A\}\)</span> 的轴（始终不变）</td>
+</tr>
+<tr>
+<td style="text-align: center;">矩阵乘法</td>
+<td style="text-align: center;"><strong>后乘</strong>（右乘）</td>
+<td style="text-align: center;"><strong>前乘</strong>（左乘）</td>
+</tr>
+<tr>
+<td style="text-align: center;">连乘顺序 vs 转动顺序</td>
+<td style="text-align: center;"><strong>相同</strong>（先转的矩阵排最左）</td>
+<td style="text-align: center;"><strong>相反</strong>（后转的矩阵排最左）</td>
+</tr>
+<tr>
+<td style="text-align: center;">表达式</td>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}_Z(\alpha)\bm{R}_Y(\beta)\bm{R}_X(\gamma)\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}_Z(\alpha)\bm{R}_Y(\beta)\bm{R}_X(\gamma)\)</span></td>
+</tr>
+<tr>
+<td style="text-align: center;">直观理解</td>
+<td style="text-align: center;">先转<strong>肩</strong>、再转<strong>肘</strong>、最后转<strong>腕</strong></td>
+<td style="text-align: center;">先转<strong>腕</strong>、再转<strong>肘</strong>、最后转<strong>肩</strong></td>
+</tr>
+</tbody>
+</table>
+<p>由此可见"内旋 Z-Y-X"的连乘与"外旋 X-Y-Z"的反序前乘得到的结果恰好相等——<strong>先肩后肘再腕</strong>与<strong>先腕后肘再肩</strong>虽然动作顺序相反，但最终结果完全一致。</p>
+<h4 id="215">2.1.5 万向节死锁问题</h4>
+<div class="arithmatex">\[
+^A_B\bm{R}=\bm{R}_Z(\alpha)\bm{R}_Y(\beta)\bm{R}_X(\gamma)=\begin{bmatrix}c\alpha\,c\beta &amp; c\alpha\,s\beta\,s\gamma-s\alpha\,c\gamma &amp; c\alpha\,s\beta\,c\gamma+s\alpha\,s\gamma\\ s\alpha\,c\beta &amp; s\alpha\,s\beta\,s\gamma+c\alpha\,c\gamma &amp; s\alpha\,s\beta\,c\gamma-c\alpha\,s\gamma\\ -s\beta &amp; c\beta\,s\gamma &amp; c\beta\,c\gamma\end{bmatrix}
+\]</div>
+<p>当俯仰角 <span class="arithmatex">\(\beta=\pm90°\)</span> 时，<span class="arithmatex">\(c\beta=0\)</span>、<span class="arithmatex">\(s\beta=\pm1\)</span>，代入化简后旋转矩阵</p>
+<div class="arithmatex">\[
+\beta=+90°:\quad {}^A_B\bm{R}=\begin{bmatrix}0&amp;-s(\alpha-\gamma)&amp;c(\alpha-\gamma)\\0&amp;c(\alpha-\gamma)&amp;s(\alpha-\gamma)\\-1&amp;0&amp;0\end{bmatrix}
+\]</div>
+<div class="arithmatex">\[
+\beta=-90°:\quad {}^A_B\bm{R}=\begin{bmatrix}0&amp;-s(\alpha+\gamma)&amp;-c(\alpha+\gamma)\\0&amp;c(\alpha+\gamma)&amp;-s(\alpha+\gamma)\\1&amp;0&amp;0\end{bmatrix}
+\]</div>
+<p>只依赖 <span class="arithmatex">\((\alpha\mp\gamma)\)</span> ，这表明 Roll（<span class="arithmatex">\(\gamma\)</span>）与 Yaw（<span class="arithmatex">\(\alpha\)</span>）的作用相当，两者的轴在<strong>同一直线</strong>上、总旋转效果唯一但无法具体区分二者。三个旋转轴中有两个共线，<strong>丢失了一个自由度</strong>。</p>
+<blockquote>
+<p>⚠️ <strong>万向锁</strong>：当 <span class="arithmatex">\(\beta=\pm90°\)</span> 时，Roll 与 Yaw 退化为同轴，姿态不再由三个独立角度决定（逆解不再唯一）。这是<strong>所有三参数姿态表示</strong>（含 RPY 与各种欧拉角）的通病，也是工程上引入轴角（<a href="#22">2.2</a>）与四元数（<a href="#23">2.3</a>）的重要动因之一。</p>
+</blockquote>
+<h3 id="22">2.2 轴角表示</h3>
+<p><strong>欧拉旋转定理</strong>：三维空间任何姿态变化都可通过<strong>绕某轴 <span class="arithmatex">\(\hat{k}\)</span> 旋转角度 <span class="arithmatex">\(\theta\)</span></strong> 得到。于是姿态可用单位轴 <span class="arithmatex">\(\hat{k}=(k_x,k_y,k_z)\)</span> + 转角 <span class="arithmatex">\(\theta\)</span> 来描述（由于 <span class="arithmatex">\(\|\hat{k}\|=1\)</span> ，实际也是 3 个独立变量）。</p>
+<p>由轴角求旋转矩阵（罗德里格斯公式）：</p>
+<div class="arithmatex">\[
+\bm{R}(\hat{k},\theta)=\cos\theta\,\bm{I}+(1-\cos\theta)\,\hat{k}\hat{k}^\top+\sin\theta\,\bm{K},\quad
+\bm{K}=\begin{bmatrix}0&amp;-k_z&amp;k_y\\k_z&amp;0&amp;-k_x\\-k_y&amp;k_x&amp;0\end{bmatrix}
+\]</div>
+<h3 id="23">2.3 四元数</h3>
+<p>四元数是轴角的"合体版"，用四维向量 <span class="arithmatex">\(\bm{q}=(w,x,y,z)\)</span> 描述姿态：</p>
+<div class="arithmatex">\[
+\bm{q}=\cos\frac{\theta}{2}+\sin\frac{\theta}{2}\,(k_x\hat{i}+k_y\hat{j}+k_z\hat{k}) = \bigl( w,x,y,z \bigr)
+\]</div>
+<p><span class="arithmatex">\(w=\cos(\theta/2)\)</span> 为实部，<span class="arithmatex">\((x,y,z)=\sin(\theta/2)\hat{k}\)</span> 为虚部，满足 <span class="arithmatex">\(w^2+x^2+y^2+z^2=1\)</span> （故独立变量个数也为 3）。由四元数求旋转矩阵：</p>
+<div class="arithmatex">\[
+\bm{R}(\bm{q})=\begin{bmatrix}
+1-2(y^2+z^2) &amp; 2(xy-wz) &amp; 2(xz+wy)\\
+2(xy+wz) &amp; 1-2(x^2+z^2) &amp; 2(yz-wx)\\
+2(xz-wy) &amp; 2(yz+wx) &amp; 1-2(x^2+y^2)
+\end{bmatrix}
+\]</div>
+<h3 id="24">2.4 四种姿态表示法对比</h3>
+<p>四种姿态表示的横向对比如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">表示法</th>
+<th style="text-align: center;">参数个数</th>
+<th style="text-align: center;">优点</th>
+<th style="text-align: center;">缺点</th>
+<th style="text-align: center;">典型用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">旋转矩阵 <span class="arithmatex">\(\bm{R}\)</span></td>
+<td style="text-align: center;">9（独立 3）</td>
+<td style="text-align: center;">无奇异、计算直接（矩阵乘）、所有方法的"通用语言"</td>
+<td style="text-align: center;">冗余、不直观、存储/传输开销大</td>
+<td style="text-align: center;">内部计算、作为转换枢纽</td>
+</tr>
+<tr>
+<td style="text-align: center;">欧拉角与固定角</td>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">直观、符合直觉</td>
+<td style="text-align: center;"><strong>万向锁</strong>（Pitch=<span class="arithmatex">\(\pm90°\)</span>）；存在多解</td>
+<td style="text-align: center;">上位机示教、参数显示</td>
+</tr>
+<tr>
+<td style="text-align: center;">轴角 <span class="arithmatex">\((\hat{k},\theta)\)</span></td>
+<td style="text-align: center;">4（独立 3）</td>
+<td style="text-align: center;">直观、无万向锁、转角可直接读出</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta\to0\)</span> 时轴 <span class="arithmatex">\(\hat{k}\)</span> 不确定；非唯一（<span class="arithmatex">\(\theta\leftrightarrow2\pi-\theta\)</span>、<span class="arithmatex">\(\hat{k}\leftrightarrow-\hat{k}\)</span>）</td>
+<td style="text-align: center;">单次旋转、关节运动、插值中间量</td>
+</tr>
+<tr>
+<td style="text-align: center;">四元数 <span class="arithmatex">\(\bm{q}\)</span></td>
+<td style="text-align: center;">4（独立 3）</td>
+<td style="text-align: center;">无万向锁、可平滑插值（SLERP）、数值稳定</td>
+<td style="text-align: center;">不直观；<span class="arithmatex">\(\pm\bm{q}\)</span> 双覆盖</td>
+<td style="text-align: center;">渲染引擎、姿态滤波、轨迹插值</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>总结</strong>：RPY 直观但存在万向锁现象，轴角紧凑但零旋转奇异，四元数稳健但抽象，<span class="arithmatex">\(\bm{R}\)</span> 矩阵冗余但通用。上位机显示常用 RPY，内部计算/插值常用四元数，多表示方法的转换则一律通过 <span class="arithmatex">\(\bm{R}\)</span> 中转。</p>
+</blockquote>
+<h3 id="25">2.5 四种姿态表示法的转换</h3>
+<p>设 <span class="arithmatex">\(\bm{R}=\begin{bmatrix}r_{11}&amp;r_{12}&amp;r_{13}\\r_{21}&amp;r_{22}&amp;r_{23}\\r_{31}&amp;r_{32}&amp;r_{33}\end{bmatrix}\)</span>、<span class="arithmatex">\(\mathrm{tr}(\bm{R})=r_{11}+r_{22}+r_{33}\)</span>，则前面四种姿态表示方法间的相互转换关系为：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">转换前的表示</th>
+<th style="text-align: center;">转换后的表示</th>
+<th style="text-align: center;">转换公式</th>
+<th style="text-align: center;">Pinocchio（<code>pinocchio</code>）</th>
+<th style="text-align: center;">Spatial Math（<code>spatialmath</code>）</th>
+<th style="text-align: center;">注意点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}\)</span></td>
+<td style="text-align: center;">ZYX欧拉角和RPY</td>
+<td style="text-align: center;"><span class="arithmatex">\(\beta=\arctan2(-r_{31},\sqrt{r_{11}^2+r_{21}^2})\)</span>；<span class="arithmatex">\(\alpha=\arctan2(r_{21},r_{11})\)</span>；<span class="arithmatex">\(\gamma=\arctan2(r_{32},r_{33})\)</span></td>
+<td style="text-align: center;"><code>pinocchio.rpy.matrixToRpy(R)</code></td>
+<td style="text-align: center;"><code>rmat.rpy()</code></td>
+<td style="text-align: center;"><strong><span class="arithmatex">\(\beta\ne\pm90°\)</span></strong>，否则万向锁</td>
+</tr>
+<tr>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}\)</span></td>
+<td style="text-align: center;">轴角</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta=\arccos\!\frac{\mathrm{tr}(\bm{R})-1}{2}\)</span>；<span class="arithmatex">\(\hat{k}=\frac{1}{2\sin\theta}\begin{bmatrix}r_{32}-r_{23}\\r_{13}-r_{31}\\r_{21}-r_{12}\end{bmatrix}\)</span></td>
+<td style="text-align: center;"><code>pinocchio.log3(R)</code></td>
+<td style="text-align: center;"><code>rmat.angvec()</code></td>
+<td style="text-align: center;"><strong><span class="arithmatex">\(\theta\ne0,\pi\)</span></strong>，轴不确定</td>
+</tr>
+<tr>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}\)</span></td>
+<td style="text-align: center;">四元数</td>
+<td style="text-align: center;"><span class="arithmatex">\(w=\tfrac{1}{2}\sqrt{1+\mathrm{tr}(\bm{R})}\)</span>；<span class="arithmatex">\(x=\frac{r_{32}-r_{23}}{4w}\)</span>；<span class="arithmatex">\(y=\frac{r_{13}-r_{31}}{4w}\)</span>；<span class="arithmatex">\(z=\frac{r_{21}-r_{12}}{4w}\)</span></td>
+<td style="text-align: center;"><code>pinocchio.Quaternion(R).coeffs()</code></td>
+<td style="text-align: center;"><code>UnitQuaternion(rmat)</code></td>
+<td style="text-align: center;"><strong><span class="arithmatex">\(\mathrm{tr}(\bm{R})&gt;-1\)</span></strong>（即 <span class="arithmatex">\(w\ne0\)</span>）</td>
+</tr>
+<tr>
+<td style="text-align: center;">ZYX欧拉角和RPY</td>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}=\bm{R}_Z(\alpha)\bm{R}_Y(\beta)\bm{R}_X(\gamma)\)</span></td>
+<td style="text-align: center;"><code>pinocchio.rpy.rpyToMatrix(rpy)</code></td>
+<td style="text-align: center;"><code>SE3.RPY(rpy, order='zyx')</code></td>
+<td style="text-align: center;">见 <a href="#21">2.1</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">轴角</td>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}\)</span></td>
+<td style="text-align: center;">罗德里格斯公式 <span class="arithmatex">\(\bm{R}=\cos\theta\,\bm{I}+(1-\cos\theta)\hat{k}\hat{k}^\top+\sin\theta\,\bm{K}\)</span>，<span class="arithmatex">\(\bm{K}=\begin{bmatrix}0&amp;-k_z&amp;k_y\\k_z&amp;0&amp;-k_x\\-k_y&amp;k_x&amp;0\end{bmatrix}\)</span></td>
+<td style="text-align: center;"><code>pinocchio.exp3(theta*k)</code></td>
+<td style="text-align: center;"><code>SE3.AngVec(theta, k)</code></td>
+<td style="text-align: center;">见 <a href="#22">2.2</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">四元数</td>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{R}(\bm{q})=\begin{bmatrix}1-2(y^2+z^2)&amp;2(xy-wz)&amp;2(xz+wy)\\2(xy+wz)&amp;1-2(x^2+z^2)&amp;2(yz-wx)\\2(xz-wy)&amp;2(yz+wx)&amp;1-2(x^2+y^2)\end{bmatrix}\)</span></td>
+<td style="text-align: center;"><code>pinocchio.Quaternion(q).toRotationMatrix()</code></td>
+<td style="text-align: center;"><code>SE3(UnitQuaternion(q))</code></td>
+<td style="text-align: center;">见 <a href="#23">2.3</a></td>
+</tr>
+<tr>
+<td style="text-align: center;">轴角</td>
+<td style="text-align: center;">四元数</td>
+<td style="text-align: center;"><span class="arithmatex">\(\bm{q}=\bigl(\cos\tfrac{\theta}{2},\;\sin\tfrac{\theta}{2}\hat{k}\bigr)\)</span></td>
+<td style="text-align: center;"><code>pinocchio.Quaternion(pin.AngleAxis(theta, k))</code></td>
+<td style="text-align: center;"><code>UnitQuaternion.AngVec(theta, k)</code></td>
+<td style="text-align: center;">无奇异，最常用直接法</td>
+</tr>
+<tr>
+<td style="text-align: center;">四元数</td>
+<td style="text-align: center;">轴角</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta=2\arccos w\)</span>；<span class="arithmatex">\(\hat{k}=\frac{(x,y,z)}{\sqrt{x^2+y^2+z^2}}=\frac{(x,y,z)}{\sin(\theta/2)}\)</span></td>
+<td style="text-align: center;">—（由四元数分量直接算）</td>
+<td style="text-align: center;"><code>q.angvec()</code></td>
+<td style="text-align: center;"><span class="arithmatex">\(w=\pm1\)</span>（<span class="arithmatex">\(\theta\to0\)</span>）时轴不定</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>📌 <strong>表中未列出的其余转换经 <span class="arithmatex">\(\bm{R}\)</span> 中转</strong>：RPY↔轴角、RPY↔四元数，"先转为 <span class="arithmatex">\(\bm{R}\)</span>、再转为目标形式"两步求解。</p>
+<p>💡 <strong>选库建议</strong>：侧重运动学分析与教学用 <code>spatialmath</code>（语义清晰）；侧重动力学与高效仿真用 <code>pinocchio</code>（与 URDF 深度集成，考虑到后续实际开发，本教程主要用<code>pinocchio</code>）。</p>
+</blockquote>
+<h3 id="26">2.6 四种姿态表示转换的可视化演示</h3>
+<p>用 Python 脚本演示四种姿态表示如何描述<strong>同一个旋转</strong>：全局参考系 <span class="arithmatex">\(\{A\}\)</span> 固定不动，系 <span class="arithmatex">\(\{B\}\)</span> 被驱转动（纯姿态）。右侧数值面板修改其中一个，点击<strong>开始计算</strong>后便立刻刷新其余三个面板数据与左侧 3D 可视化。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">元素</th>
+<th style="text-align: center;">作用</th>
+<th style="text-align: center;">可视化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">固定参考系 <span class="arithmatex">\(\{A\}\)</span></td>
+<td style="text-align: center;">观察基准，不移动</td>
+<td style="text-align: center;">原点 + RGB 虚线单位轴</td>
+</tr>
+<tr>
+<td style="text-align: center;">固连系 <span class="arithmatex">\(\{B\}\)</span></td>
+<td style="text-align: center;">被 <span class="arithmatex">\(^A_B\bm{R}\)</span> 驱动，绕原点旋转</td>
+<td style="text-align: center;">原点 + RGB 实线坐标轴</td>
+</tr>
+</tbody>
+</table>
+<p>四个输入面板（角度均为度，四元数取 <span class="arithmatex">\((w,x,y,z)\)</span>）<strong>开始计算</strong>后的规范化处理如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">面板</th>
+<th style="text-align: center;">输入形式</th>
+<th style="text-align: center;">规范化处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">RPY 角</td>
+<td style="text-align: center;"><span class="arithmatex">\(r_x,r_y,r_z\)</span> 三个数值框（°）</td>
+<td style="text-align: center;">显示规范解</td>
+</tr>
+<tr>
+<td style="text-align: center;">轴角</td>
+<td style="text-align: center;"><span class="arithmatex">\(\hat{k}=(k_x,k_y,k_z)\)</span> 任意非零向量 + <span class="arithmatex">\(\theta\)</span>（°）</td>
+<td style="text-align: center;">归一化单位轴与 <span class="arithmatex">\([0°, 180°]\)</span> 内转角</td>
+</tr>
+<tr>
+<td style="text-align: center;">四元数</td>
+<td style="text-align: center;"><span class="arithmatex">\(w,x,y,z\)</span> 四个数值框</td>
+<td style="text-align: center;">归一化单位四元数</td>
+</tr>
+<tr>
+<td style="text-align: center;">旋转矩阵 <span class="arithmatex">\(\bm{R}\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(3\times3\)</span> 可编辑表格</td>
+<td style="text-align: center;">不正交时则正交化</td>
+</tr>
+</tbody>
+</table>
+<p>万向锁：点<strong>万向锁示例</strong>填入 <span class="arithmatex">\((30°, 90°, 60°)\)</span> 计算，再把 RPY 改为 <span class="arithmatex">\((0°, 90°, 30°)\)</span> 计算，两组 RPY 角度不同但<strong>姿态相同</strong>（其余三组表示形式的结果不变）。</p>
+<p>对应脚本位于 <code>joyarm_code/chapt/chapt2/chapt2_R_demo.py</code>，使用说明见脚本头部注释。</p>
+<blockquote>
+<p>💡 建议先在一个面板手改数字、预测其余三种表示的计算结果，再点"开始计算"核对结果。</p>
+</blockquote>
+<h2 id="3-joyarm-mdh">3 JoyArm 连杆建系与MDH参数</h2>
+<p>本节采用 <strong>改进 D-H（Modified Denavit-Hartenberg，MDH）参数法</strong>把机械臂构型关系转化为 MDH 参数表：为每个连杆建立坐标系，并用 4 个参数描述相邻连杆系间的位姿关系。</p>
+<h3 id="31">3.1 连杆建系步骤</h3>
+<h4 id="311">3.1.1 关节与连杆的编号</h4>
+<p><img alt="图片占位：JoyArm 关节与连杆标注实物图" src="" /></p>
+<p>以上述 JoyArm 机械臂为例，该机械臂为 <strong>6 DOF 串联型旋转关节机械臂</strong>（6R）：6 个旋转关节 ，相邻两关节间的刚性杆件为连杆，关节 <span class="arithmatex">\(i\)</span> 驱动着与之固连的连杆 <span class="arithmatex">\(i\)</span>。</p>
+<h4 id="312-mdh">3.1.2 MDH 建系步骤</h4>
+<p><strong>步骤 1</strong>：机械臂摆放至零位构型，标出各关节轴及其延长线，自基座向末端编号依次为 1 至 n。关节轴 <span class="arithmatex">\(i\)</span> 与 <span class="arithmatex">\(i+1\)</span> 间的连杆为连杆 <span class="arithmatex">\(x\)</span>。</p>
+<p><strong>步骤 2</strong>：找出两相邻关节轴 <span class="arithmatex">\(\{i\}\)</span> 和 <span class="arithmatex">\(\{i+1\}\)</span> 的公垂线（若两者平行，通常取符合直觉、结构对称且便于计算的公垂线）或关节轴 <span class="arithmatex">\(\{i\}\)</span> 和 <span class="arithmatex">\(\{i+1\}\)</span> 的交点，以公垂线与关节轴 <span class="arithmatex">\(\{i\}\)</span> 的交点或关节轴 <span class="arithmatex">\(\{i\}\)</span> 和 <span class="arithmatex">\(\{i+1\}\)</span> 的交点作为连杆系 <span class="arithmatex">\(\{i\}\)</span> 的原点。</p>
+<p><strong>步骤 3</strong>：规定连杆系 <span class="arithmatex">\(\{i\}\)</span> 的 <span class="arithmatex">\(\hat{Z}_i\)</span> 轴沿关节轴线 <span class="arithmatex">\(\{i\}\)</span> 的方向。</p>
+<p><strong>步骤 4</strong>：规定连杆系 <span class="arithmatex">\(\{i\}\)</span> 的 <span class="arithmatex">\(\hat{X}_i\)</span> 轴沿关节轴 <span class="arithmatex">\(\{i\}\)</span> 和 <span class="arithmatex">\(\{i+1\}\)</span> 的公垂线方向并指向轴 <span class="arithmatex">\(\{i+1\}\)</span> ；若轴 <span class="arithmatex">\(\{i\}\)</span> 和 <span class="arithmatex">\(\{i+1\}\)</span> 相交，则取它们的公垂线方向。</p>
+<p><strong>步骤 5</strong>：在 <span class="arithmatex">\(\hat{X}_i\)</span> 与 <span class="arithmatex">\(\hat{Z}_i\)</span> 已确定的基础上，按右手系规则确定出 <span class="arithmatex">\(\hat{Y}_i\)</span> 轴。</p>
+<p><strong>步骤 6</strong>：基座系 <span class="arithmatex">\(\{0\}\)</span> 通常与零位位姿下的连杆系 <span class="arithmatex">\(\{1\}\)</span> 重合；也可沿其 <span class="arithmatex">\(\hat{Z}_1\)</span> 轴进行平移，使基座系 <span class="arithmatex">\(\{0\}\)</span> 原点位于基座的安装底面。</p>
+<p><strong>步骤 7</strong>：末端工具系 <span class="arithmatex">\(\{e\}\)</span>（可选）固连于末端执行器，其原点取工具中心点（TCP），三轴朝向按依具体工具朝向选取，末端工具系 <span class="arithmatex">\(\{e\}\)</span> 可通过固定偏移 <span class="arithmatex">\(^n_E\bm{T}\)</span> 与 末连杆系 <span class="arithmatex">\(\{n\}\)</span> 相接。</p>
+<p><strong>步骤 8</strong>：末连杆系 <span class="arithmatex">\(\{n\}\)</span> 的原点和 <span class="arithmatex">\(\hat{X}_n\)</span> 方向可任意选取，但通常会使连杆系 <span class="arithmatex">\(\{n\}\)</span> 原点与连杆系 <span class="arithmatex">\(\{n-1\}\)</span> 原点重合，且 <span class="arithmatex">\(\hat{X}_n\)</span> 方向通常指向末端工具系 <span class="arithmatex">\(\{e\}\)</span>。</p>
+<h4 id="313-joyarm">3.1.3 JoyArm 的连杆系</h4>
+<p>遵循上述建系规则对 JoyArm 机械臂建系，得到下图的连杆系、基座系和工具系。图中标注了各系的 <span class="arithmatex">\(Z\)</span> 轴（关节转轴）与 <span class="arithmatex">\(X\)</span> 轴（公垂线），是推导 MDH 参数表的依据。</p>
+<p><img alt="图片占位：JoyArm 连杆坐标系 1-6 标注图（各关节轴、各连杆系、末端系、基座系）" src="" /></p>
+<blockquote>
+<p>📌 建系结果<strong>不唯一</strong>（<span class="arithmatex">\(Z\)</span> 轴正负、<span class="arithmatex">\(X\)</span> 轴方向有多种合法选择），但最后计算得到的位姿 <span class="arithmatex">\(^0_n\bm{T}\)</span> 或 <span class="arithmatex">\(^0_E \bm{T}\)</span> 应当是唯一的。</p>
+</blockquote>
+<h3 id="32-mdh">3.2 MDH 参数表</h3>
+<h4 id="321">3.2.1 四个参数的几何含义</h4>
+<p><img alt="图片占位：MDH 连杆参数示意图" src="" /></p>
+<p>相邻连杆系 <span class="arithmatex">\(\{i-1\}\)</span> 与 <span class="arithmatex">\(\{i\}\)</span> 的相对位姿由以下 4 个参数完全描述：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">参数</th>
+<th style="text-align: center;">符号</th>
+<th style="text-align: center;">几何含义</th>
+<th style="text-align: center;">物理对应</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">连杆扭角</td>
+<td style="text-align: center;"><span class="arithmatex">\(\alpha_{i-1}\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\hat{Z}_{i-1}\)</span> 绕 <span class="arithmatex">\(\hat{X}_{i-1}\)</span> 转到 <span class="arithmatex">\(\hat{Z}_i\)</span> 所需的角度</td>
+<td style="text-align: center;">相邻关节轴线的<strong>夹角</strong>（连杆扭转角）</td>
+</tr>
+<tr>
+<td style="text-align: center;">连杆长度</td>
+<td style="text-align: center;"><span class="arithmatex">\(a_{i-1}\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\hat{Z}_{i-1}\)</span> 与 <span class="arithmatex">\(\hat{Z}_i\)</span> 的公垂线长度</td>
+<td style="text-align: center;">相邻关节轴线的<strong>最短距离</strong>（连杆长度）</td>
+</tr>
+<tr>
+<td style="text-align: center;">连杆偏距</td>
+<td style="text-align: center;"><span class="arithmatex">\(d_i\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\hat{X}_{i-1}\)</span> 沿 <span class="arithmatex">\(\hat{Z}_i\)</span> 平移到 <span class="arithmatex">\(\hat{X}_i\)</span> 的长度</td>
+<td style="text-align: center;">关节轴上的<strong>偏移量</strong>（转动关节为常数）</td>
+</tr>
+<tr>
+<td style="text-align: center;">关节角</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta_i\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(\hat{X}_{i-1}\)</span> 绕 <span class="arithmatex">\(\hat{Z}_i\)</span> 转到 <span class="arithmatex">\(\hat{X}_i\)</span> 的角度</td>
+<td style="text-align: center;">关节<strong>转角</strong>（转动关节的变量）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 <strong>记忆</strong>：$ \alpha_{i-1},a_{i-1}$ 描述<strong>连杆几何</strong>（常数）；<span class="arithmatex">\(d_i, \theta_i\)</span> 描述<strong>关节运动</strong>。对于全旋转关节机械臂，<strong><span class="arithmatex">\(\theta_i\)</span> 为变量</strong>，其余三参数为常量。</p>
+</blockquote>
+<h4 id="322-joyarm-mdh">3.2.2 JoyArm 的 MDH 参数表</h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">序号 <span class="arithmatex">\(i\)</span></th>
+<th style="text-align: center;"><span class="arithmatex">\(\alpha_{i-1}(rad)\)</span></th>
+<th style="text-align: center;"><span class="arithmatex">\(a_{i-1}(m)\)</span></th>
+<th style="text-align: center;"><span class="arithmatex">\(d_i(m)\)</span></th>
+<th style="text-align: center;"><span class="arithmatex">\(\theta_i(rad)\)</span></th>
+<th style="text-align: center;">范围 <span class="arithmatex">\((rad)\)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">0.0</td>
+<td style="text-align: center;">0.0</td>
+<td style="text-align: center;">0.1402</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta_1\)</span></td>
+<td style="text-align: center;">-2.8 ~ 2.8</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"><span class="arithmatex">\(\pi/2\)</span></td>
+<td style="text-align: center;">0.02</td>
+<td style="text-align: center;">0.0</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta_2+\pi\)</span></td>
+<td style="text-align: center;">-<span class="arithmatex">\(\pi\)</span> ~ 0.0</td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">-<span class="arithmatex">\(\pi\)</span></td>
+<td style="text-align: center;">0.264</td>
+<td style="text-align: center;">0.0</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta_3+2.9226\)</span></td>
+<td style="text-align: center;">-<span class="arithmatex">\(\pi\)</span> ~ 0.0</td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">0.0</td>
+<td style="text-align: center;">0.2485</td>
+<td style="text-align: center;">0.0</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta_4+0.2190\)</span></td>
+<td style="text-align: center;">-<span class="arithmatex">\(\pi/2\)</span> ~ <span class="arithmatex">\(\pi/2\)</span></td>
+</tr>
+<tr>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;"><span class="arithmatex">\(-\pi/2\)</span></td>
+<td style="text-align: center;">0.0783</td>
+<td style="text-align: center;">0.0025</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta_5+\pi/2\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(-\pi/2\)</span> ~ <span class="arithmatex">\(\pi/2\)</span></td>
+</tr>
+<tr>
+<td style="text-align: center;">6</td>
+<td style="text-align: center;"><span class="arithmatex">\(\pi/2\)</span></td>
+<td style="text-align: center;">0.0</td>
+<td style="text-align: center;">0.0</td>
+<td style="text-align: center;"><span class="arithmatex">\(\theta_6\)</span></td>
+<td style="text-align: center;"><span class="arithmatex">\(-\pi/2\)</span> ~ <span class="arithmatex">\(\pi/2\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>末端工具系 <span class="arithmatex">\(\{e\}\)</span> 相对末连杆系 <span class="arithmatex">\(\{n\}\)</span> 的位姿</p>
+<div class="arithmatex">\[
+{}^n_e\bm{T} = \begin{bmatrix}
+r_{11} &amp; r_{12} &amp; r_{13} &amp; p_x \\
+r_{21} &amp; r_{22} &amp; r_{23} &amp; p_y \\
+r_{31} &amp; r_{32} &amp; r_{33} &amp; p_z \\
+0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix}
+\]</div>
+<h2 id="4-joyarm">4 JoyArm 位置正运动学求解</h2>
+<p>得到 MDH 参数表后，求解机械臂位置正运动学（Forward Kinematics, FK）的过程就是：<strong>分别写出各相邻连杆系间的位姿矩阵，然后从基座系连乘到末端系（或工具系）</strong>。</p>
+<h3 id="41">4.1 相邻连杆系间的位姿矩阵</h3>
+<h4 id="411">4.1.1 位姿矩阵通用表达式</h4>
+<p><span class="arithmatex">\(\{i\}\)</span> 相对 <span class="arithmatex">\(\{i-1\}\)</span> 的变换矩阵 <span class="arithmatex">\(^{i-1}_i\bm{T}\)</span> 由四个参数按如下顺序复合：</p>
+<div class="arithmatex">\[
+^{i-1}_i\bm{T}=\bm{R}_x(\alpha_{i-1})\,\bm{D}_x(a_{i-1})\,\bm{R}_z(\theta_i)\,\bm{D}_z(d_i)
+\]</div>
+<p><strong><span class="arithmatex">\(R\)</span></strong> 为 <span class="arithmatex">\(4 \times 4\)</span> 旋转算子，<strong><span class="arithmatex">\(D\)</span></strong> 为 <span class="arithmatex">\(4 \times 4\)</span> 平移算子。展开后：</p>
+<div class="arithmatex">\[
+^{i-1}_i\bm{T}=\begin{bmatrix}
+c\theta_i &amp; -s\theta_i &amp; 0 &amp; a_{i-1}\\
+s\theta_i\,c\alpha_{i-1} &amp; c\theta_i\,c\alpha_{i-1} &amp; -s\alpha_{i-1} &amp; -s\alpha_{i-1}\,d_i\\
+s\theta_i\,s\alpha_{i-1} &amp; c\theta_i\,s\alpha_{i-1} &amp; c\alpha_{i-1} &amp; c\alpha_{i-1}\,d_i\\
+0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix}
+\]</div>
+<p>上式中， <span class="arithmatex">\(c\cdot=\cos(\cdot)\)</span>、<span class="arithmatex">\(s\cdot=\sin(\cdot)\)</span> 。</p>
+<h4 id="412-joyarm">4.1.2 JoyArm 各相邻连杆位姿矩阵</h4>
+<p>将 MDH 参数表按行代入上式，得：</p>
+<div class="arithmatex">\[
+^0_1\bm{T}=\begin{bmatrix}
+c_1 &amp; -s_1 &amp; 0 &amp; a_0\\
+s_1 c_{\alpha_0} &amp; c_1 c_{\alpha_0} &amp; -s_{\alpha_0} &amp; -s_{\alpha_0} d_1\\
+s_1 s_{\alpha_0} &amp; c_1 s_{\alpha_0} &amp; c_{\alpha_0} &amp; c_{\alpha_0} d_1\\
+0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix},\quad c_1=\cos\theta_1,\;s_1=\sin\theta_1
+\]</div>
+<div class="arithmatex">\[
+^1_2\bm{T}=\begin{bmatrix}
+c_2 &amp; -s_2 &amp; 0 &amp; a_1\\
+s_2 c_{\alpha_1} &amp; c_2 c_{\alpha_1} &amp; -s_{\alpha_1} &amp; -s_{\alpha_1} d_2\\
+s_2 s_{\alpha_1} &amp; c_2 s_{\alpha_1} &amp; c_{\alpha_1} &amp; c_{\alpha_1} d_2\\
+0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix},\quad c_2=\cos\theta_2,\;s_2=\sin\theta_2
+\]</div>
+<div class="arithmatex">\[
+^2_3\bm{T}=\begin{bmatrix}
+c_3 &amp; -s_3 &amp; 0 &amp; a_2\\
+s_3 c_{\alpha_2} &amp; c_3 c_{\alpha_2} &amp; -s_{\alpha_2} &amp; -s_{\alpha_2} d_3\\
+s_3 s_{\alpha_2} &amp; c_3 s_{\alpha_2} &amp; c_{\alpha_2} &amp; c_{\alpha_2} d_3\\
+0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix},\quad c_3=\cos\theta_3,\;s_3=\sin\theta_3
+\]</div>
+<div class="arithmatex">\[
+^3_4\bm{T}=\begin{bmatrix}
+c_4 &amp; -s_4 &amp; 0 &amp; a_3\\
+s_4 c_{\alpha_3} &amp; c_4 c_{\alpha_3} &amp; -s_{\alpha_3} &amp; -s_{\alpha_3} d_4\\
+s_4 s_{\alpha_3} &amp; c_4 s_{\alpha_3} &amp; c_{\alpha_3} &amp; c_{\alpha_3} d_4\\
+0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix},\quad c_4=\cos\theta_4,\;s_4=\sin\theta_4
+\]</div>
+<div class="arithmatex">\[
+^4_5\bm{T}=\begin{bmatrix}
+c_5 &amp; -s_5 &amp; 0 &amp; a_4\\
+s_5 c_{\alpha_4} &amp; c_5 c_{\alpha_4} &amp; -s_{\alpha_4} &amp; -s_{\alpha_4} d_5\\
+s_5 s_{\alpha_4} &amp; c_5 s_{\alpha_4} &amp; c_{\alpha_4} &amp; c_{\alpha_4} d_5\\
+0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix},\quad c_5=\cos\theta_5,\;s_5=\sin\theta_5
+\]</div>
+<div class="arithmatex">\[
+^5_6\bm{T}=\begin{bmatrix}
+c_6 &amp; -s_6 &amp; 0 &amp; a_5\\
+s_6 c_{\alpha_5} &amp; c_6 c_{\alpha_5} &amp; -s_{\alpha_5} &amp; -s_{\alpha_5} d_6\\
+s_6 s_{\alpha_5} &amp; c_6 s_{\alpha_5} &amp; c_{\alpha_5} &amp; c_{\alpha_5} d_6\\
+0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix},\quad c_6=\cos\theta_6,\;s_6=\sin\theta_6
+\]</div>
+<h3 id="42">4.2 完整正运动学</h3>
+<p>根据位姿复合的连乘规则，末端工具系 <span class="arithmatex">\(\{e\}\)</span> 相对基座系 <span class="arithmatex">\(\{0\}\)</span> 的位姿矩阵：</p>
+<div class="arithmatex">\[
+^0_e\bm{T}(\theta_1,\cdots,\theta_6)=^0_1\bm{T}(\theta_1)\cdots{ }^{n-1}_n\bm{T}(\theta_n)\cdot^n_e\bm{T}
+\]</div>
+<p>上式即为机械臂的位置正运动学方程**：给定各关节角，解得末端位姿 <span class="arithmatex">\(^0_e\bm{T}\)</span>。</p>
+<h3 id="43-urdf">4.3 URDF + 库的正运动学求解方法</h3>
+<p>在实际项目和应用中，手写推算 <span class="arithmatex">\(\bm{T}\)</span> 既繁琐又易错，且较后者不够通用。更易用且现代做法是：将机器人CAD模型导出为统一机器人描述格式（URDF），程序中<strong>用 URDF 描述机器人几何，由机器人学库自动建系、求解</strong>。当我们理解并掌握了位姿变换和正运动学的基本原理后，实际运用过程中完全可以转向<strong>“URDF + 机器人学计算库”</strong>的组合。</p>
+<h4 id="431-urdf">4.3.1 URDF：机械臂的"数字孪生"</h4>
+<p><strong>URDF（Unified Robot Description Format，统一机器人描述格式）</strong> 是 XML 格式的机器人数字模型，用 link + joint 描述：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">URDF 元素</th>
+<th style="text-align: center;">描述内容</th>
+<th style="text-align: center;">对应物理量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>&lt;link&gt;</code></td>
+<td style="text-align: center;">连杆的视觉、碰撞、惯性属性</td>
+<td style="text-align: center;">连杆几何、质量、惯量</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>&lt;joint&gt;</code></td>
+<td style="text-align: center;">相邻连杆的连接关系</td>
+<td style="text-align: center;">关节类型（revolute/fixed）、轴向量、零位偏移</td>
+</tr>
+</tbody>
+</table>
+<p>如，机械臂基座、关节 1 和连杆 1 的 URDF 示例如下：</p>
+<div class="highlight"><pre><span></span><code><span class="nt">&lt;link</span><span class="w"> </span><span class="na">name=</span><span class="s">"link0"</span><span class="nt">&gt;</span>
+<span class="w">  </span><span class="nt">&lt;visual&gt;</span>
+<span class="w">    </span><span class="nt">&lt;origin</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0 0 0"</span><span class="w"> </span><span class="na">rpy=</span><span class="s">"0 0 0"</span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;geometry&gt;</span>
+<span class="w">      </span><span class="nt">&lt;mesh</span><span class="w"> </span><span class="na">filename=</span><span class="s">"../meshes/link0.STL"</span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/geometry&gt;</span>
+<span class="w">  </span><span class="nt">&lt;/visual&gt;</span>
+<span class="nt">&lt;/link&gt;</span>
+
+<span class="nt">&lt;joint</span><span class="w"> </span><span class="na">name=</span><span class="s">"joint1"</span><span class="w"> </span><span class="na">type=</span><span class="s">"revolute"</span><span class="nt">&gt;</span>
+<span class="w">  </span><span class="nt">&lt;origin</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0 0 0.1402"</span><span class="w"> </span><span class="na">rpy=</span><span class="s">"0 0 0"</span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;parent</span><span class="w"> </span><span class="na">link=</span><span class="s">"link0"</span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;child</span><span class="w">  </span><span class="na">link=</span><span class="s">"link1"</span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;axis</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0 0 1"</span><span class="nt">/&gt;</span>
+<span class="w">  </span><span class="nt">&lt;limit</span><span class="w"> </span><span class="na">lower=</span><span class="s">"-2.8"</span><span class="w"> </span><span class="na">upper=</span><span class="s">"2.8"</span><span class="w"> </span><span class="na">effort=</span><span class="s">"30"</span><span class="w"> </span><span class="na">velocity=</span><span class="s">"5"</span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/joint&gt;</span>
+
+<span class="nt">&lt;link</span><span class="w"> </span><span class="na">name=</span><span class="s">"link1"</span><span class="nt">&gt;</span>
+<span class="w">  </span><span class="nt">&lt;visual&gt;</span>
+<span class="w">    </span><span class="nt">&lt;origin</span><span class="w"> </span><span class="na">xyz=</span><span class="s">"0 0 0"</span><span class="w"> </span><span class="na">rpy=</span><span class="s">"0 0 0"</span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;geometry&gt;</span>
+<span class="w">      </span><span class="nt">&lt;mesh</span><span class="w"> </span><span class="na">filename=</span><span class="s">"../meshes/link1.STL"</span><span class="nt">/&gt;</span>
+<span class="w">    </span><span class="nt">&lt;/geometry&gt;</span>
+<span class="w">  </span><span class="nt">&lt;/visual&gt;</span>
+<span class="nt">&lt;/link&gt;</span>
+</code></pre></div>
+<p>URDF 使用"父子连杆 + 关节偏移"的树状结构描述机器人几何结构，<strong>不依赖特定 D-H 约定，比 MDH 法更通用、更贴近结构设计 CAD</strong>。JoyArm 的 URDF 便是基于<a href="../chapt7_urdf/">第七章</a>的方法由 CAD 装配体导出的。</p>
+<p>JoyArm 机械臂 URDF 在 <a href="https://urdf.d-robotics.cc/">URDF Studio</a> （也可使用 vscode 中的URDF可视化插件进行预览）的可视化结果如下</p>
+<p><img alt="图片占位：URDF Studio 中的 JoyArm URDF可视化" src="" /></p>
+<p>URDF 几乎兼容所有的主流仿真器和机器人学计算库，它可以导入仿真器作为仿真的数字模型，也可加载进机器人学计算库进行机器人的规划和控制。</p>
+<h4 id="432">4.3.2 用库自动求解正运动学</h4>
+<p>以 <strong>URDF + Pinocchio</strong> 计算正运动学，核心流程示例：</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pinocchio</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pin</span>
+
+<span class="c1"># 1. 从 URDF 加载模型（含运动链与关节限位）</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">pin</span><span class="o">.</span><span class="n">buildModelFromUrdf</span><span class="p">(</span><span class="s2">"joyarm.urdf"</span><span class="p">)</span> <span class="c1"># 模型（不可变数据）</span>
+<span class="n">data</span>  <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">createData</span><span class="p">()</span> <span class="c1"># 可变数据</span>
+
+<span class="c1"># 2. 给定关节角（rad）</span>
+<span class="n">q</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span> 
+
+<span class="c1"># 3. 求解末端（"frame_end_tcp" 帧，即末端 TCP 系）相对基座的位姿</span>
+<span class="n">pin</span><span class="o">.</span><span class="n">forwardKinematics</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span> <span class="c1"># 计算正运动学</span>
+<span class="n">T_0e</span> <span class="o">=</span> <span class="n">pin</span><span class="o">.</span><span class="n">updateFramePlacement</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">getFrameId</span><span class="p">(</span><span class="s2">"frame_end_tcp"</span><span class="p">))</span> <span class="c1"># 获取结果</span>
+</code></pre></div>
+<h2 id="5">5 本章实践：正运动学求解器实现与工作空间绘制分析</h2>
+<h3 id="51">5.1 正运动学求解器的算法实现</h3>
+<p>正运动学求解算法封装在 robotics/fkine 里，一个基类规定接口，多个子类实现各自算法。</p>
+<h4 id="511-fkinesolver">5.1.1 基类接口： FkineSolver</h4>
+<p>基类只规定了 <code>solve(arm, q, frame) → Pose</code>方法，输入参数与返回值如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">输入/返回</th>
+<th style="text-align: center;">名称</th>
+<th style="text-align: center;">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">输入</td>
+<td style="text-align: center;"><code>arm</code></td>
+<td style="text-align: center;">机械臂对象</td>
+</tr>
+<tr>
+<td style="text-align: center;">输入</td>
+<td style="text-align: center;"><code>q</code></td>
+<td style="text-align: center;"><code>(n,)</code> 关节角，rad</td>
+</tr>
+<tr>
+<td style="text-align: center;">输入</td>
+<td style="text-align: center;"><code>frame</code></td>
+<td style="text-align: center;">末端 frame 名，如 <code>"frame_end_tcp"</code></td>
+</tr>
+<tr>
+<td style="text-align: center;">返回</td>
+<td style="text-align: center;"><code>Pose</code></td>
+<td style="text-align: center;"><code>position</code>：<code>(3,)</code> 位置；<code>orientation</code>：<code>(4,)</code> 四元数 <span class="arithmatex">\((w,x,y,z)\)</span>；<code>.T</code>：<span class="arithmatex">\(4\times4\)</span> 位姿矩阵</td>
+</tr>
+</tbody>
+</table>
+<h4 id="512-mdh">5.1.2 子求解器：MDH 法位姿矩阵连乘</h4>
+<p>MDH 版是 4.2 节连乘公式的直接实现：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">操作</th>
+<th style="text-align: center;">得到</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">读 MDH 参数表与末端偏移</td>
+<td style="text-align: center;">cfg.joyarm 的 <code>arm_mdh</code> 与 <code>T_linkn_endtcp</code></td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">逐行代入相邻连杆位姿矩阵表达式</td>
+<td style="text-align: center;">相邻连杆位姿矩阵 <span class="arithmatex">\(^{i-1}_i\bm{T}\)</span></td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">位姿矩阵自基座系连乘</td>
+<td style="text-align: center;"><span class="arithmatex">\(^0_e\bm{T}={}^0_n\bm{T}\,{}^n_e\bm{T}\)</span></td>
+</tr>
+<tr>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">转为 <code>Pose</code> 返回</td>
+<td style="text-align: center;">位置 + 四元数</td>
+</tr>
+</tbody>
+</table>
+<p>完整实现位于 <code>joyarm_code/joyarm_core/robotics/fkine/fkine_solver_mdh.py</code>。</p>
+<h4 id="513-pinocchio">5.1.3 子求解器：Pinocchio 库调用</h4>
+<p>Pin 版调用 Pinochio 库函数完成求解：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">操作</th>
+<th style="text-align: center;">得到</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><code>forwardKinematics</code> 沿运动链逐关节传递位姿</td>
+<td style="text-align: center;">各连杆系相对基座的位姿</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"><code>updateFramePlacement</code> 取出末端 frame 位姿，转为 <code>Pose</code> 返回</td>
+<td style="text-align: center;">位置 + 四元数</td>
+</tr>
+</tbody>
+</table>
+<p>完整实现位于 <code>joyarm_code/joyarm_core/robotics/fkine/fkine_solver_pin.py</code>。</p>
+<h4 id="514">5.1.4 注册与配置</h4>
+<p>子类实现后，需要在 <code>robotics/fkine/__init__.py</code> 的注册表 <code>REGISTRY</code> 登记（注册名 = 类名小写 + 下划线）：</p>
+<div class="highlight"><pre><span></span><code><span class="n">REGISTRY</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"pin_fkine_solver"</span><span class="p">:</span> <span class="n">PinFkineSolver</span><span class="p">,</span>  
+    <span class="s2">"mdh_fkine_solver"</span><span class="p">:</span> <span class="n">MdhFkineSolver</span><span class="p">,</span>  
+<span class="p">}</span>
+</code></pre></div>
+<p>注册等级后，<code>config/</code> 再按名加载：</p>
+<div class="highlight"><pre><span></span><code><span class="nt">robotics</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">fkine</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> name</span><span class="p">:</span><span class="w"> </span><span class="nv">pin_fkine_solver</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">  </span><span class="c1"># 列表首位默认激活</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> name</span><span class="p">:</span><span class="w"> </span><span class="nv">mdh_fkine_solver</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<h3 id="52">5.2 正运动学求解器的调用与测试</h3>
+<h4 id="521">5.2.1 正运动学求解的调用方式</h4>
+<p>创建机械臂对象时按 config 配置加载全部 fkine 求解器，<code>arm.solve_fkine</code> 自动调用被激活的求解器进行计算：</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">joyarm_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">joyArm</span>
+
+<span class="n">arm</span> <span class="o">=</span> <span class="n">joyArm</span><span class="p">(</span><span class="s2">"rebot_arm_b601_dm"</span><span class="p">)</span>               <span class="c1"># 离线创建对象</span>
+<span class="n">arm</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>                                   <span class="c1"># 连接硬件通讯总线</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">arm</span><span class="o">.</span><span class="n">get_fkine_solvers</span><span class="p">())</span>                  <span class="c1"># 加载的全部 fkine_solver</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">arm</span><span class="o">.</span><span class="n">get_activated_fkine_solver</span><span class="p">())</span>         <span class="c1"># 当前激活的求解器</span>
+<span class="n">pose</span> <span class="o">=</span> <span class="n">arm</span><span class="o">.</span><span class="n">solve_fkine</span><span class="p">(</span><span class="n">arm</span><span class="o">.</span><span class="n">zero_arm</span><span class="p">)</span>            <span class="c1"># 进行位置正运动学计算</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pose</span><span class="o">.</span><span class="n">position</span><span class="p">)</span>                            <span class="c1"># 位置（x,y,z）</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pose</span><span class="o">.</span><span class="n">orientation</span><span class="p">)</span>                         <span class="c1"># 姿态四元数</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pose</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>                                   <span class="c1"># 位姿矩阵</span>
+<span class="n">arm</span><span class="o">.</span><span class="n">set_fkine_solver</span><span class="p">(</span><span class="s2">"mdh_fkine_solver"</span><span class="p">)</span>        <span class="c1"># 切换求解器</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">arm</span><span class="o">.</span><span class="n">solve_fkine</span><span class="p">()</span><span class="o">.</span><span class="n">position</span><span class="p">)</span>               <span class="c1"># MDH 版的求解结果，q 缺省取机械臂的实时关节角</span>
+<span class="n">arm</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>                                     <span class="c1"># 机械臂停机</span>
+</code></pre></div>
+<h4 id="522">5.2.2 正运动学求解器的测试验证</h4>
+<p>测试验证脚本位于 <code>joyarm_code/test/fkine_test.py</code>，使用说明（新建环境、激活环境、安装依赖、切换目录、运行命令）见脚本头部注释。</p>
+<p><img alt="fkine_test_shot" src="../images/chapt2_fkine/fkine_test.png.jpg" /></p>
+<p>界面右上方可按机械臂自由度输入关节角 q （英文逗号分割），点击 <code>计算</code> 后更新正运动学数据。</p>
+<h3 id="53">5.3 工作空间及求解思路</h3>
+<h4 id="531">5.3.1 什么是工作空间</h4>
+<p><strong>工作空间（Workspace）</strong> 是末端参考点（通常取 TCP）所能到达的所有位置集合，回答"目标点是否够得到"的问题。最常用的两类工作空间：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">类别</th>
+<th style="text-align: center;">定义</th>
+<th style="text-align: center;">作用和意义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><strong>可达工作空间</strong></td>
+<td style="text-align: center;">末端至少能以一种姿态到达的所有位置</td>
+<td style="text-align: center;">体现了机械臂"最大活动范围"，设计和选型时参考</td>
+</tr>
+<tr>
+<td style="text-align: center;"><strong>灵巧工作空间</strong></td>
+<td style="text-align: center;">末端能以多种或任意姿态到达的所有位置</td>
+<td style="text-align: center;">高姿态要求任务的可行域，狭小空间、避障任务时常用</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>📌 本章聚焦<strong>可达工作空间</strong>（最常用、易计算）。灵巧工作空间的求解涉及逆运动学（末端某位置不同姿态的逆解存在性）。</p>
+</blockquote>
+<h4 id="532">5.3.2 求解思路：蒙特卡洛采样</h4>
+<p>解析方式求取工作空间边界需联立关节限位与运动学方程，非常困难。<strong>实用做法是蒙特卡洛采样</strong>——用大量随机关节角样本逼近工作空间：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">操作</th>
+<th style="text-align: center;">原理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">在各关节角范围内均匀随机采样 <span class="arithmatex">\(\theta_i\)</span></td>
+<td style="text-align: center;">覆盖关节空间全部可达构型</td>
+</tr>
+<tr>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">对每组采样角调用 <code>arm.solve_fkine(q)</code> 求末端位置 <span class="arithmatex">\((p_x,p_y,p_z)\)</span></td>
+<td style="text-align: center;">关节空间映射到笛卡尔空间</td>
+</tr>
+<tr>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">收集末端位置点构成点云</td>
+<td style="text-align: center;">点云的包络便是近似的工作空间</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>💡 采样数越多、点云越密、边界越清晰，但计算耗时也越大。</p>
+</blockquote>
+<h4 id="533">5.3.3 体积估算：体素计数</h4>
+<p>点云只给形状，量化"活动范围大小"还需算<strong>体积</strong>。最简单的办法是体素计数：把空间切成边长为 <span class="arithmatex">\(h\)</span> 的小方格，数落进点的格子数。若记被占用的格子数为 <span class="arithmatex">\(N\)</span>，则体积近似为</p>
+<div class="arithmatex">\[V \approx N\,h^3\]</div>
+<blockquote>
+<p>💡 体积是<strong>近似值</strong>：格子越小、边界越精细，但需要的采样点也越多——点太少时容易存在漏掉的格子，让体积偏小；格子太大时，边界范围时的整格计入又让体积偏大。</p>
+</blockquote>
+<h3 id="54">5.4 工作空间绘制方法</h3>
+<p>按照前面的思路：点云边算边画、逐批刷新，整体结束后打印分析数据，工作空间绘制流程为：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步骤</th>
+<th style="text-align: center;">操作</th>
+<th style="text-align: center;">调用的功能</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">①</td>
+<td style="text-align: center;">创建对象，选定求解器</td>
+<td style="text-align: center;"><code>joyArm("&lt;型号&gt;")</code>、<code>arm.set_fkine_solver(SOLVER)</code></td>
+</tr>
+<tr>
+<td style="text-align: center;">②</td>
+<td style="text-align: center;">硬限位内均匀随机采样 <span class="arithmatex">\(N\)</span> 组关节角</td>
+<td style="text-align: center;"><code>rand_within_limits(arm.joint_limits_hard_arm, size=N)</code></td>
+</tr>
+<tr>
+<td style="text-align: center;">③</td>
+<td style="text-align: center;">分批求末端位置并刷新画面</td>
+<td style="text-align: center;"><code>arm.solve_fkine(q)</code></td>
+</tr>
+<tr>
+<td style="text-align: center;">④</td>
+<td style="text-align: center;">打印分析数据（范围 / 臂展 / 体积 / 占比 / 耗时）</td>
+<td style="text-align: center;">——</td>
+</tr>
+</tbody>
+</table>
+<p>界面共三幅图：左侧为 3D 视图，右侧上、下分别为俯视图（看水平覆盖范围）与侧视图。各元素作用与画法：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">元素</th>
+<th style="text-align: center;">作用</th>
+<th style="text-align: center;">可视化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">点云</td>
+<td style="text-align: center;">全部采样点的末端位置</td>
+<td style="text-align: center;">三幅子图同时画，点的颜色表示到基座的距离（紫近黄远）</td>
+</tr>
+<tr>
+<td style="text-align: center;">机械臂构型</td>
+<td style="text-align: center;">home 位形下的参考姿态</td>
+<td style="text-align: center;">基座 → 各关节 → 末端的黑色折线</td>
+</tr>
+<tr>
+<td style="text-align: center;">末端坐标系</td>
+<td style="text-align: center;">home 位形下的末端朝向</td>
+<td style="text-align: center;">末端原点处的红绿蓝三根轴（长 0.1 m）</td>
+</tr>
+</tbody>
+</table>
+<p>脚本顶部的可调参常量如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">常量</th>
+<th style="text-align: center;">含义</th>
+<th style="text-align: center;">默认值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;"><code>N_SAMPLES</code></td>
+<td style="text-align: center;">采样组数</td>
+<td style="text-align: center;">1_000_000</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>N_BATCHES</code></td>
+<td style="text-align: center;">分批数（每批刷新一次画面）</td>
+<td style="text-align: center;">10</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>SEED</code></td>
+<td style="text-align: center;">随机种子（固定后结果可复现）</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>VOXEL</code></td>
+<td style="text-align: center;">体素边长 (m)</td>
+<td style="text-align: center;">0.05</td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>SOLVER</code></td>
+<td style="text-align: center;">正运动学求解器注册名</td>
+<td style="text-align: center;"><code>"pin_fkine_solver"</code></td>
+</tr>
+<tr>
+<td style="text-align: center;"><code>SHOW_MAX</code></td>
+<td style="text-align: center;">画面最多显示的点数（统计仍用全部点）</td>
+<td style="text-align: center;">20000</td>
+</tr>
+</tbody>
+</table>
+<p>运行时须指定型号，如：</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>chapt/chapt2/chapt2_workspace.py<span class="w"> </span>rebot_arm_b601_dm
+</code></pre></div>
+<p>对应脚本位于 <code>joyarm_code/chapt/chapt2/chapt2_workspace.py</code>，使用说明（新建环境、激活环境、安装依赖、切换目录、运行命令）见脚本头部注释。</p>
+<blockquote>
+<p>💡 先用默认参数跑通并进行结果的整体性核对，再增大 <code>N_SAMPLES</code> 。</p>
+</blockquote>
+<h3 id="55">5.5 工作空间用途与分析</h3>
+<h4 id="551">5.5.1 工作空间用途</h4>
+<p>工作空间分析对机械臂<strong>设计、选型、布置、任务规划</strong>有直接指导：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">应用场景</th>
+<th style="text-align: center;">指导作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">设计和选型</td>
+<td style="text-align: center;">目标任务作业区域必须完全落在工作空间内</td>
+</tr>
+<tr>
+<td style="text-align: center;">安装布置</td>
+<td style="text-align: center;">工件/料仓应布置在工作空间密集区域，避开边缘死角</td>
+</tr>
+<tr>
+<td style="text-align: center;">任务可行性</td>
+<td style="text-align: center;">先判断目标点是否在工作空间内，再做逆运动学求解</td>
+</tr>
+<tr>
+<td style="text-align: center;">性能评估</td>
+<td style="text-align: center;">工作空间体积与形状是衡量"活动能力"的基本指标</td>
+</tr>
+</tbody>
+</table>
+<h4 id="552-joyarm">5.5.2 JoyArm 工作空间分析</h4>
+<p>下列数据取自脚本默认参数的一次运行：型号 <code>rebot_arm_b601_dm</code>，硬限位内均匀采样 <span class="arithmatex">\(N=10^6\)</span> 组（随机种子 0），求解器 <code>pin_fkine_solver</code>。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">指标</th>
+<th style="text-align: center;">数值</th>
+<th style="text-align: center;">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">x 范围 (m)</td>
+<td style="text-align: center;">[-0.709, +0.750]</td>
+<td style="text-align: center;">正前方比正后方略远（关节 1 限位的痕迹）</td>
+</tr>
+<tr>
+<td style="text-align: center;">y 范围 (m)</td>
+<td style="text-align: center;">[-0.748, +0.748]</td>
+<td style="text-align: center;">左右基本对称</td>
+</tr>
+<tr>
+<td style="text-align: center;">z 范围 (m)</td>
+<td style="text-align: center;">[-0.325, +0.872]</td>
+<td style="text-align: center;">上至基座上方 0.87 m，下探安装面以下 0.33 m</td>
+</tr>
+<tr>
+<td style="text-align: center;">最大臂展 (m)</td>
+<td style="text-align: center;">0.874</td>
+<td style="text-align: center;">末端到基座原点的最远距离</td>
+</tr>
+<tr>
+<td style="text-align: center;">最近距离 (m)</td>
+<td style="text-align: center;">0.004</td>
+<td style="text-align: center;">末端能折回到基座近旁</td>
+</tr>
+<tr>
+<td style="text-align: center;">体积 (m³)</td>
+<td style="text-align: center;">约 1.595</td>
+<td style="text-align: center;">体素法近似值（边长 0.05 m），估算方法见 5.3.3 节</td>
+</tr>
+<tr>
+<td style="text-align: center;">安装面以下点占比</td>
+<td style="text-align: center;">15.2%</td>
+<td style="text-align: center;"><span class="arithmatex">\(z&lt;0\)</span> 的采样点，台面安装时不可达</td>
+</tr>
+<tr>
+<td style="text-align: center;">求解耗时</td>
+<td style="text-align: center;">12.33 s</td>
+<td style="text-align: center;">单次约 12.3 µs</td>
+</tr>
+</tbody>
+</table>
+<p>对照运行画面读形状：</p>
+<ul>
+<li><strong>整体形状</strong>：近似<strong>实心的球状区域</strong>——点云靠近基座最密、向外渐稀（画面呈亮核淡边），但末端折回后能到达离基座 0.004 m 的近旁，基座正上方同样有点，因此没有中心空洞。</li>
+<li><strong>俯视图近似整圆</strong>：关节 1 只能转 ±2.8 rad（约 ±160°），看似该在背后留下缺口；但肩关节行程接近 <span class="arithmatex">\(-\pi\)</span>，整条臂能翻到基座正后方把这个方向补上——留下的痕迹只是 <span class="arithmatex">\(x\)</span> 方向的不对称：正前方 +0.750 m、正后方 -0.709 m。</li>
+<li><strong>侧视图呈穹顶形</strong>：最高点 <span class="arithmatex">\(z\approx0.872\)</span> m 在基座正上方附近，向两侧逐渐降低；下边界最低到 <span class="arithmatex">\(z\approx-0.325\)</span> m。</li>
+</ul>
+<blockquote>
+<p>⚠️ 纯正运动学采样只受关节限位约束，<strong>没考虑连杆自碰撞与桌面遮挡</strong>，实际可执行的空间会小于当前计算得到的空间，使用时可结合碰撞检测再精确化有效范围。</p>
+</blockquote>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.expand"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../javascripts/image-viewer.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

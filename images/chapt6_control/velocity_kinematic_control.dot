@@ -1,0 +1,20 @@
+digraph velocity_kinematic_control {
+    graph [rankdir=LR, bgcolor="white", pad="0.45", nodesep="1.00", ranksep="0.32", splines=ortho];
+    node [shape=box, style="filled", fillcolor="white", color="black", penwidth=1.5, fontname="sans-serif", fontsize=14, margin="0.16,0.11"];
+    edge [color="black", penwidth=1.4, arrowsize=0.75, fontname="sans-serif", fontsize=12];
+
+    vd [shape=plain, label="目标末端速度 v_d"];
+    inv [label="雅可比逆\n或阻尼伪逆"];
+    qd [shape=plain, label="目标关节速度 q̇_d"];
+    sum [shape=circle, fixedsize=true, width=0.40, label="Σ", margin=0];
+    ctrl [label="关节速度控制器"];
+    arm [label="机械臂"];
+    tap [shape=point, fixedsize=true, width=0.08, label="", fillcolor="black"];
+    q [shape=plain, label="当前关节角 q"];
+    jac [label="计算 J(q)"];
+
+    vd -> inv -> qd -> sum -> ctrl -> arm -> tap -> q;
+    tap -> sum [xlabel="速度反馈  −", constraint=false, tailport=s, headport=n];
+    tap -> jac [constraint=false, tailport=s, headport=e];
+    jac -> inv [constraint=false, tailport=w, headport=s];
+}
